@@ -60,9 +60,13 @@ django_settings_module = "example.settings"
 source = ["gnu_jango"]
 omit = ["*/migrations/*", "*/tests.py", "*/test_*.py", "gnu_jango/templates/*"]
 branch = true
+# `manage.py test --parallel` runs tests in worker processes; each writes its own data file and
+# `coverage combine` merges them before `coverage report`.
+parallel = true
+concurrency = ["multiprocessing"]
 
 [tool.coverage.report]
 skip_empty = true
 # Floor just under the measured 51% (2026-10-10) so coverage cannot silently drop; raise it as tests grow.
-fail_under = 49
+fail_under = 65
 show_missing = false

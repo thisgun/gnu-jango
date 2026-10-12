@@ -9,6 +9,8 @@ on:
 
 jobs:
   django:
+    # CI runs in the public repository only; a private copy of the code skips it.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -55,11 +57,16 @@ jobs:
         run: python manage.py check
       - name: Django tests
         # The whole suite: new test modules are picked up without editing this file.
+        # --parallel runs the suite in worker processes (about 4x faster); coverage writes one data
+        # file per worker (parallel = true in pyproject.toml) and combine merges them.
         run: |
-          coverage run manage.py test gnu_jango
+          coverage run manage.py test gnu_jango --parallel auto
+          coverage combine
           coverage report
 
   nextjs:
+    # CI runs in the public repository only; a private copy of the code skips it.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     defaults:
       run:

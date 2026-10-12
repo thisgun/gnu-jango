@@ -276,12 +276,11 @@ def avatar_url(user, width=50, height=50, gravatar_only=False):
         not gravatar_only
         and hasattr(user, "profile")
         and user.profile.avatar
-        and default_storage.exists(user.profile.avatar.path)
+        # .name, not .path: remote storages (MEDIA_STORAGE=s3) have no local filesystem path.
+        and default_storage.exists(user.profile.avatar.name)
     ):
-        # return user.profile.avatar.url
-
         im = get_thumbnail(
-            user.profile.avatar.path,
+            user.profile.avatar,
             "%sx%s" % (width, height),
             crop="center",
             quality=defaults.THUMBNAIL_QUALITY,

@@ -6,7 +6,7 @@
     <description>&lt;img src=&quot;#&quot; onerror=&quot;alert(&apos;x&apos;)&quot;&gt;</description>
     <language>ko-KR</language>
     <atom:link href="http://localhost:3000/rss/test22323" rel="self" type="application/rss+xml"/>
-    <lastBuildDate>Mon, 12 Oct 2026 08:00:16 GMT</lastBuildDate>
+    <lastBuildDate>Mon, 12 Oct 2026 11:53:57 GMT</lastBuildDate>
     <item>
       <title>aaaaa</title>
       <link>http://localhost:3000/test22323/225</link>

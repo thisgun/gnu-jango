@@ -42,12 +42,20 @@ six==1.17.0
 
 # Storage / database
 dj-database-url==3.1.2
-psycopg2==2.9.12
+# The binary wheel ships libpq, so it installs where no compiler or pg_config exists (the Vercel
+# Python build image); same `psycopg2` module and version as the source package it replaces.
+psycopg2-binary==2.9.12
 PyMySQL==1.2.0
+# MEDIA_STORAGE=s3 (Supabase Storage or any S3-compatible bucket, docs/04-deploy/deployment-profiles.md).
+# Imported only when MEDIA_STORAGE=s3. Pinned to the current releases (2026-10-12); not yet exercised
+# against a real bucket - try one upload on the target storage before relying on it. Dependabot bumps them.
+django-storages[s3]==1.14.6
+boto3==1.43.111
 
 # Background work
-celery>=5.4,<6
-redis>=5,<6
+celery==5.6.3
+# Also the client for CACHE_URL=redis://... (django.core.cache.backends.redis.RedisCache).
+redis==5.3.1
 
 # Serving / deployment
 gunicorn==26.0.0

@@ -1,7 +1,9 @@
 from .base import *
-import dj_database_url
+from .deploy import database_from_env, vercel_allowed_hosts
 
 ALLOWED_HOSTS = de_config("ALLOWED_HOSTS", default="", cast=csv_config)
+# On Vercel (VERCEL=1) also accept the deployment, branch and production *.vercel.app hosts.
+ALLOWED_HOSTS += [host for host in vercel_allowed_hosts(os.environ) if host not in ALLOWED_HOSTS]
 if not ALLOWED_HOSTS:
     raise ImproperlyConfigured("ALLOWED_HOSTS environment variable is required in production.")
 
@@ -10,8 +12,11 @@ if not ALLOWED_HOSTS:
 #     'cloudinary',
 # ]
 
-# Media
-MEDIA_URL = '/media/'
+# Media: MEDIA_URL / STORAGES["default"] come from base.py (MEDIA_STORAGE=local|s3).
+# Production never set MEDIA_ROOT, so FileSystemStorage wrote to the working directory; keep that default
+# so existing installs still find their files, and set MEDIA_ROOT explicitly (docker-compose uses
+# /app/media). `manage.py check_deploy_profile` fails while it is empty.
+MEDIA_ROOT = de_config("MEDIA_ROOT", default="")
 # DEFAULT_FILE_STORAGE = 'cloudinary_storage.storage.MediaCloudinaryStorage'
 
 RECAPTCHA_PUBLIC_KEY = de_config("RECAPTCHA_PUBLIC_KEY", default="")
@@ -54,10 +59,13 @@ IS_HEROKU = "DYNO" in os.environ
 
 MAX_CONN_AGE = 600
 
-if "DATABASE_URL" in os.environ:
-    # Configure Django for DATABASE_URL environment variable.
-    DATABASES["default"] = dj_database_url.config(
-        conn_max_age=MAX_CONN_AGE, ssl_require=True)
+# DATABASE_URL wins over DB_*; resolved exactly like development.py (example/settings/deploy.py) but
+# with persistent connections and SSL required for Postgres by default. Serverless + Supabase
+# transaction pooler: DB_CONN_MAX_AGE=0 and DB_DISABLE_SERVER_SIDE_CURSORS=true. A local compose
+# Postgres without TLS: DB_SSL_REQUIRE=false.
+_database_from_url = database_from_env(DEPLOY_ENV, default_conn_max_age=MAX_CONN_AGE, default_ssl_require=True)
+if _database_from_url:
+    DATABASES["default"] = _database_from_url
 
     # Enable test database if found in CI environment.
     if "CI" in os.environ:

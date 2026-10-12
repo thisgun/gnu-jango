@@ -9,6 +9,9 @@ from django.conf import settings
 from django.core.management import call_command
 from django.core.management.base import BaseCommand, CommandError
 
+from gnu_jango.core.deploy_profile import evaluate_deploy_profile
+from gnu_jango.core.management.commands.check_deploy_profile import deploy_env
+
 
 class Command(BaseCommand):
     help = "Run a combined Django/Next/Gnuboard5 production-readiness gate."
@@ -41,6 +44,9 @@ class Command(BaseCommand):
         checks.append(self.check_assets(options["sample_size"], strict))
         checks.append(self.check_legacy_data_quality(options["sample_size"], strict))
         checks.append(self.check_external_integrations(strict))
+        deploy_check = self.check_deploy_profile(strict)
+        if deploy_check is not None:
+            checks.append(deploy_check)
 
         if options["skip_next"]:
             checks.append(
@@ -206,6 +212,29 @@ class Command(BaseCommand):
             details,
             action=action,
             data=summary,
+        )
+
+    def check_deploy_profile(self, strict):
+        """Gate on DEPLOY_PROFILE (vps|vercel|split) when it is set; see check_deploy_profile."""
+        env = deploy_env()
+        profile = str(env.get("DEPLOY_PROFILE", "") or "").strip().lower()
+        if not profile:
+            return None
+        try:
+            report = evaluate_deploy_profile(profile, settings_obj=settings, env=env)
+        except ValueError as exc:
+            return self.result("deploy_profile", "Deploy profile", "fail", str(exc))
+
+        summary = report["summary"]
+        status = "fail" if summary["failed"] else "pass" if not summary["warnings"] else "fail" if strict else "warn"
+        not_passed = [check for check in report["checks"] if check["status"] != "pass"]
+        return self.result(
+            "deploy_profile",
+            f"Deploy profile ({profile})",
+            status,
+            f"passed={summary['passed']}, warnings={summary['warnings']}, failed={summary['failed']}",
+            action="; ".join(f"{check['label']}: {check['action']}" for check in not_passed if check["action"]),
+            data=report,
         )
 
     def check_nextjs(self, *, strict, include_build):

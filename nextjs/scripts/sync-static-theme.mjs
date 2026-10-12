@@ -22,6 +22,9 @@ const outDir = join(nextRoot, staticExportDir);
 const templateDir = join(repoRoot, 'gnu_jango', 'templates', 'theme', 'nextjs_default');
 const staticDir = join(repoRoot, 'gnu_jango', 'templates', 'theme_static', 'nextjs_default');
 const compatibilityManifestName = '.g5-static-compat.json';
+// Hashed assets of earlier builds are kept so pages opened before a deploy keep working, but only for the
+// last few builds; older ones are dropped so the theme does not grow forever.
+const keepBuilds = Math.max(1, Number.parseInt(process.env.G5_STATIC_KEEP_BUILDS ?? '2', 10) || 2);
 
 function listFiles(root) {
   if (!existsSync(root)) return [];
@@ -53,10 +56,36 @@ if (!existsSync(outDir)) {
   process.exit(1);
 }
 
+function readManifest() {
+  try {
+    const manifest = JSON.parse(readFileSync(join(staticDir, compatibilityManifestName), 'utf8'));
+    const retiredAt = new Map(
+      (Array.isArray(manifest.files) ? manifest.files : [])
+        .filter((entry) => typeof entry?.path === 'string')
+        .map((entry) => [entry.path, Number.isInteger(entry.retiredAt) ? entry.retiredAt : 0])
+    );
+    return { generation: Number.isInteger(manifest.generation) ? manifest.generation : 0, retiredAt };
+  } catch {
+    return { generation: 0, retiredAt: new Map() };
+  }
+}
+
+const previousManifest = readManifest();
+const generation = previousManifest.generation + 1;
 const currentOutFiles = new Set(listFiles(outDir));
-const previousStaticAssets = listFiles(staticDir).filter(
-  (file) => file.startsWith('_next/static/') && !currentOutFiles.has(file)
-);
+const retiredAtByPath = new Map();
+let droppedCount = 0;
+for (const file of listFiles(staticDir)) {
+  if (!file.startsWith('_next/static/') || currentOutFiles.has(file)) continue;
+  // a file the previous build still served retires now; one already retired keeps its build number
+  const retiredAt = previousManifest.retiredAt.get(file) ?? generation;
+  if (generation - retiredAt >= keepBuilds) {
+    droppedCount += 1;
+    continue;
+  }
+  retiredAtByPath.set(file, retiredAt);
+}
+const previousStaticAssets = [...retiredAtByPath.keys()];
 const compatibilityStageDir = mkdtempSync(join(tmpdir(), 'g5-nextjs-static-compat-'));
 
 for (const file of previousStaticAssets) {
@@ -87,13 +116,16 @@ for (const file of previousStaticAssets) {
 const compatibilityFiles = previousStaticAssets.map((path) => ({
   path,
   sha256: sha256(join(staticDir, path)),
+  retiredAt: retiredAtByPath.get(path),
 }));
 writeFileSync(
   join(staticDir, compatibilityManifestName),
-  `${JSON.stringify({ version: 1, files: compatibilityFiles }, null, 2)}\n`
+  `${JSON.stringify({ version: 2, generation, keepBuilds, files: compatibilityFiles }, null, 2)}\n`
 );
 rmSync(compatibilityStageDir, { recursive: true, force: true });
 
 console.log(`[sync-static-theme] Synced templates ${outDir} -> ${templateDir}`);
 console.log(`[sync-static-theme] Synced static assets ${outDir} -> ${staticDir}`);
-console.log(`[sync-static-theme] Preserved ${compatibilityFiles.length} previous hashed assets for already-open pages`);
+console.log(
+  `[sync-static-theme] Build ${generation}: kept ${compatibilityFiles.length} hashed assets of the last ${keepBuilds} build(s) for already-open pages, dropped ${droppedCount} older ones`
+);

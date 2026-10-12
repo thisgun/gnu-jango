@@ -1,13 +1,15 @@
-import dj_database_url
-
 from .base import *
+from .deploy import database_from_env
 
 DATABASE_URL = de_config("DATABASE_URL", default="")
 DB_ENGINE = de_config("DB_ENGINE", default="")
 
+# DATABASE_URL wins over DB_ENGINE/DB_*; both settings modules resolve it the same way
+# (example/settings/deploy.py), only the defaults differ: no persistent connections and no
+# forced SSL here. DB_CONN_MAX_AGE / DB_SSL_REQUIRE / DB_DISABLE_SERVER_SIDE_CURSORS override them.
 if DATABASE_URL:
     DATABASES = {
-        "default": dj_database_url.config(default=DATABASE_URL, conn_max_age=0),
+        "default": database_from_env(DEPLOY_ENV, default_conn_max_age=0, default_ssl_require=False),
     }
 elif DB_ENGINE:
     DATABASES = {
@@ -35,8 +37,7 @@ ALLOWED_HOSTS = de_config(
     cast=csv_config,
 )
 
-MEDIA_URL = "/media/"
-MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+# MEDIA_URL / MEDIA_ROOT come from base.py (MEDIA_ROOT env, MEDIA_STORAGE switch).
 
 DEFAULT_DEVELOPMENT_CORS_ALLOWED_ORIGINS = (
     "http://localhost:3000,"

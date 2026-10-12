@@ -7,6 +7,8 @@ const API_MESSAGES: Record<string, string> = {
   "Validation failed.": "입력한 내용을 확인해 주세요.",
   "Invalid captcha.": "자동등록방지 문자가 올바르지 않습니다.",
   "File not found.": "파일을 찾을 수 없습니다.",
+  "Not found.": "찾을 수 없습니다.",
+  "Invalid or missing cron credentials.": "예약 작업 인증 정보가 없거나 올바르지 않습니다.",
   "Invalid member ID or password.": "아이디 또는 비밀번호가 올바르지 않습니다.",
   "This account is inactive.": "사용할 수 없는 계정입니다.",
   "Social signup profile was not found.": "소셜 가입 정보를 찾을 수 없습니다.",

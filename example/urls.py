@@ -17,6 +17,7 @@ from django.contrib import admin
 from django.urls import path, include, re_path
 from django.conf import settings
 from django.conf.urls.static import static
+from gnu_jango.api import v1_auth
 from gnu_jango.core import views as core_views
 from gnu_jango.config import theme_admin
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
@@ -59,6 +60,10 @@ urlpatterns = [
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="api-schema"), name="api-docs"),
     path("api/redoc/", SpectacularRedocView.as_view(url_name="api-schema"), name="api-redoc"),
     path("api/", include("gnu_jango.api.urls")),
+    # The Expo app (dday-app) opens the social login at the site root, as the PHP site served it;
+    # these are the same views as /api/social/*.php and must come before the legacy *.php redirects.
+    path("social/start.php", v1_auth.social_start_view, name="social-start-root"),
+    path("social/finish.php", v1_auth.social_callback_view, name="social-finish-root"),
     path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
     path("", include("gnu_jango.editor.urls")),
     path("", include("gnu_jango.core.urls")),

@@ -829,7 +829,9 @@ class RobotsTests(TestCase):
             with self.subTest(prefix=prefix):
                 self.assertTrue(any(prefix.startswith(item) for item in disallowed), prefix)
 
+    @override_settings(ALLOWED_HOSTS=["shop.example.test", "testserver"])
     def test_robots_reflects_the_forwarded_script_prefix(self):
+        # the host must be allowed explicitly: CI has no .env widening ALLOWED_HOSTS
         response = self.client.get("/robots.txt", HTTP_HOST="shop.example.test")
         self.assertIn("Sitemap: http://shop.example.test/sitemap.xml", response.content.decode())
 

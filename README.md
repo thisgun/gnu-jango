@@ -23,7 +23,7 @@
 | 작업 큐 | Celery + Redis |
 | 프런트엔드 | Next.js 15.5 (`nextjs/`) |
 | 인증 | JWT(Bearer) + 그누보드5 호환 해시 |
-| 배포 | Heroku · AWS Lightsail · CentOS/Ubuntu(Apache·nginx) · Vercel(프런트) |
+| 배포 | Vercel + Supabase · VPS(Docker/gunicorn) · 분리형 — [배포 프로필](docs/04-deploy/deployment-profiles.md) · Heroku · AWS Lightsail · CentOS/Ubuntu(Apache·nginx) |
 
 ## 프로젝트 구조
 
@@ -88,6 +88,13 @@ python manage.py runserver 127.0.0.1:8000
 
 > Windows에서 PowerShell 실행 정책 때문에 가상환경 활성화가 막히면, 명령 프롬프트(cmd)에서 `.venv\Scripts\activate.bat`을 실행하세요.
 
+테스트는 병렬로 돌리면 4분 안팎에 끝납니다. 커버리지는 작업 프로세스별 결과를 합쳐서 봅니다(CI 하한 65%).
+
+```bash
+python manage.py test gnu_jango --parallel auto
+coverage run manage.py test gnu_jango --parallel auto && coverage combine && coverage report
+```
+
 ## 프런트엔드 / 크로스도메인 인증
 
 Next.js 프런트엔드 환경설정과 **Vercel ↔ 별도 API 서버** 로그인 유지(프록시 모드)는
@@ -103,6 +110,18 @@ Next.js 프런트엔드 환경설정과 **Vercel ↔ 별도 API 서버** 로그�
 
 - [구현 플랜](docs/01-plan/features/nextjs-default-theme.plan.md)
 - [제품 요구사항 문서(PRD)](docs/01-plan/features/nextjs-default-theme.prd.md)
+
+## 배포 프로필
+
+같은 코드베이스를 환경 변수만 바꿔 세 가지로 배포합니다. 설정하지 않으면 지금과 동일하게 동작합니다.
+
+- **Vercel + Supabase**(무료 데모): Django를 Vercel Python 함수로, Supabase Postgres·Storage(S3), DB 캐시, Vercel Cron
+- **VPS**(운영): Docker compose 또는 gunicorn + nginx, Postgres/SQLite, 로컬 미디어, 시스템 cron
+- **분리형**: Vercel의 Next.js 프런트 + VPS의 Django API
+
+자세한 설정·환경 변수(`DATABASE_URL`, `MEDIA_STORAGE`, `CACHE_URL`, `CRON_SECRET`, `DEPLOY_PROFILE`)와 데이터 이전은
+[배포 프로필 문서](docs/04-deploy/deployment-profiles.md), 템플릿은 `deploy/env/`에 있습니다. 예약 작업은
+`python manage.py run_scheduled_jobs`, 점검은 `python manage.py check_deploy_profile`로 실행합니다.
 
 ## 운영 준비도 체크
 

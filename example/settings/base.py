@@ -19,6 +19,8 @@ from django.templatetags.static import static
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
 
+from .deploy import ConfigEnv, cache_config, media_storage_config, media_url_for
+
 
 def csv_config(value):
     return [item.strip() for item in value.split(",") if item.strip()]
@@ -911,7 +913,12 @@ LOGGING_HANDLERS = {
 }
 
 if LOG_TO_FILE:
-    os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
+    try:
+        os.makedirs(os.path.dirname(LOG_FILE_PATH), exist_ok=True)
+    except OSError:
+        # Read-only filesystem (e.g. a Vercel function): keep console logging instead of failing to boot.
+        LOG_TO_FILE = False
+if LOG_TO_FILE:
     LOGGING_HANDLERS["file"] = {
         "level": LOG_LEVEL,
         "class": "logging.handlers.RotatingFileHandler",
@@ -1029,10 +1036,17 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 # Storage backends. The legacy DEFAULT_FILE_STORAGE / STATICFILES_STORAGE
 # settings were removed in Django 5.1 and are silently ignored, so any override
 # must go through STORAGES (see production.py for the WhiteNoise override).
+# Deployment switches resolved by example/settings/deploy.py (docs/04-deploy/deployment-profiles.md).
+# python-decouple's config reads the environment first, then .env.
+DEPLOY_ENV = ConfigEnv(de_config)
+
+# MEDIA_STORAGE=local (default) keeps uploads under MEDIA_ROOT; MEDIA_STORAGE=s3 stores them in an
+# S3-compatible bucket such as Supabase Storage (needs django-storages[s3] + boto3).
+MEDIA_ROOT = de_config("MEDIA_ROOT", default=os.path.join(BASE_DIR, "media"))
+MEDIA_URL = media_url_for(DEPLOY_ENV, "/media/")
+
 STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
+    "default": media_storage_config(DEPLOY_ENV),
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
@@ -1061,7 +1075,17 @@ LOGOUT_REDIRECT_URL = "/"
 # FILE_UPLOAD_MAX_MEMORY_SIZE = '2621440'
 
 # https://docs.djangoproject.com/en/4.1/topics/cache/
-# Cache
+# Cache. CACHE_URL empty/locmem:// keeps Django's per-process default; serverless or multi-worker
+# deployments need a shared backend (db:// -> run `python manage.py createcachetable`, or redis://),
+# otherwise DRF throttles and cooldowns are counted per process.
+CACHES = cache_config(DEPLOY_ENV)
+
+# Bearer token for GET/POST /api/internal/cron (Vercel Cron sends `Authorization: Bearer $CRON_SECRET`).
+# Empty disables the endpoint (404); system cron can run `manage.py run_scheduled_jobs` instead.
+CRON_SECRET = de_config("CRON_SECRET", default="")
+
+# Origins allowed to send unsafe requests with the CSRF cookie (a split front-end on another domain).
+CSRF_TRUSTED_ORIGINS = de_config("CSRF_TRUSTED_ORIGINS", default="", cast=csv_config)
 
 # https://stackoverflow.com/questions/11297873/how-to-disable-cache-for-development-in-django
 # 캐시를 끄려면 아래코드 적용

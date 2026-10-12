@@ -135,12 +135,11 @@ def user_icon_url(user, width=20, height=20):
     if (
         hasattr(user, "profile")
         and user.profile.icon
-        and default_storage.exists(user.profile.icon.path)
+        # .name, not .path: remote storages (MEDIA_STORAGE=s3) have no local filesystem path.
+        and default_storage.exists(user.profile.icon.name)
     ):
-        # return user.profile.icon.url
-
         im = get_thumbnail(
-            user.profile.icon.path,
+            user.profile.icon,
             "%sx%s" % (width, height),
             crop="center",
             quality=defaults.THUMBNAIL_QUALITY,

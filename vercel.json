@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "example/wsgi.py": {
+      "maxDuration": 60,
+      "excludeFiles": "{nextjs/**,docs/**,node_modules/**,**/node_modules/**,.tmp-nextjs-runtime/**,test/**,scripts/**,build/**,dist/**,media/**,react_example/**,.github/**,.idea/**,*.log,*.log.*,**/*.sqlite3,**/tests.py,**/test_*.py}"
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/internal/cron",
+      "schedule": "0 18 * * *"
+    }
+  ]
+}

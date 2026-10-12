@@ -77,7 +77,7 @@ const compatibilityProblems = [];
 if (existsSync(compatibilityManifestPath)) {
   try {
     const manifest = JSON.parse(readFileSync(compatibilityManifestPath, 'utf8'));
-    if (manifest.version !== 1 || !Array.isArray(manifest.files)) {
+    if (![1, 2].includes(manifest.version) || !Array.isArray(manifest.files)) {
       compatibilityProblems.push(`${compatibilityManifestName} has an unsupported format`);
     } else {
       compatibilityEntries = manifest.files;

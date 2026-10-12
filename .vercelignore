@@ -1,0 +1,10 @@
+# Uploaded to Vercel only for the Django (Vercel + Supabase) profile, whose project root is the repo root.
+# The root api/ folder holds a PHP contract file used by the VPS deploy scripts; Vercel treats /api as its
+# functions folder, so it must not be uploaded or /api/v1/... could stop reaching Django.
+/api/
+/docs/
+/.tmp-nextjs-runtime/
+/media/
+*.sqlite3
+*.sqlite3-journal
+*.log
