@@ -2,7 +2,7 @@
 # Django to 6.1 broke on an unpinned djangorestframework 3.17, which imports a
 # name Django 6.1 removed -- an install months later would otherwise not
 # reproduce. Bump deliberately, run the test suite, then edit the pin here.
-Django==6.1.1
+Django==6.1.2
 
 # Admin / UI
 django-unfold==0.105.0
