@@ -279,23 +279,19 @@ def _rewrite_nextjs25_runtime_config(content, request):
         content = content.replace(object_assign_script, direct_config_script + object_assign_script, 1)
 
     escaped_current_url = escape(current_url, quote=True)
-    content = re.sub(
-        r'(<meta\s+property="og:url"\s+content=")[^"]*(")',
-        rf"\g<1>{escaped_current_url}\2",
-        content,
-    )
-    content = re.sub(
-        r'(<link\s+rel="canonical"\s+href=")[^"]*(")',
-        rf"\g<1>{escaped_current_url}\2",
-        content,
-    )
+
+    # Callables, so a backslash in the URL is never read as a regex group reference.
+    def with_html_url(match):
+        return f"{match.group(1)}{escaped_current_url}{match.group(2)}"
+
+    def with_json_url(match):
+        return f"{match.group(1)}{_nextjs25_script_json(current_url)[1:-1]}{match.group(2)}"
+
+    content = re.sub(r'(<meta\s+property="og:url"\s+content=")[^"]*(")', with_html_url, content)
+    content = re.sub(r'(<link\s+rel="canonical"\s+href=")[^"]*(")', with_html_url, content)
     if not re.search(r'<link\b(?=[^>]*\brel=["\']canonical["\'])[^>]*>', content, flags=re.I):
         content = content.replace("</head>", f'<link href="{escaped_current_url}" rel="canonical"/></head>', 1)
-    content = re.sub(
-        r'("property":"og:url","content":")[^"]*(")',
-        rf"\g<1>{current_url}\2",
-        content,
-    )
+    content = re.sub(r'("property":"og:url","content":")[^"]*(")', with_json_url, content)
     if not re.search(r'<meta\b(?=[^>]*\bproperty=["\']og:url["\'])[^>]*>', content, flags=re.I):
         content = content.replace("</head>", f'<meta property="og:url" content="{escaped_current_url}"/></head>', 1)
     return content

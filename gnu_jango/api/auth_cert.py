@@ -130,12 +130,20 @@ def _cert_adapter_url(request, endpoint):
     return f"{target}?{encoded}" if encoded else target
 
 
+_SCRIPT_JSON_ESCAPES = str.maketrans({"<": "\\u003C", ">": "\\u003E", "&": "\\u0026"})
+
+
+def _script_json(value):
+    # JSON placed inside a <script> block: no markup character may survive ("</script", "<!--").
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":")).translate(_SCRIPT_JSON_ESCAPES)
+
+
 def _cert_bridge_html(request, payload, *, clear_return_origin=True):
     payload = dict(payload)
     payload.setdefault("type", "identity-verification-result")
     payload.setdefault("status", "error")
-    payload_json = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
-    target_origin_json = json.dumps(_cert_post_message_origin(request), ensure_ascii=False)
+    payload_json = _script_json(payload)
+    target_origin_json = _script_json(_cert_post_message_origin(request))
     if clear_return_origin:
         request.session[CERT_RETURN_ORIGIN_SESSION_KEY] = ""
         request.session.modified = True

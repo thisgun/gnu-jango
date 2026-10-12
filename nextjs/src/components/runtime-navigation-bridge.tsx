@@ -32,7 +32,9 @@ function isIgnoredHref(href: string): boolean {
     normalized.startsWith("#") ||
     normalized.startsWith("mailto:") ||
     normalized.startsWith("tel:") ||
-    normalized.startsWith("javascript:")
+    normalized.startsWith("javascript:") ||
+    normalized.startsWith("data:") ||
+    normalized.startsWith("vbscript:")
   );
 }
 

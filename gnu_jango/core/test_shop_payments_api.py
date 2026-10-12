@@ -1916,6 +1916,17 @@ class TossHttpCallTests(TestCase):
                 self.assertEqual(error.status_code, expected)
 
     @override_settings(**FAKE_TOSS)
+    def test_network_failure_details_stay_in_the_server_log(self):
+        # The exception text can name internal hosts and ports; the client gets a generic message.
+        failure = urllib_error.URLError("[Errno 111] Connection refused: internal-pg:9443")
+        with patch("gnu_jango.api.shop_payments.urllib_request.urlopen", side_effect=failure):
+            with self.assertLogs("gnu_jango.api.shop_payments", level="WARNING") as logs:
+                _, error = shop_payments.toss_api_confirm("pk", "o1", 1)
+
+        self.assertNotIn("internal-pg", json.dumps(error.data))
+        self.assertIn("internal-pg", "\n".join(logs.output))
+
+    @override_settings(**FAKE_TOSS)
     def test_confirm_reports_the_provider_message_of_a_rejection(self):
         with patch("gnu_jango.api.shop_payments.urllib_request.urlopen", side_effect=http_error(400, b'{"code":"X","message":"card declined"}')):
             _, error = shop_payments.toss_api_confirm("pk", "o1", 1)

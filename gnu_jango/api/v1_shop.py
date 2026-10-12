@@ -62,7 +62,6 @@ from .shop_common import (
     legacy_shop_asset_url,
     product_image_url,
     CANCELLED_STATUSES,
-    GUEST_ORDER_PASSWORD_HASH_PREFIX,
     ORDERED_STATUSES,  # noqa: F401 - re-exported for existing importers
     ORDER_STATUS_CANCELLED,
     ORDER_STATUS_ORDERED,
@@ -81,6 +80,7 @@ from .shop_common import (
     guest_order_password_config_name,
     guest_order_password_hash,
     guest_order_password_matches,
+    guest_order_password_needs_upgrade,
     next_coupon_log_id,
     normalize_hp,
     normalize_order_status,
@@ -906,7 +906,7 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
         if not user and guest_password:
             Config.objects.update_or_create(
                 name=guest_order_password_config_name(order.od_id),
-                defaults={"value": guest_order_password_hash(order.od_id, guest_password)},
+                defaults={"value": guest_order_password_hash(guest_password)},
             )
 
         ShopOrderData.objects.update_or_create(
@@ -1382,14 +1382,15 @@ def order_lookup_view(request):
     data = request_data(request)
     order = ShopOrder.objects.filter(pk=str(data.get("od_id") or "").strip()).first()
     if not order or order.user_id is not None:
+        guest_order_password_matches("", data.get("od_pwd"), "")  # same cost as a real lookup
         return api_error("Order not found.", status=drf_status.HTTP_404_NOT_FOUND, code="order_not_found")
     stored = Config.objects.filter(name=guest_order_password_config_name(order.od_id)).values_list("value", flat=True).first()
     if not stored or not guest_order_password_matches(order.od_id, data.get("od_pwd"), stored):
         return api_error("Order not found.", status=drf_status.HTTP_404_NOT_FOUND, code="order_not_found")
-    if not str(stored).startswith(GUEST_ORDER_PASSWORD_HASH_PREFIX):
+    if guest_order_password_needs_upgrade(stored):
         Config.objects.update_or_create(
             name=guest_order_password_config_name(order.od_id),
-            defaults={"value": guest_order_password_hash(order.od_id, data.get("od_pwd"))},
+            defaults={"value": guest_order_password_hash(data.get("od_pwd"))},
         )
     return api_response(data={"od_id": order.od_id, "uid": order.uid, "redirect_url": f"/shop/orders/{order.od_id}?uid={order.uid}"})
 

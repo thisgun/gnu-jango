@@ -377,6 +377,13 @@ class CertBridgeHtmlTests(CertTestBase):
         self.assertEqual(response.content.decode().count("</script>"), 1)
         self.assertEqual(bridge_payload(response)["message"], "</script><script>alert(1)</script>")
 
+    def test_no_markup_character_from_the_payload_reaches_the_script_block(self):
+        # "<!--" and an unclosed "<script" can change how the browser parses a script block.
+        _, response = self.render({"message": "<!--<script>&x"})
+        script_line = re.search(r"var payload = (.*);", response.content.decode()).group(1)
+        self.assertNotRegex(script_line, r"[<>&]")
+        self.assertEqual(bridge_payload(response)["message"], "<!--<script>&x")
+
     def test_non_ascii_text_is_preserved(self):
         _, response = self.render({"message": "본인확인 실패"})
         self.assertEqual(bridge_payload(response)["message"], "본인확인 실패")

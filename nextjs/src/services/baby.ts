@@ -153,5 +153,8 @@ export const VACCINE_STATUS_LABEL: Record<VaccineStatus, { label: string; cls: s
 };
 
 export function babyClientUid(prefix = "web"): string {
-  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  // getRandomValues works on plain-HTTP pages too, unlike crypto.randomUUID.
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  const random = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `${prefix}-${Date.now().toString(36)}-${random}`;
 }

@@ -34,7 +34,7 @@ from .shop_common import (
     request_data,
     require_user,
     safe_int,
-    strip_script_tags,
+    strip_script_and_style_blocks,
 )
 
 
@@ -167,7 +167,7 @@ def reviews_view(request):
         # with moderation on (de_item_use_use) a new review waits for an administrator
         is_confirm="0" if int(policy.de_item_use_use or 0) == 1 else "1",
         is_subject=str(data.get("is_subject") or ""),
-        is_content=strip_script_tags(data.get("is_content")),
+        is_content=strip_script_and_style_blocks(data.get("is_content")),
     )
     return api_response(data=review_payload(review), status=drf_status.HTTP_201_CREATED)
 
@@ -210,7 +210,7 @@ def review_detail_view(request, review_id):
         data = request_data(request)
         for field in ("is_subject", "is_content"):
             if field in data:
-                value = strip_script_tags(data.get(field)) if field == "is_content" else str(data.get(field) or "")
+                value = strip_script_and_style_blocks(data.get(field)) if field == "is_content" else str(data.get(field) or "")
                 setattr(review, field, value)
         if "is_score" in data:
             score = _review_score(data.get("is_score"))
@@ -271,7 +271,7 @@ def qna_view(request):
         mb_nick=getattr(getattr(user, "profile", None), "nickname", "") or user.get_username(),
         iq_name=member_display_name(user),
         iq_subject=str(data.get("iq_subject") or ""),
-        iq_question=strip_script_tags(data.get("iq_question")),
+        iq_question=strip_script_and_style_blocks(data.get("iq_question")),
         iq_secret=bool_int(data.get("iq_secret")),
         iq_email=str(data.get("iq_email") or user.email or ""),
         iq_hp=str(data.get("iq_hp") or ""),
@@ -303,7 +303,7 @@ def qna_detail_view(request, iq_id):
             editable_fields.append("iq_answer")
         for field in editable_fields:
             if field in data:
-                value = strip_script_tags(data.get(field)) if field in {"iq_question", "iq_answer"} else str(data.get(field) or "")
+                value = strip_script_and_style_blocks(data.get(field)) if field in {"iq_question", "iq_answer"} else str(data.get(field) or "")
                 setattr(qa, field, value)
         if "iq_secret" in data:
             qa.iq_secret = bool_int(data.get("iq_secret"))

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { apiUrl } from "@/lib/config";
+import { sanitizeUserHtml } from "@/lib/sanitize";
 
 const TOKEN_COOKIE = "g5_token";
 
@@ -251,7 +252,7 @@ function renderReviews(items: LegacyReview[]) {
       <span>${escapeHtml(formatDate(item.is_time))}</span>
     </p>
     <h2 class="legacy-subject">${escapeHtml(stringValue(item.is_subject))}</h2>
-    <div class="legacy-content">${sanitizeLegacyHtml(stringValue(item.is_content))}</div>
+    <div class="legacy-content">${sanitizeUserHtml(stringValue(item.is_content))}</div>
   </div>
 </li>`;
   }).join("")}</ul>`;
@@ -275,8 +276,8 @@ function renderQas(items: LegacyQa[]) {
       <span>${escapeHtml(formatDate(item.iq_time))}</span>
     </p>
     <h2 class="legacy-subject">${escapeHtml(stringValue(item.iq_subject))}</h2>
-    <div class="legacy-content">${canView ? sanitizeLegacyHtml(stringValue(item.iq_question)) : "Secret question."}</div>
-    ${canView && answered ? `<div class="legacy-answer">${sanitizeLegacyHtml(stringValue(item.iq_answer))}</div>` : ""}
+    <div class="legacy-content">${canView ? sanitizeUserHtml(stringValue(item.iq_question)) : "Secret question."}</div>
+    ${canView && answered ? `<div class="legacy-answer">${sanitizeUserHtml(stringValue(item.iq_answer))}</div>` : ""}
   </div>
 </li>`;
   }).join("")}</ul>`;
@@ -304,17 +305,6 @@ function renderPagination(request: NextRequest, meta: LegacyMeta) {
     links.push(`<a class="page${page === current ? " current" : ""}" href="${escapeHtml(url.pathname + url.search)}">${page}</a>`);
   }
   return `<nav class="legacy-pages" aria-label="Pagination">${links.join("")}</nav>`;
-}
-
-function sanitizeLegacyHtml(value: string) {
-  return value
-    .replace(/<script[\s\S]*?<\/script>/gi, "")
-    .replace(/<style[\s\S]*?<\/style>/gi, "")
-    .replace(/<iframe[\s\S]*?<\/iframe>/gi, "")
-    .replace(/<object[\s\S]*?<\/object>/gi, "")
-    .replace(/<embed[\s\S]*?>/gi, "")
-    .replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "")
-    .replace(/\s(href|src)\s*=\s*(['"])\s*javascript:[\s\S]*?\2/gi, "");
 }
 
 function formatDate(value: unknown) {

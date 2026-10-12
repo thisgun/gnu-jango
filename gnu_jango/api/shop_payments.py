@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import socket
 from urllib import error as urllib_error
 from urllib import request as urllib_request
@@ -32,6 +33,8 @@ from .shop_common import (
     safe_int,
     split_setting_list,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def payment_transaction_id(data):
@@ -139,11 +142,13 @@ def payment_adapter_request(action, provider, data):
             details={"provider": provider, "adapter_status": exc.code},
         )
     except (urllib_error.URLError, TimeoutError, socket.timeout) as exc:
+        # The exception text can name internal hosts; it goes to the log, not to the client.
+        logger.warning("Payment adapter request for %s failed: %s", provider, exc)
         return None, api_error(
             "Payment adapter request failed.",
             status=drf_status.HTTP_502_BAD_GATEWAY,
             code="payment_adapter_unavailable",
-            details={"provider": provider, "reason": str(exc)},
+            details={"provider": provider},
         )
 
     try:
@@ -436,11 +441,12 @@ def toss_api_confirm(payment_key_value, order_id, amount):
             },
         )
     except (urllib_error.URLError, TimeoutError, socket.timeout) as exc:
+        logger.warning("Toss payment authorization request failed: %s", exc)
         return None, api_error(
             "Toss payment authorization request failed.",
             status=drf_status.HTTP_502_BAD_GATEWAY,
             code="toss_payment_unavailable",
-            details={"provider": "toss", "reason": str(exc)},
+            details={"provider": "toss"},
         )
     except ValueError:
         return None, api_error(

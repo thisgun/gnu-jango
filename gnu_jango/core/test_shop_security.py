@@ -1,16 +1,20 @@
+import hashlib
 import json
 import tempfile
+import time
 from io import BytesIO
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.hashers import check_password, identify_hasher
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from PIL import Image
 from rest_framework_simplejwt.tokens import RefreshToken
 
+from gnu_jango.api.shop_common import GUEST_ORDER_PASSWORD_HASH_PREFIX, strip_script_and_style_blocks
 from gnu_jango.api.v1_shop import (
-    GUEST_ORDER_PASSWORD_HASH_PREFIX,
     auth_cart_config_name,
     guest_order_password_config_name,
 )
@@ -92,8 +96,33 @@ class ShopSecurityApiTests(TestCase):
         )
         self.assertEqual(ok.status_code, 200)
         stored = Config.objects.get(name=guest_order_password_config_name(order.od_id)).value
-        self.assertTrue(stored.startswith(GUEST_ORDER_PASSWORD_HASH_PREFIX))
-        self.assertNotEqual(stored, "guestpass")
+        self.assertEqual(identify_hasher(stored).algorithm, "pbkdf2_sha256")
+        self.assertTrue(check_password("guestpass", stored))
+
+    def test_guest_order_lookup_upgrades_a_legacy_sha256_password_to_a_password_hasher(self):
+        order = ShopOrder.objects.create(
+            od_id="GUESTSHA001",
+            od_name="Guest",
+            od_email="guest@example.com",
+            od_cart_price=1000,
+            od_receipt_price=1000,
+            od_misu=1000,
+            od_status="order",
+        )
+        legacy_raw = f"{settings.SECRET_KEY}:{order.od_id}:guestpass".encode("utf-8")
+        legacy = f"{GUEST_ORDER_PASSWORD_HASH_PREFIX}{hashlib.sha256(legacy_raw).hexdigest()}"
+        Config.objects.create(name=guest_order_password_config_name(order.od_id), value=legacy)
+
+        ok = self.client.post(
+            "/api/v1/shop/orders/lookup",
+            data=json.dumps({"od_id": order.od_id, "od_pwd": "guestpass"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(ok.status_code, 200)
+        stored = Config.objects.get(name=guest_order_password_config_name(order.od_id)).value
+        self.assertEqual(identify_hasher(stored).algorithm, "pbkdf2_sha256")
+        self.assertTrue(check_password("guestpass", stored))
 
     def test_coupon_apply_rejects_coupon_owned_by_another_user(self):
         cart_item = {
@@ -530,3 +559,33 @@ class ConfigSideTableCleanupTests(TestCase):
         order.delete()
 
         self.assertFalse(Config.objects.filter(name=name).exists())
+
+
+class ScriptAndStyleBlockStripTests(SimpleTestCase):
+    """Review and Q&A bodies are stored after this; renderers sanitise the rest with an allow-list."""
+
+    def test_script_and_style_blocks_are_removed_with_their_content(self):
+        self.assertEqual(strip_script_and_style_blocks("ok<script>alert(1)</script> text"), "ok text")
+        self.assertEqual(strip_script_and_style_blocks("a<style>p{}</style>b"), "ab")
+        self.assertEqual(strip_script_and_style_blocks('a<SCRIPT type="x">1</script >b'), "ab")
+
+    def test_nested_script_tags_cannot_reassemble_a_script_block(self):
+        cleaned = strip_script_and_style_blocks("<scr<script></script>ipt>alert(1)</script>")
+        self.assertNotIn("<script", cleaned.lower())
+
+    def test_an_unclosed_block_is_dropped_to_the_end(self):
+        self.assertEqual(strip_script_and_style_blocks("keep<script>alert(1)"), "keep")
+
+    def test_many_unclosed_tags_are_handled_in_linear_time(self):
+        started = time.monotonic()
+        cleaned = strip_script_and_style_blocks("<script>" * 50000)
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertEqual(cleaned, "")
+
+    def test_plain_text_and_other_markup_are_left_as_written(self):
+        # No entity escaping: text views and edit forms show what the member typed.
+        self.assertEqual(strip_script_and_style_blocks("R&D a < b <p>ok</p> <scripted"), "R&D a < b <p>ok</p> <scripted")
+
+    def test_empty_values_become_an_empty_string(self):
+        self.assertEqual(strip_script_and_style_blocks(None), "")
+        self.assertEqual(strip_script_and_style_blocks(""), "")

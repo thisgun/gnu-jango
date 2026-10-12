@@ -7,6 +7,7 @@ import re
 import uuid
 
 from django.conf import settings
+from django.contrib.auth.hashers import check_password, identify_hasher, make_password
 from django.utils import timezone
 from rest_framework import status as drf_status
 from rest_framework.permissions import BasePermission
@@ -35,7 +36,14 @@ CANCELLED_STATUSES = {ORDER_STATUS_CANCELLED, "cancel", "cancelled"}
 PAID_STATUSES = {ORDER_STATUS_PAID, ORDER_STATUS_SHIPPING, "paid", "shipping"}
 ORDERED_STATUSES = {ORDER_STATUS_ORDERED, "order", "ordered"}
 PAYMENT_ADAPTER_PROVIDERS = {"kcp", "kcp_v2", "inicis", "nicepay", "naverpay", "kakaopay", "samsungpay"}
+# Guest order passwords used to be stored as sha256(SECRET_KEY:od_id:password) with this prefix; they
+# still verify and are re-hashed with the password hasher on the next successful lookup.
 GUEST_ORDER_PASSWORD_HASH_PREFIX = "sha256$"
+_SCRIPT_OR_STYLE_OPEN = re.compile(r"<(script|style)(?=[\s/>])", re.IGNORECASE)
+_SCRIPT_OR_STYLE_CLOSE = {
+    name: re.compile(rf"</{name}(?=[\s/>])[^>]*>", re.IGNORECASE) for name in ("script", "style")
+}
+_SCRIPT_OR_STYLE_TAG = re.compile(r"<(?=/?(?:script|style)(?![\w-]))", re.IGNORECASE)
 
 
 class ShopStaffPermission(BasePermission):
@@ -77,8 +85,28 @@ def write_smoke_config(suffix, value):
     )
 
 
-def strip_script_tags(value):
-    return re.sub(r"<script\b[^>]*>.*?</script>", "", str(value or ""), flags=re.IGNORECASE | re.DOTALL)
+def strip_script_and_style_blocks(value):
+    """Remove <script>/<style> blocks from member-written HTML (reviews, Q&A) before it is stored.
+
+    Every renderer still sanitises the stored HTML with an allow-list (sanitizeUserHtml in Next.js);
+    this keeps the stored text itself free of script blocks. Plain text is left as written (no entity
+    escaping), so text views and edit forms show what the member typed.
+    """
+    text = str(value or "")
+    # One linear scan: a regex with a lazy ".*?" rescans to the end from every unclosed tag.
+    kept = []
+    position = 0
+    while (opening := _SCRIPT_OR_STYLE_OPEN.search(text, position)) is not None:
+        kept.append(text[position : opening.start()])
+        closing = _SCRIPT_OR_STYLE_CLOSE[opening.group(1).lower()].search(text, opening.end())
+        if closing is None:
+            position = len(text)  # an unclosed block runs to the end, as in a browser
+            break
+        position = closing.end()
+    kept.append(text[position:])
+    # Removing an inner block can join the pieces of an outer tag ("<scr<script></script>ipt>");
+    # neutralise whatever tag is left instead of scanning again.
+    return _SCRIPT_OR_STYLE_TAG.sub("&lt;", "".join(kept))
 
 
 def member_display_name(user):
@@ -206,17 +234,39 @@ def guest_order_password_config_name(order_id):
     return f"guest_order_pwd_{order_id}"[:50]
 
 
-def guest_order_password_hash(order_id, password):
+def guest_order_password_hash(password):
+    return make_password(str(password or ""))
+
+
+def _legacy_guest_order_password_hash(order_id, password):
     raw = f"{settings.SECRET_KEY}:{order_id}:{password or ''}".encode("utf-8")
     return f"{GUEST_ORDER_PASSWORD_HASH_PREFIX}{hashlib.sha256(raw).hexdigest()}"
+
+
+def _uses_password_hasher(stored_value):
+    try:
+        identify_hasher(stored_value)
+    except ValueError:
+        return False
+    return True
+
+
+def guest_order_password_needs_upgrade(stored):
+    """True for the legacy SHA-256 and plaintext values, which are re-hashed after a successful lookup."""
+    return not _uses_password_hasher(str(stored or ""))
 
 
 def guest_order_password_matches(order_id, password, stored):
     stored_value = str(stored or "")
     if not stored_value:
+        # Pay the hasher's cost anyway, so the response time does not reveal which guest orders exist.
+        make_password(str(password or ""))
         return False
     if stored_value.startswith(GUEST_ORDER_PASSWORD_HASH_PREFIX):
-        return hmac.compare_digest(guest_order_password_hash(order_id, password), stored_value)
+        return hmac.compare_digest(_legacy_guest_order_password_hash(order_id, password), stored_value)
+    if _uses_password_hasher(stored_value):
+        return check_password(str(password or ""), stored_value)
+    # Plaintext from imported YoungCart orders.
     return hmac.compare_digest(str(password or ""), stored_value)
 
 

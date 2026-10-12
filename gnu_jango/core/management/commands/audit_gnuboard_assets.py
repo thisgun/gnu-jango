@@ -38,8 +38,9 @@ def source_path(source_roots, path):
     if normalized.startswith("data/"):
         normalized = normalized[5:]
     for source_root in source_roots:
-        candidate = legacy_data_root(source_root) / Path(normalized)
-        if candidate.is_file():
+        data_root = legacy_data_root(source_root).resolve()
+        candidate = (data_root / Path(normalized)).resolve()
+        if candidate.is_relative_to(data_root) and candidate.is_file():
             return candidate
     return None
 
@@ -87,7 +88,9 @@ def media_path(path):
         return None
     if not normalized.startswith("data/"):
         return None
-    return Path(settings.MEDIA_ROOT) / Path(normalized)
+    media_root = Path(settings.MEDIA_ROOT).resolve()
+    candidate = (media_root / Path(normalized)).resolve()
+    return candidate if candidate.is_relative_to(media_root) else None
 
 
 def exists_in_media(path):

@@ -1003,7 +1003,10 @@ class Command(BaseCommand):
     def legacy_board_file_path(self, bo_table, filename):
         if not filename:
             return None
-        return self.source_root / "data" / "file" / str(bo_table) / filename
+        # bo_table and bf_file come from the imported database: never read outside data/file.
+        base = (self.source_root / "data" / "file").resolve()
+        path = (base / str(bo_table) / filename).resolve()
+        return path if path.is_relative_to(base) and path != base else None
 
     def legacy_board_file_url(self, bo_table, filename):
         if not filename:
