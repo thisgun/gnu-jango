@@ -8,6 +8,10 @@ updates:
       time: "09:00"
       timezone: Asia/Seoul
     open-pull-requests-limit: 5
+    ignore:
+      # redis is also the Celery broker client; move to a new major only after checking Celery/kombu support
+      - dependency-name: "redis"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: npm
     directory: /nextjs
@@ -17,6 +21,12 @@ updates:
       time: "09:15"
       timezone: Asia/Seoul
     open-pull-requests-limit: 5
+    groups:
+      # TipTap packages must share one version; bumping a single extension breaks the editor build
+      tiptap:
+        patterns: ["@tiptap/*"]
+      eslint:
+        patterns: ["eslint", "eslint-*", "@eslint/*", "typescript-eslint", "@typescript-eslint/*"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -25,6 +35,9 @@ updates:
       day: monday
       time: "09:30"
       timezone: Asia/Seoul
+    groups:
+      actions:
+        patterns: ["*"]
 
   - package-ecosystem: docker
     directory: /
