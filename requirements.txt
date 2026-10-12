@@ -55,7 +55,7 @@ boto3==1.43.111
 # Background work
 celery==5.6.3
 # Also the client for CACHE_URL=redis://... (django.core.cache.backends.redis.RedisCache).
-redis==5.3.1
+redis==8.1.0
 
 # Serving / deployment
 gunicorn==26.0.0
