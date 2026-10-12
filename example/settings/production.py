@@ -84,7 +84,8 @@ if IS_HEROKU:
 STORAGES = {
 	**STORAGES,
 	"staticfiles": {
-		"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+		# hashed + compressed like WhiteNoise, but references to files the legacy skins never shipped stay as written
+		"BACKEND": "gnu_jango.core.static_storage.LegacyTolerantManifestStorage",
 	},
 }
 
