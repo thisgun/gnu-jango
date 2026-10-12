@@ -20,7 +20,7 @@ django-taggit==6.1.0
 # entry was commented out, while sanitising already goes through bleach.
 bleach[css]==6.4.0
 cmarkgfm==2025.10.22
-pillow==12.2.0
+pillow==12.3.0
 sorl-thumbnail==13.1.0
 
 # Requests / sessions
