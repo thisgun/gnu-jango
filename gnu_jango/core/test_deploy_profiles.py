@@ -177,6 +177,32 @@ class DatabaseConfigTests(SimpleTestCase):
         self.assertEqual(deploy.vercel_allowed_hosts({"VERCEL_URL": "app-abc.vercel.app"}), [])
 
 
+class SecretKeyTests(SimpleTestCase):
+    def test_development_gets_the_published_fallback(self):
+        self.assertEqual(deploy.secret_key_for({}, is_production=False), deploy.DEVELOPMENT_SECRET_KEY)
+        self.assertEqual(deploy.secret_key_for({"SECRET_KEY": "local"}, is_production=False), "local")
+
+    def test_production_requires_a_key(self):
+        with self.assertRaisesMessage(ImproperlyConfigured, "SECRET_KEY environment variable is required"):
+            deploy.secret_key_for({}, is_production=True)
+
+    def test_production_refuses_the_keys_published_in_this_repository(self):
+        # The development fallback and the docker-compose placeholder are public, so anyone could
+        # forge sessions and JWTs signed with them.
+        placeholders = (
+            deploy.DEVELOPMENT_SECRET_KEY,
+            "unsafe-compose-secret-change-me",
+            " unsafe-anything",
+            '<generate: python -c "...">',
+        )
+        for key in placeholders:
+            with self.subTest(key=key), self.assertRaisesMessage(ImproperlyConfigured, "placeholder"):
+                deploy.secret_key_for({"SECRET_KEY": key}, is_production=True)
+
+    def test_production_accepts_a_real_key(self):
+        self.assertEqual(deploy.secret_key_for({"SECRET_KEY": GOOD_SECRET_KEY}, is_production=True), GOOD_SECRET_KEY)
+
+
 class CurrentDefaultsTests(SimpleTestCase):
     """Without the new variables the running settings are exactly what they were before."""
 

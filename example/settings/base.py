@@ -19,7 +19,7 @@ from django.templatetags.static import static
 from django.urls import reverse_lazy
 from django.utils.translation import gettext_lazy as _
 
-from .deploy import ConfigEnv, cache_config, media_storage_config, media_url_for
+from .deploy import ConfigEnv, cache_config, media_storage_config, media_url_for, secret_key_for
 
 
 def csv_config(value):
@@ -59,12 +59,8 @@ SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 DEBUG = bool_config("DEBUG", default=not IS_PRODUCTION)
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = de_config(
-    "SECRET_KEY",
-    default=None if IS_PRODUCTION else "unsafe-development-secret-key-change-me",
-)
-if not SECRET_KEY:
-    raise ImproperlyConfigured("SECRET_KEY environment variable is required in production.")
+# Production refuses a missing key and the placeholders published in this repository.
+SECRET_KEY = secret_key_for(ConfigEnv(de_config), is_production=IS_PRODUCTION)
 
 SENTRY_DSN = de_config("SENTRY_DSN", default="")
 SENTRY_TRACES_SAMPLE_RATE = de_config("SENTRY_TRACES_SAMPLE_RATE", default=0.0, cast=float)

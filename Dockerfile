@@ -1,30 +1,51 @@
+# Build stage: compilers are needed only if a dependency has no wheel; they stay out of the final image.
+FROM python:3.13-slim AS builder
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends build-essential libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt /tmp/requirements.txt
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --upgrade pip \
+    && /opt/venv/bin/pip install -r /tmp/requirements.txt
+
+
 FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
+    PATH="/opt/venv/bin:$PATH" \
     DJANGO_SETTINGS_MODULE=example.settings.production \
-    ENVIRONMENT=Production
+    ENVIRONMENT=Production \
+    MEDIA_ROOT=/app/media
+
+# libpq: a transitive dependency (django-heroku) may build psycopg2 from source in the builder stage.
+# The app runs as an unprivileged user; it writes only to media/ and logs/.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpq5 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 10001 --create-home --shell /usr/sbin/nologin app
+
+COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /app
-
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential curl libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt ./
-RUN python -m pip install --upgrade pip \
-    && pip install -r requirements.txt
-
 COPY . .
-
-RUN mkdir -p /app/staticfiles /app/media /app/logs
 
 # Static files are collected into the image (served by WhiteNoise), so containers start without it and
 # every new image brings its own assets. The build needs no database or real secrets.
-RUN SECRET_KEY=build-only-not-secret ALLOWED_HOSTS=localhost     EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend     python manage.py collectstatic --noinput
+RUN SECRET_KEY=build-only-not-secret ALLOWED_HOSTS=localhost \
+    EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend \
+    python manage.py collectstatic --noinput
 
-RUN chmod +x /app/docker/entrypoint.sh
+RUN mkdir -p /app/media /app/logs \
+    && chown app:app /app/media /app/logs \
+    && chmod +x /app/docker/entrypoint.sh
+
+USER app
 
 EXPOSE 8000
 

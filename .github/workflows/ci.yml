@@ -86,3 +86,34 @@ jobs:
         run: npm run lint
       - name: Payment return tests
         run: npm run test:payment:return
+
+  docker:
+    # Builds the image the CD workflow publishes (without pushing) and smoke-tests it, so a broken
+    # Dockerfile is caught on the pull request instead of after the merge.
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: gnu-jango:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test
+        # No database here: skip migrations; Django setup and gunicorn start without connecting.
+        run: |
+          docker run -d --name web -e SECRET_KEY="$(openssl rand -hex 32)" -e ALLOWED_HOSTS=localhost \
+            -e EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend -e RUN_MIGRATIONS=0 gnu-jango:ci
+          docker exec web sh -c 'test "$(id -u)" != 0 && touch /app/media/.write-test /app/logs/.write-test'
+          docker exec web python manage.py check
+          for i in $(seq 1 20); do
+            docker exec web python -c "import socket; socket.create_connection(('127.0.0.1', 8000), 3)" && exit 0
+            sleep 2
+          done
+          exit 1
+      - name: Container logs
+        if: failure()
+        run: docker logs web || true

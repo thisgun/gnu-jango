@@ -223,6 +223,33 @@ def database_from_env(env, *, default_conn_max_age, default_ssl_require):
 
 
 # --------------------------------------------------------------------------------------------- #
+#  Secret key
+# --------------------------------------------------------------------------------------------- #
+
+DEVELOPMENT_SECRET_KEY = "unsafe-development-secret-key-change-me"
+# Keys published in this repository start with one of these: the development fallback ("unsafe-") and
+# the deploy/env/*.env.example placeholder ("<generate: ...>"). Anyone could forge sessions and JWTs
+# signed with them.
+PLACEHOLDER_SECRET_KEY_PREFIXES = ("unsafe-", "<")
+
+
+def secret_key_for(env, *, is_production):
+    """SECRET_KEY from the environment; production refuses a missing key or a published placeholder."""
+    # The value is returned as given (not stripped) so an existing deployment keeps its signing key.
+    value = env.get("SECRET_KEY", None) or ""
+    if not is_production:
+        return value or DEVELOPMENT_SECRET_KEY
+    if not value.strip():
+        raise ImproperlyConfigured("SECRET_KEY environment variable is required in production.")
+    if value.strip().startswith(PLACEHOLDER_SECRET_KEY_PREFIXES):
+        raise ImproperlyConfigured(
+            "SECRET_KEY is a placeholder published in this repository; generate a real one with "
+            "`python -c \"from django.core.management.utils import get_random_secret_key as g; print(g())\"`."
+        )
+    return value
+
+
+# --------------------------------------------------------------------------------------------- #
 #  Hosts
 # --------------------------------------------------------------------------------------------- #
 

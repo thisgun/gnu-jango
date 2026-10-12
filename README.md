@@ -157,6 +157,7 @@ python manage.py audit_external_integrations --fail-on-missing
 `python manage.py runserver`만으로 관리자 메일 테스트가 동작하고, Docker/운영 환경은 Redis와 별도 worker 프로세스를 사용합니다.
 
 ```bash
+# .env에 SECRET_KEY가 있어야 합니다(deploy/env/vps.env.example 참고)
 docker compose up --build
 docker compose logs -f worker
 ```

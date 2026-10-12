@@ -69,6 +69,7 @@ path-style 주소(`S3_ADDRESSING_STYLE`로 변경 가능), SigV4. boto3 1.36 이
 
 | 변수 | 설명 |
 |------|------|
+| `SECRET_KEY` | 운영에서는 필수입니다. 이 저장소에 공개된 자리표시 값(`unsafe-`로 시작하는 개발 기본값, `deploy/env/*.example`의 `<generate: ...>`)이면 운영 설정이 시작을 거부합니다. |
 | `DEPLOY_PROFILE` | `vps` / `vercel` / `split`. `check_deploy_profile`, `check_release_readiness`가 읽습니다. |
 | `CRON_SECRET` | `/api/internal/cron`의 Bearer 토큰. 비어 있거나 16자 미만이면 엔드포인트가 404입니다. |
 | `CSRF_TRUSTED_ORIGINS` | 다른 도메인의 프런트엔드가 CSRF 쿠키로 POST할 때(분리형 direct 모드). |
@@ -162,6 +163,14 @@ Vercel 함수에서는 번들 디렉터리에 쓸 수 없습니다(`/tmp`만 임
 docker compose up -d --build
 docker compose exec web python manage.py check_deploy_profile
 ```
+
+- `SECRET_KEY`는 기본값이 없습니다. `.env`에 넣지 않으면 compose가 시작 전에 멈춥니다.
+- 컨테이너는 root가 아닌 `app` 사용자(uid 10001)로 실행되고, `/app/media`와 `/app/logs`에만 씁니다.
+  `web`에는 8000번 포트 상태 점검(healthcheck)이 붙어 있습니다.
+- root로 실행되던 예전 이미지에서 만든 `media` 볼륨은 소유자가 root라 업로드가 실패합니다. 한 번만 소유자를 바꾸세요:
+  `docker compose run --rm --user root web chown -R app:app /app/media`
+- 이미지를 `docker run`으로 직접 쓸 때 `MEDIA_ROOT` 기본값은 `/app/media`입니다. 호스트 폴더를 연결(bind mount)한다면
+  그 폴더의 소유자를 uid 10001로 바꿔 두세요(`sudo chown -R 10001:10001 <폴더>`).
 
 ### gunicorn + nginx 직접 설치
 
@@ -314,7 +323,8 @@ aws s3 sync ./media "s3://<bucket>/" \
 
 ## CI/CD (GitHub Actions)
 
-- **CI** (`.github/workflows/ci.yml`): PR과 `main` push마다 PostgreSQL 16으로 Django 테스트를 병렬 실행하고(커버리지 하한 65%), Next.js 타입 검사·빌드를 돌립니다. **공개 저장소에서만** 실행되고, 비공개 저장소에서는 작업이 건너뜁니다.
+- **CI** (`.github/workflows/ci.yml`): PR과 `main` push마다 PostgreSQL 16으로 Django 테스트를 병렬 실행하고(커버리지 하한 65%), Next.js 타입 검사·빌드를 돌립니다. Docker 이미지도 빌드해(push 없이) root가 아닌 사용자로 뜨는지, gunicorn이 8000번에서 응답하는지 확인합니다. **공개 저장소에서만** 실행되고, 비공개 저장소에서는 작업이 건너뜁니다.
+- **CodeQL** (`.github/workflows/codeql.yml`, 공개 저장소에서만): PR, `main` push, 매주 월요일에 Python과 JavaScript/TypeScript 코드를 정적 분석합니다. 결과는 Security → Code scanning에 나옵니다.
 - **CD** (`.github/workflows/cd.yml`, 공개 저장소에서만):
   - `main`에서 CI가 통과하면 Docker 이미지를 `ghcr.io/<owner>/<repo>:main`과 `:sha-<커밋>`으로 올립니다. VPS에서는 `docker pull` 후 재시작하면 됩니다.
   - `v1.2.3` 같은 태그를 push하면 `:1.2.3`·`:latest` 이미지와 GitHub Release를 만듭니다.

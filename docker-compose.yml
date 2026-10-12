@@ -32,7 +32,7 @@ services:
       DJANGO_SETTINGS_MODULE: example.settings.production
       ENVIRONMENT: Production
       DEBUG: ${DEBUG:-False}
-      SECRET_KEY: ${SECRET_KEY:-unsafe-compose-secret-change-me}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env (see deploy/env/vps.env.example)}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0}
       SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-False}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-False}
@@ -69,6 +69,13 @@ services:
       CRON_SECRET: ${CRON_SECRET:-}
     ports:
       - "${DJANGO_PORT:-8000}:8000"
+    # A TCP probe: an HTTP request would depend on ALLOWED_HOSTS and SECURE_SSL_REDIRECT.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
     volumes:
       - media:/app/media
 
@@ -85,7 +92,7 @@ services:
       DJANGO_SETTINGS_MODULE: example.settings.production
       ENVIRONMENT: Production
       DEBUG: ${DEBUG:-False}
-      SECRET_KEY: ${SECRET_KEY:-unsafe-compose-secret-change-me}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env (see deploy/env/vps.env.example)}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0}
       DB_ENGINE: django.db.backends.postgresql
       DB_NAME: ${DB_NAME:-gnu_jango}
