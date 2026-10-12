@@ -2,8 +2,12 @@ GNU Jango (gnu_jango)
 Copyright (c) the GNU Jango contributors
 
 GNU Jango ports Gnuboard5 and YoungCart to Django (API and server) and Next.js
-(front end). It is distributed under the GNU Lesser General Public License,
-version 2.1 or (at your option) any later version; see LICENSE.
+(front end). It is a derivative work of Gnuboard5 (GNU Board 5) and its YoungCart
+shop module by SIR Soft Inc. (http://sir.kr), which are distributed under the GNU
+Lesser General Public License version 2.1. GNU Jango is therefore distributed under
+the same license, the GNU Lesser General Public License version 2.1 or (at your
+option) any later version; the full text is in LICENSE. The third-party components
+listed below keep their own licenses.
 
 Upstream work
 -------------
