@@ -1,0 +1,11 @@
+-r requirements.txt
+
+black
+coverage[toml]
+django-stubs[compatible-mypy]
+djangorestframework-stubs[compatible-mypy]
+isort
+mypy
+pip-audit
+pre-commit
+ruff

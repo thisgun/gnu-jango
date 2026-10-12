@@ -1,0 +1,21 @@
+{% load i18n %}
+
+{% comment %}
+Project override of unfold/helpers/site_icon.html.
+The brand mark is supplied by the custom branding block in admin/base_site.html
+(rendered here as the branding variable — the "G5" badge). Unfold's default icon
+square (site_icon image / site_symbol fallback) is intentionally omitted so the
+sidebar header does not show two logos.
+{% endcomment %}
+
+<div class="flex flex-col grow justify-center min-w-0">
+    <div class="text-important tracking-tight *:truncate {% if site_subheader %}xl:text-sm{% else %}xl:text-base{% endif %}">
+        {{ branding }}
+    </div>
+
+    {% if site_subheader %}
+        <div class="font-normal text-subtle text-xs truncate">
+            {{ site_subheader }}
+        </div>
+    {% endif %}
+</div>

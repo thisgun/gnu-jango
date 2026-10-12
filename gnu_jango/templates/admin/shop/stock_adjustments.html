@@ -1,0 +1,219 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:shop_shopproduct_changelist' %}">{% translate 'Products' %}</a>
+  &rsaquo; {% translate 'Stock adjustment and history' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">{% translate 'Shop inventory' %}</p>
+    <h1>{% translate 'Stock adjustment and history' %}</h1>
+    <p class="g5-admin-hero-copy">{% translate 'Adjust product or option stock with a reason. Each change records the actor and before/after quantities.' %}</p>
+  </div>
+  <form class="g5-admin-report-filter g5-admin-report-filter-compact" method="get" action="{{ report_path }}">
+    <label>
+      <span>{% translate 'Product ID or name' %}</span>
+      <input class="input" type="search" name="q" value="{{ query }}" placeholder="{% translate 'Search products' %}">
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button btn" type="submit">{% translate 'Find product' %}</button>
+      <a class="button btn g5-admin-button-secondary" href="{{ report_path }}">{% translate 'Reset' %}</a>
+    </div>
+  </form>
+</section>
+
+{% if error %}
+<div role="alert" class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+{% if not product and query %}
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Product selection' %}</p>
+      <h2>{% translate 'Choose a product' %}</h2>
+    </div>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="table g5-admin-mini-table">
+      <thead>
+        <tr>
+          <th scope="col">{% translate 'Product' %}</th>
+          <th scope="col">{% translate 'Product ID' %}</th>
+          <th scope="col">{% translate 'Product stock' %}</th>
+          <th scope="col">{% translate 'Action' %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in products %}
+        <tr>
+          <td>{{ item.it_name }}</td>
+          <td>{{ item.it_id }}</td>
+          <td>{{ item.it_stock_qty }}</td>
+          <td><a class="button btn btn-sm" href="{{ report_path }}?it_id={{ item.it_id|urlencode }}">{% translate 'Open inventory' %}</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="g5-admin-empty">{% translate 'No products match this search.' %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% elif not product %}
+<p class="g5-admin-empty">{% translate 'Search for a product ID or name to begin.' %}</p>
+{% endif %}
+
+{% if product %}
+<section class="g5-admin-report-metrics" aria-label="{% translate 'Selected product' %}">
+  <article class="card g5-admin-report-metric">
+    <span>{% translate 'Product' %}</span>
+    <strong>{{ product.it_name }}</strong>
+    <em>{{ product.it_id }}</em>
+  </article>
+  <article class="card g5-admin-report-metric">
+    <span>{% translate 'Product stock' %}</span>
+    <strong>{{ product.it_stock_qty }}</strong>
+    <em>{% translate 'Main product inventory' %}</em>
+  </article>
+  <article class="card g5-admin-report-metric">
+    <span>{% translate 'Options' %}</span>
+    <strong>{{ option_rows|length }}</strong>
+    <em>{% translate 'Stock-managed choices and supplies' %}</em>
+  </article>
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Inventory command' %}</p>
+      <h2>{% translate 'Record a stock adjustment' %}</h2>
+    </div>
+    <a class="button btn g5-admin-button-secondary" href="{% url 'admin:shop_shopproduct_change' product.pk %}">{% translate 'Edit product details' %}</a>
+  </div>
+  <form class="g5-admin-report-filter" method="post" action="{{ report_path }}">
+    {% csrf_token %}
+    <input type="hidden" name="it_id" value="{{ product.it_id }}">
+    <label>
+      <span>{% translate 'Stock scope' %}</span>
+      <select class="select" name="scope">
+        <option value="product"{% if form_values.scope == 'product' %} selected{% endif %}>{% translate 'Product stock' %}</option>
+        {% if option_rows %}<option value="option"{% if form_values.scope == 'option' %} selected{% endif %}>{% translate 'Option stock' %}</option>{% endif %}
+      </select>
+    </label>
+    <label>
+      <span>{% translate 'Option' %}</span>
+      <select class="select" name="option_key">
+        <option value="">{% translate 'Choose an option' %}</option>
+        {% for option in option_rows %}
+        <option value="{{ option.key }}"{% if form_values.option_key == option.key %} selected{% endif %}>{{ option.type_label }} · {{ option.id }} · {{ option.stock }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>{% translate 'Adjustment quantity (+/-)' %}</span>
+      <input class="input" type="number" name="delta" step="1" value="{{ form_values.delta }}" required>
+    </label>
+    <label>
+      <span>{% translate 'Reason' %}</span>
+      <input class="input" type="text" name="reason" maxlength="255" value="{{ form_values.reason }}" required>
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button btn btn-primary" type="submit">{% translate 'Save adjustment' %}</button>
+    </div>
+  </form>
+</section>
+
+<div class="g5-admin-report-grid">
+  <section class="g5-admin-panel g5-admin-report-panel{% if option_rows %} g5-admin-report-panel-wide{% endif %}">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Product inventory' %}</p>
+        <h2>{% translate 'Product stock' %}</h2>
+      </div>
+    </div>
+    <p class="g5-admin-empty">{% blocktranslate with soldout=product.it_soldout %}Sold-out flag: {{ soldout }}. Positive stock clears the flag only when replenishing from zero.{% endblocktranslate %}</p>
+  </section>
+
+  {% if option_rows %}
+  <section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Option inventory' %}</p>
+        <h2>{% translate 'Current option stock' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-table-wrap">
+      <table class="table g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate 'Type' %}</th>
+            <th scope="col">{% translate 'Option' %}</th>
+            <th scope="col">{% translate 'Stock' %}</th>
+            <th scope="col">{% translate 'Status' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for option in option_rows %}
+          <tr>
+            <td>{{ option.type_label }}</td>
+            <td>{{ option.id }}</td>
+            <td>{{ option.stock }}</td>
+            <td><span class="badge g5-admin-badge{% if option.use == 0 or option.use == '0' %} g5-admin-badge-neutral{% else %} g5-admin-badge-success{% endif %}">{% if option.use == 0 or option.use == '0' %}{% translate 'Disabled' %}{% else %}{% translate 'Available' %}{% endif %}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Audit trail' %}</p>
+        <h2>{% translate 'Recent stock changes' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-table-wrap">
+      <table class="table g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate 'Time' %}</th>
+            <th scope="col">{% translate 'Scope' %}</th>
+            <th scope="col">{% translate 'Option' %}</th>
+            <th scope="col">{% translate 'Before' %}</th>
+            <th scope="col">{% translate 'Change' %}</th>
+            <th scope="col">{% translate 'After' %}</th>
+            <th scope="col">{% translate 'Reason' %}</th>
+            <th scope="col">{% translate 'Changed by' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in adjustments %}
+          <tr>
+            <td>{{ row.created_at|date:'Y-m-d H:i:s' }}</td>
+            <td>{{ row.get_scope_display }}</td>
+            <td>{% if row.scope == 'option' %}{{ row.io_id }} ({{ row.io_type }}){% else %}-{% endif %}</td>
+            <td>{{ row.before_qty }}</td>
+            <td><strong>{{ row.delta }}</strong></td>
+            <td>{{ row.after_qty }}</td>
+            <td>{{ row.reason }}</td>
+            <td>{% if row.actor %}{{ row.actor.get_username }}{% else %}{% translate 'Deleted user' %}{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="8" class="g5-admin-empty">{% translate 'No stock adjustments have been recorded for this product.' %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endif %}
+{% endblock %}

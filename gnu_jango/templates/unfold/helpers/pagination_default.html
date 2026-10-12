@@ -1,0 +1,32 @@
+{% load unfold_list %}
+
+{% comment %}
+Project override of unfold/helpers/pagination_default.html.
+Unfold's paginator_number tag emits class-less anchors for non-current pages,
+so they render as bare text links. Wrap each item in .g5-admin-page-item so
+dashboard.css can give them pill styling and a highlighted current page.
+{% endcomment %}
+
+<div class="g5-admin-pagination">
+{% if pagination_required %}
+    {% for i in page_range %}
+        <div class="g5-admin-page-item {% if forloop.last %}pr-2{% else %}pr-4{% endif %}">
+            {% paginator_number cl i %}
+        </div>
+    {% endfor %}
+{% endif %}
+
+<div class="g5-admin-page-summary py-4">
+    {% if pagination_required %}
+        &middot;
+    {% endif %}
+
+    {{ cl.result_count }}
+
+    {% if cl.result_count == 1 %}
+        {{ cl.opts.verbose_name }}
+    {% else %}
+        {{ cl.opts.verbose_name_plural }}
+    {% endif %}
+</div>
+</div>

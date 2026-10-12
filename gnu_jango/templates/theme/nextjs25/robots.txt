@@ -1,0 +1,19 @@
+User-Agent: *
+Allow: /
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /mypage
+Disallow: /admin
+Disallow: /api
+Disallow: /shop/cart
+Disallow: /shop/order
+Disallow: /shop/orders
+Disallow: /shop/payment
+Disallow: /shop/personalpay
+Disallow: /shop/search
+Disallow: /shop/wishlist
+
+Host: https://your-vercel-app.example.com
+Sitemap: https://your-vercel-app.example.com/sitemap.xml
+Sitemap: https://your-vercel-app.example.com/sitemap-posts.xml

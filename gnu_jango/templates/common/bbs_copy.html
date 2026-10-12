@@ -1,0 +1,114 @@
+{% extends theme_path|add:'base.html' %}
+{% load static %}
+{% block head_sub %}
+{% endblock %}{# 새창에서는 빈값으로 넣음 #}
+{% block tail_sub %}
+{% endblock %}{# 새창에서는 빈값으로 넣음 #}
+{% block content %}
+{% load humanize urlparams %}
+<!-- 게시판 copy 목록 시작 { -->
+<div id="copymove" class="new_win">
+    <h1 id="win_title">{{ site_title }}</h1>
+    <form name="fboardmoveall" method="post" onsubmit="return fboardmoveall_submit(this);">
+        {% csrf_token %}
+        <input type="hidden" name="sw" value="{{ sw }}">
+        <input type="hidden" name="board_id" value="{{ board_id }}">
+        <input type="hidden" name="bo_table" value="{{ bo_table }}">
+        <input type="hidden" name="post_id_list" value="{{ post_id_list }}">
+        <input type="hidden" name="sfl" value="{{ sfl }}">
+        <input type="hidden" name="stx" value="{{ stx }}">
+        <input type="hidden" name="spt" value="{{ spt }}">
+        <input type="hidden" name="sst" value="{{ sst }}">
+        <input type="hidden" name="sod" value="{{ sod }}">
+        <input type="hidden" name="page" value="{{ page }}">
+        <input type="hidden" name="act" value="{{ act }}">
+        <input type="hidden" name="next" value="{{ next }}">
+
+        <div class="tbl_head01 tbl_wrap">
+            <table>
+                <caption>{{ act }}할 게시판을 한개 이상 선택하여 주십시오.</caption>
+                <thead>
+                    <tr>
+                        <th scope="col">
+                            <label for="chkall" class="sound_only">현재 페이지 게시판 전체</label>
+                            <input type="checkbox" id="chkall" onclick="if (this.checked) all_checked(true); else all_checked(false);">
+                        </th>
+                        <th scope="col">게시판</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% if list %}
+                {% for board in list %}
+                <tr class="{% if board.id == board_id %}copymove_currentbg{% endif %}">
+                    <td class="td_chk">
+                        <label for="chk{{ forloop.counter0 }}" class="sound_only">{{ board.id }}</label>
+                        <input type="checkbox" value="{{ board.id }}" id="chk{{ forloop.counter0 }}" name="chk_board_ids[]">
+                    </td>
+                    <td>
+                        <label for="chk{{ forloop.counter0 }}">
+                            {{ board.group.gr_subject }} &gt; {{ board.bo_subject }} ({{ board.bo_table }})
+                            {% if board.id == board_id %}<span class="copymove_current">현재<span class="sound_only">게시판</span></span>{% endif %}
+                        </label>
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+                {% endif %}
+                </tbody>
+            </table>
+        </div>
+        <div class="win_btn">
+            <input type="submit" name="btn_submit" value="{{ act }}" id="btn_submit" class="btn_submit">
+        </div>
+    </form>
+</div>
+<script>
+    jQuery(function($) {
+        $(".win_btn").append("<button type=\"button\" class=\"btn_cancel btn_close\">창닫기</button>");
+    
+        $(".win_btn button.btn_close").click(function(e) {
+            window.close();
+        });
+    });
+    
+    function all_checked(sw) {
+        var f = document.fboardmoveall;
+    
+        for (var i=0; i<f.length; i++) {
+            if (f.elements[i].name == "chk_board_ids[]")
+                f.elements[i].checked = sw;
+        }
+    }
+    
+    function fboardmoveall_submit(f)
+    {
+        var check = false;
+    
+        if (typeof(f.elements['chk_board_ids[]']) == 'undefined')
+            ;
+        else {
+            if (typeof(f.elements['chk_board_ids[]'].length) == 'undefined') {
+                if (f.elements['chk_board_ids[]'].checked)
+                    check = true;
+            } else {
+                for (i=0; i<f.elements['chk_board_ids[]'].length; i++) {
+                    if (f.elements['chk_board_ids[]'][i].checked) {
+                        check = true;
+                        break;
+                    }
+                }
+            }
+        }
+    
+        if (!check) {
+            alert('게시물을 '+f.act.value+'할 게시판을 한개 이상 선택해 주십시오.');
+            return false;
+        }
+    
+        document.getElementById('btn_submit').disabled = true;
+    
+        return true;
+    }
+    </script>
+{% endblock %}

@@ -1,0 +1,104 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; {% translate 'Search keyword statistics' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">{% translate 'Search analytics' %}</p>
+    <h1>{% translate 'Search keyword statistics' %}</h1>
+    <p class="g5-admin-hero-copy">{% translate 'Track popular search terms from site, shop, API, and admin search entry points.' %}</p>
+  </div>
+  <form class="g5-admin-report-filter g5-admin-report-filter-compact" method="get" action="{{ report_path }}">
+    <label>
+      <span>{% translate 'From' %}</span>
+      <input type="date" name="date_from" value="{{ filters.date_from }}">
+    </label>
+    <label>
+      <span>{% translate 'To' %}</span>
+      <input type="date" name="date_to" value="{{ filters.date_to }}">
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button" type="submit">{% translate 'Apply' %}</button>
+      <a class="button g5-admin-button-secondary" href="{{ report_path }}">{% translate 'Reset' %}</a>
+    </div>
+  </form>
+</section>
+
+<nav class="g5-admin-export-actions" aria-label="{% translate 'Search actions' %}">
+  <a class="button g5-admin-button-secondary" href="{% url 'admin:core_searchkeyword_changelist' %}">{% translate 'Raw search keywords' %}</a>
+  <a class="button g5-admin-button-secondary" href="{% url 'admin:core_visitlog_reports' %}?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}">{% translate 'Visit statistics' %}</a>
+</nav>
+
+<section class="g5-admin-report-metrics" aria-label="{% translate 'Search keyword summary' %}">
+  {% for metric in metrics %}
+  <article class="g5-admin-report-metric">
+    <span>{{ metric.label }}</span>
+    <strong>{{ metric.value }}</strong>
+    <em>{{ metric.hint }}</em>
+  </article>
+  {% endfor %}
+</section>
+
+<div class="g5-admin-report-grid">
+  <section class="g5-admin-panel g5-admin-report-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Sources' %}</p>
+        <h2>{% translate 'Keyword source mix' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-list">
+      {% for row in source_rows %}
+      <div><strong>{{ row.key }}</strong><span>{{ row.count }}</span></div>
+      {% empty %}
+      <p class="g5-admin-empty">{% translate 'No source rows match the selected period.' %}</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Popular keywords' %}</p>
+        <h2>{% translate 'Top searched terms' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-table-wrap">
+      <table class="g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate 'Keyword' %}</th>
+            <th scope="col">{% translate 'Source' %}</th>
+            <th scope="col">{% translate 'Searches' %}</th>
+            <th scope="col">{% translate 'Last user' %}</th>
+            <th scope="col">{% translate 'Last IP' %}</th>
+            <th scope="col">{% translate 'Last searched' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in keyword_rows %}
+          <tr>
+            <td><strong>{{ row.keyword }}</strong></td>
+            <td>{{ row.source }}</td>
+            <td>{{ row.count }}</td>
+            <td>{{ row.last_user }}</td>
+            <td>{{ row.last_ip }}</td>
+            <td>{{ row.last_time }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="g5-admin-empty">{% translate 'No search keywords match the selected period.' %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

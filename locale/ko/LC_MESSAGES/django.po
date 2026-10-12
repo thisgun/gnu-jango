@@ -1,0 +1,2238 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: gnu-jango admin\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-06-17 00:00+0900\n"
+"PO-Revision-Date: 2026-06-17 00:00+0900\n"
+"Last-Translator: Codex\n"
+"Language-Team: Korean\n"
+"Language: ko\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+msgid "GNU Jango Admin"
+msgstr "GNU Jango 관리자"
+
+msgid "Gnuboard5 operations console"
+msgstr "그누보드5 운영 콘솔"
+
+msgid "GNU Jango administration"
+msgstr "GNU Jango 관리"
+
+msgid "Operations"
+msgstr "운영"
+
+msgid "Dashboard"
+msgstr "대시보드"
+
+msgid "Shop orders"
+msgstr "쇼핑몰 주문"
+
+msgid "Settlement report"
+msgstr "정산 리포트"
+
+msgid "Payment logs"
+msgstr "결제 로그"
+
+msgid "Personal pay"
+msgstr "개인결제"
+
+msgid "Community"
+msgstr "커뮤니티"
+
+msgid "Boards"
+msgstr "게시판"
+
+msgid "Posts"
+msgstr "게시글"
+
+msgid "Members"
+msgstr "회원"
+
+msgid "System"
+msgstr "시스템"
+
+msgid "Configuration"
+msgstr "환경설정"
+
+msgid "API status"
+msgstr "API 상태"
+
+msgid "Public site"
+msgstr "사이트 보기"
+
+msgid "Orders"
+msgstr "주문"
+
+msgid "Coupons"
+msgstr "쿠폰"
+
+msgid "Products"
+msgstr "상품"
+
+msgid "Order detail"
+msgstr "주문 상세"
+
+msgid "Order detail command center"
+msgstr "주문 상세 운영 센터"
+
+msgid "Order detail shortcuts"
+msgstr "주문 상세 바로가기"
+
+msgid "Receipt proof"
+msgstr "영수증 증빙"
+
+msgid "Risk signals"
+msgstr "위험 신호"
+
+msgid "Needs attention"
+msgstr "확인 필요"
+
+msgid "Related records"
+msgstr "관련 기록"
+
+msgid "Operational links"
+msgstr "운영 연결"
+
+msgid "Recipient"
+msgstr "수령자"
+
+msgid "Items"
+msgstr "주문상품"
+
+msgid "Order line count"
+msgstr "주문 상품 수"
+
+msgid "PG logs"
+msgstr "PG 로그"
+
+msgid "Imported gateway records"
+msgstr "가져온 결제대행 기록"
+
+msgid "Applied coupon logs"
+msgstr "적용된 쿠폰 로그"
+
+msgid "Linked personal payments"
+msgstr "연결된 개인결제"
+
+msgid "Back to orders"
+msgstr "주문 목록"
+
+msgid "Outstanding balance remains."
+msgstr "남은 미수금이 있습니다."
+
+msgid "Paid order has no invoice number."
+msgstr "입금된 주문에 송장번호가 없습니다."
+
+msgid "Cancellation amount exists."
+msgstr "취소 금액이 있습니다."
+
+msgid "Cash receipt number is registered."
+msgstr "현금영수증 번호가 등록되어 있습니다."
+
+msgid "No urgent risks"
+msgstr "긴급 위험 없음"
+
+msgid "Normal"
+msgstr "정상"
+
+msgid "Payment and delivery signals look stable."
+msgstr "결제와 배송 신호가 안정적입니다."
+
+msgid "Quick navigation"
+msgstr "빠른 이동"
+
+msgid "Reports"
+msgstr "리포트"
+
+msgid "Site"
+msgstr "사이트"
+
+msgid "Operations console"
+msgstr "운영 콘솔"
+
+msgid "Monitor orders, settlement, receipts, members, boards, and live integration status from one responsive control room."
+msgstr "주문, 정산, 영수증, 회원, 게시판, 실시간 연동 상태를 하나의 반응형 관리 화면에서 확인합니다."
+
+msgid "System shortcuts"
+msgstr "시스템 바로가기"
+
+msgid "Django API v1"
+msgstr "Django API v1"
+
+msgid "Status endpoint"
+msgstr "상태 확인 엔드포인트"
+
+msgid "Settlement"
+msgstr "정산"
+
+msgid "Orders, PG, receipts"
+msgstr "주문, PG, 영수증"
+
+msgid "Operational metrics"
+msgstr "운영 지표"
+
+msgid "Workflows"
+msgstr "업무 흐름"
+
+msgid "Daily operations"
+msgstr "일일 운영"
+
+msgid "Attention"
+msgstr "주의"
+
+msgid "Settlement watchlist"
+msgstr "정산 확인 목록"
+
+msgid "No outstanding orders currently need follow-up."
+msgstr "현재 후속 확인이 필요한 미수 주문이 없습니다."
+
+msgid "Recent"
+msgstr "최근"
+
+msgid "Latest orders"
+msgstr "최근 주문"
+
+msgid "No recent orders."
+msgstr "최근 주문이 없습니다."
+
+msgid "Gateway"
+msgstr "결제대행"
+
+msgid "PG log tail"
+msgstr "최근 PG 로그"
+
+msgid "No PG logs are available."
+msgstr "사용 가능한 PG 로그가 없습니다."
+
+msgid "Modules"
+msgstr "모듈"
+
+msgid "Management menu"
+msgstr "관리 메뉴"
+
+msgid "Recent actions"
+msgstr "최근 활동"
+
+msgid "My actions"
+msgstr "내 활동"
+
+msgid "None available"
+msgstr "표시할 항목이 없습니다."
+
+msgid "Unknown content"
+msgstr "알 수 없는 콘텐츠"
+
+msgid "Today orders"
+msgstr "오늘 주문"
+
+msgid "%(amount)s received"
+msgstr "%(amount)s 입금"
+
+msgid "Outstanding"
+msgstr "미수"
+
+msgid "%(amount)s unpaid"
+msgstr "%(amount)s 미수"
+
+msgid "Shipping queue"
+msgstr "배송 대기"
+
+msgid "Paid orders without invoice"
+msgstr "입금 완료 후 송장 미등록"
+
+msgid "Cash receipts"
+msgstr "현금영수증"
+
+msgid "%(amount)s issued"
+msgstr "%(amount)s 발급"
+
+msgid "Personal pay due"
+msgstr "개인결제 대기"
+
+msgid "%(amount)s requested"
+msgstr "%(amount)s 요청"
+
+msgid "Order operations"
+msgstr "주문 운영"
+
+msgid "Order command center"
+msgstr "주문 운영 센터"
+
+msgid "Monitor payment, delivery, cancellation, and receipt risks before opening each order."
+msgstr "각 주문을 열기 전에 입금, 배송, 취소, 영수증 위험 상태를 먼저 확인합니다."
+
+msgid "Order shortcuts"
+msgstr "주문 바로가기"
+
+msgid "Order metrics"
+msgstr "주문 지표"
+
+msgid "Quick filters"
+msgstr "빠른 필터"
+
+msgid "Payment due"
+msgstr "미수 확인"
+
+msgid "Delivery queue"
+msgstr "배송 대기"
+
+msgid "All orders"
+msgstr "전체 주문"
+
+msgid "Shipping state"
+msgstr "배송 상태"
+
+msgid "Waiting invoice"
+msgstr "송장 대기"
+
+msgid "Carrier only"
+msgstr "택배사만 등록"
+
+msgid "YoungCart operations"
+msgstr "영카트 운영"
+
+msgid "Shop settlement report"
+msgstr "쇼핑몰 정산 리포트"
+
+msgid "Review imported orders, payment logs, coupon usage, and personal payment totals in one responsive admin screen."
+msgstr "가져온 주문, 결제 로그, 쿠폰 사용, 개인결제 합계를 하나의 반응형 관리자 화면에서 확인합니다."
+
+msgid "From"
+msgstr "시작일"
+
+msgid "To"
+msgstr "종료일"
+
+msgid "Series"
+msgstr "집계 단위"
+
+msgid "Monthly"
+msgstr "월별"
+
+msgid "Daily"
+msgstr "일별"
+
+msgid "Apply"
+msgstr "적용"
+
+msgid "Reset"
+msgstr "초기화"
+
+msgid "Report exports"
+msgstr "리포트 내보내기"
+
+msgid "Orders CSV"
+msgstr "주문 CSV"
+
+msgid "Sales CSV"
+msgstr "매출 CSV"
+
+msgid "Coupons CSV"
+msgstr "쿠폰 CSV"
+
+msgid "Receipts CSV"
+msgstr "영수증 CSV"
+
+msgid "Report summary"
+msgstr "리포트 요약"
+
+msgid "Sales trend"
+msgstr "매출 추이"
+
+msgid "Receipt series"
+msgstr "입금 추이"
+
+msgid "orders"
+msgstr "건"
+
+msgid "No sales rows match the selected period."
+msgstr "선택한 기간에 해당하는 매출 데이터가 없습니다."
+
+msgid "Order status"
+msgstr "주문 상태"
+
+msgid "Status totals"
+msgstr "상태별 합계"
+
+msgid "Payment"
+msgstr "결제"
+
+msgid "Settle case"
+msgstr "결제수단"
+
+msgid "PG totals"
+msgstr "PG 합계"
+
+msgid "Receipts"
+msgstr "영수증"
+
+msgid "Receipt state"
+msgstr "입금 상태"
+
+msgid "Coupon usage"
+msgstr "쿠폰 사용"
+
+msgid "Issued"
+msgstr "발급"
+
+msgid "Unused"
+msgstr "미사용"
+
+msgid "Used logs"
+msgstr "사용 로그"
+
+msgid "Discount"
+msgstr "할인"
+
+msgid "Orders requiring settlement follow-up"
+msgstr "정산 확인이 필요한 주문"
+
+msgid "Order"
+msgstr "주문"
+
+msgid "Order ID"
+msgstr "주문번호"
+
+msgid "Name"
+msgstr "이름"
+
+msgid "Status"
+msgstr "상태"
+
+msgid "Settle"
+msgstr "결제수단"
+
+msgid "Receipt"
+msgstr "입금"
+
+msgid "Time"
+msgstr "시각"
+
+msgid "No outstanding orders in this period."
+msgstr "이 기간에는 미수 주문이 없습니다."
+
+msgid "Recent cash receipt orders"
+msgstr "최근 현금영수증 주문"
+
+msgid "No cash receipt orders in this period."
+msgstr "이 기간에는 현금영수증 주문이 없습니다."
+
+msgid "Recent personal payments"
+msgstr "최근 개인결제"
+
+msgid "ID"
+msgstr "ID"
+
+msgid "Price"
+msgstr "금액"
+
+msgid "Cash no"
+msgstr "현금영수증 번호"
+
+msgid "No personal payment rows in this period."
+msgstr "이 기간에는 개인결제 내역이 없습니다."
+
+msgid "PG raw logs"
+msgstr "PG 원본 로그"
+
+msgid "Recent imported gateway logs"
+msgstr "최근 가져온 결제대행 로그"
+
+msgid "Log"
+msgstr "로그"
+
+msgid "Cart"
+msgstr "장바구니"
+
+msgid "PG"
+msgstr "PG"
+
+msgid "No raw PG logs in this period."
+msgstr "이 기간에는 PG 원본 로그가 없습니다."
+
+msgid "Count"
+msgstr "건수"
+
+msgid "Amount"
+msgstr "금액"
+
+msgid "No rows available."
+msgstr "표시할 데이터가 없습니다."
+
+msgid "Receipt total"
+msgstr "입금 합계"
+
+msgid "Paid and confirmed"
+msgstr "입금 확인 완료"
+
+msgid "Unpaid balance"
+msgstr "미수 잔액"
+
+msgid "Cancelled"
+msgstr "취소"
+
+msgid "Coupon discount"
+msgstr "쿠폰 할인"
+
+msgid "Raw PG logs"
+msgstr "PG 원본 로그"
+
+msgid "Imported order data"
+msgstr "가져온 주문 데이터"
+
+msgid "%(count)s items"
+msgstr "%(count)s개 상품"
+
+msgid "%(count)s orders"
+msgstr "%(count)s건 주문"
+
+msgid "%(count)s usage logs"
+msgstr "%(count)s건 사용 로그"
+
+msgid "%(count)s requests"
+msgstr "%(count)s건 요청"
+
+msgid "Sales, payment logs, coupons, receipts, and personal pay"
+msgstr "매출, 결제 로그, 쿠폰, 영수증, 개인결제"
+
+msgid "Paid"
+msgstr "입금"
+
+msgid "Cash receipt"
+msgstr "현금영수증"
+
+msgid "Unpaid"
+msgstr "미입금"
+
+msgid "Pending"
+msgstr "대기"
+
+msgid "Invoiced"
+msgstr "송장등록"
+
+msgid "Carrier set"
+msgstr "택배사 등록"
+
+msgid "Operations snapshot"
+msgstr "운영 스냅샷"
+
+msgid "Order identity"
+msgstr "주문 식별"
+
+msgid "Payment and settlement"
+msgstr "결제 및 정산"
+
+msgid "Shipping"
+msgstr "배송"
+
+msgid "Orderer address"
+msgstr "주문자 주소"
+
+msgid "Recipient address"
+msgstr "수령자 주소"
+
+msgid "Memo"
+msgstr "메모"
+
+msgid "Save the order before reviewing operations status."
+msgstr "운영 상태를 확인하려면 먼저 주문을 저장하세요."
+
+msgid "Customer"
+msgstr "고객"
+
+msgid "Created"
+msgstr "생성일시"
+
+msgid "Ordered at"
+msgstr "주문일시"
+
+msgid "Settlement snapshot"
+msgstr "정산 스냅샷"
+
+msgid "Cancel"
+msgstr "취소"
+
+msgid "Receipt snapshot"
+msgstr "영수증 스냅샷"
+
+msgid "Cash receipt no"
+msgstr "현금영수증 번호"
+
+msgid "TID"
+msgstr "거래번호"
+
+msgid "Tax/VAT/Free"
+msgstr "과세/부가세/면세"
+
+msgid "Shipping snapshot"
+msgstr "배송 스냅샷"
+
+msgid "Carrier"
+msgstr "택배사"
+
+msgid "Invoice time"
+msgstr "송장 등록 시각"
+
+msgid "Recipient contact"
+msgstr "수령자 연락처"
+
+msgid "Export selected orders CSV"
+msgstr "선택한 주문 CSV 내보내기"
+
+msgid "Export selected receipts CSV"
+msgstr "선택한 영수증 CSV 내보내기"
+
+msgid "Line total"
+msgstr "상품 합계"
+
+msgid "Raw data"
+msgstr "원본 데이터"
+
+msgid "Payment gateway"
+msgstr "결제대행사"
+
+msgid "Unspecified"
+msgstr "미지정"
+
+msgid "Shop"
+msgstr "쇼핑몰"
+
+msgid "BBS"
+msgstr "게시판"
+
+msgid "Users"
+msgstr "회원"
+
+msgid "Core"
+msgstr "콘텐츠"
+
+msgid "Config"
+msgstr "환경설정"
+
+msgid "Token Blacklist"
+msgstr "토큰 차단 목록"
+
+msgid "Token blacklist"
+msgstr "토큰 차단 목록"
+
+msgid "Shop category"
+msgstr "상품 분류"
+
+msgid "Shop categories"
+msgstr "상품 분류"
+
+msgid "Shop product"
+msgstr "상품"
+
+msgid "Shop products"
+msgstr "상품"
+
+msgid "Shop wishlist"
+msgstr "위시리스트"
+
+msgid "Shop wishlists"
+msgstr "위시리스트"
+
+msgid "Shop coupon zone"
+msgstr "쿠폰 존"
+
+msgid "Shop coupon zones"
+msgstr "쿠폰 존"
+
+msgid "Shop coupon"
+msgstr "쿠폰"
+
+msgid "Shop coupons"
+msgstr "쿠폰"
+
+msgid "Shop coupon log"
+msgstr "쿠폰 사용 로그"
+
+msgid "Shop coupon logs"
+msgstr "쿠폰 사용 로그"
+
+msgid "Shop address"
+msgstr "배송지"
+
+msgid "Shop addresses"
+msgstr "배송지"
+
+msgid "Shop order"
+msgstr "주문"
+
+msgid "Shop order item"
+msgstr "주문 상품"
+
+msgid "Shop order items"
+msgstr "주문 상품"
+
+msgid "Shop order data"
+msgstr "주문 원본 로그"
+
+msgid "Shop personal pay"
+msgstr "개인결제"
+
+msgid "Shop personal pays"
+msgstr "개인결제"
+
+msgid "Shop review"
+msgstr "상품 후기"
+
+msgid "Shop reviews"
+msgstr "상품 후기"
+
+msgid "Shop QA"
+msgstr "상품 문의"
+
+msgid "Shop QAs"
+msgstr "상품 문의"
+
+msgid "Content page"
+msgstr "콘텐츠 페이지"
+
+msgid "Content pages"
+msgstr "콘텐츠 페이지"
+
+msgid "FAQ master"
+msgstr "FAQ 분류"
+
+msgid "FAQ masters"
+msgstr "FAQ 분류"
+
+msgid "FAQ item"
+msgstr "FAQ 항목"
+
+msgid "FAQ items"
+msgstr "FAQ 항목"
+
+msgid "Poll"
+msgstr "설문"
+
+msgid "Polls"
+msgstr "설문"
+
+msgid "Poll choice"
+msgstr "설문 선택지"
+
+msgid "Poll choices"
+msgstr "설문 선택지"
+
+msgid "Poll vote"
+msgstr "설문 투표"
+
+msgid "Poll votes"
+msgstr "설문 투표"
+
+msgid "Poll comment"
+msgstr "설문 댓글"
+
+msgid "Poll comments"
+msgstr "설문 댓글"
+
+msgid "Notification"
+msgstr "알림"
+
+msgid "Notifications"
+msgstr "알림"
+
+msgid "Search apps and models..."
+msgstr "앱과 모델 검색..."
+
+msgid "All applications"
+msgstr "전체 애플리케이션"
+
+msgid "View site"
+msgstr "사이트 보기"
+
+msgid "Change password"
+msgstr "비밀번호 변경"
+
+msgid "Log out"
+msgstr "로그아웃"
+
+msgid "More actions"
+msgstr "추가 작업"
+
+msgid "Select record"
+msgstr "항목 선택"
+
+msgid "Show all"
+msgstr "전체 보기"
+
+msgid "No results matching your query"
+msgstr "검색어와 일치하는 결과가 없습니다."
+
+msgid "No results found"
+msgstr "결과가 없습니다."
+
+msgid "Remove"
+msgstr "삭제"
+
+msgid "Remove from sorting"
+msgstr "정렬에서 제거"
+
+msgid "Check cancellation and refund trail."
+msgstr "취소 및 환불 흐름을 확인하세요."
+
+msgid "Contact customer or confirm bank transfer."
+msgstr "고객에게 연락하거나 무통장 입금을 확인하세요."
+
+msgid "Register carrier and invoice number."
+msgstr "택배사와 송장번호를 등록하세요."
+
+msgid "Memo review"
+msgstr "메모 확인"
+
+msgid "Review customer memo before shipping."
+msgstr "배송 전에 고객 메모를 확인하세요."
+
+msgid "Routine monitoring"
+msgstr "정상 모니터링"
+
+msgid "No urgent operations signal."
+msgstr "긴급 운영 신호가 없습니다."
+
+msgid "Review identity, payment, shipping, and memo before saving changes."
+msgstr "변경 저장 전 주문 식별, 결제, 배송, 메모를 함께 확인합니다."
+
+msgid "Customer signal"
+msgstr "고객 신호"
+
+msgid "Created from"
+msgstr "생성 출처"
+
+msgid "Next action"
+msgstr "다음 조치"
+
+msgid "Use the tabs below for direct edits."
+msgstr "아래 탭에서 바로 수정할 수 있습니다."
+
+msgid "Receipt %(receipt)s / outstanding %(outstanding)s / cancel %(cancel)s"
+msgstr "입금 %(receipt)s / 미수 %(outstanding)s / 취소 %(cancel)s"
+
+msgid "Order amount"
+msgstr "주문 금액"
+
+msgid "Items %(items)s / shipping %(shipping)s"
+msgstr "상품 %(items)s / 배송 %(shipping)s"
+
+msgid "Receipt amount"
+msgstr "입금액"
+
+msgid "Discount and point"
+msgstr "할인 및 포인트"
+
+msgid "Coupon %(coupon)s / point %(point)s"
+msgstr "쿠폰 %(coupon)s / 포인트 %(point)s"
+
+msgid "Cash receipt issued"
+msgstr "현금영수증 발급"
+
+msgid "Gateway evidence"
+msgstr "PG 증빙"
+
+msgid "Receipt proof needed"
+msgstr "영수증 증빙 필요"
+
+msgid "No receipt proof"
+msgstr "영수증 증빙 없음"
+
+msgid "Keep PG identifiers, cash receipt, and tax base aligned."
+msgstr "PG 식별자, 현금영수증, 과세 기준을 일치시켜 관리합니다."
+
+msgid "Approval no"
+msgstr "승인번호"
+
+msgid "Shipping pending"
+msgstr "배송 대기"
+
+msgid "Confirm carrier, invoice, contact, and recipient address together."
+msgstr "택배사, 송장, 연락처, 수령지 주소를 함께 확인합니다."
+
+msgid "Carrier and invoice"
+msgstr "택배사/송장"
+
+msgid "Copy this into shipping tools when needed."
+msgstr "필요 시 배송 도구에 복사하세요."
+
+msgid "Shipping edit target"
+msgstr "배송 수정 위치"
+
+msgid "Shipping tab"
+msgstr "배송 탭"
+
+msgid "Carrier, invoice, and invoice time fields."
+msgstr "택배사, 송장번호, 송장 등록 시각 필드입니다."
+
+msgid "Memo snapshot"
+msgstr "메모 스냅샷"
+
+msgid "Memo registered"
+msgstr "메모 등록됨"
+
+msgid "No memo"
+msgstr "메모 없음"
+
+msgid "Review customer request text before settlement or delivery changes."
+msgstr "정산 또는 배송 변경 전에 고객 요청 문구를 확인합니다."
+
+msgid "Customer memo"
+msgstr "고객 메모"
+
+msgid "Full memo is editable in the Memo tab."
+msgstr "전체 메모는 메모 탭에서 수정할 수 있습니다."
+
+msgid "Memo length"
+msgstr "메모 길이"
+
+msgid "Characters"
+msgstr "글자"
+
+msgid "Payment log snapshot"
+msgstr "결제 로그 스냅샷"
+
+msgid "Log identity"
+msgstr "로그 식별"
+
+msgid "Raw payload"
+msgstr "원문 데이터"
+
+msgid "Log ID"
+msgstr "로그 ID"
+
+msgid "Member"
+msgstr "회원"
+
+msgid "Payload"
+msgstr "데이터"
+
+msgid "%(count)s chars"
+msgstr "%(count)s자"
+
+msgid "Linked to order"
+msgstr "주문 연결됨"
+
+msgid "Order ID only"
+msgstr "주문번호만 있음"
+
+msgid "Unlinked payment log"
+msgstr "미연결 결제 로그"
+
+msgid "Review gateway, order key, member key, and raw payload together."
+msgstr "결제대행사, 주문 키, 회원 키, 원문 데이터를 함께 확인합니다."
+
+msgid "Order reference"
+msgstr "주문 참조"
+
+msgid "Cart and member"
+msgstr "장바구니/회원"
+
+msgid "Payload size"
+msgstr "데이터 크기"
+
+msgid "Payload preview"
+msgstr "데이터 미리보기"
+
+msgid "Personal pay snapshot"
+msgstr "개인결제 스냅샷"
+
+msgid "Payment request"
+msgstr "결제 요청"
+
+msgid "Request"
+msgstr "요청금액"
+
+msgid "Inactive"
+msgstr "비활성"
+
+msgid "Partial"
+msgstr "부분입금"
+
+msgid "Linked order"
+msgstr "연결 주문"
+
+msgid "Review request amount, receipt proof, linked order, and customer contact together."
+msgstr "요청금액, 입금 증빙, 연결 주문, 고객 연락처를 함께 확인합니다."
+
+msgid "Request amount"
+msgstr "요청금액"
+
+msgid "Outstanding %(amount)s"
+msgstr "미수 %(amount)s"
+
+msgid "Customer contact"
+msgstr "고객 연락처"
+
+msgid "Partial payment"
+msgstr "부분 입금"
+
+msgid "Unlinked"
+msgstr "미연결"
+
+msgid "Content"
+msgstr "내용"
+
+msgid "Product snapshot"
+msgstr "상품 스냅샷"
+
+msgid "Product identity"
+msgstr "상품 식별"
+
+msgid "Pricing and points"
+msgstr "가격 및 포인트"
+
+msgid "Stock and purchase"
+msgstr "재고 및 구매"
+
+msgid "Shipping policy"
+msgstr "배송 정책"
+
+msgid "Display badges"
+msgstr "진열 배지"
+
+msgid "Images and options"
+msgstr "이미지 및 옵션"
+
+msgid "Product ID"
+msgstr "상품 ID"
+
+msgid "Product"
+msgstr "상품"
+
+msgid "Sale status"
+msgstr "판매 상태"
+
+msgid "Hidden"
+msgstr "숨김"
+
+msgid "Sold out"
+msgstr "품절"
+
+msgid "Phone inquiry"
+msgstr "전화문의"
+
+msgid "Selling"
+msgstr "판매중"
+
+msgid "Stock"
+msgstr "재고"
+
+msgid "No stock"
+msgstr "재고 없음"
+
+msgid "%(count)s left"
+msgstr "%(count)s개 남음"
+
+msgid "Free shipping"
+msgstr "무료배송"
+
+msgid "Low stock"
+msgstr "재고 부족"
+
+msgid "Review sale exposure, price, stock, shipping, and storefront assets together."
+msgstr "판매 노출, 가격, 재고, 배송, 매장 노출 자산을 함께 확인합니다."
+
+msgid "Sale exposure"
+msgstr "판매 노출"
+
+msgid "Price and point"
+msgstr "가격/포인트"
+
+msgid "Point %(point)s"
+msgstr "포인트 %(point)s"
+
+msgid "Min %(min)s / max %(max)s"
+msgstr "최소 %(min)s / 최대 %(max)s"
+
+msgid "Shipping fee"
+msgstr "배송비"
+
+msgid "Free over %(amount)s"
+msgstr "%(amount)s 이상 무료"
+
+msgid "Assets"
+msgstr "노출 자산"
+
+msgid "%(images)s images / %(options)s options"
+msgstr "이미지 %(images)s개 / 옵션 %(options)s개"
+
+msgid "Updated"
+msgstr "수정일시"
+
+msgid "Coupon zone snapshot"
+msgstr "쿠폰존 스냅샷"
+
+msgid "Coupon zone identity"
+msgstr "쿠폰존 식별"
+
+msgid "Coupon benefit"
+msgstr "쿠폰 혜택"
+
+msgid "Coupon zone status"
+msgstr "쿠폰존 상태"
+
+msgid "Expired"
+msgstr "만료"
+
+msgid "Scheduled"
+msgstr "예약"
+
+msgid "Active"
+msgstr "진행중"
+
+msgid "Benefit"
+msgstr "혜택"
+
+msgid "%(rate)s%% discount"
+msgstr "%(rate)s%% 할인"
+
+msgid "Rule"
+msgstr "조건"
+
+msgid "Minimum %(amount)s"
+msgstr "최소 %(amount)s"
+
+msgid "Review public coupon exposure, period, benefit, and download limits together."
+msgstr "공개 쿠폰 노출, 기간, 혜택, 다운로드 제한을 함께 확인합니다."
+
+msgid "Coupon title"
+msgstr "쿠폰명"
+
+msgid "Period"
+msgstr "기간"
+
+msgid "%(days)s days"
+msgstr "%(days)s일"
+
+msgid "Maximum %(amount)s"
+msgstr "최대 %(amount)s"
+
+msgid "Downloads"
+msgstr "다운로드"
+
+msgid "Created %(date)s"
+msgstr "생성 %(date)s"
+
+msgid "Image"
+msgstr "이미지"
+
+msgid "Coupon snapshot"
+msgstr "쿠폰 스냅샷"
+
+msgid "Coupon identity"
+msgstr "쿠폰 식별"
+
+msgid "Used"
+msgstr "사용됨"
+
+msgid "Usable"
+msgstr "사용 가능"
+
+msgid "Review recipient, benefit, target, period, and usage state together."
+msgstr "수령자, 혜택, 대상, 기간, 사용 상태를 함께 확인합니다."
+
+msgid "Limit"
+msgstr "제한"
+
+msgid "Truncation %(value)s"
+msgstr "절사 %(value)s"
+
+msgid "Source"
+msgstr "출처"
+
+msgid "Not used"
+msgstr "미사용"
+
+msgid "Board snapshot"
+msgstr "게시판 스냅샷"
+
+msgid "Board"
+msgstr "게시판"
+
+msgid "Search hidden"
+msgstr "검색 숨김"
+
+msgid "Secret enabled"
+msgstr "비밀글 사용"
+
+msgid "Open board"
+msgstr "공개 게시판"
+
+msgid "Volume"
+msgstr "규모"
+
+msgid "%(count)s posts"
+msgstr "게시글 %(count)s개"
+
+msgid "%(count)s comments"
+msgstr "댓글 %(count)s개"
+
+msgid "Permissions"
+msgstr "권한"
+
+msgid "Read %(level)s"
+msgstr "읽기 %(level)s"
+
+msgid "Write %(level)s"
+msgstr "쓰기 %(level)s"
+
+msgid "Comment %(level)s"
+msgstr "댓글 %(level)s"
+
+msgid "Review board exposure, permissions, post volume, points, and mobile behavior together."
+msgstr "게시판 노출, 권한, 게시글 규모, 포인트, 모바일 동작을 함께 확인합니다."
+
+msgid "Board identity"
+msgstr "게시판 식별"
+
+msgid "Content volume"
+msgstr "콘텐츠 규모"
+
+msgid "Access levels"
+msgstr "접근 권한"
+
+msgid "Read %(read)s / write %(write)s"
+msgstr "읽기 %(read)s / 쓰기 %(write)s"
+
+msgid "Points"
+msgstr "포인트"
+
+msgid "Write %(write)s / read %(read)s"
+msgstr "쓰기 %(write)s / 읽기 %(read)s"
+
+msgid "Comment %(point)s"
+msgstr "댓글 %(point)s"
+
+msgid "Features"
+msgstr "기능"
+
+msgid "%(count)s enabled"
+msgstr "%(count)s개 사용"
+
+msgid "Category"
+msgstr "분류"
+
+msgid "Secret"
+msgstr "비밀글"
+
+msgid "RSS"
+msgstr "RSS"
+
+msgid "Mobile behavior"
+msgstr "모바일 동작"
+
+msgid "%(rows)s rows"
+msgstr "%(rows)s줄"
+
+msgid "Post snapshot"
+msgstr "게시글 스냅샷"
+
+msgid "Post"
+msgstr "게시글"
+
+msgid "Author"
+msgstr "작성자"
+
+msgid "Notice"
+msgstr "공지"
+
+msgid "Public"
+msgstr "공개"
+
+msgid "Engagement"
+msgstr "반응"
+
+msgid "Views %(count)s"
+msgstr "조회 %(count)s"
+
+msgid "Comments %(count)s"
+msgstr "댓글 %(count)s"
+
+msgid "Likes %(count)s"
+msgstr "좋아요 %(count)s"
+
+msgid "Review board, author, visibility, engagement, links, and attachments together."
+msgstr "게시판, 작성자, 공개 상태, 반응, 링크, 첨부를 함께 확인합니다."
+
+msgid "Post title"
+msgstr "게시글 제목"
+
+msgid "Views %(views)s / comments %(comments)s"
+msgstr "조회 %(views)s / 댓글 %(comments)s"
+
+msgid "Likes %(good)s / dislikes %(bad)s"
+msgstr "좋아요 %(good)s / 싫어요 %(bad)s"
+
+msgid "Links and files"
+msgstr "링크 및 파일"
+
+msgid "%(links)s links / %(files)s files"
+msgstr "링크 %(links)s개 / 파일 %(files)s개"
+
+msgid "Written"
+msgstr "작성일"
+
+msgid "Slug"
+msgstr "슬러그"
+
+msgid "Parent %(parent)s"
+msgstr "부모글 %(parent)s"
+
+msgid "Comment snapshot"
+msgstr "댓글 스냅샷"
+
+msgid "Score"
+msgstr "반응 점수"
+
+msgid "Dislikes %(count)s"
+msgstr "싫어요 %(count)s"
+
+msgid "Review comment author, parent post, visibility, score, and edit trail together."
+msgstr "댓글 작성자, 원글, 공개 상태, 반응 점수, 수정 흐름을 함께 확인합니다."
+
+msgid "Parent post"
+msgstr "원글"
+
+msgid "Account"
+msgstr "계정"
+
+msgid "Active member"
+msgstr "활성 회원"
+
+msgid "Activity"
+msgstr "활동"
+
+msgid "Available"
+msgstr "사용 가능"
+
+msgid "Balance after change"
+msgstr "변경 후 잔액"
+
+msgid "Commerce records"
+msgstr "쇼핑 기록"
+
+msgid "Community records"
+msgstr "커뮤니티 기록"
+
+msgid "Contact address"
+msgstr "연락처/주소"
+
+msgid "Coupons %(count)s"
+msgstr "쿠폰 %(count)s개"
+
+msgid "Expiration reached"
+msgstr "만료일 도래"
+
+msgid "Expiration"
+msgstr "만료"
+
+msgid "Expired flag %(value)s"
+msgstr "만료 플래그 %(value)s"
+
+msgid "Joined %(date)s"
+msgstr "가입 %(date)s"
+
+msgid "Last login %(date)s"
+msgstr "최근 로그인 %(date)s"
+
+msgid "Level %(level)s"
+msgstr "레벨 %(level)s"
+
+msgid "Level and points"
+msgstr "레벨/포인트"
+
+msgid "Member level"
+msgstr "회원 레벨"
+
+msgid "Member records"
+msgstr "회원 기록"
+
+msgid "Member status"
+msgstr "회원 상태"
+
+msgid "Memo status"
+msgstr "쪽지 상태"
+
+msgid "Memo type"
+msgstr "쪽지 유형"
+
+msgid "Memos %(count)s / scraps %(scraps)s"
+msgstr "쪽지 %(count)s개 / 스크랩 %(scraps)s개"
+
+msgid "Nickname"
+msgstr "닉네임"
+
+msgid "No profile"
+msgstr "프로필 없음"
+
+msgid "Orders %(count)s"
+msgstr "주문 %(count)s건"
+
+msgid "Point amount"
+msgstr "포인트 금액"
+
+msgid "Point balance"
+msgstr "포인트 잔액"
+
+msgid "Point snapshot"
+msgstr "포인트 요약"
+
+msgid "Point status"
+msgstr "포인트 상태"
+
+msgid "Points %(count)s"
+msgstr "포인트 기록 %(count)s건"
+
+msgid "Posts %(count)s"
+msgstr "게시글 %(count)s건"
+
+msgid "Profile signal"
+msgstr "프로필 신호"
+
+msgid "Profile"
+msgstr "프로필"
+
+msgid "Read"
+msgstr "읽음"
+
+msgid "Related source"
+msgstr "관련 출처"
+
+msgid "Review account access, profile, points, activity, and related records together."
+msgstr "계정 접근, 프로필, 포인트, 활동, 관련 기록을 함께 확인합니다."
+
+msgid "Review point movement, balance, expiration, and source relation together."
+msgstr "포인트 증감, 잔액, 만료, 발생 출처를 함께 확인합니다."
+
+msgid "Review sender, recipient, read state, IP, and message size together."
+msgstr "발신자, 수신자, 읽음 상태, IP, 메시지 크기를 함께 확인합니다."
+
+msgid "Sender %(id)s"
+msgstr "발신자 %(id)s"
+
+msgid "Sent"
+msgstr "발송"
+
+msgid "Staff"
+msgstr "스태프"
+
+msgid "Superuser"
+msgstr "최고 관리자"
+
+msgid "Unread"
+msgstr "읽지 않음"
+
+msgid "Used point %(point)s"
+msgstr "사용 포인트 %(point)s"
+
+msgid "Used point"
+msgstr "사용 포인트"
+
+msgid "User snapshot"
+msgstr "회원 요약"
+
+msgid "%(amount)s current points"
+msgstr "현재 포인트 %(amount)s"
+
+msgid "%(count)s active members"
+msgstr "활성 회원 %(count)s명"
+
+msgid "%(count)s blocked"
+msgstr "차단 %(count)s명"
+
+msgid "%(count)s joined today"
+msgstr "오늘 가입 %(count)s명"
+
+msgid "%(count)s point logs"
+msgstr "포인트 로그 %(count)s건"
+
+msgid "Active members"
+msgstr "활성 회원"
+
+msgid "Admin access accounts"
+msgstr "관리자 접근 계정"
+
+msgid "Staff members"
+msgstr "스태프 회원"
+
+msgid "Today members"
+msgstr "오늘 가입"
+
+msgid "Total members"
+msgstr "전체 회원"
+
+msgid "Unread memos"
+msgstr "읽지 않은 쪽지"
+
+msgid "Balance"
+msgstr "잔액"
+
+msgid "Latest members"
+msgstr "최근 회원"
+
+msgid "Level"
+msgstr "레벨"
+
+msgid "Member metrics"
+msgstr "회원 지표"
+
+msgid "Member operations"
+msgstr "회원 운영"
+
+msgid "Memos"
+msgstr "쪽지"
+
+msgid "No point logs are available."
+msgstr "사용 가능한 포인트 로그가 없습니다."
+
+msgid "No recent members."
+msgstr "최근 회원이 없습니다."
+
+msgid "No unread memos."
+msgstr "읽지 않은 쪽지가 없습니다."
+
+msgid "Point ledger tail"
+msgstr "최근 포인트 내역"
+
+msgid "Point ledger"
+msgstr "포인트 장부"
+
+msgid "Receipt command queue"
+msgstr "영수증 처리 큐"
+
+msgid "Receipts needing operator action"
+msgstr "운영자 확인이 필요한 영수증"
+
+msgid "Paid orders without PG or cash receipt evidence"
+msgstr "PG 또는 현금영수증 증빙이 없는 입금 주문"
+
+msgid "No receipt command items currently need follow-up."
+msgstr "현재 후속 확인이 필요한 영수증 항목이 없습니다."
+
+msgid "Unread memo queue"
+msgstr "읽지 않은 쪽지 대기열"
+
+msgid "Action queue"
+msgstr "처리 큐"
+
+msgid "Needs operator review"
+msgstr "운영자 확인 필요"
+
+msgid "Outstanding orders"
+msgstr "미수 주문"
+
+msgid "Shipping follow-up"
+msgstr "배송 확인"
+
+msgid "Member messages waiting for review"
+msgstr "확인이 필요한 회원 쪽지"
+
+msgid "Blocked members"
+msgstr "차단 회원"
+
+msgid "Inactive accounts that may need review"
+msgstr "확인이 필요한 비활성 계정"
+
+msgid "Point expirations"
+msgstr "포인트 만료"
+
+msgid "%(count)s already expired"
+msgstr "이미 만료 %(count)s건"
+
+msgid "Personal pay state"
+msgstr "개인결제 상태"
+
+msgid "Expiration attention"
+msgstr "만료 주의"
+
+msgid "Expiring soon"
+msgstr "곧 만료"
+
+msgid "Negative point"
+msgstr "음수 포인트"
+
+msgid "Memo state"
+msgstr "쪽지 상태"
+
+msgid "Profiles"
+msgstr "프로필"
+
+msgid "Member points"
+msgstr "회원 포인트"
+
+msgid "Member memos"
+msgstr "회원 쪽지"
+
+msgid "Member scraps"
+msgstr "회원 스크랩"
+
+msgid "users"
+msgstr "사용자"
+
+msgid "Outstanding Tokens"
+msgstr "미사용 토큰"
+
+msgid "Blacklisted Tokens"
+msgstr "차단된 토큰"
+
+msgid "Apply Filters"
+msgstr "필터 적용"
+
+msgid "Order date"
+msgstr "주문일"
+
+msgid "Request date"
+msgstr "요청일"
+
+msgid "Last 7 days"
+msgstr "지난 7일"
+
+msgid "This month"
+msgstr "이번 달"
+
+msgid "This year"
+msgstr "이번 해"
+
+msgid "Activation"
+msgstr "활성 상태"
+
+msgid "Personal pay ID"
+msgstr "개인결제 번호"
+
+msgid "Requested at"
+msgstr "요청일시"
+
+msgid "Personal pay detail command center"
+msgstr "개인결제 상세 운영 센터"
+
+msgid "Personal pay detail shortcuts"
+msgstr "개인결제 상세 바로가기"
+
+msgid "Back to personal pay"
+msgstr "개인결제 목록"
+
+msgid "Personal pay operational signals"
+msgstr "개인결제 운영 신호"
+
+msgid "Operational signals"
+msgstr "운영 신호"
+
+msgid "Payment and receipt checks"
+msgstr "입금 및 영수증 확인"
+
+msgid "Related order record"
+msgstr "연결된 주문 기록"
+
+msgid "Outstanding Token"
+msgstr "미사용 토큰"
+
+msgid "Blacklisted Token"
+msgstr "차단된 토큰"
+
+msgid "Token snapshot"
+msgstr "토큰 요약"
+
+msgid "Token identity"
+msgstr "토큰 식별"
+
+msgid "Token ID"
+msgstr "토큰 ID"
+
+msgid "Record ID"
+msgstr "레코드 ID"
+
+msgid "Full token ID"
+msgstr "전체 토큰 ID"
+
+msgid "Raw token"
+msgstr "원본 토큰"
+
+msgid "Created at"
+msgstr "생성일시"
+
+msgid "Expires at"
+msgstr "만료일시"
+
+msgid "Token state"
+msgstr "토큰 상태"
+
+msgid "No user"
+msgstr "회원 없음"
+
+msgid "Valid"
+msgstr "유효"
+
+msgid "Expired token"
+msgstr "만료된 토큰"
+
+msgid "Valid token"
+msgstr "유효한 토큰"
+
+msgid "Review issued member, token key, issue time, and expiration together."
+msgstr "발급 회원, 토큰 키, 발급 시각, 만료 시각을 함께 확인하세요."
+
+msgid "Issue time"
+msgstr "발급 시각"
+
+msgid "Expiration time"
+msgstr "만료 시각"
+
+msgid "Blacklist snapshot"
+msgstr "차단 토큰 요약"
+
+msgid "Blacklisted at"
+msgstr "차단일시"
+
+msgid "Blocked token"
+msgstr "차단된 토큰"
+
+msgid "Review blocked token, issued member, issue time, and expiration together."
+msgstr "차단된 토큰, 발급 회원, 발급 시각, 만료 시각을 함께 확인하세요."
+
+msgid "Blocked time"
+msgstr "차단 시각"
+
+msgid "Token record"
+msgstr "토큰 레코드"
+
+msgid "Cart ID"
+msgstr "장바구니 ID"
+
+msgid "Imported at"
+msgstr "가져온 시각"
+
+msgid "Admin permissions"
+msgstr "관리 권한"
+
+msgid "API tokens"
+msgstr "API 토큰"
+
+msgid "Super admins"
+msgstr "최고관리자"
+
+msgid "Full-access accounts"
+msgstr "전체 권한 계정"
+
+msgid "Staff accounts"
+msgstr "스태프 계정"
+
+msgid "%(count)s without group"
+msgstr "그룹 미지정 %(count)s명"
+
+msgid "Permission groups"
+msgstr "권한 그룹"
+
+msgid "Role-based admin access"
+msgstr "역할 기반 관리자 접근"
+
+msgid "Recent admin actions"
+msgstr "최근 관리자 작업"
+
+msgid "%(count)s delete logs"
+msgstr "삭제 로그 %(count)s건"
+
+msgid "Group missing staff"
+msgstr "그룹 없는 스태프"
+
+msgid "Assign every non-superuser staff account to an operations role."
+msgstr "최고관리자가 아닌 모든 스태프 계정에 운영 역할을 배정하세요."
+
+msgid "Use groups for shop, community, support, and operations roles."
+msgstr "쇼핑몰, 커뮤니티, 고객지원, 운영 역할은 그룹으로 관리하세요."
+
+msgid "Admin delete log"
+msgstr "관리자 삭제 로그"
+
+msgid "Review destructive actions before closing daily operations."
+msgstr "일일 운영 마감 전에 삭제성 작업을 확인하세요."
+
+msgid "%(count)s outstanding tokens"
+msgstr "미사용 토큰 %(count)s개"
+
+msgid "Operations manager"
+msgstr "운영 매니저"
+
+msgid "Orders, personal pay, settlement, receipts, delivery"
+msgstr "주문, 개인결제, 정산, 영수증, 배송"
+
+msgid "Shop manager"
+msgstr "쇼핑몰 매니저"
+
+msgid "Products, categories, coupons, reviews, product QA"
+msgstr "상품, 분류, 쿠폰, 후기, 상품문의"
+
+msgid "Community manager"
+msgstr "커뮤니티 매니저"
+
+msgid "Boards, posts, comments, FAQ, content pages"
+msgstr "게시판, 게시글, 댓글, FAQ, 내용관리"
+
+msgid "Support operator"
+msgstr "고객지원 운영자"
+
+msgid "Member lookup, memo review, payment evidence without destructive deletes"
+msgstr "삭제 권한 없이 회원 조회, 쪽지 확인, 결제 증빙 검토"
+
+msgid "Admin governance"
+msgstr "관리자 거버넌스"
+
+msgid "Permissions and safety"
+msgstr "권한 및 안전"
+
+msgid "Admin safety metrics"
+msgstr "관리자 안전 지표"
+
+msgid "Daily safety checks"
+msgstr "일일 안전 점검"
+
+msgid "Recommended roles"
+msgstr "권장 역할"
+
+msgid "Order operations pipeline"
+msgstr "주문 운영 파이프라인"
+
+msgid "Operations pipeline"
+msgstr "운영 파이프라인"
+
+msgid "Payment to settlement handoff"
+msgstr "입금부터 정산 인계"
+
+msgid "Settlement pipeline"
+msgstr "정산 파이프라인"
+
+msgid "Payment, receipt, delivery, and export handoff"
+msgstr "입금, 영수증, 배송, 내보내기 인계"
+
+msgid "Export receipts"
+msgstr "영수증 내보내기"
+
+msgid "Download receipt evidence CSV for handoff."
+msgstr "인계를 위해 영수증 증빙 CSV를 내려받으세요."
+msgid "Product sales rank"
+msgstr "상품판매순위"
+
+msgid "Order print"
+msgstr "주문내역 출력"
+
+msgid "Track best-selling products by quantity, order count, gross sales, and reward points."
+msgstr "수량, 주문 수, 매출, 적립 포인트 기준으로 인기 상품을 확인합니다."
+
+msgid "Ranked products"
+msgstr "순위 상품"
+
+msgid "Top selling products in the selected period"
+msgstr "선택 기간의 상위 판매 상품"
+
+msgid "Sold quantity"
+msgstr "판매 수량"
+
+msgid "Product sales"
+msgstr "상품 매출"
+
+msgid "Reward points"
+msgstr "적립 포인트"
+
+msgid "Report actions"
+msgstr "리포트 작업"
+
+msgid "Sales rank CSV"
+msgstr "판매순위 CSV"
+
+msgid "Sales rank summary"
+msgstr "판매순위 요약"
+
+msgid "Ranking"
+msgstr "순위"
+
+msgid "Top products by sales"
+msgstr "매출 기준 상위 상품"
+
+msgid "Sales share"
+msgstr "매출 비중"
+
+msgid "Lines"
+msgstr "항목 수"
+
+msgid "Unnamed product"
+msgstr "이름 없는 상품"
+
+msgid "No product sales rows match the selected period."
+msgstr "선택한 기간에 해당하는 상품 판매 데이터가 없습니다."
+
+msgid "Prepare order, payment, receipt, and delivery sheets for offline handling."
+msgstr "오프라인 처리를 위한 주문, 결제, 영수증, 배송 내역을 출력합니다."
+
+msgid "Order print CSV"
+msgstr "주문출력 CSV"
+
+msgid "Print actions"
+msgstr "출력 작업"
+
+msgid "Order print summary"
+msgstr "주문출력 요약"
+
+msgid "Matched printable orders"
+msgstr "출력 대상 주문"
+
+msgid "Print rows"
+msgstr "출력 행"
+
+msgid "Limited for browser print stability"
+msgstr "브라우저 출력 안정성을 위해 제한됨"
+
+msgid "Printable order sheet"
+msgstr "출력용 주문서"
+
+msgid "Order, receipt, and delivery list"
+msgstr "주문, 영수증, 배송 목록"
+
+msgid "Order, name, phone, invoice"
+msgstr "주문번호, 이름, 연락처, 송장번호"
+
+msgid "All receipt states"
+msgstr "전체 영수증 상태"
+
+msgid "All shipping states"
+msgstr "전체 배송 상태"
+
+msgid "Invoice registered"
+msgstr "송장 등록"
+
+msgid "Rows"
+msgstr "행 수"
+
+msgid "Print"
+msgstr "인쇄"
+
+msgid "Approval"
+msgstr "승인번호"
+
+msgid "+%(count)s more"
+msgstr "외 %(count)s건"
+
+msgid "No printable orders match the selected filters."
+msgstr "선택한 조건에 맞는 출력 대상 주문이 없습니다."
+
+msgid "Mail tools"
+msgstr "메일 도구"
+
+msgid "Member communication"
+msgstr "회원 커뮤니케이션"
+
+msgid "Send a test message, preview member recipients, and dispatch member mail from the admin console."
+msgstr "관리자 콘솔에서 테스트 메일을 보내고 회원 수신자를 미리 본 뒤 회원메일을 발송합니다."
+
+msgid "From email"
+msgstr "발신 이메일"
+
+msgid "Delivery check"
+msgstr "발송 점검"
+
+msgid "Send test email"
+msgstr "테스트 메일 발송"
+
+msgid "Prepare member email"
+msgstr "회원메일 준비"
+
+msgid "Confirm member email send"
+msgstr "회원메일 발송 확인"
+
+msgid "Preview or send member email"
+msgstr "회원메일 미리보기 또는 발송"
+
+msgid "Recipient preview"
+msgstr "수신자 미리보기"
+
+msgid "Matched member emails"
+msgstr "일치하는 회원 이메일"
+
+msgid "Superusers"
+msgstr "최고관리자"
+
+msgid "All members with email"
+msgstr "이메일이 있는 전체 회원"
+
+msgid "GNU Jango mail test"
+msgstr "GNU Jango 메일 테스트"
+
+msgid "This is a test message from the GNU Jango admin."
+msgstr "GNU Jango 관리자에서 보낸 테스트 메일입니다."
+
+msgid "Member notice"
+msgstr "회원 공지"
+
+msgid "Enter a valid test recipient email."
+msgstr "올바른 테스트 수신자 이메일을 입력하세요."
+
+msgid "Subject and body are required."
+msgstr "제목과 본문은 필수입니다."
+
+msgid "Test email failed: %(error)s"
+msgstr "테스트 메일 발송 실패: %(error)s"
+
+msgid "Test email sent to %(email)s."
+msgstr "%(email)s 주소로 테스트 메일을 발송했습니다."
+
+msgid "Recipient preview updated. Tick confirmation to send member mail."
+msgstr "수신자 미리보기를 갱신했습니다. 회원메일을 발송하려면 확인을 체크하세요."
+
+msgid "No member email recipients matched the selected group."
+msgstr "선택한 그룹에 해당하는 회원 이메일 수신자가 없습니다."
+
+msgid "Member email failed: %(error)s"
+msgstr "회원메일 발송 실패: %(error)s"
+
+msgid "Member email sent to %(count)s recipients."
+msgstr "%(count)s명에게 회원메일을 발송했습니다."
+
+msgid "Visit log"
+msgstr "접속자 로그"
+
+msgid "Visit logs"
+msgstr "접속자 로그"
+
+msgid "Search keyword"
+msgstr "검색어"
+
+msgid "Search keywords"
+msgstr "검색어"
+
+msgid "Visit statistics"
+msgstr "접속자 통계"
+
+msgid "Search keyword statistics"
+msgstr "검색어 통계"
+
+msgid "Raw visit logs"
+msgstr "접속자 원본 로그"
+
+msgid "Raw search keywords"
+msgstr "검색어 원본 데이터"
+
+msgid "Traffic analytics"
+msgstr "접속 통계"
+
+msgid "Review recorded visits, unique IPs, device mix, status codes, and popular paths."
+msgstr "기록된 접속, 고유 IP, 기기 비율, 상태 코드, 인기 경로를 확인합니다."
+
+msgid "Traffic actions"
+msgstr "접속 통계 작업"
+
+msgid "Visit summary"
+msgstr "접속 요약"
+
+msgid "Visits"
+msgstr "접속 수"
+
+msgid "Recorded page requests"
+msgstr "기록된 페이지 요청"
+
+msgid "Unique IPs"
+msgstr "고유 IP"
+
+msgid "Approximate visitor count"
+msgstr "대략적인 방문자 수"
+
+msgid "Mobile visits"
+msgstr "모바일 접속"
+
+msgid "Mobile user agents"
+msgstr "모바일 사용자 에이전트"
+
+msgid "Admin visits"
+msgstr "관리자 접속"
+
+msgid "Admin console requests"
+msgstr "관리자 콘솔 요청"
+
+msgid "Visits by day"
+msgstr "일자별 접속"
+
+msgid "No visit rows match the selected period."
+msgstr "선택한 기간에 해당하는 접속 데이터가 없습니다."
+
+msgid "Device mix"
+msgstr "기기 비율"
+
+msgid "No device rows match the selected period."
+msgstr "선택한 기간에 해당하는 기기 데이터가 없습니다."
+
+msgid "Status code mix"
+msgstr "상태 코드 비율"
+
+msgid "No status rows match the selected period."
+msgstr "선택한 기간에 해당하는 상태 코드 데이터가 없습니다."
+
+msgid "Admin log actions"
+msgstr "관리자 로그 작업"
+
+msgid "Logged admin changes in the selected period"
+msgstr "선택 기간의 관리자 변경 로그"
+
+msgid "Popular paths"
+msgstr "인기 경로"
+
+msgid "Most requested paths"
+msgstr "가장 많이 요청된 경로"
+
+msgid "Recent visit logs"
+msgstr "최근 접속 로그"
+
+msgid "No recent visit logs."
+msgstr "최근 접속 로그가 없습니다."
+
+msgid "Search analytics"
+msgstr "검색 통계"
+
+msgid "Track popular search terms from site, shop, API, and admin search entry points."
+msgstr "사이트, 쇼핑몰, API, 관리자 검색 진입점의 인기 검색어를 추적합니다."
+
+msgid "Search actions"
+msgstr "검색 통계 작업"
+
+msgid "Search keyword summary"
+msgstr "검색어 요약"
+
+msgid "Keywords"
+msgstr "검색어 수"
+
+msgid "Unique search terms"
+msgstr "고유 검색어"
+
+msgid "Searches"
+msgstr "검색 수"
+
+msgid "Accumulated search count"
+msgstr "누적 검색 횟수"
+
+msgid "Shop searches"
+msgstr "쇼핑몰 검색"
+
+msgid "Shop search source"
+msgstr "쇼핑몰 검색 출처"
+
+msgid "API searches"
+msgstr "API 검색"
+
+msgid "API search source"
+msgstr "API 검색 출처"
+
+msgid "Sources"
+msgstr "출처"
+
+msgid "Keyword source mix"
+msgstr "검색어 출처 비율"
+
+msgid "No source rows match the selected period."
+msgstr "선택한 기간에 해당하는 출처 데이터가 없습니다."
+
+msgid "Popular keywords"
+msgstr "인기 검색어"
+
+msgid "Top searched terms"
+msgstr "상위 검색어"
+
+msgid "Keyword"
+msgstr "검색어"
+
+msgid "Last user"
+msgstr "최근 사용자"
+
+msgid "Last IP"
+msgstr "최근 IP"
+
+msgid "Last searched"
+msgstr "최근 검색일"
+
+msgid "No search keywords match the selected period."
+msgstr "선택한 기간에 해당하는 검색어 데이터가 없습니다."
+
+msgid "Compare product quantity, revenue, and order contribution."
+msgstr "상품별 수량, 매출, 주문 기여도를 비교합니다."
+
+msgid "Print order, payment, receipt, and delivery handoff sheets."
+msgstr "주문, 결제, 영수증, 배송 인계용 출력물을 준비합니다."
+
+msgid "Send a test email or prepare member mail from the admin console."
+msgstr "관리자 콘솔에서 테스트 메일을 보내거나 회원메일을 준비합니다."
+
+msgid "Review visitor traffic, device mix, status codes, and popular paths."
+msgstr "방문 트래픽, 기기 비율, 상태 코드, 인기 경로를 확인합니다."
+
+msgid "Review popular search terms by source and recency."
+msgstr "출처와 최근성 기준으로 인기 검색어를 확인합니다."
+
+msgid "Today visits"
+msgstr "오늘 접속"
+
+msgid "%(count)s admin visits"
+msgstr "관리자 접속 %(count)s건"
+
+msgid "%(count)s searched today"
+msgstr "오늘 검색 %(count)s건"
+
+msgid "%(count)s unique IPs"
+msgstr "고유 IP %(count)s개"
+
+msgid "Mobile traffic today"
+msgstr "오늘 모바일 접속"
+
+msgid "Members with email"
+msgstr "이메일 보유 회원"
+
+msgid "Traffic and communication"
+msgstr "접속/커뮤니케이션"
+
+msgid "Visits, searches, and member mail"
+msgstr "접속, 검색, 회원메일"
+
+msgid "Traffic and communication metrics"
+msgstr "접속/커뮤니케이션 지표"
+
+msgid "Recorded visits"
+msgstr "기록된 접속"
+
+msgid "Order items"
+msgstr "주문 상품"
+
+msgid "Admin action logs"
+msgstr "관리자 작업 로그"
+
+msgid "Action time"
+msgstr "작업 시간"
+
+msgid "Action"
+msgstr "작업"
+
+msgid "Object"
+msgstr "대상"
+
+msgid "Added"
+msgstr "추가"
+
+msgid "Changed"
+msgstr "변경"
+
+msgid "Deleted"
+msgstr "삭제"
+
+msgid "Editor attachment"
+msgstr "에디터 첨부파일"
+
+msgid "Editor attachments"
+msgstr "에디터 첨부파일"
+
+msgid "Post scrap"
+msgstr "게시글 스크랩"
+
+msgid "Post scraps"
+msgstr "게시글 스크랩"
+
+msgid "Autosave draft"
+msgstr "자동저장 글"
+
+msgid "Autosave drafts"
+msgstr "자동저장 글"

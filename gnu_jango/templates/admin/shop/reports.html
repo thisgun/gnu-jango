@@ -1,0 +1,333 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; {% translate 'Shop settlement report' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">{% translate 'YoungCart operations' %}</p>
+    <h1>{% translate 'Shop settlement report' %}</h1>
+    <p class="g5-admin-hero-copy">{% translate 'Review imported orders, payment logs, coupon usage, and personal payment totals in one responsive admin screen.' %}</p>
+  </div>
+  <form class="g5-admin-report-filter" method="get" action="{{ report_path }}">
+    <label>
+      <span>{% translate 'From' %}</span>
+      <input type="date" name="date_from" value="{{ filters.date_from }}">
+    </label>
+    <label>
+      <span>{% translate 'To' %}</span>
+      <input type="date" name="date_to" value="{{ filters.date_to }}">
+    </label>
+    <label>
+      <span>{% translate 'Series' %}</span>
+      <select name="period">
+        <option value="month"{% if filters.period == "month" %} selected{% endif %}>{% translate 'Monthly' %}</option>
+        <option value="day"{% if filters.period == "day" %} selected{% endif %}>{% translate 'Daily' %}</option>
+      </select>
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button" type="submit">{% translate 'Apply' %}</button>
+      <a class="button g5-admin-button-secondary" href="{{ report_path }}">{% translate 'Reset' %}</a>
+    </div>
+  </form>
+</section>
+
+<nav class="g5-admin-export-actions" aria-label="{% translate 'Report exports' %}">
+  <a class="button g5-admin-button-secondary" href="{% url 'admin:shop_shoporder_sales_rank' %}?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}">{% translate 'Product sales rank' %}</a>
+  <a class="button g5-admin-button-secondary" href="{% url 'admin:shop_shoporder_print' %}?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}">{% translate 'Order print' %}</a>
+  <a class="button" href="{{ report_path }}?period={{ filters.period }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&export=orders">{% translate 'Orders CSV' %}</a>
+  <a class="button" href="{{ report_path }}?period={{ filters.period }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&export=sales">{% translate 'Sales CSV' %}</a>
+  <a class="button" href="{{ report_path }}?period={{ filters.period }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&export=coupons">{% translate 'Coupons CSV' %}</a>
+  <a class="button" href="{{ report_path }}?period={{ filters.period }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&export=receipts">{% translate 'Receipts CSV' %}</a>
+</nav>
+
+<section class="g5-admin-report-metrics" aria-label="{% translate 'Report summary' %}">
+  {% for metric in metrics %}
+  <article class="g5-admin-report-metric">
+    <span>{{ metric.label }}</span>
+    <strong>{{ metric.value }}</strong>
+    <em>{{ metric.hint }}</em>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="g5-admin-panel g5-admin-action-queue-panel">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Receipt command queue' %}</p>
+      <h2>{% translate 'Receipts needing operator action' %}</h2>
+    </div>
+  </div>
+  <div class="g5-admin-action-grid">
+    {% for item in receipt_command_queue %}
+    <a class="g5-admin-action-card g5-admin-action-card-{{ item.tone }}" href="{{ item.url }}">
+      <span class="material-symbols-outlined" aria-hidden="true">{{ item.icon }}</span>
+      <div>
+        <strong>{{ item.value }}</strong>
+        <em>{{ item.label }}</em>
+        <small>{{ item.hint }}</small>
+      </div>
+    </a>
+    {% empty %}
+    <p class="g5-admin-empty">{% translate 'No receipt command items currently need follow-up.' %}</p>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="g5-admin-panel g5-admin-flow-panel">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Settlement pipeline' %}</p>
+      <h2>{% translate 'Payment, receipt, delivery, and export handoff' %}</h2>
+    </div>
+  </div>
+  <ol class="g5-admin-flow-list g5-admin-flow-list-panel">
+    {% for step in settlement_pipeline %}
+    <li>
+      <a class="g5-admin-flow-step g5-admin-flow-step-{{ step.tone }}" href="{{ step.url }}">
+        <span class="material-symbols-outlined" aria-hidden="true">{{ step.icon }}</span>
+        <strong>{{ step.value }}</strong>
+        <em>{{ step.label }}</em>
+        <small>{{ step.hint }}</small>
+      </a>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+
+<div class="g5-admin-report-grid">
+  <section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Sales trend' %}</p>
+        <h2>{% translate 'Receipt series' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-series">
+      {% for row in sales_series %}
+      <div class="g5-admin-series-row">
+        <span class="g5-admin-series-label">{{ row.period }}</span>
+        <div class="g5-admin-series-track" aria-hidden="true">
+          <i style="width: {{ row.share }}%"></i>
+        </div>
+        <strong>{{ row.receipt_price_display }}</strong>
+        <small>{{ row.order_count_display }} {% translate 'orders' %}</small>
+        <small>{% translate 'Tax base' %} {{ row.tax_base_display }} · {% translate 'VAT' %} {{ row.vat_amount_display }} · {% translate 'Tax exempt' %} {{ row.exempt_amount_display }}</small>
+      </div>
+      {% empty %}
+      <p class="g5-admin-empty">{% translate 'No sales rows match the selected period.' %}</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Order status' %}</p>
+        <h2>{% translate 'Status totals' %}</h2>
+      </div>
+    </div>
+    {% include "admin/shop/report_table.html" with rows=status_rows key_label="Status" %}
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Payment' %}</p>
+        <h2>{% translate 'Settle case' %}</h2>
+      </div>
+    </div>
+    {% include "admin/shop/report_table.html" with rows=settle_rows key_label="Settle case" %}
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Gateway' %}</p>
+        <h2>{% translate 'PG totals' %}</h2>
+      </div>
+    </div>
+    {% include "admin/shop/report_table.html" with rows=pg_rows key_label="PG" %}
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Receipts' %}</p>
+        <h2>{% translate 'Receipt state' %}</h2>
+      </div>
+    </div>
+    {% include "admin/shop/report_table.html" with rows=receipt_rows key_label="State" %}
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Coupons' %}</p>
+        <h2>{% translate 'Coupon usage' %}</h2>
+      </div>
+    </div>
+    <dl class="g5-admin-report-summary-list">
+      <div><dt>{% translate 'Issued' %}</dt><dd>{{ coupon_summary.issued }}</dd></div>
+      <div><dt>{% translate 'Unused' %}</dt><dd>{{ coupon_summary.unused }}</dd></div>
+      <div><dt>{% translate 'Used logs' %}</dt><dd>{{ coupon_summary.used_logs }}</dd></div>
+      <div><dt>{% translate 'Discount' %}</dt><dd>{{ coupon_summary.used_discount }}</dd></div>
+    </dl>
+    {% include "admin/shop/report_table.html" with rows=top_coupons key_label="Coupon" %}
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Outstanding' %}</p>
+        <h2>{% translate 'Orders requiring settlement follow-up' %}</h2>
+      </div>
+      <a class="button btn g5-admin-button-secondary" href="{% url 'admin:shop_shoporder_unresolved' %}">{% translate 'Open full payment queue' %}</a>
+    </div>
+    <div class="g5-admin-report-table-wrap">
+      <table class="g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate 'Order' %}</th>
+            <th scope="col">{% translate 'Name' %}</th>
+            <th scope="col">{% translate 'Status' %}</th>
+            <th scope="col">{% translate 'Settle' %}</th>
+            <th scope="col">{% translate 'Receipt' %}</th>
+            <th scope="col">{% translate 'Outstanding' %}</th>
+            <th scope="col">{% translate 'Time' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in outstanding_orders %}
+          <tr>
+            <td><a href="{% url 'admin:shop_shoporder_change' row.id %}">{{ row.id }}</a></td>
+            <td>{{ row.name }}</td>
+            <td>{{ row.status }}</td>
+            <td>{{ row.settle_case }} / {{ row.pg }}</td>
+            <td>{{ row.receipt }}</td>
+            <td>{{ row.misu }}</td>
+            <td>{{ row.time }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="7" class="g5-admin-empty">{% translate 'No outstanding orders in this period.' %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Cash receipts' %}</p>
+        <h2>{% translate 'Recent cash receipt orders' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-table-wrap">
+      <table class="g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate 'Order' %}</th>
+            <th scope="col">{% translate 'Name' %}</th>
+            <th scope="col">{% translate 'Settle' %}</th>
+            <th scope="col">{% translate 'Receipt' %}</th>
+            <th scope="col">{% translate 'Time' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in cash_receipt_orders %}
+          <tr>
+            <td><a href="{% url 'admin:shop_shoporder_change' row.id %}">{{ row.id }}</a></td>
+            <td>{{ row.name }}</td>
+            <td>{{ row.settle_case }} / {{ row.pg }}</td>
+            <td>{{ row.receipt }}</td>
+            <td>{{ row.time }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="g5-admin-empty">{% translate 'No cash receipt orders in this period.' %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Personal pay' %}</p>
+        <h2>{% translate 'Recent personal payments' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-table-wrap">
+      <table class="g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate 'ID' %}</th>
+            <th scope="col">{% translate 'Name' %}</th>
+            <th scope="col">{% translate 'Settle' %}</th>
+            <th scope="col">{% translate 'Price' %}</th>
+            <th scope="col">{% translate 'Receipt' %}</th>
+            <th scope="col">{% translate 'Cash no' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in personal_pay_rows %}
+          <tr>
+            <td><a href="{% url 'admin:shop_shoppersonalpay_change' row.id %}">{{ row.id }}</a></td>
+            <td>{{ row.name }}</td>
+            <td>{{ row.settle_case }} / {{ row.pg }}</td>
+            <td>{{ row.price }}</td>
+            <td>{{ row.receipt }}</td>
+            <td>{{ row.cash_no }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="g5-admin-empty">{% translate 'No personal payment rows in this period.' %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'PG raw logs' %}</p>
+        <h2>{% translate 'Recent imported gateway logs' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-table-wrap">
+      <table class="g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate 'Log' %}</th>
+            <th scope="col">{% translate 'Order' %}</th>
+            <th scope="col">{% translate 'Cart' %}</th>
+            <th scope="col">{% translate 'PG' %}</th>
+            <th scope="col">{% translate 'Time' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in recent_raw_logs %}
+          <tr>
+            <td><a href="{% url 'admin:shop_shoporderdata_change' row.id %}">{{ row.id }}</a></td>
+            <td>{{ row.order_id }}</td>
+            <td>{{ row.cart_id }}</td>
+            <td>{{ row.pg }}</td>
+            <td>{{ row.time }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="5" class="g5-admin-empty">{% translate 'No raw PG logs in this period.' %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -1,0 +1,68 @@
+[tool.black]
+line-length = 120
+target-version = ["py312"]
+extend-exclude = '''
+/(
+  \.git
+  | \.venv
+  | \.venv314
+  | build
+  | dist
+  | staticfiles
+  | media
+  | gnu_jango/templates/theme/nextjs25
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 120
+skip = [".venv", ".venv314", "build", "dist", "staticfiles", "media", "gnu_jango/templates/theme/nextjs25"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+exclude = [
+  ".git",
+  ".venv",
+  ".venv314",
+  "build",
+  "dist",
+  "staticfiles",
+  "media",
+  "gnu_jango/templates/theme/nextjs25",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+ignore_missing_imports = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+exclude = [
+  "\\.venv",
+  "\\.venv314",
+  "build",
+  "dist",
+  "staticfiles",
+  "media",
+  "gnu_jango/templates/theme/nextjs25",
+]
+
+[tool.django-stubs]
+django_settings_module = "example.settings"
+
+[tool.coverage.run]
+source = ["gnu_jango"]
+omit = ["*/migrations/*", "*/tests.py", "*/test_*.py", "gnu_jango/templates/*"]
+branch = true
+
+[tool.coverage.report]
+skip_empty = true
+# Floor just under the measured 51% (2026-10-10) so coverage cannot silently drop; raise it as tests grow.
+fail_under = 49
+show_missing = false

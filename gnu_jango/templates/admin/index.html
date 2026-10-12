@@ -1,0 +1,395 @@
+﻿{% extends "admin/base_site.html" %}
+{% load i18n static log admin_ops %}
+
+{% block extrastyle %}{{ block.super }}<link rel="stylesheet" href="{% static "admin/css/dashboard.css" %}">{% endblock %}
+
+{% block coltype %}colMS{% endblock %}
+
+{% block bodyclass %}{{ block.super }} dashboard{% endblock %}
+
+{% block nav-breadcrumbs %}{% endblock %}
+
+{% block content %}
+{% admin_ops_summary as ops %}
+<section class="g5-admin-dashboard-hero g5-admin-dashboard-hero-ops">
+  <div>
+    <p class="g5-admin-eyebrow">{% translate 'Operations console' %}</p>
+    <h1>{% translate 'GNU Jango Admin' %}</h1>
+    <p class="g5-admin-hero-copy">{% translate 'Monitor orders, settlement, receipts, members, boards, and live integration status from one responsive control room.' %}</p>
+  </div>
+  <div class="g5-admin-status-stack" aria-label="{% translate 'System shortcuts' %}">
+    <a class="g5-admin-status-card" href="/api/v1/status">
+      <span class="g5-admin-status-dot"></span>
+      <div>
+        <strong>{% translate 'Django API v1' %}</strong>
+        <small>{% translate 'Status endpoint' %}</small>
+      </div>
+    </a>
+    <a class="g5-admin-status-card" href="{% url 'admin:shop_shoporder_reports' %}">
+      <span class="g5-admin-status-dot g5-admin-status-dot-info"></span>
+      <div>
+        <strong>{% translate 'Settlement' %}</strong>
+        <small>{% translate 'Orders, PG, receipts' %}</small>
+      </div>
+    </a>
+    {% if user.is_superuser %}
+    <a class="g5-admin-status-card" href="{% url 'admin:core_visitlog_maintenance' %}">
+      <span class="g5-admin-status-dot g5-admin-status-dot-info"></span>
+      <div>
+        <strong>{% translate 'System maintenance' %}</strong>
+        <small>{% translate 'Cache, sessions, thumbnails' %}</small>
+      </div>
+    </a>
+    {% endif %}
+  </div>
+</section>
+
+<section class="g5-admin-metrics g5-admin-ops-metrics" aria-label="{% translate 'Operational metrics' %}">
+  {% for metric in ops.metrics %}
+  <a class="g5-admin-metric g5-admin-metric-{{ metric.tone }}" href="{{ metric.url }}">
+    <span>{{ metric.label }}</span>
+    <strong>{{ metric.value }}</strong>
+    <em>{{ metric.hint }}</em>
+  </a>
+  {% endfor %}
+</section>
+
+<section class="g5-admin-panel g5-admin-action-queue-panel">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Action queue' %}</p>
+      <h2>{% translate 'Needs operator review' %}</h2>
+    </div>
+  </div>
+  <div class="g5-admin-action-grid">
+    {% for item in ops.action_queue %}
+    <a class="g5-admin-action-card g5-admin-action-card-{{ item.tone }}" href="{{ item.url }}">
+      <span class="material-symbols-outlined" aria-hidden="true">{{ item.icon }}</span>
+      <div>
+        <strong>{{ item.value }}</strong>
+        <em>{{ item.label }}</em>
+        <small>{{ item.hint }}</small>
+      </div>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+<div id="content-main" class="g5-admin-dashboard-grid">
+  <section class="g5-admin-panel g5-admin-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Workflows' %}</p>
+        <h2>{% translate 'Daily operations' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-workflows">
+      {% for workflow in ops.workflows %}
+      <article class="g5-admin-workflow">
+        <div class="g5-admin-workflow-title">
+          <span class="material-symbols-outlined" aria-hidden="true">{{ workflow.icon }}</span>
+          <strong>{{ workflow.title }}</strong>
+        </div>
+        <nav aria-label="{{ workflow.title }}">
+          {% for item in workflow.items %}
+          <a href="{{ item.url }}">{{ item.label }}</a>
+          {% endfor %}
+        </nav>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="g5-admin-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Attention' %}</p>
+        <h2>{% translate 'Settlement watchlist' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-list">
+      {% for order in ops.watch_orders %}
+      <a class="g5-admin-list-row" href="{% url 'admin:shop_shoporder_change' order.id %}">
+        <span class="g5-admin-badge g5-admin-badge-{{ order.tone }}">{{ order.status }}</span>
+        <strong>{{ order.id }}</strong>
+        <small>{{ order.name }} · {{ order.outstanding }}</small>
+      </a>
+      {% empty %}
+      <p class="g5-admin-empty">{% translate 'No outstanding orders currently need follow-up.' %}</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="g5-admin-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Recent' %}</p>
+        <h2>{% translate 'Latest orders' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-list">
+      {% for order in ops.recent_orders %}
+      <a class="g5-admin-list-row" href="{% url 'admin:shop_shoporder_change' order.id %}">
+        <span class="g5-admin-badge g5-admin-badge-{{ order.tone }}">{{ order.status }}</span>
+        <strong>{{ order.id }}</strong>
+        <small>{{ order.name }} · {{ order.receipt }} · {{ order.time }}</small>
+      </a>
+      {% empty %}
+      <p class="g5-admin-empty">{% translate 'No recent orders.' %}</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Members' %}</p>
+        <h2>{% translate 'Member operations' %}</h2>
+      </div>
+    </div>
+    <section class="g5-admin-metrics g5-admin-ops-metrics" aria-label="{% translate 'Member metrics' %}">
+      {% for metric in ops.member_metrics %}
+      <a class="g5-admin-metric g5-admin-metric-{{ metric.tone }}" href="{{ metric.url }}">
+        <span>{{ metric.label }}</span>
+        <strong>{{ metric.value }}</strong>
+        <em>{{ metric.hint }}</em>
+      </a>
+      {% endfor %}
+    </section>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Traffic and communication' %}</p>
+        <h2>{% translate 'Visits, searches, and member mail' %}</h2>
+      </div>
+    </div>
+    <section class="g5-admin-metrics g5-admin-ops-metrics" aria-label="{% translate 'Traffic and communication metrics' %}">
+      {% for metric in ops.traffic_metrics %}
+      <a class="g5-admin-metric g5-admin-metric-{{ metric.tone }}" href="{{ metric.url }}">
+        <span>{{ metric.label }}</span>
+        <strong>{{ metric.value }}</strong>
+        <em>{{ metric.hint }}</em>
+      </a>
+      {% endfor %}
+    </section>
+    <div class="g5-admin-governance-grid">
+      <section class="g5-admin-governance-block">
+        <h3>{% translate 'Popular paths' %}</h3>
+        <div class="g5-admin-list">
+          {% for path in ops.popular_paths %}
+          <a class="g5-admin-list-row" href="{% url 'admin:core_visitlog_changelist' %}?q={{ path.path|urlencode }}">
+            <span class="g5-admin-badge g5-admin-badge-info">{{ path.count }}</span>
+            <strong>{{ path.path }}</strong>
+            <small>{% translate 'Recorded visits' %}</small>
+          </a>
+          {% empty %}
+          <p class="g5-admin-empty">{% translate 'No visit rows match the selected period.' %}</p>
+          {% endfor %}
+        </div>
+      </section>
+      <section class="g5-admin-governance-block">
+        <h3>{% translate 'Popular keywords' %}</h3>
+        <div class="g5-admin-list">
+          {% for keyword in ops.popular_keywords %}
+          <a class="g5-admin-list-row" href="{% url 'admin:core_searchkeyword_changelist' %}?q={{ keyword.keyword|urlencode }}">
+            <span class="g5-admin-badge g5-admin-badge-success">{{ keyword.count }}</span>
+            <strong>{{ keyword.keyword }}</strong>
+            <small>{{ keyword.source }} · {% translate 'Searches' %}</small>
+          </a>
+          {% empty %}
+          <p class="g5-admin-empty">{% translate 'No search keywords match the selected period.' %}</p>
+          {% endfor %}
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-panel-wide g5-admin-governance-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Admin governance' %}</p>
+        <h2>{% translate 'Permissions and safety' %}</h2>
+      </div>
+    </div>
+    <section class="g5-admin-metrics g5-admin-ops-metrics" aria-label="{% translate 'Admin safety metrics' %}">
+      {% for metric in ops.governance_metrics %}
+      <a class="g5-admin-metric g5-admin-metric-{{ metric.tone }}" href="{{ metric.url }}">
+        <span>{{ metric.label }}</span>
+        <strong>{{ metric.value }}</strong>
+        <em>{{ metric.hint }}</em>
+      </a>
+      {% endfor %}
+    </section>
+    <div class="g5-admin-governance-grid">
+      <section class="g5-admin-governance-block">
+        <h3>{% translate 'Daily safety checks' %}</h3>
+        <div class="g5-admin-action-grid">
+          {% for item in ops.safety_checks %}
+          <a class="g5-admin-action-card g5-admin-action-card-{{ item.tone }}" href="{{ item.url }}">
+            <span class="material-symbols-outlined" aria-hidden="true">{{ item.icon }}</span>
+            <div>
+              <strong>{{ item.value }}</strong>
+              <em>{{ item.label }}</em>
+              <small>{{ item.hint }}</small>
+            </div>
+          </a>
+          {% endfor %}
+        </div>
+      </section>
+      <section class="g5-admin-governance-block">
+        <h3>{% translate 'Recommended roles' %}</h3>
+        <dl class="g5-admin-role-list">
+          {% for role in ops.role_recommendations %}
+          <div>
+            <dt>{{ role.role }}</dt>
+            <dd>{{ role.scope }}</dd>
+          </div>
+          {% endfor %}
+        </dl>
+      </section>
+    </div>
+  </section>
+
+  <section class="g5-admin-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Recent' %}</p>
+        <h2>{% translate 'Latest members' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-list">
+      {% for member in ops.recent_members %}
+      <a class="g5-admin-list-row" href="{% url 'admin:auth_user_change' member.id %}">
+        <span class="g5-admin-badge g5-admin-badge-{{ member.tone }}">{{ member.status }}</span>
+        <strong>{{ member.nickname }} / {{ member.username }}</strong>
+        <small>{% translate 'Level' %} {{ member.level }} &middot; {{ member.point }}P &middot; {{ member.joined }}</small>
+      </a>
+      {% empty %}
+      <p class="g5-admin-empty">{% translate 'No recent members.' %}</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="g5-admin-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Points' %}</p>
+        <h2>{% translate 'Point ledger tail' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-list">
+      {% for point in ops.recent_points %}
+      <a class="g5-admin-list-row" href="{% url 'admin:users_user_point_change' point.id %}">
+        <span class="g5-admin-badge g5-admin-badge-{{ point.tone }}">{{ point.point }}</span>
+        <strong>{{ point.username }}</strong>
+        <small>{{ point.content }} &middot; {% translate 'Balance' %} {{ point.balance }} &middot; {{ point.time }}</small>
+      </a>
+      {% empty %}
+      <p class="g5-admin-empty">{% translate 'No point logs are available.' %}</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="g5-admin-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Memos' %}</p>
+        <h2>{% translate 'Unread memo queue' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-list">
+      {% for memo in ops.unread_memos %}
+      <a class="g5-admin-list-row" href="{% url 'admin:users_user_memo_change' memo.id %}">
+        <span class="g5-admin-badge g5-admin-badge-{{ memo.tone }}">{{ memo.status }}</span>
+        <strong>{{ memo.username }}</strong>
+        <small>{{ memo.type }} &middot; {{ memo.time }}</small>
+      </a>
+      {% empty %}
+      <p class="g5-admin-empty">{% translate 'No unread memos.' %}</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="g5-admin-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Gateway' %}</p>
+        <h2>{% translate 'PG log tail' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-list">
+      {% for log_row in ops.recent_logs %}
+      <a class="g5-admin-list-row" href="{% url 'admin:shop_shoporderdata_change' log_row.id %}">
+        <span class="g5-admin-badge g5-admin-badge-info">{{ log_row.pg }}</span>
+        <strong>{{ log_row.order_id }}</strong>
+        <small>{{ log_row.id }} · {{ log_row.time }}</small>
+      </a>
+      {% empty %}
+      <p class="g5-admin-empty">{% translate 'No PG logs are available.' %}</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Modules' %}</p>
+        <h2>{% translate 'Management menu' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-module-grid">
+      {% for app in app_list %}
+      <article class="g5-admin-module">
+        <div>
+          <span>{{ app.name }}</span>
+          <strong>{{ app.models|length }}</strong>
+        </div>
+        <nav aria-label="{{ app.name }}">
+          {% for model in app.models %}
+          {% if model.admin_url %}
+          <a href="{{ model.admin_url }}">{{ model.name }}</a>
+          {% else %}
+          <span>{{ model.name }}</span>
+          {% endif %}
+          {% endfor %}
+        </nav>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+</div>
+{% endblock %}
+
+{% block sidebar %}
+<div id="content-related" class="g5-admin-related">
+  <div class="module g5-admin-panel" id="recent-actions-module">
+    <h2>{% translate 'Recent actions' %}</h2>
+    <h3>{% translate 'My actions' %}</h3>
+    {% get_admin_log 10 as admin_log for_user user %}
+    {% if not admin_log %}
+    <p class="g5-admin-empty">{% translate 'None available' %}</p>
+    {% else %}
+    <ul class="actionlist">
+      {% for entry in admin_log %}
+      <li class="{% if entry.is_addition %}addlink{% endif %}{% if entry.is_change %}changelink{% endif %}{% if entry.is_deletion %}deletelink{% endif %}">
+        <span class="visually-hidden">{% if entry.is_addition %}{% translate 'Added:' %}{% elif entry.is_change %}{% translate 'Changed:' %}{% elif entry.is_deletion %}{% translate 'Deleted:' %}{% endif %}</span>
+        {% if entry.is_deletion or not entry.get_admin_url %}
+          {{ entry.object_repr }}
+        {% else %}
+          <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
+        {% endif %}
+        <br>
+        {% if entry.content_type %}
+          <span class="mini quiet">{% filter capfirst %}{{ entry.content_type.name }}{% endfilter %}</span>
+        {% else %}
+          <span class="mini quiet">{% translate 'Unknown content' %}</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

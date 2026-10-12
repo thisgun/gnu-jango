@@ -1,0 +1,114 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; {% translate 'System maintenance' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">{% translate 'Superuser tools' %}</p>
+    <h1>{% translate 'System maintenance' %}</h1>
+    <p class="g5-admin-hero-copy">{% translate 'Review the active backends and cleanup targets. Each action requires a separate confirmation.' %}</p>
+  </div>
+  <div class="g5-admin-tool-status">
+    <span>{% translate 'Access' %}</span>
+    <strong>{% translate 'Superusers only' %}</strong>
+    <small>{% translate 'No cleanup runs while opening this page.' %}</small>
+  </div>
+</section>
+
+<section class="g5-admin-report-metrics" aria-label="{% translate 'Maintenance status' %}">
+  <article class="g5-admin-report-metric">
+    <span>{% translate 'Default cache backend' %}</span>
+    <strong>{{ snapshot.cache_backend|default:"-" }}</strong>
+    <em>{% translate 'Only the default cache alias is cleared.' %}</em>
+  </article>
+  <article class="g5-admin-report-metric">
+    <span>{% translate 'Session backend' %}</span>
+    <strong>{{ snapshot.session_engine|default:"-" }}</strong>
+    <em>{% translate 'Session cleanup removes expired sessions only.' %}</em>
+  </article>
+  <article class="g5-admin-report-metric">
+    <span>{% translate 'Expired sessions to clear' %}</span>
+    <strong>{% if snapshot.expired_sessions != None %}{{ snapshot.expired_sessions }}{% else %}{% translate 'Count unavailable' %}{% endif %}</strong>
+    <em>{% translate 'The active session backend determines whether a preview count is available.' %}</em>
+  </article>
+</section>
+
+{% if snapshot.cache_session_warning %}
+<section class="g5-admin-panel g5-admin-report-panel">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Cache impact' %}</p>
+      <h2>{% translate 'Clearing cache can sign users out' %}</h2>
+    </div>
+  </div>
+  <p class="g5-admin-hero-copy">{% translate 'The default cache also stores sessions in this configuration. Clearing it invalidates active sessions. Use expired-session cleanup when you only need routine session maintenance.' %}</p>
+</section>
+{% endif %}
+
+<div class="g5-admin-tool-grid">
+  <section class="g5-admin-panel g5-admin-tool-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Cache' %}</p>
+        <h2>{% translate 'Clear default cache' %}</h2>
+      </div>
+    </div>
+    <p>{% translate 'Removes cached entries from the default cache backend. Pages may be slower while cached data is rebuilt.' %}</p>
+    <form class="g5-admin-admin-form" method="post" action="{{ report_path }}">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="clear_cache">
+      <label class="g5-admin-confirm-row">
+        <input type="checkbox" name="confirm" value="1" required>
+        <span>{% translate 'I confirm clearing the default cache.' %}</span>
+      </label>
+      <button class="button" type="submit">{% translate 'Clear cache' %}</button>
+    </form>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-tool-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Sessions' %}</p>
+        <h2>{% translate 'Remove expired sessions' %}</h2>
+      </div>
+    </div>
+    <p>{% translate 'Runs Django’s expired-session cleanup. Current, unexpired sessions are preserved, along with their active CAPTCHA challenges.' %}</p>
+    <form class="g5-admin-admin-form" method="post" action="{{ report_path }}">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="clear_expired_sessions">
+      <label class="g5-admin-confirm-row">
+        <input type="checkbox" name="confirm" value="1" required>
+        <span>{% translate 'I confirm removing expired sessions.' %}</span>
+      </label>
+      <button class="button" type="submit">{% translate 'Clean expired sessions' %}</button>
+    </form>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-tool-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Thumbnails' %}</p>
+        <h2>{% translate 'Clean stale thumbnail data' %}</h2>
+      </div>
+    </div>
+    <p>{% translate 'Removes stale Sorl thumbnail references and generated copies whose source image is missing. Uploaded originals are preserved.' %}</p>
+    <form class="g5-admin-admin-form" method="post" action="{{ report_path }}">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="cleanup_thumbnails">
+      <label class="g5-admin-confirm-row">
+        <input type="checkbox" name="confirm" value="1" required>
+        <span>{% translate 'I confirm cleaning stale thumbnail data.' %}</span>
+      </label>
+      <button class="button" type="submit">{% translate 'Clean thumbnails' %}</button>
+    </form>
+  </section>
+</div>
+{% endblock %}

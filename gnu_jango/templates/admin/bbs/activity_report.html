@@ -1,0 +1,209 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:bbs_post_changelist' %}">{% translate 'Posts' %}</a>
+  &rsaquo; {% translate 'Content activity report' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">{% translate 'Board operations' %}</p>
+    <h1>{% translate 'Content activity report' %}</h1>
+    <p class="g5-admin-hero-copy">{% translate 'Review post and comment volume by date and board, then open recent records for moderation.' %}</p>
+  </div>
+  <form class="g5-admin-report-filter g5-admin-report-filter-compact" method="get" action="{{ report_path }}">
+    <label>
+      <span>{% translate 'From' %}</span>
+      <input type="date" name="date_from" value="{{ filters.date_from }}">
+    </label>
+    <label>
+      <span>{% translate 'To' %}</span>
+      <input type="date" name="date_to" value="{{ filters.date_to }}">
+    </label>
+    <label>
+      <span>{% translate 'Board' %}</span>
+      <select name="board">
+        <option value="">{% translate 'All boards' %}</option>
+        {% for board in board_choices %}
+        <option value="{{ board.pk }}"{% if filters.board == board.pk %} selected{% endif %}>{{ board.bo_subject }} ({{ board.bo_table }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>{% translate 'Content' %}</span>
+      <select name="content_type">
+        {% for value, label in content_types %}
+        <option value="{{ value }}"{% if filters.content_type == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>{% translate 'Search' %}</span>
+      <input type="search" name="q" value="{{ filters.q }}" placeholder="{% translate 'Subject, author, board' %}">
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button btn" type="submit">{% translate 'Apply' %}</button>
+      <a class="button btn g5-admin-button-secondary" href="{{ report_path }}">{% translate 'Reset' %}</a>
+    </div>
+  </form>
+</section>
+
+{% if date_range_error %}
+<div role="alert" class="alert alert-warning">
+  {% translate 'The start date must be on or before the end date.' %}
+</div>
+{% endif %}
+
+<section class="g5-admin-report-metrics" aria-label="{% translate 'Content summary' %}">
+  {% for metric in metrics %}
+  <article class="card g5-admin-report-metric">
+    <span>{{ metric.label }}</span>
+    <strong>{{ metric.value }}</strong>
+    <em>{{ metric.hint }}</em>
+  </article>
+  {% endfor %}
+</section>
+
+<div class="g5-admin-report-grid">
+  <section class="g5-admin-panel g5-admin-report-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Daily activity' %}</p>
+        <h2>{% translate 'Posts and comments by date' %}</h2>
+      </div>
+    </div>
+    {% if daily_rows_limited %}
+    <p class="g5-admin-empty">{% translate 'Showing the 90 most recent active dates. Narrow the date range for a complete daily view.' %}</p>
+    {% endif %}
+    <div class="g5-admin-report-table-wrap">
+      <table class="table g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate 'Date' %}</th>
+            <th scope="col">{% translate 'Posts' %}</th>
+            <th scope="col">{% translate 'Comments' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in daily_rows %}
+          <tr>
+            <th scope="row">{{ row.day|date:'Y-m-d' }}</th>
+            <td>{{ row.posts }}</td>
+            <td>{{ row.comments }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3" class="g5-admin-empty">{% translate 'No content activity matches these filters.' %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Board activity' %}</p>
+        <h2>{% translate 'Most active boards' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-table-wrap">
+      <table class="table g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate 'Board' %}</th>
+            <th scope="col">{% translate 'Posts' %}</th>
+            <th scope="col">{% translate 'Comments' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in board_rows %}
+          <tr>
+            <th scope="row"><a href="{% url 'admin:bbs_board_change' row.id %}">{{ row.subject }}</a><small class="block">{{ row.table }}</small></th>
+            <td>{{ row.posts }}</td>
+            <td>{{ row.comments }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="3" class="g5-admin-empty">{% translate 'No active boards match these filters.' %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Recent posts' %}</p>
+        <h2>{% translate 'Latest matching posts' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-table-wrap">
+      <table class="table g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate 'Post' %}</th>
+            <th scope="col">{% translate 'Board' %}</th>
+            <th scope="col">{% translate 'Author' %}</th>
+            <th scope="col">{% translate 'Views' %}</th>
+            <th scope="col">{% translate 'Comments' %}</th>
+            <th scope="col">{% translate 'Time' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in recent_posts %}
+          <tr>
+            <td><a href="{% url 'admin:bbs_post_change' row.id %}">{{ row.subject }}</a></td>
+            <td>{{ row.board }}</td>
+            <td>{{ row.author }}</td>
+            <td>{{ row.views }}</td>
+            <td>{{ row.comments }}</td>
+            <td>{{ row.time }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="g5-admin-empty">{% translate 'No posts match these filters.' %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Recent comments' %}</p>
+        <h2>{% translate 'Latest matching comments' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-table-wrap">
+      <table class="table g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate 'Comment' %}</th>
+            <th scope="col">{% translate 'Board' %}</th>
+            <th scope="col">{% translate 'Author' %}</th>
+            <th scope="col">{% translate 'Time' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in recent_comments %}
+          <tr>
+            <td><a href="{% url 'admin:bbs_comment_change' row.id %}">{{ row.subject }}</a></td>
+            <td>{{ row.board }}</td>
+            <td>{{ row.author }}</td>
+            <td>{{ row.time }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="4" class="g5-admin-empty">{% translate 'No comments match these filters.' %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

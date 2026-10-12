@@ -1,0 +1,92 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{% translate "테마 설정" %} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'admin_next/css/theme_settings.css' %}">
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+  &rsaquo; {% translate "테마 설정" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<main class="g5-theme-settings">
+  <section class="g5-admin-dashboard-hero g5-theme-settings-hero">
+    <div>
+      <p class="g5-admin-eyebrow">SITE APPEARANCE</p>
+      <h1>{% translate "테마 설정" %}</h1>
+      <p class="g5-admin-hero-copy">{% translate "설치된 테마를 확인하고 홈페이지에 적용할 테마를 선택하세요." %}</p>
+    </div>
+    <a class="button g5-admin-button-secondary" href="/" target="_blank" rel="noopener">{% translate "홈페이지 보기" %}</a>
+  </section>
+
+  {% if messages %}
+  <div class="g5-theme-messages" aria-live="polite">
+    {% for message in messages %}
+    <div class="messagelist"><div class="{{ message.tags }}">{{ message }}</div></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <section class="g5-theme-list-heading">
+    <div>
+      <h2>{% translate "설치된 테마" %}</h2>
+      <p>{% translate "테마를 적용하면 홈페이지에 즉시 반영됩니다." %}</p>
+    </div>
+    <span class="g5-theme-count">{{ themes|length }} {% translate "개 테마" %}</span>
+  </section>
+
+  <div class="g5-theme-grid">
+    {% for theme in themes %}
+    <article class="g5-theme-card{% if theme.is_active %} is-active{% endif %}">
+      <div class="g5-theme-preview" aria-label="{{ theme.title }} {% translate '미리보기' %}">
+        {% if theme.preview_url %}
+        <img src="{{ theme.preview_url }}" alt="{{ theme.title }} {% translate '미리보기 이미지' %}" loading="lazy">
+        {% else %}
+        <div class="g5-theme-mockup theme-{{ theme.preview_variant }}" aria-hidden="true">
+          <div class="g5-theme-mockup-browser"><i></i><i></i><i></i><span>example.com</span></div>
+          <div class="g5-theme-mockup-site">
+            <div class="g5-theme-mockup-nav"><b>G5</b><span></span><span></span><span></span></div>
+            <div class="g5-theme-mockup-hero"><small>COMMUNITY · SHOP</small><strong>GNU<br>JANGO</strong><em></em></div>
+            <div class="g5-theme-mockup-content"><i></i><i></i><i></i></div>
+          </div>
+        </div>
+        {% endif %}
+        {% if theme.is_active %}<span class="g5-theme-current-badge">{% translate "현재 사용 중" %}</span>{% endif %}
+      </div>
+
+      <div class="g5-theme-card-body">
+        <div class="g5-theme-card-heading">
+          <div>
+            <h3>{{ theme.title }}</h3>
+            <code>{{ theme.name }}</code>
+          </div>
+          {% if theme.is_active %}<span class="g5-theme-active-dot" aria-label="{% translate '현재 사용 중' %}"></span>{% endif %}
+        </div>
+        <p class="g5-theme-description">{{ theme.description }}</p>
+        <form method="post" action="{% url 'admin-theme-settings' %}">
+          {% csrf_token %}
+          <input type="hidden" name="theme" value="{{ theme.name }}">
+          {% if theme.is_active %}
+          <button class="button g5-theme-apply-button" type="submit" disabled>{% translate "적용됨" %}</button>
+          {% else %}
+          <button class="button g5-theme-apply-button" type="submit">{% translate "테마 적용" %}</button>
+          {% endif %}
+        </form>
+      </div>
+    </article>
+    {% empty %}
+    <section class="g5-admin-panel g5-theme-empty">
+      <h2>{% translate "설치된 테마가 없습니다." %}</h2>
+      <p>{% translate "테마 디렉터리에 index.html이 있는지 확인하세요." %}</p>
+    </section>
+    {% endfor %}
+  </div>
+</main>
+{% endblock %}

@@ -1,0 +1,119 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:shop_shoporder_changelist' %}">{% translate 'Orders' %}</a>
+  &rsaquo; {% translate 'Unresolved orders' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">{% translate 'YoungCart operations' %}</p>
+    <h1>{% translate 'Unresolved orders' %}</h1>
+    <p class="g5-admin-hero-copy">{% translate 'Find orders that still have a balance, review the selected bank account and depositor, then open the order to reconcile it.' %}</p>
+  </div>
+  <form class="g5-admin-report-filter g5-admin-report-filter-compact" method="get" action="{{ report_path }}">
+    <label>
+      <span>{% translate 'From' %}</span>
+      <input type="date" name="date_from" value="{{ filters.date_from }}">
+    </label>
+    <label>
+      <span>{% translate 'To' %}</span>
+      <input type="date" name="date_to" value="{{ filters.date_to }}">
+    </label>
+    <label>
+      <span>{% translate 'Payment method' %}</span>
+      <select name="settle_case">
+        <option value="">{% translate 'All methods' %}</option>
+        {% for choice in settle_case_choices %}
+        <option value="{{ choice }}"{% if filters.settle_case == choice %} selected{% endif %}>{{ choice }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>{% translate 'Search' %}</span>
+      <input type="search" name="q" value="{{ filters.q }}" placeholder="{% translate 'Order, customer, account, depositor' %}">
+    </label>
+    <label>
+      <span>{% translate 'Order' %}</span>
+      <select name="ordering">
+        {% for value, label in ordering_choices %}
+        <option value="{{ value }}"{% if filters.ordering == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button btn" type="submit">{% translate 'Apply' %}</button>
+      <a class="button btn g5-admin-button-secondary" href="{{ report_path }}">{% translate 'Reset' %}</a>
+    </div>
+  </form>
+</section>
+
+<section class="g5-admin-report-metrics" aria-label="{% translate 'Outstanding order summary' %}">
+  {% for metric in metrics %}
+  <article class="card g5-admin-report-metric">
+    <span>{{ metric.label }}</span>
+    <strong>{{ metric.value }}</strong>
+    <em>{{ metric.hint }}</em>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Payment follow-up' %}</p>
+      <h2>{% translate 'Orders requiring settlement' %}</h2>
+    </div>
+    <a class="button btn" href="{{ export_url }}">{% translate 'Export filtered CSV' %}</a>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="table g5-admin-mini-table">
+      <thead>
+        <tr>
+          <th scope="col">{% translate 'Order' %}</th>
+          <th scope="col">{% translate 'Customer' %}</th>
+          <th scope="col">{% translate 'Status' %}</th>
+          <th scope="col">{% translate 'Payment' %}</th>
+          <th scope="col">{% translate 'Bank account' %}</th>
+          <th scope="col">{% translate 'Depositor' %}</th>
+          <th scope="col">{% translate 'Received' %}</th>
+          <th scope="col">{% translate 'Outstanding' %}</th>
+          <th scope="col">{% translate 'Time' %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td><a href="{% url 'admin:shop_shoporder_change' row.id %}">{{ row.id }}</a></td>
+          <td>{{ row.name }}</td>
+          <td><span class="badge g5-admin-badge g5-admin-badge-warning">{{ row.status }}</span></td>
+          <td>{{ row.settle_case }}</td>
+          <td>{{ row.bank_account }}</td>
+          <td>{{ row.deposit_name }}</td>
+          <td>{{ row.receipt }}</td>
+          <td><strong>{{ row.outstanding }}</strong></td>
+          <td>{{ row.time }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="g5-admin-empty">{% translate 'No outstanding orders match these filters.' %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <nav class="g5-admin-export-actions" aria-label="{% translate 'Order pages' %}">
+    {% if orders_page.has_previous %}
+    <a class="button btn g5-admin-button-secondary" href="{{ report_path }}?{% if page_query %}{{ page_query }}&amp;{% endif %}page={{ orders_page.previous_page_number }}">{% translate 'Previous' %}</a>
+    {% endif %}
+    <span>{% blocktranslate with current=orders_page.number total=orders_page.paginator.num_pages %}Page {{ current }} of {{ total }}{% endblocktranslate %}</span>
+    {% if orders_page.has_next %}
+    <a class="button btn g5-admin-button-secondary" href="{{ report_path }}?{% if page_query %}{{ page_query }}&amp;{% endif %}page={{ orders_page.next_page_number }}">{% translate 'Next' %}</a>
+    {% endif %}
+  </nav>
+</section>
+{% endblock %}

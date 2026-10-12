@@ -1,0 +1,10 @@
+{% load i18n %}
+
+<nav class="g5-admin-order-shortcuts" aria-label="{% translate 'Product tools' %}">
+  {% if perms.shop.change_shopproduct %}
+  <a class="button btn" href="{% url 'admin:shop_shopproduct_stock_adjustments' %}">
+    <span class="material-symbols-outlined" aria-hidden="true">inventory_2</span>
+    {% translate 'Stock adjustment and history' %}
+  </a>
+  {% endif %}
+</nav>

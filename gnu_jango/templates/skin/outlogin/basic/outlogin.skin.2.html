@@ -1,0 +1,48 @@
+{% load static widgets sekizai_tags %}
+{% addtoblock "headcss" %}
+<link rel="stylesheet" href="{% static outlogin_static_path|add:'style.css' %}" />
+{% endaddtoblock %}
+<!-- 로그인 후 아웃로그인 시작 { -->
+<section id="ol_after" class="ol">
+  <header id="ol_after_hd">
+    <h2>나의 회원정보</h2>
+    <span class="profile_img">
+      <img src="{% avatar_url user 50 50 %}" alt="profile_image" />
+    </span>
+    <strong>{{ nickname }}님</strong>
+    <a href="{% url 'user_confirm' %}?next={{ request.get_full_path|urlencode }}" id="ol_after_info" title="정보수정">정보수정</a>
+    {% if user.is_superuser or is_auth %}<a href="{% url 'admin:index' %}" class="btn_admin btn" title="관리자"><i class="fa fa-cog fa-spin fa-fw"></i><span class="sound_only">관리자</span></a
+    >{% endif %}
+  </header>
+  <ul id="ol_after_private">
+    <li>
+      <a href="{% url 'point_view' %}" target="_blank" id="ol_after_pt" class="win_point">
+        <i class="fa fa-database" aria-hidden="true"></i>포인트
+        <strong>{{ point }}</strong>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'memo_list' %}" target="_blank" id="ol_after_memo" class="win_memo">
+        <i class="fa fa-envelope-o" aria-hidden="true"></i><span class="sound_only">안 읽은 </span>쪽지
+        <strong>{{ memo_not_read }}</strong>
+      </a>
+    </li>
+    <li>
+      <a href="{% url 'post_scrap' %}" target="_blank" id="ol_after_scrap" class="win_scrap">
+        <i class="fa fa-thumb-tack" aria-hidden="true"></i>스크랩
+        <strong class="scrap">{{ mb_scrap_cnt }}</strong>
+      </a>
+    </li>
+  </ul>
+  <footer>
+    <a href="{{ logout_url }}" id="ol_after_logout"><i class="fa fa-sign-out" aria-hidden="true"></i> 로그아웃</a>
+  </footer>
+</section>
+
+<script>
+  // 탈퇴의 경우 아래 코드를 연동하시면 됩니다.
+  function user_leave() {
+    if (confirm("정말 회원에서 탈퇴 하시겠습니까?")) location.href = "#";
+  }
+</script>
+<!-- } 로그인 후 아웃로그인 끝 -->

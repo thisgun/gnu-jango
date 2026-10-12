@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>__g5_static__</title>
+    <link>https://your-vercel-app.example.com/__g5_static__</link>
+    <description></description>
+    <language>ko-KR</language>
+    <atom:link href="https://your-vercel-app.example.com/rss/__g5_static__" rel="self" type="application/rss+xml"/>
+    <lastBuildDate>Tue, 16 Jun 2026 23:09:19 GMT</lastBuildDate>
+
+  </channel>
+</rss>

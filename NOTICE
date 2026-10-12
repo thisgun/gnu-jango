@@ -1,0 +1,33 @@
+GNU Jango (gnu_jango)
+Copyright (c) the GNU Jango contributors
+
+GNU Jango ports Gnuboard5 and YoungCart to Django (API and server) and Next.js
+(front end). It is distributed under the GNU Lesser General Public License,
+version 2.1 or (at your option) any later version; see LICENSE.
+
+Upstream work
+-------------
+Gnuboard5 (GNU Board 5) and the YoungCart shop module
+  Copyright (c) SIR Soft Inc. (주식회사 에스아이알소프트), http://sir.kr
+  License: GNU Lesser General Public License, version 2.1
+  The data model, behaviour, messages, board/shop skin images and styles under
+  gnu_jango/templates/skin*, gnu_jango/templates/statics/img and the legacy theme
+  assets are derived from or copied from Gnuboard5 / YoungCart.
+
+Third-party components included in this repository (each keeps its own license)
+-------------------------------------------------------------------------------
+jQuery 3.6.0 and jQuery Migrate 3.4.0   MIT License, OpenJS Foundation and contributors
+  gnu_jango/templates/statics/js/jquery-*.min.js
+toastr                                  MIT License, John Papa, Hans Fjällemark and Tim Ferrell
+  gnu_jango/templates/statics/js/toastr*, gnu_jango/templates/statics/css/toastr*
+Font Awesome 4.7.0                      Font: SIL Open Font License 1.1; CSS/LESS/SCSS: MIT License
+  gnu_jango/templates/statics/font-awesome (Dave Gandy, https://fontawesome.com)
+TOAST UI Editor                         MIT License, NHN Cloud Corp.
+  gnu_jango/templates/statics/editor/tuieditor/toastui-editor*
+CodeMirror                              MIT License, Marijn Haverbeke and others
+  gnu_jango/templates/statics/editor/tuieditor/codemirror*
+
+The Next.js front end (nextjs/) depends on npm packages listed in
+nextjs/package.json; the compiled output under gnu_jango/templates/theme_static
+bundles code from those packages under their respective licenses (mostly MIT).
+Python dependencies are listed in requirements*.txt / pyproject.toml.

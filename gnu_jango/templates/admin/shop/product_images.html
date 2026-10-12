@@ -1,0 +1,96 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:shop_shopproduct_changelist' %}">{% translate 'Products' %}</a>
+  &rsaquo; <a href="{% url 'admin:shop_shopproduct_change' product.pk %}">{{ product.it_name }}</a>
+  &rsaquo; {% translate 'Product images' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">{% translate 'Catalog assets' %}</p>
+    <h1>{% translate 'Product image management' %}</h1>
+    <p class="g5-admin-hero-copy">{{ product.it_name }} &middot; {{ product.it_id }} &middot; {% blocktranslate with count=image_rows|length %}{{ count }} images{% endblocktranslate %}</p>
+  </div>
+  <a class="button btn g5-admin-button-secondary" href="{% url 'admin:shop_shopproduct_change' product.pk %}">{% translate 'Back to product details' %}</a>
+</section>
+
+{% if error %}
+<div role="alert" class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Validated upload' %}</p>
+      <h2>{% translate 'Add product images' %}</h2>
+    </div>
+  </div>
+  <form class="g5-admin-product-image-upload" method="post" enctype="multipart/form-data" action="{{ request.path }}">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="upload">
+    <label for="product-image-files">
+      <span>{% translate 'Image files' %}</span>
+      <input id="product-image-files" class="g5-admin-product-image-input" type="file" name="images" accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif" multiple required>
+    </label>
+    <p class="g5-admin-product-image-help">{% blocktranslate with size=image_max_size_mb %}JPG, PNG, and GIF files are accepted. Maximum {{ size }} MB per image. Invalid files are rejected before any upload is saved.{% endblocktranslate %}</p>
+    <button class="button btn btn-primary" type="submit">{% translate 'Upload selected images' %}</button>
+  </form>
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Storefront gallery' %}</p>
+      <h2>{% translate 'Current product images' %}</h2>
+    </div>
+  </div>
+  {% if image_rows %}
+  <div class="g5-admin-product-images-grid">
+    {% for image in image_rows %}
+    <article class="g5-admin-product-image-card">
+      <a class="g5-admin-product-image-stage" href="{{ image.url }}" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" aria-label="{% translate 'Open product image in a new tab' %}">
+        <img src="{{ image.url }}" alt="{{ product.it_name }}" loading="lazy" decoding="async">
+      </a>
+      <div class="g5-admin-product-image-card-body">
+        {% if image.is_primary %}
+        <span class="g5-admin-badge g5-admin-badge-success">{% translate 'Primary image' %}</span>
+        {% else %}
+        <span class="g5-admin-badge g5-admin-badge-neutral">{% translate 'Gallery image' %}</span>
+        {% endif %}
+        <small class="g5-admin-product-image-source">
+          {% if image.managed_upload %}
+          {% translate 'Managed upload; removal deletes the stored file.' %}
+          {% else %}
+          {% translate 'Legacy or external URL; removal only disconnects it from this product.' %}
+          {% endif %}
+        </small>
+        {% if not image.is_primary %}
+        <form method="post" action="{{ request.path }}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="set_primary">
+          <input type="hidden" name="image_url" value="{{ image.url }}">
+          <button class="button btn g5-admin-button-secondary" type="submit">{% translate 'Use as primary image' %}</button>
+        </form>
+        {% endif %}
+        <form method="post" action="{{ request.path }}" data-confirm="{% translate 'Remove this image from the product? A managed upload file will also be deleted.' %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="remove">
+          <input type="hidden" name="image_url" value="{{ image.url }}">
+          <button class="button btn g5-admin-product-image-remove" type="submit">{% translate 'Remove image' %}</button>
+        </form>
+      </div>
+    </article>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="g5-admin-empty">{% translate 'No product images are configured. The storefront will show its image-empty state.' %}</p>
+  {% endif %}
+</section>
+{% endblock %}

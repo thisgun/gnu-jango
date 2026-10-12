@@ -1,0 +1,173 @@
+/*
+ * Site-menu builder theming.
+ *
+ * The site_menu change_list / change_form templates are a legacy Gnuboard5
+ * menu builder with extensive jQuery that depends on specific class and id
+ * hooks (#menulist, .menu_list, .btn_del_menu, code[] inputs, etc.). To avoid
+ * any behavioural risk this file restyles the legacy presentation classes only
+ * (tbl_head01, tbl_input, frm_input, btn_02/03, td_*) using the g5-admin
+ * design tokens, so the builder matches the rest of the Unfold admin and
+ * adapts to dark mode — without touching any markup or script.
+ *
+ * Everything is scoped under .g5-admin so it cannot leak to other admin pages.
+ */
+
+.g5-admin .site_menu_list {
+  margin: 0 0 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--g5-admin-border);
+  border-left: 4px solid var(--g5-admin-primary);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface-muted);
+  color: var(--g5-admin-text);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.g5-admin .site_menu_list strong {
+  color: var(--g5-admin-primary-dark);
+}
+
+.g5-admin .new_win_desc {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+}
+
+.g5-admin .new_win_desc label {
+  font-weight: 700;
+  color: var(--g5-admin-surface-strong);
+}
+
+/* Builder + search tables rendered with the legacy tbl_head01 wrapper. */
+.g5-admin .tbl_head01 {
+  overflow: hidden;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+}
+
+.g5-admin .tbl_head01 table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.g5-admin .tbl_head01 thead th {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--g5-admin-border);
+  background: var(--g5-admin-surface-muted);
+  color: var(--g5-admin-surface-strong);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.g5-admin .tbl_head01 tbody td {
+  padding: 8px 12px;
+  border-top: 1px solid var(--g5-admin-border);
+  color: var(--g5-admin-text);
+  vertical-align: middle;
+}
+
+.g5-admin .tbl_head01 tbody tr:first-child td {
+  border-top: 0;
+}
+
+.g5-admin .tbl_head01 .empty_table {
+  padding: 22px 12px;
+  color: var(--g5-admin-muted);
+  text-align: center;
+}
+
+/* Sub-menu rows are indented to show hierarchy. */
+.g5-admin .tbl_head01 td.sub_menu_class {
+  padding-left: 26px;
+}
+
+.g5-admin .tbl_head01 tr.exist_menu_link td,
+.g5-admin .tbl_head01 td.exist_menu_link {
+  color: var(--g5-admin-danger);
+}
+
+/* Inputs / selects inside the builder. */
+.g5-admin .tbl_input,
+.g5-admin .frm_input,
+.g5-admin .site_menu_list ~ form select,
+.g5-admin #menulist select,
+.g5-admin #menu_result select {
+  box-sizing: border-box;
+  min-height: 34px;
+  padding: 5px 9px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: 6px;
+  background: var(--g5-admin-surface);
+  color: var(--g5-admin-text);
+  font-size: 13px;
+}
+
+.g5-admin .full_input {
+  width: 100%;
+}
+
+.g5-admin .tbl_input:focus,
+.g5-admin .frm_input:focus,
+.g5-admin #menulist select:focus,
+.g5-admin #menu_result select:focus {
+  outline: 2px solid var(--g5-admin-primary);
+  outline-offset: -1px;
+  border-color: var(--g5-admin-primary);
+}
+
+/* Builder buttons. Behaviour comes from .btn_add_submenu / .btn_del_menu /
+   .add_select hooks; these rules only set the look. */
+.g5-admin .btn_02,
+.g5-admin .btn_03,
+.g5-admin .add_select,
+.g5-admin #add_manual {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 4px 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--g5-admin-primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.g5-admin .btn_03,
+.g5-admin .add_select,
+.g5-admin #add_manual {
+  background: var(--g5-admin-primary);
+}
+
+/* Delete is destructive. */
+.g5-admin .btn_02 {
+  background: transparent;
+  border-color: var(--g5-admin-danger);
+  color: var(--g5-admin-danger);
+}
+
+.g5-admin .btn_02:hover {
+  background: var(--g5-admin-danger);
+  color: #fff;
+}
+
+.g5-admin .btn_win,
+.g5-admin .btn_win02 {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.g5-admin .menu_exists_tip {
+  margin-top: 10px;
+  color: var(--g5-admin-danger);
+  font-size: 12px;
+}

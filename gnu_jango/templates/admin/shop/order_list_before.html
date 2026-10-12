@@ -1,0 +1,59 @@
+{% load i18n %}
+
+{% if order_ops %}
+<section class="g5-admin-order-console" aria-label="{% translate 'Order command center' %}">
+  <div class="g5-admin-order-console-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Order command center' %}</p>
+      <h2>{% translate 'Order operations' %}</h2>
+      <p>{% translate 'Monitor payment, delivery, cancellation, and receipt risks before opening each order.' %}</p>
+    </div>
+    <nav class="g5-admin-order-shortcuts" aria-label="{% translate 'Order shortcuts' %}">
+      {% for shortcut in order_ops.shortcuts %}
+      <a href="{{ shortcut.url }}">
+        <span class="material-symbols-outlined" aria-hidden="true">{{ shortcut.icon }}</span>
+        {{ shortcut.label }}
+      </a>
+      {% endfor %}
+    </nav>
+  </div>
+
+  <div class="g5-admin-order-kpis" aria-label="{% translate 'Order metrics' %}">
+    {% for metric in order_ops.metrics %}
+    <a class="g5-admin-order-kpi g5-admin-order-kpi-{{ metric.tone }}" href="{{ metric.url }}">
+      <span>{{ metric.label }}</span>
+      <strong>{{ metric.value }}</strong>
+      <em>{{ metric.hint }}</em>
+    </a>
+    {% endfor %}
+  </div>
+
+  <nav class="g5-admin-order-filter-tabs" aria-label="{% translate 'Quick filters' %}">
+    {% for item in order_ops.quick_filters %}
+    <a class="g5-admin-order-filter g5-admin-order-filter-{{ item.tone }}{% if item.active %} is-active{% endif %}" href="{{ item.url }}">
+      <span>{{ item.label }}</span>
+      <strong>{{ item.count }}</strong>
+    </a>
+    {% endfor %}
+  </nav>
+
+  <section class="g5-admin-flow" aria-label="{% translate 'Order operations pipeline' %}">
+    <div class="g5-admin-flow-head">
+      <p class="g5-admin-eyebrow">{% translate 'Operations pipeline' %}</p>
+      <h3>{% translate 'Payment to settlement handoff' %}</h3>
+    </div>
+    <ol class="g5-admin-flow-list">
+      {% for step in order_ops.flow_steps %}
+      <li>
+        <a class="g5-admin-flow-step g5-admin-flow-step-{{ step.tone }}" href="{{ step.url }}">
+          <span class="material-symbols-outlined" aria-hidden="true">{{ step.icon }}</span>
+          <strong>{{ step.value }}</strong>
+          <em>{{ step.label }}</em>
+          <small>{{ step.hint }}</small>
+        </a>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+</section>
+{% endif %}

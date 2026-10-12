@@ -1,0 +1,142 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; {% translate 'Order print' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero g5-admin-print-hidden">
+  <div>
+    <p class="g5-admin-eyebrow">{% translate 'YoungCart operations' %}</p>
+    <h1>{% translate 'Order print' %}</h1>
+    <p class="g5-admin-hero-copy">{% translate 'Prepare order, payment, receipt, and delivery sheets for offline handling.' %}</p>
+  </div>
+  <form class="g5-admin-report-filter g5-admin-print-filter" method="get" action="{{ report_path }}">
+    <label>
+      <span>{% translate 'Search' %}</span>
+      <input type="search" name="q" value="{{ filters.q }}" placeholder="{% translate 'Order, name, phone, invoice' %}">
+    </label>
+    <label>
+      <span>{% translate 'From' %}</span>
+      <input type="date" name="date_from" value="{{ filters.date_from }}">
+    </label>
+    <label>
+      <span>{% translate 'To' %}</span>
+      <input type="date" name="date_to" value="{{ filters.date_to }}">
+    </label>
+    <label>
+      <span>{% translate 'Receipt' %}</span>
+      <select name="receipt_state">
+        {% for value, label in receipt_state_choices %}
+        <option value="{{ value }}"{% if filters.receipt_state == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>{% translate 'Shipping' %}</span>
+      <select name="shipping_state">
+        {% for value, label in shipping_state_choices %}
+        <option value="{{ value }}"{% if filters.shipping_state == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>{% translate 'Rows' %}</span>
+      <select name="limit">
+        {% for choice in limit_choices %}
+        <option value="{{ choice }}"{% if filters.limit == choice|stringformat:"s" %} selected{% endif %}>{{ choice }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button" type="submit">{% translate 'Apply' %}</button>
+      <a class="button g5-admin-button-secondary" href="{{ report_path }}">{% translate 'Reset' %}</a>
+    </div>
+  </form>
+</section>
+
+<nav class="g5-admin-export-actions g5-admin-print-hidden" aria-label="{% translate 'Print actions' %}">
+  <button class="button" type="button" onclick="window.print()">{% translate 'Print' %}</button>
+  <a class="button" href="{{ report_path }}?q={{ filters.q }}&date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&receipt_state={{ filters.receipt_state }}&shipping_state={{ filters.shipping_state }}&export=csv">{% translate 'Order print CSV' %}</a>
+  <a class="button g5-admin-button-secondary" href="{% url 'admin:shop_shoporder_reports' %}?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}">{% translate 'Settlement report' %}</a>
+  <a class="button g5-admin-button-secondary" href="{% url 'admin:shop_shoporder_sales_rank' %}?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}">{% translate 'Product sales rank' %}</a>
+</nav>
+
+<section class="g5-admin-report-metrics g5-admin-print-hidden" aria-label="{% translate 'Order print summary' %}">
+  {% for metric in metrics %}
+  <article class="g5-admin-report-metric">
+    <span>{{ metric.label }}</span>
+    <strong>{{ metric.value }}</strong>
+    <em>{{ metric.hint }}</em>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide g5-admin-print-sheet">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Printable order sheet' %}</p>
+      <h2>{% translate 'Order, receipt, and delivery list' %}</h2>
+    </div>
+    <span class="g5-admin-print-meta">{{ filters.date_from|default:"-" }} - {{ filters.date_to|default:"-" }}</span>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="g5-admin-mini-table g5-admin-print-table">
+      <thead>
+        <tr>
+          <th scope="col">{% translate 'Order' %}</th>
+          <th scope="col">{% translate 'Customer' %}</th>
+          <th scope="col">{% translate 'Payment' %}</th>
+          <th scope="col">{% translate 'Receipt' %}</th>
+          <th scope="col">{% translate 'Delivery' %}</th>
+          <th scope="col">{% translate 'Items' %}</th>
+          <th scope="col">{% translate 'Memo' %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in print_rows %}
+        <tr>
+          <td>
+            <a href="{% url 'admin:shop_shoporder_change' row.id %}">{{ row.id }}</a>
+            <small>{{ row.time }}</small>
+          </td>
+          <td>
+            <strong>{{ row.name }}</strong>
+            <small>{{ row.phone }}</small>
+            <small>{{ row.email }}</small>
+          </td>
+          <td>
+            <strong>{{ row.status }}</strong>
+            <small>{{ row.settle_case }} / {{ row.pg }}</small>
+            <small>{% translate 'Outstanding' %}: {{ row.outstanding }}</small>
+          </td>
+          <td>
+            <strong>{{ row.receipt }}</strong>
+            <small>{% translate 'Cash no' %}: {{ row.cash_no }}</small>
+            <small>{% translate 'Approval' %}: {{ row.approval_no }}</small>
+          </td>
+          <td>
+            <strong>{{ row.recipient }}</strong>
+            <small>{{ row.recipient_phone }}</small>
+            <small>{{ row.recipient_address }}</small>
+            <small>{{ row.delivery_company }} / {{ row.invoice }}</small>
+          </td>
+          <td>
+            <strong>{{ row.item_count }}</strong>
+            <small>{{ row.items }}</small>
+          </td>
+          <td>{{ row.memo }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="g5-admin-empty">{% translate 'No printable orders match the selected filters.' %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

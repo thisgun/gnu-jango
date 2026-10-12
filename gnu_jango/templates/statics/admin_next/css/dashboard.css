@@ -1,0 +1,2870 @@
+:root {
+  --g5-admin-bg: #f4f7fb;
+  --g5-admin-surface: #ffffff;
+  --g5-admin-surface-muted: #f8fbff;
+  --g5-admin-surface-strong: #0f172a;
+  --g5-admin-border: #d9e2ef;
+  --g5-admin-muted: #64748b;
+  --g5-admin-text: #1e293b;
+  --g5-admin-primary: #2563eb;
+  --g5-admin-primary-dark: #1d4ed8;
+  --g5-admin-success: #059669;
+  --g5-admin-warning: #d97706;
+  --g5-admin-danger: #dc2626;
+  --g5-admin-radius: 8px;
+  --g5-admin-shadow-soft: 0 8px 20px rgba(15, 23, 42, 0.06);
+  --g5-admin-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+  --g5-admin-shadow-strong: 0 18px 38px rgba(15, 23, 42, 0.1);
+}
+
+/* Unfold toggles dark mode with a `.dark` class on <html>. The dashboard is
+   built around the --g5-admin-* tokens, so remapping them here makes the whole
+   token-driven surface adapt instead of staying white inside the dark chrome.
+   Accent tints (success/warning/danger) read fine on dark and are left as-is. */
+html.dark {
+  --g5-admin-bg: #0b1120;
+  --g5-admin-surface: #111827;
+  --g5-admin-surface-muted: #0f1a2e;
+  --g5-admin-surface-strong: #f1f5f9;
+  --g5-admin-border: #29374e;
+  --g5-admin-muted: #94a3b8;
+  --g5-admin-text: #e2e8f0;
+  --g5-admin-primary: #3b82f6;
+  --g5-admin-primary-dark: #60a5fa;
+  --g5-admin-shadow-soft: 0 8px 20px rgba(0, 0, 0, 0.4);
+  --g5-admin-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  --g5-admin-shadow-strong: 0 18px 38px rgba(0, 0, 0, 0.5);
+}
+
+body.g5-admin {
+  background: var(--g5-admin-bg);
+  color: var(--g5-admin-text);
+}
+
+body.g5-admin-unfold {
+  background: var(--g5-admin-bg);
+}
+
+.g5-admin-unfold #content {
+  padding: 0;
+}
+
+.g5-admin-unfold #page {
+  background: var(--g5-admin-bg);
+}
+
+.g5-admin-unfold #main {
+  background: var(--g5-admin-bg);
+}
+
+.g5-admin-unfold #main,
+.g5-admin-unfold #content {
+  min-width: 0;
+}
+
+.g5-admin-unfold #header-inner {
+  min-width: 0;
+}
+
+.g5-admin-unfold .g5-admin-brand {
+  min-width: 0;
+}
+
+.g5-admin-unfold .g5-admin-brand a {
+  color: inherit;
+}
+
+.g5-admin-unfold .g5-admin-brand-mark {
+  flex: 0 0 auto;
+}
+
+.g5-admin-unfold .g5-admin-quicknav {
+  margin-left: 0;
+}
+
+.g5-admin-unfold .g5-admin-quicknav a {
+  background: #eef4ff;
+  color: var(--g5-admin-primary-dark);
+}
+
+.g5-admin-unfold .g5-admin-quicknav a:hover {
+  background: #dbeafe;
+  color: var(--g5-admin-surface-strong);
+}
+
+.g5-admin #header {
+  min-height: 64px;
+  padding: 0 22px;
+  /* Intentionally dark in both themes; kept off the surface-strong token,
+     which flips to a light text color under dark mode. */
+  background: #0f172a;
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.18);
+}
+
+.g5-admin #branding {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.g5-admin-brand a {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff;
+  text-decoration: none;
+}
+
+.g5-admin-brand-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--g5-admin-primary);
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.g5-admin-brand-text {
+  display: block;
+  overflow: hidden;
+  max-width: 42vw;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.g5-admin-menu-toggle {
+  display: none;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+}
+
+.g5-admin-menu-toggle span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  margin: 4px auto;
+  background: var(--g5-admin-surface);
+}
+
+.g5-admin-quicknav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.g5-admin #user-tools {
+  display: flex;
+  float: none;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 10px;
+  min-width: 0;
+  max-width: min(100%, 560px);
+  margin-left: 12px;
+  text-align: right;
+  white-space: normal;
+}
+
+.g5-admin #logout-form {
+  display: inline-flex;
+  margin: 0;
+}
+
+.g5-admin-quicknav a,
+.g5-admin #user-tools a,
+.g5-admin #logout-form button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: 6px;
+  color: #dbeafe;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.g5-admin-quicknav a {
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.g5-admin-quicknav a:hover,
+.g5-admin #user-tools a:hover,
+.g5-admin #logout-form button:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.g5-admin #content {
+  padding: 28px;
+}
+
+.g5-admin-dashboard-hero {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: stretch;
+  overflow: hidden;
+  margin-bottom: 18px;
+  padding: 22px;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: var(--g5-admin-radius);
+  background: linear-gradient(135deg, #ffffff 0%, #f4f8ff 48%, #effcf8 100%);
+  box-shadow: var(--g5-admin-shadow-strong);
+}
+
+.g5-admin-dashboard-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 4px;
+  background: linear-gradient(90deg, var(--g5-admin-primary), var(--g5-admin-success), var(--g5-admin-warning));
+}
+
+.g5-admin-dashboard-hero > * {
+  position: relative;
+}
+
+.g5-admin-dashboard-hero-ops {
+  background: linear-gradient(135deg, #ffffff 0%, #f0f7ff 55%, #eefcf8 100%);
+}
+
+.g5-admin-eyebrow {
+  margin: 0 0 6px;
+  color: var(--g5-admin-primary);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.g5-admin-dashboard-hero h1,
+.g5-admin-panel h2 {
+  margin: 0;
+  color: var(--g5-admin-surface-strong);
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.g5-admin-hero-copy {
+  max-width: 760px;
+  margin: 8px 0 0;
+  color: var(--g5-admin-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.g5-admin-status-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 220px;
+  padding: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+  box-shadow: var(--g5-admin-shadow-soft);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.g5-admin-status-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(190px, 1fr));
+  gap: 10px;
+  min-width: min(100%, 420px);
+}
+
+.g5-admin-status-stack .g5-admin-status-card {
+  min-width: 0;
+  color: var(--g5-admin-text);
+  text-decoration: none;
+}
+
+.g5-admin-status-stack .g5-admin-status-card:hover {
+  border-color: rgba(37, 99, 235, 0.32);
+  box-shadow: var(--g5-admin-shadow);
+  transform: translateY(-1px);
+}
+
+.g5-admin-status-card strong,
+.g5-admin-status-card a {
+  display: block;
+}
+
+.g5-admin-status-card small {
+  display: block;
+  margin-top: 3px;
+  color: var(--g5-admin-muted);
+  font-weight: 700;
+}
+
+.g5-admin-status-card a {
+  margin-top: 4px;
+  color: var(--g5-admin-primary);
+  font-weight: 700;
+}
+
+.g5-admin-status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--g5-admin-success);
+  box-shadow: 0 0 0 5px rgba(5, 150, 105, 0.14);
+}
+
+.g5-admin-status-dot-info {
+  background: var(--g5-admin-primary);
+  box-shadow: 0 0 0 5px rgba(37, 99, 235, 0.12);
+}
+
+.g5-admin-metrics,
+.g5-admin-report-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(168px, 100%), 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.g5-admin-metric,
+.g5-admin-report-metric {
+  display: flex;
+  min-width: 0;
+  min-height: 92px;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+  color: var(--g5-admin-text);
+  text-decoration: none;
+  box-shadow: var(--g5-admin-shadow-soft);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.g5-admin-metric:hover,
+.g5-admin-report-metric:hover {
+  border-color: rgba(37, 99, 235, 0.38);
+  box-shadow: var(--g5-admin-shadow);
+  transform: translateY(-1px);
+}
+
+.g5-admin-metric span,
+.g5-admin-metric strong,
+.g5-admin-metric em,
+.g5-admin-report-metric span,
+.g5-admin-report-metric strong,
+.g5-admin-report-metric em {
+  overflow-wrap: anywhere;
+}
+
+/* The product name column must stay readable; the changelist table scrolls sideways when it is wider than the screen. */
+#result_list th.column-product_name_display,
+#result_list td.field-product_name_display {
+  min-width: 11rem;
+}
+
+/* Fieldset tab strips (product, order, ... forms) scroll sideways instead of squeezing labels one character per line. */
+.form-rows nav.flex {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.form-rows nav.flex::-webkit-scrollbar {
+  display: none;
+}
+
+.form-rows nav.flex > a {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* The list pagination row must wrap on phones instead of pushing the count off-screen. */
+.g5-admin-pagination {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  row-gap: 6px;
+}
+
+.g5-admin-metric span,
+.g5-admin-report-metric span {
+  color: var(--g5-admin-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.g5-admin-metric strong,
+.g5-admin-report-metric strong {
+  color: var(--g5-admin-surface-strong);
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.g5-admin-metric em {
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.g5-admin-metric-info {
+  border-top: 3px solid var(--g5-admin-primary);
+}
+
+.g5-admin-metric-success {
+  border-top: 3px solid var(--g5-admin-success);
+}
+
+.g5-admin-metric-warning {
+  border-top: 3px solid var(--g5-admin-warning);
+}
+
+.g5-admin-metric-danger {
+  border-top: 3px solid var(--g5-admin-danger);
+}
+
+.g5-admin-panel > .g5-admin-metrics {
+  margin-bottom: 0;
+  padding: 18px;
+}
+
+.g5-admin-action-queue-panel {
+  margin-bottom: 18px;
+}
+
+.g5-admin-action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 18px;
+}
+
+.g5-admin-action-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  min-width: 0;
+  min-height: 92px;
+  padding: 14px;
+  border: 1px solid var(--g5-admin-border);
+  border-left: 4px solid var(--g5-admin-primary);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+  color: var(--g5-admin-text);
+  text-decoration: none;
+  box-shadow: var(--g5-admin-shadow-soft);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.g5-admin-action-card:hover {
+  border-color: rgba(37, 99, 235, 0.42);
+  box-shadow: var(--g5-admin-shadow);
+  transform: translateY(-1px);
+}
+
+.g5-admin-action-card .material-symbols-outlined {
+  display: inline-grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+  background: #eef4ff;
+  color: var(--g5-admin-primary);
+  font-size: 23px;
+}
+
+.g5-admin-action-card div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.g5-admin-action-card strong {
+  color: var(--g5-admin-surface-strong);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.g5-admin-action-card em {
+  overflow: hidden;
+  color: var(--g5-admin-surface-strong);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.g5-admin-action-card small {
+  overflow: hidden;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.g5-admin-action-card-success {
+  border-left-color: var(--g5-admin-success);
+}
+
+.g5-admin-action-card-success .material-symbols-outlined {
+  background: #ecfdf5;
+  color: var(--g5-admin-success);
+}
+
+.g5-admin-action-card-warning {
+  border-left-color: var(--g5-admin-warning);
+}
+
+.g5-admin-action-card-warning .material-symbols-outlined {
+  background: #fff7ed;
+  color: var(--g5-admin-warning);
+}
+
+.g5-admin-action-card-danger {
+  border-left-color: var(--g5-admin-danger);
+}
+
+.g5-admin-action-card-danger .material-symbols-outlined {
+  background: #fef2f2;
+  color: var(--g5-admin-danger);
+}
+
+.g5-admin-action-card-neutral {
+  border-left-color: var(--g5-admin-border);
+}
+
+.g5-admin-action-card-neutral .material-symbols-outlined {
+  background: #f8fafc;
+  color: var(--g5-admin-muted);
+}
+
+.g5-admin-governance-panel .g5-admin-action-grid {
+  padding: 0;
+}
+
+.g5-admin-governance-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.8fr);
+  gap: 16px;
+  padding: 0 18px 18px;
+}
+
+.g5-admin-governance-block {
+  min-width: 0;
+}
+
+.g5-admin-governance-block h3 {
+  margin: 0 0 10px;
+  color: var(--g5-admin-surface-strong);
+  font-size: 15px;
+}
+
+.g5-admin-role-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.g5-admin-role-list div {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: 8px;
+  background: var(--g5-admin-surface);
+}
+
+.g5-admin-role-list dt {
+  color: var(--g5-admin-surface-strong);
+  font-weight: 900;
+}
+
+.g5-admin-role-list dd {
+  margin: 0;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.g5-admin-report-metric em {
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.g5-admin-main-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.g5-admin-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.g5-admin-panel-wide {
+  grid-column: 1 / -1;
+}
+
+.g5-admin-panel {
+  overflow: hidden;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+  box-shadow: var(--g5-admin-shadow-soft);
+}
+
+.g5-admin-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 0;
+}
+
+.g5-admin .app-list {
+  margin: 0;
+  padding: 18px;
+}
+
+.g5-admin-workflows {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 18px;
+}
+
+.g5-admin-workflow {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface-muted);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.g5-admin-workflow-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--g5-admin-surface-strong);
+  font-weight: 800;
+}
+
+.g5-admin-workflow-title .material-symbols-outlined {
+  color: var(--g5-admin-primary);
+  font-size: 20px;
+}
+
+.g5-admin-workflow nav {
+  display: grid;
+  gap: 6px;
+}
+
+.g5-admin-workflow a {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 7px 9px;
+  border-radius: 6px;
+  background: var(--g5-admin-surface);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.g5-admin-list {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+}
+
+.g5-admin-list-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 9px;
+  align-items: center;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+  color: var(--g5-admin-text);
+  text-decoration: none;
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.g5-admin-list-row:hover {
+  border-color: rgba(37, 99, 235, 0.35);
+  background: var(--g5-admin-surface-muted);
+  box-shadow: var(--g5-admin-shadow-soft);
+  transform: translateY(-1px);
+}
+
+.g5-admin-list-row strong {
+  overflow: hidden;
+  color: var(--g5-admin-surface-strong);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.g5-admin-list-row small {
+  grid-column: 2;
+  overflow: hidden;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.g5-admin-module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+  padding: 18px;
+}
+
+.g5-admin-module {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+  box-shadow: var(--g5-admin-shadow-soft);
+}
+
+.g5-admin-module > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.g5-admin-module span {
+  overflow: hidden;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.g5-admin-module strong {
+  color: var(--g5-admin-surface-strong);
+  font-size: 20px;
+}
+
+.g5-admin-module nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.g5-admin-module nav a,
+.g5-admin-module nav span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  max-width: 100%;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: var(--g5-admin-primary-dark);
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  text-transform: none;
+}
+
+/* Legacy card treatment, for surfaces Unfold does not card itself. Unfold wraps
+   change-form fieldsets and the changelist in its own bordered card, so carding
+   them again here drew two borders 1px apart. Excluded rather than deleted
+   because dashboard panels (#recent-actions-module) still rely on this rule. */
+.g5-admin .app-list .app,
+.g5-admin .module:not(fieldset):not(#changelist) {
+  overflow: hidden;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+}
+
+.g5-admin .app-list caption,
+.g5-admin .module h2 {
+  padding: 12px 14px;
+  background: #edf4ff;
+  color: var(--g5-admin-surface-strong);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.g5-admin table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+/* No card here: Unfold already renders the search toolbar and the result table
+   as one joined card, so an outer card nested a second border around them. */
+
+.g5-admin #changelist .changelist-form-container {
+  box-sizing: border-box;
+}
+
+.g5-admin #changelist .results,
+.g5-admin #changelist form,
+.g5-admin #changelist table {
+  max-width: 100%;
+}
+
+.g5-admin #changelist table {
+  width: 100%;
+}
+
+.g5-admin #changelist table thead th {
+  border-bottom-color: #dbe6f3;
+  background: var(--g5-admin-surface-muted);
+  color: var(--g5-admin-surface-strong);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.g5-admin #changelist table tbody tr {
+  transition: background 0.14s ease;
+}
+
+.g5-admin #changelist table tbody tr:hover {
+  background: var(--g5-admin-surface-muted);
+}
+
+.g5-admin #changelist table tbody td,
+.g5-admin #changelist table tbody th {
+  vertical-align: middle;
+}
+
+.g5-admin #changelist .paginator {
+  border-top: 1px solid #edf2f7;
+  background: #fbfdff;
+}
+
+.g5-admin th,
+.g5-admin td {
+  border-bottom: 1px solid #edf2f7;
+}
+
+.g5-admin tr:last-child th,
+.g5-admin tr:last-child td {
+  border-bottom: 0;
+}
+
+.g5-admin a:link,
+.g5-admin a:visited {
+  color: var(--g5-admin-primary-dark);
+}
+
+.g5-admin .button,
+.g5-admin input[type="submit"],
+.g5-admin input[type="button"],
+.g5-admin .submit-row input,
+.g5-admin a.button {
+  border-radius: 6px;
+  border-color: var(--g5-admin-primary-dark);
+  background: var(--g5-admin-primary);
+  color: #fff;
+  font-weight: 700;
+}
+
+.g5-admin .button.default,
+.g5-admin input[type="submit"].default,
+.g5-admin .submit-row input.default {
+  background: var(--g5-admin-success);
+  border-color: var(--g5-admin-success);
+}
+
+.g5-admin input[type="text"],
+.g5-admin input[type="password"],
+.g5-admin input[type="email"],
+.g5-admin input[type="url"],
+.g5-admin input[type="number"],
+.g5-admin textarea,
+.g5-admin select,
+.g5-admin .vTextField {
+  box-sizing: border-box;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: 6px;
+}
+
+.g5-admin .related-widget-wrapper {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+}
+
+.g5-admin .related-widget-wrapper select,
+.g5-admin .related-widget-wrapper input {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.g5-admin .breadcrumbs {
+  border: 0;
+  background: transparent;
+  color: var(--g5-admin-muted);
+}
+
+.g5-admin #content-related.g5-admin-related {
+  margin-right: 0;
+}
+
+.g5-admin-related .module {
+  padding-bottom: 12px;
+}
+
+.g5-admin-related h3 {
+  margin: 12px 14px 0;
+  color: var(--g5-admin-muted);
+  font-size: 13px;
+}
+
+.g5-admin-related .actionlist {
+  margin: 12px 14px;
+}
+
+.g5-admin-report-hero {
+  align-items: center;
+}
+
+.g5-admin-report-filter {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+  gap: 10px;
+  min-width: min(100%, 620px);
+  padding: 14px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.g5-admin-report-filter label {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.g5-admin-report-filter input,
+.g5-admin-report-filter select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 36px;
+}
+
+.g5-admin-report-filter-actions {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.g5-admin-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.g5-admin-export-actions .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+}
+
+.g5-admin-button-secondary {
+  border-color: var(--g5-admin-border) !important;
+  background: var(--g5-admin-surface) !important;
+  color: var(--g5-admin-primary-dark) !important;
+}
+
+.g5-admin-report-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.g5-admin-report-panel-wide {
+  grid-column: 1 / -1;
+}
+
+.g5-admin-report-panel {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.g5-admin-series {
+  display: grid;
+  gap: 10px;
+  max-height: min(540px, 70vh);
+  overflow-y: auto;
+  padding: 18px;
+}
+
+.g5-admin-series-row {
+  display: grid;
+  grid-template-columns: 110px minmax(120px, 1fr) minmax(110px, auto) minmax(74px, auto);
+  gap: 12px;
+  align-items: center;
+  min-height: 34px;
+}
+
+.g5-admin-series-label {
+  color: var(--g5-admin-muted);
+  font-weight: 800;
+}
+
+.g5-admin-series-track {
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: #e5edf8;
+}
+
+.g5-admin-series-track i {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--g5-admin-primary), var(--g5-admin-success));
+}
+
+.g5-admin-series-row strong {
+  color: var(--g5-admin-surface-strong);
+  text-align: right;
+}
+
+.g5-admin-series-row small {
+  color: var(--g5-admin-muted);
+  text-align: right;
+}
+
+.g5-admin-report-table-wrap {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 18px;
+  overscroll-behavior-inline: contain;
+}
+
+.g5-admin-report-table {
+  width: 100%;
+}
+
+.g5-admin-report-table th,
+.g5-admin-report-table td {
+  padding: 10px 8px;
+  vertical-align: middle;
+}
+
+.g5-admin-report-table thead th {
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.g5-admin-report-table tbody th {
+  color: var(--g5-admin-surface-strong);
+  font-weight: 800;
+}
+
+.g5-admin-report-table td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.g5-admin-report-summary-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 18px 0;
+}
+
+.g5-admin-report-summary-list div {
+  padding: 12px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface-muted);
+}
+
+.g5-admin-report-summary-list dt {
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.g5-admin-report-summary-list dd {
+  margin: 4px 0 0;
+  color: var(--g5-admin-surface-strong);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.g5-admin-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 24px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.g5-admin-badge-success {
+  border-color: rgba(5, 150, 105, 0.22);
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.g5-admin-badge-info {
+  border-color: rgba(37, 99, 235, 0.22);
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.g5-admin-badge-warning {
+  border-color: rgba(217, 119, 6, 0.26);
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.g5-admin-badge-danger {
+  border-color: rgba(220, 38, 38, 0.2);
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.g5-admin-badge-neutral {
+  border-color: var(--g5-admin-border);
+  background: #f8fafc;
+  color: var(--g5-admin-muted);
+}
+
+.g5-admin-product-image-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 4px;
+}
+
+.g5-admin-product-image-thumb {
+  display: inline-flex;
+  width: 84px;
+  height: 84px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface-muted);
+}
+
+.g5-admin-product-image-thumb:focus-visible {
+  outline: 2px solid var(--g5-admin-primary);
+  outline-offset: 2px;
+}
+
+.g5-admin-product-image-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.g5-admin-product-image-count,
+.g5-admin-product-image-empty {
+  margin: 4px 0 0;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+}
+
+.g5-admin-product-image-upload {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.g5-admin-product-image-upload label {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.g5-admin-product-image-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+  color: var(--g5-admin-text);
+}
+
+.g5-admin-product-image-help {
+  margin: 0;
+  color: var(--g5-admin-muted);
+  font-size: 13px;
+}
+
+.g5-admin-product-images-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 14px;
+  padding: 18px;
+}
+
+.g5-admin-product-image-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+}
+
+.g5-admin-product-image-stage {
+  display: flex;
+  min-height: 190px;
+  aspect-ratio: 1 / 1;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: var(--g5-admin-surface-muted);
+}
+
+.g5-admin-product-image-stage img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.g5-admin-product-image-card-body {
+  display: grid;
+  justify-items: start;
+  gap: 9px;
+  padding: 12px;
+}
+
+.g5-admin-product-image-card-body form,
+.g5-admin-product-image-card-body .button {
+  width: 100%;
+}
+
+.g5-admin-product-image-card-body .button {
+  justify-content: center;
+}
+
+.g5-admin-product-image-source {
+  color: var(--g5-admin-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.g5-admin-product-image-remove {
+  border-color: var(--g5-admin-danger);
+  color: var(--g5-admin-danger);
+}
+
+@media (max-width: 640px) {
+  .g5-admin-product-images-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    padding: 12px;
+  }
+
+  .g5-admin-product-image-stage {
+    min-height: 0;
+  }
+
+  .g5-admin-product-image-card-body {
+    padding: 9px;
+  }
+}
+
+.g5-admin-money {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.g5-admin-money-danger {
+  color: var(--g5-admin-danger);
+}
+
+.g5-admin-order-panels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 10px;
+}
+
+.g5-admin-order-console {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 18px;
+  border: 1px solid rgba(37, 99, 235, 0.18);
+  border-radius: var(--g5-admin-radius);
+  background: linear-gradient(135deg, #ffffff 0%, #f7fbff 52%, #eefcf8 100%);
+  box-shadow: var(--g5-admin-shadow);
+}
+
+.g5-admin-order-console-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.g5-admin-order-console-header h2 {
+  margin: 0;
+  /* Don't inherit the full-width tinted bar from `.g5-admin .module h2`. */
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--g5-admin-surface-strong);
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.g5-admin-order-console-header p:last-child {
+  max-width: 680px;
+  margin: 6px 0 0;
+  color: var(--g5-admin-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.g5-admin-order-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.g5-admin-order-shortcuts a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: 6px;
+  background: var(--g5-admin-surface);
+  color: var(--g5-admin-primary-dark);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: var(--g5-admin-shadow-soft);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.g5-admin-order-shortcuts a:hover {
+  border-color: rgba(37, 99, 235, 0.38);
+  box-shadow: var(--g5-admin-shadow);
+  transform: translateY(-1px);
+}
+
+.g5-admin-order-shortcuts .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.g5-admin-order-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.g5-admin-order-kpi {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--g5-admin-border);
+  border-top: 3px solid var(--g5-admin-primary);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+  color: var(--g5-admin-text);
+  text-decoration: none;
+  box-shadow: var(--g5-admin-shadow-soft);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.g5-admin-order-kpi:hover {
+  border-color: rgba(37, 99, 235, 0.38);
+  box-shadow: var(--g5-admin-shadow);
+  transform: translateY(-1px);
+}
+
+.g5-admin-order-kpi-success {
+  border-top-color: var(--g5-admin-success);
+}
+
+.g5-admin-order-kpi-warning {
+  border-top-color: var(--g5-admin-warning);
+}
+
+.g5-admin-order-kpi-danger {
+  border-top-color: var(--g5-admin-danger);
+}
+
+.g5-admin-order-kpi span {
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.g5-admin-order-kpi strong {
+  color: var(--g5-admin-surface-strong);
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.g5-admin-order-kpi em {
+  overflow: hidden;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.g5-admin-order-filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.g5-admin-order-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: 999px;
+  background: var(--g5-admin-surface);
+  color: var(--g5-admin-text);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow: var(--g5-admin-shadow-soft);
+  transition: border-color 0.16s ease, background 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.g5-admin-order-filter:hover {
+  border-color: rgba(37, 99, 235, 0.36);
+  box-shadow: var(--g5-admin-shadow);
+  transform: translateY(-1px);
+}
+
+.g5-admin-order-filter strong {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: var(--g5-admin-primary-dark);
+  font-variant-numeric: tabular-nums;
+}
+
+.g5-admin-order-filter.is-active {
+  border-color: var(--g5-admin-primary);
+  background: var(--g5-admin-primary);
+  color: #fff;
+}
+
+.g5-admin-order-filter.is-active strong {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.g5-admin-flow {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.g5-admin-flow-panel {
+  margin-bottom: 18px;
+}
+
+.g5-admin-flow-head h3 {
+  margin: 2px 0 0;
+  color: var(--g5-admin-surface-strong);
+  font-size: 17px;
+}
+
+.g5-admin-flow-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g5-admin-flow-list-panel {
+  padding: 0 18px 18px;
+}
+
+.g5-admin-flow-list li {
+  min-width: 0;
+}
+
+.g5-admin-flow-step {
+  display: grid;
+  min-height: 126px;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid var(--g5-admin-border);
+  border-top: 4px solid var(--g5-admin-primary);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+  color: var(--g5-admin-text);
+  text-decoration: none;
+  box-shadow: var(--g5-admin-shadow-soft);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, transform 0.16s ease;
+}
+
+.g5-admin-flow-step:hover {
+  border-color: rgba(37, 99, 235, 0.42);
+  box-shadow: var(--g5-admin-shadow);
+  transform: translateY(-1px);
+}
+
+.g5-admin-flow-step .material-symbols-outlined {
+  color: var(--g5-admin-primary);
+  font-size: 22px;
+}
+
+.g5-admin-flow-step strong {
+  color: var(--g5-admin-surface-strong);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.g5-admin-flow-step em {
+  color: var(--g5-admin-surface-strong);
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.g5-admin-flow-step small {
+  overflow: hidden;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+}
+
+.g5-admin-flow-step-success {
+  border-top-color: var(--g5-admin-success);
+}
+
+.g5-admin-flow-step-warning {
+  border-top-color: var(--g5-admin-warning);
+}
+
+.g5-admin-flow-step-danger {
+  border-top-color: var(--g5-admin-danger);
+}
+
+.g5-admin-flow-step-neutral {
+  border-top-color: var(--g5-admin-border);
+}
+
+.g5-admin-order-detail-console {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 18px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: linear-gradient(135deg, #ffffff 0%, #f7fbff 55%, #f0fdf8 100%);
+  box-shadow: var(--g5-admin-shadow);
+}
+
+.g5-admin-order-detail-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.g5-admin-order-detail-header h2 {
+  margin: 0;
+  color: var(--g5-admin-surface-strong);
+  font-size: 24px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.g5-admin-order-detail-header p:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 7px 0 0;
+  color: var(--g5-admin-muted);
+  font-size: 13px;
+}
+
+.g5-admin-order-detail-header p:last-child strong {
+  color: var(--g5-admin-surface-strong);
+}
+
+.g5-admin-order-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.g5-admin-order-detail-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: 6px;
+  background: var(--g5-admin-surface);
+  color: var(--g5-admin-primary-dark);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.g5-admin-order-detail-actions .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.g5-admin-order-detail-status {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.g5-admin-order-detail-status article,
+.g5-admin-order-risk,
+.g5-admin-order-detail-metric-list article,
+.g5-admin-order-recipient {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+}
+
+.g5-admin-order-detail-status span,
+.g5-admin-order-risk span,
+.g5-admin-order-detail-metric-list span,
+.g5-admin-order-recipient span {
+  display: block;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.g5-admin-order-detail-status strong,
+.g5-admin-order-risk strong,
+.g5-admin-order-detail-metric-list strong,
+.g5-admin-order-recipient strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--g5-admin-surface-strong);
+  font-size: 16px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.g5-admin-order-detail-status small,
+.g5-admin-order-risk small,
+.g5-admin-order-detail-metric-list small,
+.g5-admin-order-recipient small {
+  display: block;
+  margin-top: 5px;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.g5-admin-order-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 12px;
+}
+
+.g5-admin-order-detail-risks,
+.g5-admin-order-detail-metrics {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.g5-admin-order-detail-section-title {
+  margin-bottom: 10px;
+}
+
+.g5-admin-order-detail-section-title h3 {
+  margin: 0;
+  color: var(--g5-admin-surface-strong);
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.g5-admin-order-risk-list,
+.g5-admin-order-detail-metric-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.g5-admin-order-risk {
+  border-top: 3px solid var(--g5-admin-primary);
+}
+
+.g5-admin-order-risk-success {
+  border-top-color: var(--g5-admin-success);
+}
+
+.g5-admin-order-risk-warning {
+  border-top-color: var(--g5-admin-warning);
+}
+
+.g5-admin-order-risk-danger {
+  border-top-color: var(--g5-admin-danger);
+}
+
+.g5-admin-order-recipient {
+  display: grid;
+  gap: 2px;
+}
+
+.g5-admin-order-panel {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface-muted);
+}
+
+.g5-admin-order-panel span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.g5-admin-order-panel strong {
+  display: block;
+  color: var(--g5-admin-surface-strong);
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.g5-admin-order-panel small {
+  display: block;
+  margin-top: 6px;
+  color: var(--g5-admin-muted);
+  line-height: 1.4;
+}
+
+.g5-admin-order-snapshot {
+  display: grid;
+  gap: 12px;
+  margin: 0 0 12px;
+  padding: 14px;
+  border: 1px solid var(--g5-admin-border);
+  border-top: 3px solid var(--g5-admin-primary);
+  border-radius: var(--g5-admin-radius);
+  background: linear-gradient(135deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.g5-admin-order-snapshot-success {
+  border-top-color: var(--g5-admin-success);
+}
+
+.g5-admin-order-snapshot-info {
+  border-top-color: var(--g5-admin-primary);
+}
+
+.g5-admin-order-snapshot-warning {
+  border-top-color: var(--g5-admin-warning);
+}
+
+.g5-admin-order-snapshot-danger {
+  border-top-color: var(--g5-admin-danger);
+}
+
+.g5-admin-order-snapshot-neutral {
+  border-top-color: var(--g5-admin-border);
+}
+
+.g5-admin-order-snapshot-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.9fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.g5-admin-order-snapshot-head span {
+  display: block;
+  color: var(--g5-admin-primary-dark);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.g5-admin-order-snapshot-head strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--g5-admin-surface-strong);
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.g5-admin-order-snapshot-head p {
+  margin: 0;
+  color: var(--g5-admin-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.g5-admin-order-snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.g5-admin-order-snapshot-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+}
+
+.g5-admin-order-snapshot-card span {
+  display: block;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.g5-admin-order-snapshot-card strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--g5-admin-surface-strong);
+  font-size: 17px;
+  line-height: 1.28;
+  overflow-wrap: anywhere;
+}
+
+.g5-admin-order-snapshot-card small {
+  display: block;
+  margin-top: 6px;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.g5-admin-raw-log {
+  max-height: 460px;
+  margin: 0;
+  padding: 14px;
+  overflow: auto;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.g5-admin-mini-table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.g5-admin-mini-table th,
+.g5-admin-mini-table td {
+  padding: 9px 8px;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.g5-admin-mini-table td {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.g5-admin-mini-table th {
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.g5-admin-mini-table td {
+  font-variant-numeric: tabular-nums;
+}
+
+.g5-admin-report-filter-compact {
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+  min-width: min(100%, 480px);
+}
+
+.g5-admin-print-filter {
+  grid-template-columns: repeat(3, minmax(130px, 1fr));
+  min-width: min(100%, 820px);
+}
+
+.g5-admin-rank-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: var(--g5-admin-primary-dark);
+  font-size: 13px;
+}
+
+.g5-admin-rank-product {
+  display: grid;
+  gap: 3px;
+  min-width: 180px;
+}
+
+.g5-admin-rank-product strong,
+.g5-admin-rank-product a {
+  overflow: hidden;
+  color: var(--g5-admin-surface-strong);
+  font-weight: 800;
+  text-overflow: ellipsis;
+}
+
+.g5-admin-rank-product small {
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+}
+
+.g5-admin-rank-bar {
+  display: block;
+  overflow: hidden;
+  width: 150px;
+  height: 10px;
+  border-radius: 999px;
+  background: #e5edf8;
+}
+
+.g5-admin-rank-bar i {
+  display: block;
+  height: 100%;
+  min-width: 3px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--g5-admin-primary), var(--g5-admin-success));
+}
+
+.g5-admin-print-meta {
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.g5-admin-print-table td {
+  max-width: 260px;
+  white-space: normal;
+}
+
+.g5-admin-print-table td small {
+  display: block;
+  margin-top: 3px;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.g5-admin-tool-status {
+  display: grid;
+  gap: 5px;
+  min-width: min(100%, 320px);
+  padding: 14px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.g5-admin-tool-status span,
+.g5-admin-admin-form label > span {
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.g5-admin-tool-status strong {
+  overflow: hidden;
+  color: var(--g5-admin-surface-strong);
+  text-overflow: ellipsis;
+}
+
+.g5-admin-tool-status small {
+  overflow: hidden;
+  color: var(--g5-admin-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+.g5-admin-tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.g5-admin-tool-panel {
+  min-width: 0;
+}
+
+.g5-admin-admin-form {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.g5-admin-admin-form label {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.g5-admin-admin-form input,
+.g5-admin-admin-form select,
+.g5-admin-admin-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 38px;
+}
+
+.g5-admin-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(90px, 140px);
+  gap: 10px;
+}
+
+.g5-admin-confirm-row {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  gap: 8px !important;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: 6px;
+  background: var(--g5-admin-surface-muted);
+}
+
+.g5-admin-confirm-row input {
+  width: auto;
+  min-height: 0;
+}
+
+.g5-admin-preview-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 18px;
+}
+
+.g5-admin-preview-list span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: var(--g5-admin-primary-dark);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.g5-admin-report-list {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+}
+
+.g5-admin-report-list div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: 6px;
+  background: var(--g5-admin-surface-muted);
+}
+
+.g5-admin-report-list strong {
+  overflow: hidden;
+  color: var(--g5-admin-surface-strong);
+  font-size: 13px;
+  text-overflow: ellipsis;
+}
+
+.g5-admin-report-list span {
+  color: var(--g5-admin-primary-dark);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+.g5-admin-big-number {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  gap: 8px;
+  padding: 18px;
+  text-align: center;
+}
+
+.g5-admin-big-number strong {
+  color: var(--g5-admin-primary-dark);
+  font-size: 42px;
+  line-height: 1;
+}
+
+.g5-admin-big-number span {
+  color: var(--g5-admin-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.g5-admin-filter-toggle {
+  display: none;
+}
+
+.g5-admin-mobile-search {
+  min-width: 0;
+}
+
+.g5-admin-mobile-actions {
+  min-width: 0;
+}
+
+/* On tablet widths the action select, extra fields and Run button must wrap instead of pushing Run off-screen. */
+.g5-admin-mobile-actions .group.primary {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.g5-admin-empty {
+  margin: 0;
+  padding: 18px;
+  color: var(--g5-admin-muted);
+}
+
+@media (max-width: 1024px) {
+  .g5-admin #content {
+    padding: 20px;
+  }
+
+  .g5-admin-report-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .g5-admin-report-filter {
+    min-width: 0;
+  }
+
+  .g5-admin-metrics,
+  .g5-admin-report-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .g5-admin-report-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .g5-admin-tool-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .g5-admin-print-filter {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .g5-admin-flow-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .g5-admin-dashboard-grid,
+  .g5-admin-workflows,
+  .g5-admin-governance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .g5-admin-order-console-header,
+  .g5-admin-order-kpis,
+  .g5-admin-order-snapshot-head,
+  .g5-admin-order-snapshot-grid,
+  .g5-admin-order-detail-header,
+  .g5-admin-order-detail-status,
+  .g5-admin-order-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .g5-admin-order-shortcuts,
+  .g5-admin-order-detail-actions {
+    justify-content: flex-start;
+  }
+
+  .g5-admin #changelist table a,
+  .g5-admin #changelist .results a,
+  .g5-admin #changelist .field-__str__ a,
+  .g5-admin #changelist .text-font-important-light,
+  .g5-admin #changelist .text-font-important-dark,
+  .g5-admin .g5-admin-mini-table a,
+  .g5-admin #changelist .action-select,
+  .g5-admin #changelist .actions select,
+  .g5-admin #changelist .actions button,
+  .g5-admin #changelist .actions .button,
+  .g5-admin .g5-admin-report-filter-actions .button,
+  .g5-admin .breadcrumbs a,
+  .g5-admin .paginator a,
+  .g5-admin #searchbar-submit {
+    min-height: 32px !important;
+  }
+
+  .g5-admin #changelist table a,
+  .g5-admin #changelist .results a,
+  .g5-admin #changelist .text-font-important-light,
+  .g5-admin #changelist .text-font-important-dark,
+  .g5-admin .g5-admin-mini-table a,
+  .g5-admin .breadcrumbs a,
+  .g5-admin .paginator a,
+  .g5-admin #searchbar-submit {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    max-width: 100%;
+    min-width: 32px !important;
+    padding-block: 4px !important;
+  }
+
+  .g5-admin #changelist .action-select {
+    width: 28px !important;
+    min-width: 28px !important;
+  }
+
+  .g5-admin .paginator a,
+  .g5-admin #searchbar-submit {
+    min-width: 32px !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .g5-admin #header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .g5-admin #branding {
+    width: 100%;
+  }
+
+  .g5-admin-menu-toggle {
+    display: inline-block;
+  }
+
+  .g5-admin-brand-text {
+    max-width: calc(100vw - 160px);
+  }
+
+  .g5-admin-quicknav {
+    display: none;
+    width: 100%;
+    margin-left: 0;
+    padding-top: 8px;
+  }
+
+  .g5-admin.g5-admin-nav-open .g5-admin-quicknav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .g5-admin-quicknav a {
+    text-align: center;
+  }
+
+  .g5-admin #user-tools {
+    grid-column: 1;
+    justify-self: stretch;
+    flex-basis: auto;
+    inline-size: 100%;
+    justify-content: flex-start;
+    order: 3;
+    width: auto;
+    max-width: 100%;
+    margin-left: 0;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+
+  .g5-admin #content {
+    padding: 14px;
+  }
+
+  .g5-admin-unfold #content {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .g5-admin #content-main {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .g5-admin-unfold #content .flex.flex-row.grow {
+    max-width: calc(100vw - 46px);
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .g5-admin-dashboard-hero {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+
+  .g5-admin-status-card {
+    min-width: 0;
+  }
+
+  .g5-admin-status-stack {
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
+  .g5-admin-metrics,
+  .g5-admin-report-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .g5-admin .app-list,
+  .g5-admin-panel-header {
+    padding: 14px;
+  }
+
+  .g5-admin-dashboard-hero h1,
+  .g5-admin-panel h2 {
+    font-size: 21px;
+  }
+
+  .g5-admin table {
+    display: block;
+    overflow-x: auto;
+    width: 100%;
+  }
+
+  .g5-admin-report-filter {
+    grid-template-columns: 1fr;
+  }
+
+  .g5-admin-tool-status,
+  .g5-admin-form-grid {
+    grid-template-columns: 1fr;
+    min-width: 0;
+  }
+
+  .g5-admin-rank-bar {
+    width: 100px;
+  }
+
+  .g5-admin-report-filter-actions {
+    align-items: stretch;
+  }
+
+  .g5-admin-report-filter-actions .button {
+    display: inline-flex;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .g5-admin .related-widget-wrapper {
+    width: 100%;
+  }
+
+  .g5-admin .related-widget-wrapper select,
+  .g5-admin .related-widget-wrapper input {
+    flex: 1 1 220px;
+  }
+
+  .g5-admin-export-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .g5-admin-series-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding-bottom: 10px;
+  }
+
+  .g5-admin-series-row strong,
+  .g5-admin-series-row small {
+    text-align: left;
+  }
+
+  .g5-admin-report-summary-list {
+    grid-template-columns: 1fr;
+  }
+
+  .g5-admin-filter-toggle {
+    order: -3;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    min-height: 40px;
+    margin: 0 0 10px;
+    border: 1px solid var(--g5-admin-border);
+    border-radius: 8px;
+    background: var(--g5-admin-surface);
+    color: var(--g5-admin-surface-strong);
+    font-weight: 900;
+  }
+
+  .g5-admin-filter-toggle .material-symbols-outlined {
+    font-size: 20px;
+  }
+
+  .g5-admin #changelist-filter.g5-admin-filter-panel {
+    order: -2;
+    display: none;
+    width: 100%;
+    margin: 0 0 12px;
+    max-height: min(58vh, 480px);
+    overflow: auto;
+  }
+
+  .g5-admin.g5-admin-filters-open #changelist-filter.g5-admin-filter-panel {
+    display: block;
+  }
+
+  .g5-admin #changelist-search,
+  .g5-admin #toolbar,
+  .g5-admin .g5-admin-mobile-search {
+    position: sticky;
+    top: 0;
+    z-index: 8;
+    max-width: 100%;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.96);
+  }
+
+  .g5-admin #changelist {
+    display: block;
+    overflow: visible;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .g5-admin #changelist .changelist-form-container {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-inline: 0 !important;
+  }
+
+  .g5-admin #changelist .changelist-form-container > .grow,
+  .g5-admin #changelist .changelist-form-container > .grow.min-w-0 {
+    flex: 0 1 auto !important;
+    order: 1;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .g5-admin #changelist .results,
+  .g5-admin #changelist form,
+  .g5-admin #changelist table {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .g5-admin #changelist-search input,
+  .g5-admin #toolbar input,
+  .g5-admin .g5-admin-mobile-search input {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .g5-admin .g5-admin-mobile-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .g5-admin .g5-admin-mobile-actions select,
+  .g5-admin .g5-admin-mobile-actions button {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  /* The action select, the extra form fields and the Run button stack instead of sharing one cramped row. */
+  .g5-admin .g5-admin-mobile-actions .group.primary {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .g5-admin .g5-admin-mobile-actions .group.primary label {
+    display: grid;
+    gap: 4px;
+    font-size: 12px;
+  }
+
+  .g5-admin-order-panels {
+    grid-template-columns: 1fr;
+  }
+
+  .g5-admin-order-console {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: 14px;
+  }
+
+  .g5-admin-order-console-header,
+  .g5-admin-order-kpis,
+  .g5-admin-flow-list {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .g5-admin-order-snapshot {
+    padding: 12px;
+  }
+
+  .g5-admin-order-snapshot-head strong {
+    font-size: 18px;
+  }
+
+  .g5-admin-raw-log {
+    max-height: 320px;
+    padding: 12px;
+  }
+
+  .g5-admin-order-filter-tabs,
+  .g5-admin-flow-list,
+  .g5-admin-order-shortcuts,
+  .g5-admin-order-snapshot-grid,
+  .g5-admin-order-detail-actions,
+  .g5-admin-order-risk-list,
+  .g5-admin-order-detail-metric-list {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .g5-admin-order-filter,
+  .g5-admin-flow-step,
+  .g5-admin-order-shortcuts a,
+  .g5-admin-order-detail-actions a {
+    justify-content: space-between;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .g5-admin-order-kpi,
+  .g5-admin-flow-step,
+  .g5-admin-action-card,
+  .g5-admin-metric,
+  .g5-admin-report-metric,
+  .g5-admin-list-row,
+  .g5-admin-module {
+    box-shadow: none;
+  }
+
+  .g5-admin-list-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 12px;
+  }
+
+  .g5-admin-list-row small {
+    grid-column: 1;
+    white-space: normal;
+  }
+
+  .g5-admin-order-detail-console {
+    padding: 14px;
+  }
+
+  .g5-admin-order-detail-status strong,
+  .g5-admin-order-risk strong,
+  .g5-admin-order-detail-metric-list strong,
+  .g5-admin-order-recipient strong,
+  .g5-admin-order-detail-status small,
+  .g5-admin-order-risk small,
+  .g5-admin-order-detail-metric-list small,
+  .g5-admin-order-recipient small {
+    white-space: normal;
+  }
+
+  .g5-admin-mini-table {
+    min-width: max(100%, 620px);
+  }
+
+  .g5-admin-print-table td {
+    min-width: 150px;
+  }
+
+  .g5-admin-badge {
+    white-space: normal;
+  }
+}
+
+@media print {
+  .g5-admin #header,
+  .g5-admin .breadcrumbs,
+  .g5-admin .messagelist,
+  .g5-admin .g5-admin-print-hidden,
+  .g5-admin .g5-admin-export-actions,
+  .g5-admin aside,
+  .g5-admin nav[aria-label],
+  .g5-admin .sidebar {
+    display: none !important;
+  }
+
+  .g5-admin #content,
+  .g5-admin-unfold #content {
+    max-width: none !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  .g5-admin-panel,
+  .g5-admin-print-sheet {
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .g5-admin-print-sheet .g5-admin-panel-header {
+    padding: 0 0 10px !important;
+  }
+
+  .g5-admin-report-table-wrap {
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  .g5-admin table,
+  .g5-admin-mini-table,
+  .g5-admin-print-table {
+    display: table !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    font-size: 10px;
+  }
+
+  .g5-admin-print-table th,
+  .g5-admin-print-table td {
+    padding: 5px 4px !important;
+    border-bottom: 1px solid #d1d5db !important;
+    white-space: normal !important;
+  }
+
+  .g5-admin-print-table a {
+    color: #111827 !important;
+    text-decoration: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Dark mode — surfaces/badges/chips that use hardcoded light hex
+ * (not the --g5-admin-* tokens) would otherwise stay light under
+ * Unfold's `.dark` theme. Override only the background (and the badge
+ * text, which is hardcoded dark) so dark mode reads correctly; light
+ * mode is untouched.
+ * ------------------------------------------------------------------ */
+
+/* Light chips / heading bars / progress tracks -> subtle elevated dark */
+html.dark .g5-admin-unfold .g5-admin-quicknav a,
+html.dark .g5-admin-module nav a,
+html.dark .g5-admin-module nav span,
+html.dark .g5-admin-rank-no,
+html.dark .g5-admin-order-filter strong,
+html.dark .g5-admin-preview-list span {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+html.dark .g5-admin-unfold .g5-admin-quicknav a:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+html.dark .g5-admin .module h2 {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+html.dark .g5-admin-series-track,
+html.dark .g5-admin-rank-bar {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+/* Action-card icon tiles -> translucent accent on dark (icon color is a token) */
+html.dark .g5-admin-action-card .material-symbols-outlined {
+  background: rgba(59, 130, 246, 0.16);
+}
+html.dark .g5-admin-action-card-success .material-symbols-outlined {
+  background: rgba(5, 150, 105, 0.16);
+}
+html.dark .g5-admin-action-card-warning .material-symbols-outlined {
+  background: rgba(217, 119, 6, 0.18);
+}
+html.dark .g5-admin-action-card-danger .material-symbols-outlined {
+  background: rgba(220, 38, 38, 0.16);
+}
+html.dark .g5-admin-action-card-neutral .material-symbols-outlined {
+  background: rgba(148, 163, 184, 0.14);
+}
+
+/* Status badges -> translucent accent background + lightened text */
+html.dark .g5-admin-badge-success {
+  background: rgba(5, 150, 105, 0.18);
+  color: #6ee7b7;
+}
+html.dark .g5-admin-badge-info {
+  background: rgba(37, 99, 235, 0.20);
+  color: #93c5fd;
+}
+html.dark .g5-admin-badge-warning {
+  background: rgba(217, 119, 6, 0.20);
+  color: #fcd34d;
+}
+html.dark .g5-admin-badge-danger {
+  background: rgba(220, 38, 38, 0.18);
+  color: #fca5a5;
+}
+html.dark .g5-admin-badge-neutral {
+  background: rgba(148, 163, 184, 0.14);
+}
+
+/* ------------------------------------------------------------------ *
+ * Unfold component fixes
+ * ------------------------------------------------------------------ */
+
+/* Search: Unfold wraps the input in a bordered/rounded shell, but the global
+   `.g5-admin input` reset adds a second border on the inner input. Neutralize
+   it so the field shows a single border from the wrapper. */
+.g5-admin form[role="search"] input[type="text"],
+.g5-admin #toolbar input[type="text"],
+.g5-admin input[name="q"] {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Pagination: Unfold's paginator_number emits class-less <a> for non-current
+   pages. Give every page item (link + current span) a consistent pill. */
+.g5-admin-page-item a,
+.g5-admin-page-item > span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: 6px;
+  background: var(--g5-admin-surface);
+  color: var(--g5-admin-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.g5-admin-page-item a:hover {
+  border-color: var(--g5-admin-primary);
+  color: var(--g5-admin-primary);
+}
+
+/* Current page (rendered as a <span> by Unfold) -> filled accent. */
+.g5-admin-page-item > span {
+  border-color: var(--g5-admin-primary);
+  background: var(--g5-admin-primary);
+  color: #fff;
+}
+
+/* The order-console heading must not inherit the full-width tinted bar from
+   `.g5-admin .module h2` (equal specificity, so this later rule wins). */
+.g5-admin .g5-admin-order-console-header h2 {
+  padding: 0;
+  background: transparent;
+  border: 0;
+}

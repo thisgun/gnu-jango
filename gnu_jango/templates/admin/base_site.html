@@ -1,0 +1,39 @@
+{% extends "admin/base.html" %}
+{% load i18n static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin_next/css/dashboard.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script src="{% static 'admin_next/js/dashboard.js' %}" defer></script>
+{% endblock %}
+
+{% block bodyclass %}{{ block.super }} g5-admin g5-admin-unfold{% endblock %}
+
+{% block branding %}
+<div id="site-name" class="g5-admin-brand">
+  <a href="{% url 'admin:index' %}">
+    <span class="g5-admin-brand-mark">G5</span>
+    <span class="g5-admin-brand-text">{{ site_header|default:_('GNU Jango administration') }}</span>
+  </a>
+</div>
+{% if user.is_anonymous %}
+  {% include "admin/color_theme_toggle.html" %}
+{% endif %}
+{% endblock %}
+
+{% block nav-global %}{% endblock %}
+
+{% block nav-global-side %}
+<nav class="g5-admin-quicknav" aria-label="{% translate 'Quick navigation' %}">
+  <a href="{% url 'admin:index' %}">{% translate 'Dashboard' %}</a>
+  <a href="{% url 'admin:shop_shoporder_reports' %}">{% translate 'Reports' %}</a>
+  <a href="/">{% translate 'Site' %}</a>
+  <a href="/api/v1/status">{% translate 'API status' %}</a>
+</nav>
+{% endblock %}

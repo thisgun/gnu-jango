@@ -1,0 +1,8 @@
+{% load i18n %}
+
+<nav class="g5-admin-order-shortcuts" aria-label="{% translate 'Content tools' %}">
+  <a class="button btn" href="{% url 'admin:bbs_post_activity' %}">
+    <span class="material-symbols-outlined" aria-hidden="true">query_stats</span>
+    {% translate 'Content activity report' %}
+  </a>
+</nav>

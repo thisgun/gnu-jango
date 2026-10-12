@@ -1,0 +1,112 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-gnu_jango}
+      POSTGRES_USER: ${DB_USERNAME:-gnu_jango}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-gnu_jango_password}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-gnu_jango} -d ${DB_NAME:-gnu_jango}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DJANGO_SETTINGS_MODULE: example.settings.production
+      ENVIRONMENT: Production
+      DEBUG: ${DEBUG:-False}
+      SECRET_KEY: ${SECRET_KEY:-unsafe-compose-secret-change-me}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0}
+      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-False}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-False}
+      CSRF_COOKIE_SECURE: ${CSRF_COOKIE_SECURE:-False}
+      SECURE_HSTS_SECONDS: ${SECURE_HSTS_SECONDS:-0}
+      DB_ENGINE: django.db.backends.postgresql
+      DB_NAME: ${DB_NAME:-gnu_jango}
+      DB_USERNAME: ${DB_USERNAME:-gnu_jango}
+      DB_PASSWORD: ${DB_PASSWORD:-gnu_jango_password}
+      DB_HOSTNAME: db
+      DB_PORT: 5432
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL:-False}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-webmaster@localhost}
+      SERVER_EMAIL: ${SERVER_EMAIL:-webmaster@localhost}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DJANGO_REQUEST_LOG_LEVEL: ${DJANGO_REQUEST_LOG_LEVEL:-WARNING}
+      DJANGO_DB_LOG_LEVEL: ${DJANGO_DB_LOG_LEVEL:-WARNING}
+      LOG_TO_FILE: ${LOG_TO_FILE:-False}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      CELERY_TASK_ALWAYS_EAGER: ${CELERY_TASK_ALWAYS_EAGER:-False}
+    ports:
+      - "${DJANGO_PORT:-8000}:8000"
+    volumes:
+      - staticfiles:/app/staticfiles
+      - media:/app/media
+
+  worker:
+    build: .
+    command: celery -A example worker --loglevel=INFO
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DJANGO_SETTINGS_MODULE: example.settings.production
+      ENVIRONMENT: Production
+      DEBUG: ${DEBUG:-False}
+      SECRET_KEY: ${SECRET_KEY:-unsafe-compose-secret-change-me}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0}
+      DB_ENGINE: django.db.backends.postgresql
+      DB_NAME: ${DB_NAME:-gnu_jango}
+      DB_USERNAME: ${DB_USERNAME:-gnu_jango}
+      DB_PASSWORD: ${DB_PASSWORD:-gnu_jango_password}
+      DB_HOSTNAME: db
+      DB_PORT: 5432
+      EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+      EMAIL_HOST: ${EMAIL_HOST:-}
+      EMAIL_PORT: ${EMAIL_PORT:-587}
+      EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+      EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+      EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+      EMAIL_USE_SSL: ${EMAIL_USE_SSL:-False}
+      DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-webmaster@localhost}
+      SERVER_EMAIL: ${SERVER_EMAIL:-webmaster@localhost}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DJANGO_REQUEST_LOG_LEVEL: ${DJANGO_REQUEST_LOG_LEVEL:-WARNING}
+      DJANGO_DB_LOG_LEVEL: ${DJANGO_DB_LOG_LEVEL:-WARNING}
+      LOG_TO_FILE: ${LOG_TO_FILE:-False}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
+      CELERY_TASK_ALWAYS_EAGER: ${CELERY_TASK_ALWAYS_EAGER:-False}
+    volumes:
+      - staticfiles:/app/staticfiles
+      - media:/app/media
+
+volumes:
+  postgres_data:
+  staticfiles:
+  media:

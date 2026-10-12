@@ -1,0 +1,191 @@
+{% extends "admin/change_list.html" %}
+{% load i18n static %}
+
+{% comment %}
+Settings page for the Config model. The layout (tabs -> section cards ->
+responsive field grid -> sticky save bar) lives in admin_next/css/config_form.css
+and is scoped to `.cfgx`. Field grouping comes from ConfigsForm.__iter__, which
+tags every bound field with tab_id/tab_label/group/section_help/unit.
+{% endcomment %}
+
+{% block extrastyle %}{{ block.super }}
+<link rel="stylesheet" href="{% static 'admin_next/css/config_form.css' %}">
+<style>
+  /* Unfold styles selects with `appearance: none`, and a plain Django <select>
+     then has no chevron, so paint one to keep the dropdown affordance. */
+  .cfgx select {
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.625rem center;
+    background-size: 1.1rem;
+    padding-right: 2.25rem;
+  }
+</style>
+{% endblock %}
+
+{% block object-tools %}{% endblock %}
+{% block pagination %}{% endblock %}
+
+{% block content %}
+<div id="content-main" class="cfgx">
+    <div class="cfgx-head">
+        <div>
+            <p class="cfgx-eyebrow">{% translate '환경설정' %}</p>
+            <h1 class="cfgx-title">{% translate '기본환경설정' %}</h1>
+            <p class="cfgx-lede">{% translate '사이트 이름과 관리자, 게시판·회원 정책 등 사이트 운영의 기본값을 관리합니다.' %}</p>
+        </div>
+        <p class="cfgx-meta">{{ configs_form.fields|length }}{% translate '개 설정' %}</p>
+    </div>
+
+    {% if request.POST and configs_form.errors %}
+        <div class="cfgx-alert" role="alert">
+            {% translate "아래 항목을 확인해 주세요." %}
+            {{ configs_form.non_field_errors }}
+        </div>
+    {% endif %}
+
+    <form method="post" id="settings-form" data-cfgx-form>
+        {% csrf_token %}
+        {% for hidden in configs_form.hidden_fields %}{{ hidden }}{% endfor %}
+
+        {% comment %}
+        visible_fields only: the hidden inputs are emitted above, and listing
+        them again here would print a label with no control.
+        {% endcomment %}
+        {% regroup configs_form.visible_fields by tab_id as tab_groups %}
+
+        <div class="cfgx-tabs" role="tablist">
+            {% for tab in tab_groups %}
+                <button type="button"
+                        class="cfgx-tab"
+                        role="tab"
+                        id="cfgx-tab-{{ tab.grouper }}"
+                        aria-controls="cfgx-panel-{{ tab.grouper }}"
+                        aria-selected="{% if forloop.first %}true{% else %}false{% endif %}"
+                        data-cfgx-tab="{{ tab.grouper }}">
+                    {{ tab.list.0.tab_label }}<span class="cfgx-tab-count">{{ tab.list|length }}</span>
+                </button>
+            {% endfor %}
+        </div>
+
+        {% for tab in tab_groups %}
+            <section class="cfgx-panel"
+                     role="tabpanel"
+                     id="cfgx-panel-{{ tab.grouper }}"
+                     aria-labelledby="cfgx-tab-{{ tab.grouper }}"
+                     data-cfgx-panel="{{ tab.grouper }}">
+                {% regroup tab.list by group as sections %}
+                {% for section in sections %}
+                    <div class="cfgx-card">
+                        <h2 class="cfgx-card-title">{{ section.grouper }}</h2>
+                        {% if section.list.0.section_help %}
+                            <p class="cfgx-card-help">{{ section.list.0.section_help }}</p>
+                        {% endif %}
+                        <div class="cfgx-card-body">
+                            {% for field in section.list %}
+                                {% if field.is_checkbox %}
+                                    <div class="cfgx-field">
+                                        <label class="cfgx-switch" for="{{ field.id_for_label }}">
+                                            <span class="cfgx-switch-text">
+                                                <span class="cfgx-switch-label">{{ field.label }}</span>
+                                                {% if field.help_text %}<span class="cfgx-help">{{ field.help_text }}</span>{% endif %}
+                                            </span>
+                                            {{ field }}
+                                            <span class="cfgx-track" aria-hidden="true"></span>
+                                        </label>
+                                        {% if field.errors %}<ul class="cfgx-errors">{% for error in field.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+                                    </div>
+                                {% else %}
+                                    <div class="cfgx-field{% if field.is_wide %} cfgx-field--wide{% endif %}">
+                                        <label class="cfgx-label" for="{{ field.id_for_label }}">
+                                            {{ field.label }}{% if field.field.required %}<span class="cfgx-req"> *</span>{% endif %}
+                                        </label>
+                                        {% if field.unit %}
+                                            <span class="cfgx-input-group">
+                                                {{ field }}
+                                                <span class="cfgx-unit">{{ field.unit }}</span>
+                                            </span>
+                                        {% else %}
+                                            {{ field }}
+                                        {% endif %}
+                                        {% if field.help_text %}<div class="cfgx-help">{{ field.help_text }}</div>{% endif %}
+                                        {% if field.errors %}<ul class="cfgx-errors">{% for error in field.errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </section>
+        {% endfor %}
+
+        <div class="cfgx-actions">
+            <span class="cfgx-status" data-cfgx-status
+                  data-dirty-text="{% translate '저장하지 않은 변경사항이 있습니다.' %}">{% translate '변경 후 저장 버튼을 눌러 적용합니다.' %}</span>
+            <button type="submit" class="cfgx-save">{% translate 'Save' %}</button>
+        </div>
+    </form>
+</div>
+
+<script>
+(function () {
+    var form = document.querySelector('[data-cfgx-form]');
+    if (!form) { return; }
+
+    var tabs = Array.prototype.slice.call(form.querySelectorAll('[data-cfgx-tab]'));
+    var panels = Array.prototype.slice.call(form.querySelectorAll('[data-cfgx-panel]'));
+    var tablist = form.querySelector('[role=tablist]');
+    if (!tabs.length || !tablist) { return; }
+
+    var STORAGE_KEY = 'cfgx-active-tab';
+
+    function activate(id, remember) {
+        tabs.forEach(function (tab) {
+            tab.setAttribute('aria-selected', tab.getAttribute('data-cfgx-tab') === id ? 'true' : 'false');
+        });
+        panels.forEach(function (panel) {
+            panel.hidden = panel.getAttribute('data-cfgx-panel') !== id;
+        });
+        if (remember) {
+            try { sessionStorage.setItem(STORAGE_KEY, id); } catch (e) { /* private mode */ }
+        }
+    }
+
+    tabs.forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            activate(tab.getAttribute('data-cfgx-tab'), true);
+        });
+    });
+
+    tablist.addEventListener('keydown', function (event) {
+        var i = tabs.indexOf(document.activeElement);
+        if (i < 0) { return; }
+        var next = event.key === 'ArrowRight' ? i + 1 : (event.key === 'ArrowLeft' ? i - 1 : -1);
+        if (next < 0 || next >= tabs.length) { return; }
+        event.preventDefault();
+        tabs[next].focus();
+        activate(tabs[next].getAttribute('data-cfgx-tab'), true);
+    });
+
+    // A field that failed validation can sit in a hidden panel, so open the tab
+    // holding the first error rather than the remembered one.
+    var firstError = form.querySelector('.cfgx-errors');
+    var errorPanel = firstError ? firstError.closest('[data-cfgx-panel]') : null;
+    var stored = null;
+    try { stored = sessionStorage.getItem(STORAGE_KEY); } catch (e) { /* private mode */ }
+
+    var known = tabs.map(function (tab) { return tab.getAttribute('data-cfgx-tab'); });
+    var initial = errorPanel ? errorPanel.getAttribute('data-cfgx-panel')
+                : (stored && known.indexOf(stored) !== -1) ? stored
+                : known[0];
+    activate(initial, false);
+
+    var status = form.querySelector('[data-cfgx-status]');
+    if (status) {
+        form.addEventListener('change', function () {
+            status.textContent = status.getAttribute('data-dirty-text') || status.textContent;
+        }, { once: true });
+    }
+}());
+</script>
+{% endblock %}

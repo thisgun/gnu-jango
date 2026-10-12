@@ -1,0 +1,259 @@
+{% load humanize %}
+{% with colspan=5 %}
+
+<!-- 게시판 목록 시작 { -->
+<div id="bo_list" style="width: {{ width }}">
+  <!-- 게시판 카테고리 시작 { -->
+  <!-- } 게시판 카테고리 끝 -->
+  <form name="fboardlist" id="fboardlist" onsubmit="return fboardlist_submit(this);" method="post">
+    {% csrf_token %}
+    <input type="hidden" name="bo_table" value="{{ board.bo_table }}" />
+    <input type="hidden" name="board_id" value="{{ board.id }}" />
+    <input type="hidden" name="sfl" value="" />
+    <input type="hidden" name="stx" value="" />
+    <input type="hidden" name="spt" value="" />
+    <input type="hidden" name="sca" value="" />
+    <input type="hidden" name="sst" value="" />
+    <input type="hidden" name="sod" value="" />
+    <input type="hidden" name="page" value="" />
+    <input type="hidden" name="sw" value="" />
+
+    <!-- 게시판 페이지 정보 및 버튼 시작 { -->
+    <div id="bo_btn_top">
+      <div id="bo_list_total">
+        <span>Total {{ total_count|intcomma }}건</span>
+        {{ page }} 페이지
+      </div>
+
+      <ul class="btn_bo_user">
+        {% if is_auth %}
+        <li>
+          <a href="{{ admin_href }}" class="btn_admin btn" title="관리자"><i class="fa fa-cog fa-spin fa-fw"></i><span class="sound_only">관리자</span></a>
+        </li>
+        {% endif %} {% if is_rss_href %}
+        <li>
+          <a href="{{ rss_href }}" class="btn_b01 btn" title="RSS"><i class="fa fa-rss" aria-hidden="true"></i><span class="sound_only">RSS</span></a>
+        </li>
+        {% endif %}
+        <li>
+          <button type="button" class="btn_bo_sch btn_b01 btn" title="게시판 검색"><i class="fa fa-search" aria-hidden="true"></i><span class="sound_only">게시판 검색</span></button>
+        </li>
+        {% if is_write_href %}
+        <li>
+          <a href="{% url 'write_post' board.bo_table %}" class="btn_b01 btn" title="글쓰기"><i class="fa fa-pencil" aria-hidden="true"></i><span class="sound_only">글쓰기</span></a>
+        </li>
+        {% endif %} {% if user.is_superuser or is_auth %}
+        <li>
+          <button type="button" class="btn_more_opt is_list_btn btn_b01 btn" title="게시판 리스트 옵션"><i class="fa fa-ellipsis-v" aria-hidden="true"></i><span class="sound_only">게시판 리스트 옵션</span></button>
+          {% if is_checkbox %}
+          <ul class="more_opt is_list_btn">
+            <li>
+              <button type="submit" name="btn_submit" value="선택삭제" onclick="document.pressed=this.value"><i class="fa fa-trash-o" aria-hidden="true"></i> 선택삭제</button>
+            </li>
+            <li>
+              <button type="submit" name="btn_submit" value="선택복사" onclick="document.pressed=this.value"><i class="fa fa-files-o" aria-hidden="true"></i> 선택복사</button>
+            </li>
+            <li>
+              <button type="submit" name="btn_submit" value="선택이동" onclick="document.pressed=this.value"><i class="fa fa-arrows" aria-hidden="true"></i> 선택이동</button>
+            </li>
+          </ul>
+          {% endif %}
+        </li>
+        {% endif %}
+      </ul>
+    </div>
+    <!-- } 게시판 페이지 정보 및 버튼 끝 -->
+
+    <div class="tbl_head01 tbl_wrap">
+      <table>
+        <caption>
+          {{ board.bo_subject }} 목록
+        </caption>
+        <thead>
+          <tr>
+            {% if is_checkbox %}
+            <th scope="col" class="all_chk chk_box">
+              <input type="checkbox" id="chkall" onclick="if (this.checked) all_checked(true); else all_checked(false);" class="selec_chk" />
+              <label for="chkall">
+                <span></span>
+                <b class="sound_only">현재 페이지 게시물 전체선택</b>
+              </label>
+            </th>
+            {% endif %}
+            <th scope="col">번호</th>
+            <th scope="col">제목</th>
+            <th scope="col">글쓴이</th>
+            <th scope="col"><a href="#">조회</a></th>
+            {% if is_good %}
+            <th scope="col"><a href="#">추천</a></th>
+            {% endif %}
+            {% if is_nogood %}
+            <th scope="col"><a href="#">비추천</a></th>
+            {% endif %}
+            <th scope="col"><a href="#">날짜</a></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if post_list %}
+          {% for post in post_list %}
+          <tr class="{% cycle 'odd' 'even' %}">
+            {% if is_checkbox %}
+            <td class="td_chk chk_box">
+              <input type="checkbox" name="chk_post_id[]" value="{{ post.id }}" id="chk_post_id_{{ forloop.counter0 }}" class="selec_chk" />
+              <label for="chk_post_id_{{ forloop.counter0 }}">
+                <span></span>
+                <b class="sound_only">{{ post.subject }}</b>
+              </label>
+            </td>
+            {% endif %}
+            <td class="td_num2">
+              {% if post.is_notice %}
+              <strong class="notice_icon">공지</strong>
+              {% elif post.id == post_id %}
+              <span class="bo_current">열람중</span>
+              {% else %}
+              {{ post.num }}
+              {% endif %}
+            </td>
+            <td class="td_subject" style="padding-left:{% firstof post.reply post.wr_reply|length 0 %}>px">
+              {% if is_category %}
+              <a href="{{ post.ca_name_href }}" class="bo_cate_link">{{ post.ca_name }}</a>
+              {% endif %}
+              <div class="bo_tit">
+                <a href="{{ post.href }}"> {{ post.icon_reply }} {{ post.icon_secret }} {{ post.subject }} </a>
+                {% if post.icon_new %}
+                <span class="new_icon">N<span class="sound_only">새글</span></span>
+                {% endif %}
+                {# post.file_count #} {{ post.icon_hot }} {{ post.icon_file.rstrip|safe }} {{ post.icon_link.rstrip|safe }} {% if post.comment_cnt %}
+                <span class="sound_only">댓글</span><span class="cnt_cmt">{{ post.wr_comment }}</span><span class="sound_only">개</span>
+                {% endif %}
+              </div>
+            </td>
+            <td class="td_name sv_use">{{ post.name|safe }}</td>
+            <td class="td_num">{{ post.wr_hit }}</td>
+            {% if is_good %}
+            <td class="td_num">{{ post.wr_good }}</td>
+            {% endif %} {% if is_nogood %}
+            <td class="td_num">{{ post.wr_nogood }}</td>
+            {% endif %}
+            <td class="td_datetime">{{ post.datetime2 }}</td>
+          </tr>
+          {% endfor %}
+          {% else %}
+          <tr>
+            <td colspan="{{ colspan|add:add_colspan }}" class="empty_table">게시물이 없습니다.</td>
+          </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+    <!-- 페이지 -->
+    {% include "common/pagination.html" with page_link=list_href %}
+    {{ write_pages }}
+    <!-- 페이지 -->
+
+    {% if admin_href or rss_href or write_href %}
+    <div class="bo_fx">
+      <ul class="btn_bo_user">
+        {% if admin_href %}
+        <li>
+          <a href="{{ admin_href }}" class="btn_admin btn" title="관리자"><i class="fa fa-cog fa-spin fa-fw"></i><span class="sound_only">관리자</span></a>
+        </li>
+        {% endif %} {% if rss_href %}
+        <li>
+          <a href="{{ rss_href }}" class="btn_b01 btn" title="RSS"><i class="fa fa-rss" aria-hidden="true"></i><span class="sound_only">RSS</span></a>
+        </li>
+        {% endif %} {% if write_href %}
+        <li>
+          <a href="{{ write_href }}" class="btn_b01 btn" title="글쓰기"><i class="fa fa-pencil" aria-hidden="true"></i><span class="sound_only">글쓰기</span></a>
+        </li>
+        {% endif %}
+      </ul>
+    </div>
+    {% endif %}
+  </form>
+  {% comment %}
+  <ul>
+    {% for post in post_list %}
+    <li><a href="{{ post.get_absolute_url }}">{{ post.wr_subject }}</a></li>
+    {% endfor %}
+  </ul>
+  {% endcomment %}
+</div>
+{% if write_href %}
+<div>
+  <a href="{% url 'write_post' board.bo_table %}" class="btn btn-primary">{{ _("글 등록하기") }}</a>
+</div>
+{% endif %}
+{% if is_checkbox %}
+<script>
+  function all_checked(sw) {
+    var f = document.fboardlist;
+
+    for (var i = 0; i < f.length; i++) {
+      if (f.elements[i].name == "chk_post_id[]") f.elements[i].checked = sw;
+    }
+  }
+
+  function fboardlist_submit(f) {
+    var chk_count = 0;
+
+    for (var i = 0; i < f.length; i++) {
+      if (f.elements[i].name == "chk_post_id[]" && f.elements[i].checked) chk_count++;
+    }
+
+    if (!chk_count) {
+      alert(document.pressed + "할 게시물을 하나 이상 선택하세요.");
+      return false;
+    }
+
+    if (document.pressed == "선택복사") {
+      select_copy("copy");
+      return;
+    }
+
+    if (document.pressed == "선택이동") {
+      select_copy("move");
+      return;
+    }
+
+    if (document.pressed == "선택삭제") {
+      if (!confirm("선택한 게시물을 정말 삭제하시겠습니까?\n\n한번 삭제한 자료는 복구할 수 없습니다\n\n답변글이 있는 게시글을 선택하신 경우\n답변글도 선택하셔야 게시글이 삭제됩니다.")) return false;
+
+      f.removeAttribute("target");
+      f.action = "";
+    }
+
+    return true;
+  }
+
+  // 선택한 게시물 복사 및 이동
+  function select_copy(sw) {
+    var f = document.fboardlist;
+
+    if (sw == "copy") str = "복사";
+    else str = "이동";
+
+    var sub_win = window.open("", "move", "left=50, top=50, width=500, height=550, scrollbars=1");
+
+    f.sw.value = sw;
+    f.target = "move";
+    f.action = "{{ bbs_copy_url }}";
+    f.submit();
+  }
+
+  // 게시판 리스트 관리자 옵션
+  jQuery(function ($) {
+    $(".btn_more_opt.is_list_btn").on("click", function (e) {
+      e.stopPropagation();
+      $(".more_opt.is_list_btn").toggle();
+    });
+    $(document).on("click", function (e) {
+      if (!$(e.target).closest(".is_list_btn").length) {
+        $(".more_opt.is_list_btn").hide();
+      }
+    });
+  });
+</script>
+{% endif %}
+{% endwith %}

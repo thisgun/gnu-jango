@@ -1,0 +1,157 @@
+{% extends theme_path|add:'base.html' %}
+{% load static humanize bleach_tags %}
+{% block styles %}
+{{ static_files }}
+<link rel="stylesheet" href="{% static board.board_skin_path|add:'/style.css' %}">
+{{ media }}
+{% endblock %}
+{% block content %}
+
+<!-- 게시물 읽기 시작 { -->
+
+<article id="bo_v">
+  <header>
+      <h2 id="bo_v_title">
+          {% if post.ca_name %}
+          <span class="bo_v_cate">{{ post.ca_name }}</span> 
+          {% endif %}
+          <span class="bo_v_tit">{{ post.subject }}</span>
+      </h2>
+  </header>
+
+  <section id="bo_v_info">
+    <h2>페이지 정보</h2>
+    <div class="profile_info">
+      <div class="pf_img">{{ post_user_profile_img }}</div>
+      <div class="profile_info_ct">
+        <span class="sound_only">작성자</span> <strong>{{ post.name|safe }}{% if is_ip_view %}{{ post.ip }}{% endif %}</strong><br>
+        <span class="sound_only">댓글</span><strong><a href="#bo_vc"> <i class="fa fa-commenting-o" aria-hidden="true"></i> {{ post.wr_comment|intcomma }}건</a></strong>
+        <span class="sound_only">조회</span><strong><i class="fa fa-eye" aria-hidden="true"></i> {{ post.wr_hit|intcomma }}회</strong>
+        <strong class="if_date"><span class="sound_only">작성일</span><i class="fa fa-clock-o" aria-hidden="true"></i> {{ post_datetime }}</strong>
+      </div>
+    </div>
+
+    <!-- 게시물 상단 버튼 시작 { -->
+    <div id="bo_v_top">
+
+      <ul class="btn_bo_user bo_v_com">
+        <li><a href="{{ list_href }}" class="btn_b01 btn" title="목록"><i class="fa fa-list" aria-hidden="true"></i><span class="sound_only">목록</span></a></li>
+        {% if reply_href %}<li><a href="{{ reply_href }}" class="btn_b01 btn" title="답변"><i class="fa fa-reply" aria-hidden="true"></i><span class="sound_only">답변</span></a></li>{% endif %}
+        {% if write_href %}<li><a href="{{ write_href }}" class="btn_b01 btn" title="글쓰기"><i class="fa fa-pencil" aria-hidden="true"></i><span class="sound_only">글쓰기</span></a></li>{% endif %}
+        {% if update_href or delete_href or copy_href or move_href or search_href %}
+        <li>
+          <button type="button" class="btn_more_opt is_view_btn btn_b01 btn"><i class="fa fa-ellipsis-v" aria-hidden="true"></i><span class="sound_only">게시판 리스트 옵션</span></button>
+          <ul class="more_opt is_view_btn"> 
+          {% if update_href %}<li><a href="{{ update_href }}">수정<i class="fa fa-pencil-square-o" aria-hidden="true"></i></a></li>{% endif %}
+          {% if delete_href %}<li><a href="{{ delete_href }}" onclick="del(this.href); return false;">삭제<i class="fa fa-trash-o" aria-hidden="true"></i></a></li>{% endif %}
+          {% if copy_href %}<li><a href="{{ copy_href }}" onclick="board_move(this.href); return false;">복사<i class="fa fa-files-o" aria-hidden="true"></i></a></li>{% endif %}
+          {% if move_href %}<li><a href="{{ move_href }}" onclick="board_move(this.href); return false;">이동<i class="fa fa-arrows" aria-hidden="true"></i></a></li>{% endif %}
+          {% if search_href %}<li><a href="{{ search_href }}">검색<i class="fa fa-search" aria-hidden="true"></i></a></li>{% endif %}
+          </ul> 
+        </li>
+      {% endif %}
+      </ul>
+    </div>
+    <!-- } 게시물 상단 버튼 끝 -->
+  </section>
+
+  <section id="bo_v_atc">
+    <h2 id="bo_v_atc_title">본문</h2>
+    <div id="bo_v_share">
+      
+      {% if scrap_href %}<a href="{{ scrap_href }}" target="_blank" class="btn btn_b03" onclick="win_scrap(this.href); return false;"><i class="fa fa-bookmark" aria-hidden="true"></i> 스크랩</a>{% endif %}
+  </div>
+
+  {% comment %} 파일출력 {% endcomment %}
+  {% if post.image_files %}
+  {% for imagefile in post.image_files %}
+  <div id="bo_v_img">
+    {{ imagefile.view|safe }}
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <!-- 본문 내용 시작 { -->
+  {% comment %} <div id="bo_v_con">{% strip_html post.content "a, p, img" "href, src" %}</div> {% endcomment %}
+  {% comment %} <div>{{ post.content|escape_html }}</div> {% endcomment %}
+  {% comment %} <div>{{ post.content|safe|escape }}</div> {% endcomment %}
+  {% comment %} <div id="bo_v_con">{{ post.content|bleach }}</div> {% endcomment %}
+  <div id="bo_v_con">{{ post.content|safe|escape }}</div>
+  <!-- } 본문 내용 끝 -->
+
+  {% if is_signature %}<p>{{ signature }}</p>{% endif %}
+
+  <!--  추천 비추천 시작 { -->
+  {% if good_href or nogood_href %}
+  <div id="bo_v_act">
+    {% if good_href %}
+    <span class="bo_v_act_gng">
+      <a href="{{ good_href }}" id="good_button" class="bo_v_good"><i class="fa fa-thumbs-o-up" aria-hidden="true"></i><span class="sound_only">추천</span><strong>{{ post.wr_good|intcomma }}</strong></a>
+      <b id="bo_v_act_good"></b>
+    </span>
+    {% endif %}
+    {% if nogood_href %}
+    <span class="bo_v_act_gng">
+      <a href="{{ nogood_href }}" id="nogood_button" class="bo_v_nogood"><i class="fa fa-thumbs-o-down" aria-hidden="true"></i><span class="sound_only">비추천</span><strong>{{ post.wr_nogood|intcomma }}</strong></a>
+      <b id="bo_v_act_nogood"></b>
+    </span>
+    {% endif %}
+  </div>
+  {% else %}
+    {% if board.bo_use_good or board.bo_use_nogood %}
+    <div id="bo_v_act">
+    {% if board.bo_use_good %}<span class="bo_v_good"><i class="fa fa-thumbs-o-up" aria-hidden="true"></i><span class="sound_only">추천</span><strong>{{ post.wr_good|intcomma }}</strong></span>{% endif %}
+    {% if board.bo_use_nogood %}<span class="bo_v_nogood"><i class="fa fa-thumbs-o-down" aria-hidden="true"></i><span class="sound_only">비추천</span><strong>{{ post.wr_nogood|intcomma }}</strong></span>{% endif %}
+    </div>
+    {% endif %}
+  {% endif %}
+  <!-- }  추천 비추천 끝 -->
+
+  {% if post.etc_files %}
+  <section id="bo_v_file">
+    {% for file in post.etc_files %}
+    <li>
+      <i class="fa fa-folder-open" aria-hidden="true"></i>
+      <a href="{{ file.href }}" class="view_file_download">
+          <strong>{{ file.source }}</strong> {{ file.content }} ({{ file.size }})
+      </a>
+      <br>
+      <span class="bo_v_file_cnt">{{ file.download }}회 다운로드 | DATE : {{ file.datetime }}</span>
+    </li>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {% if prev_href or next_href %}
+  <ul class="bo_v_nb">
+    {% if prev_href %}
+    <li class="btn_prv"><span class="nb_tit"><i class="fa fa-chevron-up" aria-hidden="true"></i> 이전글</span><a href="{{ prev_href }}">{{ prev_post.wr_subject|slice:100 }}</a> <span class="nb_date">{{ prev_post.wr_datetime|date:'y.m.d' }}</span></li>
+    {% endif %}
+    {% if next_href %}
+    <li class="btn_next"><span class="nb_tit"><i class="fa fa-chevron-down" aria-hidden="true"></i> 다음글</span><a href="{{ next_href }}">{{ next_post.wr_subject|slice:100 }}</a> <span class="nb_date">{{ next_post.wr_datetime|date:'y.m.d' }}</span></li>
+    {% endif %}
+  </ul>
+  {% endif %}
+  {% include board_skin_path|add:'view_comment.skin.html' %}
+
+</article>
+<!-- } 게시판 읽기 끝 -->
+<script>
+jQuery(function($){
+  // 게시판 보기 버튼 옵션
+  $(".btn_more_opt.is_view_btn").on("click", function(e) {
+    e.stopPropagation();
+    $(".more_opt.is_view_btn").toggle();
+  });
+  $(document).on("click", function (e) {
+    if(!$(e.target).closest('.is_view_btn').length) {
+        $(".more_opt.is_view_btn").hide();
+    }
+  });
+});
+</script>
+
+{% if is_use_list_view %}
+{{ bbs_list_content|safe }}
+{% endif %}
+{% endblock %}

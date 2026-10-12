@@ -1,0 +1,71 @@
+{% load widgets %}
+{% if result_list %}
+<div class="tbl_head01 tbl_wrap">
+    <table>
+        <thead>
+            <tr>
+                <th scope="col">{{ bbs_subject_title }}</th>
+                {% if type == "board" %}
+                    <th scope="col">게시판 그룹</th>
+                {% endif %}
+                <th scope="col">선택</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in result_list %}
+            <tr>
+                <td>{{ row.subject }}</td>
+                {% if type == "board" %}
+                <td>{{ row.group.gr_subject }}</td>
+                {% endif %}
+                <td class="td_mngsmall">
+                    <input type="hidden" name="me_type[]" value="{{ row | to_class_name }}">
+                    <input type="hidden" name="me_type_pk[]" value="{{ row.pk }}">
+                    <input type="hidden" name="subject[]" value="{{ row.subject }}">
+                    <input type="hidden" name="link[]" value="{{ row.link }}">
+                    <button type="button" class="add_select btn btn_03"><span class="sound_only">{{ row.subject }} </span>선택</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+    
+<div class="local_desc01 menu_exists_tip" style="display:none">
+    <p>* <strong>빨간색</strong>의 제목은 이미 메뉴에 연결되어 경우 표시됩니다.</p>
+</div>
+
+<div class="btn_win02 btn_win">
+    <button type="button" class="btn_02 btn" onclick="window.close();">창닫기</button>
+</div>
+    
+{% else %}
+
+<div class="tbl_frm01 tbl_wrap">
+    <table>
+        <colgroup>
+            <col class="grid_2">
+            <col>
+        </colgroup>
+        <tbody>
+            <tr>
+                <th scope="row"><label for="me_name">메뉴<strong class="sound_only"> 필수</strong></label></th>
+                <td><input type="text" name="me_name" id="me_name" required class="frm_input required"></td>
+            </tr>
+            <tr>
+                <th scope="row"><label for="me_link">링크<strong class="sound_only"> 필수</strong></label></th>
+                <td>
+                    <span>링크는 http://를 포함해서 입력해 주세요.</span>
+                    <input type="text" name="me_link" id="me_link" required class="frm_input full_input required">
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<div class="btn_win02 btn_win">
+    <button type="button" id="add_manual" class="btn_submit btn">추가</button>
+    <button type="button" class="btn_02 btn" onclick="window.close();">창닫기</button>
+</div>
+
+{% endif %}

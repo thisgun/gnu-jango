@@ -1,0 +1,16 @@
+node_modules
+.next
+.next-server-build
+.next-local-smoke-*
+.next-server-smoke/
+.next-theme-build
+out
+.deploy
+.g5-next-build.lock
+.out-theme-build-*
+.out-theme-backup-*
+.env*.local
+.env.e2e
+*.tsbuildinfo
+playwright-report
+test-results

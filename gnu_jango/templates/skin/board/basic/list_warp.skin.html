@@ -1,0 +1,10 @@
+{% extends theme_path|add:'base.html' %}
+{% load static %}
+{% block styles %}
+<link rel="stylesheet" href="{% static board.board_skin_path|add:'style.css' %}" />
+{% endblock %}
+{% block content %}
+
+{% include "./list.skin.html" %}
+
+{% endblock %}

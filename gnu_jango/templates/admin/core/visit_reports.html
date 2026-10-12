@@ -1,0 +1,191 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; {% translate 'Visit statistics' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">{% translate 'Traffic analytics' %}</p>
+    <h1>{% translate 'Visit statistics' %}</h1>
+    <p class="g5-admin-hero-copy">{% translate 'Review recorded visits, unique IPs, device mix, status codes, and popular paths.' %}</p>
+  </div>
+  <form class="g5-admin-report-filter g5-admin-report-filter-compact" method="get" action="{{ report_path }}">
+    <label>
+      <span>{% translate 'From' %}</span>
+      <input type="date" name="date_from" value="{{ filters.date_from }}">
+    </label>
+    <label>
+      <span>{% translate 'To' %}</span>
+      <input type="date" name="date_to" value="{{ filters.date_to }}">
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button" type="submit">{% translate 'Apply' %}</button>
+      <a class="button g5-admin-button-secondary" href="{{ report_path }}">{% translate 'Reset' %}</a>
+    </div>
+  </form>
+</section>
+
+<nav class="g5-admin-export-actions" aria-label="{% translate 'Traffic actions' %}">
+  <a class="button g5-admin-button-secondary" href="{% url 'admin:core_visitlog_changelist' %}">{% translate 'Raw visit logs' %}</a>
+  <a class="button g5-admin-button-secondary" href="{% url 'admin:core_searchkeyword_reports' %}?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}">{% translate 'Search keyword statistics' %}</a>
+  {% if user.is_superuser %}<a class="button" href="{% url 'admin:core_visitlog_maintenance' %}">{% translate 'System maintenance' %}</a>{% endif %}
+</nav>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide g5-admin-privacy-panel">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">개인정보 보호</p>
+      <h2>방문 로그 보관 정책</h2>
+    </div>
+  </div>
+  <div class="g5-admin-report-summary-list">
+    <div><strong>{{ privacy_policy.retention_days }}일</strong><span>기본 보관 기간</span></div>
+    <div><strong>{% if privacy_policy.mask_ip %}ON{% else %}OFF{% endif %}</strong><span>IP 익명화 저장</span></div>
+    <div><strong>{% if privacy_policy.exclude_bots %}ON{% else %}OFF{% endif %}</strong><span>봇 트래픽 제외</span></div>
+  </div>
+  <p class="g5-admin-empty">운영 정리 명령: <code>{{ privacy_policy.cleanup_command }}</code></p>
+</section>
+
+<section class="g5-admin-report-metrics" aria-label="{% translate 'Visit summary' %}">
+  {% for metric in metrics %}
+  <article class="g5-admin-report-metric">
+    <span>{{ metric.label }}</span>
+    <strong>{{ metric.value }}</strong>
+    <em>{{ metric.hint }}</em>
+  </article>
+  {% endfor %}
+</section>
+
+<div class="g5-admin-report-grid">
+  <section class="g5-admin-panel g5-admin-report-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Daily' %}</p>
+        <h2>{% translate 'Visits by day' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-list">
+      {% for row in daily_rows %}
+      <div><strong>{{ row.key }}</strong><span>{{ row.count }}</span></div>
+      {% empty %}
+      <p class="g5-admin-empty">{% translate 'No visit rows match the selected period.' %}</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Device' %}</p>
+        <h2>{% translate 'Device mix' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-list">
+      {% for row in device_rows %}
+      <div><strong>{{ row.key }}</strong><span>{{ row.count }}</span></div>
+      {% empty %}
+      <p class="g5-admin-empty">{% translate 'No device rows match the selected period.' %}</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Status' %}</p>
+        <h2>{% translate 'Status code mix' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-list">
+      {% for row in status_rows %}
+      <div><strong>{{ row.key }}</strong><span>{{ row.count }}</span></div>
+      {% empty %}
+      <p class="g5-admin-empty">{% translate 'No status rows match the selected period.' %}</p>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Admin activity' %}</p>
+        <h2>{% translate 'Admin log actions' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-big-number">
+      <strong>{{ admin_actions }}</strong>
+      <span>{% translate 'Logged admin changes in the selected period' %}</span>
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Popular paths' %}</p>
+        <h2>{% translate 'Most requested paths' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-table-wrap">
+      <table class="g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate 'Path' %}</th>
+            <th scope="col">{% translate 'Visits' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in path_rows %}
+          <tr><td>{{ row.key }}</td><td>{{ row.count }}</td></tr>
+          {% empty %}
+          <tr><td colspan="2" class="g5-admin-empty">{% translate 'No path rows match the selected period.' %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Recent' %}</p>
+        <h2>{% translate 'Recent visit logs' %}</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-table-wrap">
+      <table class="g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">{% translate 'Time' %}</th>
+            <th scope="col">{% translate 'IP' %}</th>
+            <th scope="col">{% translate 'User' %}</th>
+            <th scope="col">{% translate 'Device' %}</th>
+            <th scope="col">{% translate 'Status' %}</th>
+            <th scope="col">{% translate 'Path' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in recent_rows %}
+          <tr>
+            <td>{{ row.time }}</td>
+            <td>{{ row.ip }}</td>
+            <td>{{ row.user }}</td>
+            <td>{{ row.device }}</td>
+            <td>{{ row.status }}</td>
+            <td>{{ row.path }}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="g5-admin-empty">{% translate 'No recent visit logs.' %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+{% endblock %}

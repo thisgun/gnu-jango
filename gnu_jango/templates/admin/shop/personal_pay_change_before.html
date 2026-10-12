@@ -1,0 +1,64 @@
+{% load i18n %}
+
+{% if personal_pay_detail_ops %}
+<section class="g5-admin-order-detail-console" aria-label="{% translate 'Personal pay detail command center' %}">
+  <div class="g5-admin-order-detail-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Personal pay detail command center' %}</p>
+      <h2>{{ personal_pay_detail_ops.pay_id }}</h2>
+      <p>
+        <strong>{{ personal_pay_detail_ops.customer }}</strong>
+        <span>{{ personal_pay_detail_ops.email }}</span>
+        <span>{{ personal_pay_detail_ops.phone }}</span>
+      </p>
+    </div>
+    <nav class="g5-admin-order-detail-actions" aria-label="{% translate 'Personal pay detail shortcuts' %}">
+      {% for link in personal_pay_detail_ops.links %}
+      <a href="{{ link.url }}">
+        <span class="material-symbols-outlined" aria-hidden="true">{{ link.icon }}</span>
+        {{ link.label }}
+      </a>
+      {% endfor %}
+    </nav>
+  </div>
+
+  <div class="g5-admin-order-detail-status">
+    <article>
+      <span>{% translate 'Status' %}</span>
+      <strong class="g5-admin-badge g5-admin-badge-{{ personal_pay_detail_ops.status_tone }}">{{ personal_pay_detail_ops.status }}</strong>
+      <small>{{ personal_pay_detail_ops.created }}</small>
+    </article>
+    <article>
+      <span>{% translate 'Settlement' %}</span>
+      <strong>{{ personal_pay_detail_ops.settle_case }} / {{ personal_pay_detail_ops.pg }}</strong>
+      <small>{% translate 'Request' %} {{ personal_pay_detail_ops.request }} · {% translate 'Receipt' %} {{ personal_pay_detail_ops.receipt }}</small>
+    </article>
+    <article>
+      <span>{% translate 'Receipt proof' %}</span>
+      <strong>{{ personal_pay_detail_ops.cash_no }}</strong>
+      <small>{{ personal_pay_detail_ops.transaction_no }} · {{ personal_pay_detail_ops.approval_no }}</small>
+    </article>
+    <article>
+      <span>{% translate 'Linked order' %}</span>
+      <strong>{{ personal_pay_detail_ops.linked_order }}</strong>
+      <small>{% translate 'Outstanding' %} {{ personal_pay_detail_ops.outstanding }}</small>
+    </article>
+  </div>
+
+  <section class="g5-admin-order-detail-metrics" aria-label="{% translate 'Personal pay operational signals' %}">
+    <div class="g5-admin-order-detail-section-title">
+      <p class="g5-admin-eyebrow">{% translate 'Operational signals' %}</p>
+      <h3>{% translate 'Payment and receipt checks' %}</h3>
+    </div>
+    <div class="g5-admin-order-detail-metric-list">
+      {% for metric in personal_pay_detail_ops.metrics %}
+      <article>
+        <span>{{ metric.label }}</span>
+        <strong>{{ metric.value }}</strong>
+        <small>{{ metric.hint }}</small>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+</section>
+{% endif %}

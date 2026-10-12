@@ -1,0 +1,41 @@
+{% load static sekizai_tags %} {% addtoblock "headcss" %}
+<link rel="stylesheet" href="{% static latest_static_path|add:'style.css' %}" />
+{% endaddtoblock %}
+
+<div class="lat">
+  <h2 class="lat_title"><a href="{{ board.get_absolute_url }}">{{ board.bo_subject }}</a></h2>
+  <ul>
+    {% for post in list %}
+    <li class="basic_li">
+      {% if post.icon_secret %}
+      <i class="fa fa-lock" aria-hidden="true"></i><span class="sound_only">비밀글</span>
+      {% endif %}
+      <a href="{{ post.get_absolute_url }}">
+        {% if post.is_notice %}
+        <strong>{{ post.subject }}</strong>
+        {% else %} {{ post.subject }} {% endif %}
+      </a>
+
+      {% if post.icon_hot %}
+      <span class="hot_icon"><i class="fa fa-heart" aria-hidden="true"></i><span class="sound_only">인기글</span></span>
+      {% endif %} {% if post.icon_new %}
+      <span class="new_icon">N<span class="sound_only">새글</span></span>
+      {% endif %} {{ post.icon_reply }} {% if post.icon_file %}
+      <i class="fa fa-download" aria-hidden="true"></i>
+      {% endif %} {% if post.icon_link %}
+      <i class="fa fa-link" aria-hidden="true"></i>
+      {% endif %} {% if post.comment_cnt %}
+      <span class="lt_cmt"><span class="sound_only">댓글</span>{{ post.comment_cnt|safe }}</span>
+      {% endif %}
+
+      <div class="lt_info">
+        <span class="lt_nick">{{ post.name|safe }}</span>
+        <span class="lt_date">{{ post.datetime2 }}</span>
+      </div>
+    </li>
+    {% empty %}
+    <li class="empty_li">게시물이 없습니다.</li>
+    {% endfor %}
+  </ul>
+  <a href="{{ board.get_absolute_url }}" class="lt_more"><span class="sound_only">{{ board.bo_subject }}</span>더보기</a>
+</div>

@@ -1,0 +1,35 @@
+{% extends theme_path|add:'base.html' %}
+{% load static %}
+{% block styles %}
+<link rel="stylesheet" href="{% static 'user/'|add:config.cf_user_skin|add:'/style.css' %}">
+{% endblock %}
+{% block head_sub %}
+{% endblock %}{# 새창에서는 빈값으로 넣음 #}
+{% block tail_sub %}
+{% endblock %}{# 새창에서는 빈값으로 넣음 #}
+{% block content %}
+{% load humanize urlparams %}
+<!-- 스크랩 목록 시작 -->
+    <div id="scrap" class="new_win">
+        <h1 id="win_title">{{ site_title }}</h1>
+        <ul>
+            {% for scrap in scrap_list %}
+            <li>
+                <a href="{{ scrap.opener_href_post_id }}" class="scrap_tit" target="_blank" onclick="opener.document.location.href='{{ scrap.opener_href_post_id }}'; return false;">{{ scrap.post.wr_subject|truncatechars:100 }}</a>
+                <a href="{{ scrap.opener_href }}" class="scrap_cate" target="_blank" onclick="opener.document.location.href='{{ scrap.opener_href }}'; return false;">{{ scrap.bo_subject }}</a>
+                <span class="scrap_datetime"><i class="fa fa-clock-o" aria-hidden="true"></i> {{ scrap.ms_datetime }}</span>
+                <a href="{{ scrap.del_href }}" onclick="del(this.href); return false;" class="scrap_del"><i class="fa fa-trash-o" aria-hidden="true"></i><span class="sound_only">삭제</span></a>
+            </li>
+            {% empty %}
+            <li class="empty_li">자료가 없습니다.</li>
+            {% endfor %}
+        </ul>
+
+        <!-- 페이지 -->
+        {% include "common/pagination.html" with page_link=list_href %}
+        <div class="win_btn">
+            <button type="button" onclick="window.close();" class="btn_close">창닫기</button>
+        </div>
+    </div>
+<!-- 스크랩 목록 끝 -->
+{% endblock %}

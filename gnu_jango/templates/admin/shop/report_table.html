@@ -1,0 +1,26 @@
+{% load i18n %}
+
+<div class="g5-admin-report-table-wrap">
+  <table class="g5-admin-report-table">
+    <thead>
+      <tr>
+        <th scope="col">{% translate key_label %}</th>
+        <th scope="col">{% translate 'Count' %}</th>
+        <th scope="col">{% translate 'Amount' %}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <th scope="row">{{ row.key }}</th>
+        <td>{{ row.count_display }}</td>
+        <td>{{ row.amount_display }}</td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="3" class="g5-admin-empty">{% translate 'No rows available.' %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

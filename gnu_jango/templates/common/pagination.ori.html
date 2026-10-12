@@ -1,0 +1,46 @@
+{% load static urlparams %}
+{% block content %}
+{% if paginations.paginator.num_pages > 1 %}
+    <!-- 페이징처리 시작 -->
+    <nav class="pagination justify-content-center">
+        <ul>
+            <!-- 이전페이지 -->
+            {% if paginations.has_previous %}
+            <li class="page-item">
+                <a href="{% add_params_url page=1 page_link=page_link %}">&laquo; first</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" data-page="{{ paginations.previous_page_number }}"
+                href="{% add_params_url page=page_obj.previous_page_number page_link=page_link %}">이전</a>
+            </li>
+            {% endif %}
+            <!-- 페이지리스트 -->
+            {% for page_number in paginations.paginator.page_range %}
+            {% if page_number >= paginations.number|add:-5 and page_number <= paginations.number|add:5 %}
+            {% if page_number == paginations.number %}
+            <li class="page-item active" aria-current="page">
+                <a class="page-link active" data-page="{{ page_number }}"
+                href="{% add_params_url page=page_number page_link=page_link %}">{{ page_number }}</a>
+            </li>
+            {% else %}
+            <li class="page-item">
+                <a class="page-link" data-page="{{ page_number }}"
+                href="{% add_params_url page=page_number page_link=page_link %}">{{ page_number }}</a>
+            </li>
+            {% endif %}
+            {% endif %}
+            {% endfor %}
+            <!-- 다음페이지 -->
+            {% if paginations.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ paginations.next_page_number }}">다음</a>
+            </li>
+            <li class="page-item">
+                <a href="?page={{ paginations.paginator.num_pages }}">last &raquo;</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    <!-- 페이징처리 끝 -->
+{% endif %}
+{% endblock %}

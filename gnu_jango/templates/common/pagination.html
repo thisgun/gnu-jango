@@ -1,0 +1,30 @@
+{% load static i18n urlparams %}
+{% block content %}
+{% if paginations.paginator.num_pages > 1 %}
+<nav class="pg_wrap">
+    <span class="pg">
+    <!-- 페이징처리 시작 -->
+    {% if paginations.paginator.current_page > 1 %}
+    <a href="{% add_params_url page=1 page_link=page_link %}" class="pg_page pg_start">{% trans '처음' %}</a>
+    {% endif %}
+    {% if paginations.paginator.start_page > 1 %}
+    <a href="{% add_params_url page=paginations.paginator.before_page page_link=page_link %}" class="pg_page pg_prev">{% trans '이전' %}</a>
+    {% endif %}
+    {% for k in paginations.paginator.loop_page %}
+        {% if paginations.paginator.current_page != k %}
+        <a href="{% add_params_url page=k page_link=page_link %}" class="pg_page">{{ k }}<span class="sound_only">{% trans '페이지' %}</span></a>
+        {% else %}
+        <span class="sound_only">{% trans '열린' %}</span><strong class="pg_current">{{ k }}</strong><span class="sound_only">{% trans '페이지' %}</span>
+        {% endif %}
+    {% endfor %}
+    {% if paginations.paginator.num_pages > paginations.paginator.end_page %}
+    <a href="{% add_params_url page=paginations.paginator.next_page page_link=page_link %}" class="pg_page pg_next">{% trans '다음' %}</a>
+    {% endif %}
+    {% if paginations.paginator.current_page < paginations.paginator.num_pages %}
+    <a href="{% add_params_url page=paginations.paginator.num_pages page_link=page_link %}" class="pg_page pg_end">{% trans '맨끝' %}</a>
+    {% endif %}
+    <!-- 페이징처리 끝 -->
+    </span>
+</nav>
+{% endif %}
+{% endblock %}

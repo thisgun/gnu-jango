@@ -1,0 +1,26 @@
+{% extends 'common/common_base.html' %}
+{% block content %}
+{% comment %} {% load jsonify %} {% endcomment %}
+<script>
+{% comment %} var messages = {{ messages|jsonify }}; {% endcomment %}
+
+var msg = "{{ msg }}";
+
+{% comment %} if (messages.length) {
+    alert(messages.join('\n'));
+} else {
+    alert();
+} {% endcomment %}
+alert(msg);
+{% if url %}
+document.location.replace("{{ url }}");
+{% else %}
+    if( IsReferredFromMe() ){
+        document.location.replace(document.referrer);
+    } else {
+        history.back();
+    }
+{% endif %}
+
+</script>
+{% endblock %}

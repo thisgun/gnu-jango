@@ -1,0 +1,439 @@
+/*
+ * Settings page (admin/config/config/) layout.
+ *
+ * Scoped to `.cfgx` so nothing here leaks into other admin screens. Colours come
+ * from Unfold's own CSS custom properties, so light and dark track Unfold
+ * exactly -- Unfold toggles dark mode with a `.dark` class on <html> and ships
+ * no prefers-color-scheme rules, so this file follows that class.
+ */
+
+.cfgx {
+  --cfgx-surface: #fff;
+  --cfgx-border: var(--color-base-200);
+  --cfgx-border-strong: var(--color-base-300);
+  --cfgx-title: var(--color-font-important-light);
+  --cfgx-muted: var(--color-font-subtle-light);
+  --cfgx-accent: var(--color-primary-600);
+  --cfgx-accent-soft: var(--color-primary-50);
+  --cfgx-bar: rgb(255 255 255 / 0.92);
+  --cfgx-radius: 12px;
+  --cfgx-gap: 20px;
+}
+
+:where(.dark) .cfgx {
+  --cfgx-surface: var(--color-base-900);
+  --cfgx-border: var(--color-base-800);
+  --cfgx-border-strong: var(--color-base-700);
+  --cfgx-title: #fff;
+  --cfgx-muted: var(--color-font-subtle-dark);
+  --cfgx-accent: var(--color-primary-500);
+  --cfgx-accent-soft: color-mix(in oklab, var(--color-primary-500) 18%, transparent);
+  --cfgx-bar: color-mix(in oklab, var(--color-base-900) 92%, transparent);
+}
+
+/* ---------- page header ---------- */
+
+.cfgx-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.cfgx-eyebrow {
+  margin: 0 0 6px;
+  color: var(--cfgx-accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.cfgx-title {
+  margin: 0;
+  color: var(--cfgx-title);
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.cfgx-lede {
+  margin: 8px 0 0;
+  max-width: 60ch;
+  color: var(--cfgx-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.cfgx-meta {
+  color: var(--cfgx-muted);
+  font-size: 12px;
+}
+
+/* ---------- tabs ---------- */
+
+.cfgx-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: var(--cfgx-gap);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--cfgx-border);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.cfgx-tab {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--cfgx-muted);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.cfgx-tab:hover {
+  background: var(--color-base-100);
+  color: var(--cfgx-title);
+}
+
+:where(.dark) .cfgx-tab:hover {
+  background: rgb(255 255 255 / 0.04);
+}
+
+.cfgx-tab[aria-selected="true"] {
+  background: var(--cfgx-accent-soft);
+  color: var(--cfgx-accent);
+}
+
+.cfgx-tab:focus-visible {
+  outline: 2px solid var(--cfgx-accent);
+  outline-offset: 2px;
+}
+
+.cfgx-tab-count {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+/* Panels render open so the page still works without JavaScript; the tab script
+   hides the inactive ones once it runs. */
+.cfgx-panel[hidden] {
+  display: none;
+}
+
+/* ---------- section cards ---------- */
+
+.cfgx-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cfgx-gap);
+}
+
+.cfgx-card {
+  padding: 22px;
+  border: 1px solid var(--cfgx-border);
+  border-radius: var(--cfgx-radius);
+  background: var(--cfgx-surface);
+}
+
+.cfgx-card-title {
+  margin: 0;
+  color: var(--cfgx-title);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.cfgx-card-help {
+  margin: 6px 0 0;
+  color: var(--cfgx-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.cfgx-card-body {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 18px;
+  margin-top: 18px;
+}
+
+/* ---------- fields ---------- */
+
+.cfgx-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.cfgx-field--wide {
+  grid-column: 1 / -1;
+}
+
+.cfgx-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--cfgx-title);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cfgx-req {
+  color: #dc2626;
+}
+
+:where(.dark) .cfgx-req {
+  color: #f87171;
+}
+
+.cfgx-help {
+  margin-top: 6px;
+  color: var(--cfgx-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.cfgx-errors {
+  margin: 6px 0 0;
+  padding: 0;
+  color: #dc2626;
+  font-size: 12px;
+  list-style: none;
+}
+
+:where(.dark) .cfgx-errors {
+  color: #f87171;
+}
+
+/* Widgets keep the classes Unfold gave them; only the box model is nudged so
+   they fill the grid cell. */
+.cfgx-field input:not([type="checkbox"]),
+.cfgx-field select,
+.cfgx-field textarea {
+  width: 100%;
+  max-width: 100%;
+}
+
+.cfgx-field textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+/* number + unit suffix */
+.cfgx-input-group {
+  display: flex;
+  align-items: stretch;
+}
+
+.cfgx-input-group > input {
+  min-width: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.cfgx-unit {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px solid var(--cfgx-border);
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+  background: var(--color-base-50);
+  color: var(--cfgx-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+:where(.dark) .cfgx-unit {
+  border-color: var(--color-base-700);
+  background: rgb(255 255 255 / 0.03);
+}
+
+/* ---------- switch rows ---------- */
+
+.cfgx-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--cfgx-border);
+  border-radius: 10px;
+  background: var(--cfgx-surface);
+  cursor: pointer;
+}
+
+.cfgx-switch:hover {
+  border-color: var(--cfgx-border-strong);
+}
+
+.cfgx-switch-text {
+  min-width: 0;
+}
+
+.cfgx-switch-label {
+  color: var(--cfgx-title);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* The native checkbox stays in the DOM for the form post and for assistive
+   technology; it is only visually replaced by the track/knob below. */
+.cfgx-switch input[type="checkbox"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cfgx-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--color-base-300);
+  transition: background 0.18s ease;
+}
+
+:where(.dark) .cfgx-track {
+  background: var(--color-base-700);
+}
+
+.cfgx-track::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+  transition: transform 0.18s ease;
+}
+
+.cfgx-switch input:checked ~ .cfgx-track {
+  background: var(--cfgx-accent);
+}
+
+.cfgx-switch input:checked ~ .cfgx-track::after {
+  transform: translateX(18px);
+}
+
+.cfgx-switch input:focus-visible ~ .cfgx-track {
+  outline: 2px solid var(--cfgx-accent);
+  outline-offset: 2px;
+}
+
+/* ---------- sticky action bar ---------- */
+
+.cfgx-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: var(--cfgx-gap);
+  padding: 14px 4px;
+  border-top: 1px solid var(--cfgx-border);
+  background: var(--cfgx-bar);
+  backdrop-filter: blur(8px);
+}
+
+.cfgx-status {
+  color: var(--cfgx-muted);
+  font-size: 13px;
+}
+
+.cfgx-save {
+  padding: 9px 22px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: var(--cfgx-accent);
+  color: #fff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cfgx-save:hover {
+  filter: brightness(1.06);
+}
+
+.cfgx-save:focus-visible {
+  outline: 2px solid var(--cfgx-accent);
+  outline-offset: 2px;
+}
+
+.cfgx-alert {
+  margin-bottom: var(--cfgx-gap);
+  padding: 12px 16px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+  color: #b91c1c;
+  font-size: 13px;
+}
+
+:where(.dark) .cfgx-alert {
+  border-color: color-mix(in oklab, #f87171 40%, transparent);
+  background: color-mix(in oklab, #f87171 12%, transparent);
+  color: #fca5a5;
+}
+
+/* ---------- small screens ---------- */
+
+@media (max-width: 640px) {
+  .cfgx-card {
+    padding: 16px;
+  }
+
+  .cfgx-card-body {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .cfgx-title {
+    font-size: 22px;
+  }
+
+  .cfgx-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cfgx-save {
+    width: 100%;
+  }
+
+  .cfgx-status {
+    text-align: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cfgx-tab,
+  .cfgx-track,
+  .cfgx-track::after {
+    transition: none;
+  }
+}

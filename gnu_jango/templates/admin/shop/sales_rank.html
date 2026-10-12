@@ -1,0 +1,104 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; {% translate 'Product sales rank' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">{% translate 'YoungCart operations' %}</p>
+    <h1>{% translate 'Product sales rank' %}</h1>
+    <p class="g5-admin-hero-copy">{% translate 'Track best-selling products by quantity, order count, gross sales, and reward points.' %}</p>
+  </div>
+  <form class="g5-admin-report-filter g5-admin-report-filter-compact" method="get" action="{{ report_path }}">
+    <label>
+      <span>{% translate 'From' %}</span>
+      <input type="date" name="date_from" value="{{ filters.date_from }}">
+    </label>
+    <label>
+      <span>{% translate 'To' %}</span>
+      <input type="date" name="date_to" value="{{ filters.date_to }}">
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button" type="submit">{% translate 'Apply' %}</button>
+      <a class="button g5-admin-button-secondary" href="{{ report_path }}">{% translate 'Reset' %}</a>
+    </div>
+  </form>
+</section>
+
+<nav class="g5-admin-export-actions" aria-label="{% translate 'Report actions' %}">
+  <a class="button g5-admin-button-secondary" href="{% url 'admin:shop_shoporder_reports' %}?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}">{% translate 'Settlement report' %}</a>
+  <a class="button g5-admin-button-secondary" href="{% url 'admin:shop_shoporder_print' %}?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}">{% translate 'Order print' %}</a>
+  <a class="button" href="{{ report_path }}?date_from={{ filters.date_from }}&date_to={{ filters.date_to }}&export=csv">{% translate 'Sales rank CSV' %}</a>
+</nav>
+
+<section class="g5-admin-report-metrics" aria-label="{% translate 'Sales rank summary' %}">
+  {% for metric in metrics %}
+  <article class="g5-admin-report-metric">
+    <span>{{ metric.label }}</span>
+    <strong>{{ metric.value }}</strong>
+    <em>{{ metric.hint }}</em>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Ranking' %}</p>
+      <h2>{% translate 'Top products by sales' %}</h2>
+    </div>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="g5-admin-mini-table g5-admin-rank-table">
+      <thead>
+        <tr>
+          <th scope="col">{% translate 'Rank' %}</th>
+          <th scope="col">{% translate 'Product' %}</th>
+          <th scope="col">{% translate 'Sales share' %}</th>
+          <th scope="col">{% translate 'Quantity' %}</th>
+          <th scope="col">{% translate 'Orders' %}</th>
+          <th scope="col">{% translate 'Lines' %}</th>
+          <th scope="col">{% translate 'Sales' %}</th>
+          <th scope="col">{% translate 'Points' %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rank_rows %}
+        <tr>
+          <td><strong class="g5-admin-rank-no">{{ row.rank }}</strong></td>
+          <td>
+            <span class="g5-admin-rank-product">
+              {% if row.product_lookup %}
+              <a href="{% url 'admin:shop_shopproduct_change' row.product_lookup %}">{{ row.name }}</a>
+              {% else %}
+              <strong>{{ row.name }}</strong>
+              {% endif %}
+              <small>{{ row.product_id }}</small>
+            </span>
+          </td>
+          <td>
+            <span class="g5-admin-rank-bar" aria-label="{{ row.share }}%">
+              <i style="width: {{ row.share }}%"></i>
+            </span>
+          </td>
+          <td>{{ row.quantity }}</td>
+          <td>{{ row.order_count }}</td>
+          <td>{{ row.line_count }}</td>
+          <td>{{ row.gross_sales }}</td>
+          <td>{{ row.reward_points }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="g5-admin-empty">{% translate 'No product sales rows match the selected period.' %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

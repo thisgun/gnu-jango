@@ -1,0 +1,16 @@
+.git
+.github
+.venv
+.venv314
+__pycache__
+*.pyc
+*.log
+db.sqlite3
+media
+staticfiles
+node_modules
+nextjs/.next
+nextjs/node_modules
+react_example/node_modules
+build
+dist

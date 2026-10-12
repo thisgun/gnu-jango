@@ -1,0 +1,156 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; {% translate 'Mail tools' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">{% translate 'Member communication' %}</p>
+    <h1>{% translate 'Mail tools' %}</h1>
+    <p class="g5-admin-hero-copy">{% translate 'Send a test message, preview member recipients, and dispatch member mail from the admin console.' %}</p>
+  </div>
+  <div class="g5-admin-tool-status">
+    <span>{% translate 'From email' %}</span>
+    <strong>{{ from_email|default:"-" }}</strong>
+    <small>{{ email_backend }}</small>
+    <small>실패 로그 {{ failed_send_count }}건</small>
+  </div>
+</section>
+
+<div class="g5-admin-tool-grid">
+  <section class="g5-admin-panel g5-admin-tool-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Delivery check' %}</p>
+        <h2>{% translate 'Send test email' %}</h2>
+      </div>
+    </div>
+    <form class="g5-admin-admin-form" method="post" action="{{ report_path }}">
+      {% csrf_token %}
+      <input type="hidden" name="mode" value="test">
+      <label>
+        <span>{% translate 'Recipient' %}</span>
+        <input type="email" name="recipient" value="{{ test_form.recipient }}" placeholder="admin@example.com" required>
+      </label>
+      <label>
+        <span>{% translate 'Subject' %}</span>
+        <input type="text" name="subject" value="{{ test_form.subject }}" required>
+      </label>
+      <label>
+        <span>{% translate 'Body' %}</span>
+        <textarea name="body" rows="8" required>{{ test_form.body }}</textarea>
+      </label>
+      <div class="g5-admin-report-filter-actions">
+        <button class="button" type="submit">{% translate 'Send test email' %}</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="g5-admin-panel g5-admin-tool-panel">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">{% translate 'Member mail' %}</p>
+        <h2>{% translate 'Prepare member email' %}</h2>
+      </div>
+    </div>
+    <form class="g5-admin-admin-form" method="post" action="{{ report_path }}">
+      {% csrf_token %}
+      <input type="hidden" name="mode" value="members">
+      <div class="g5-admin-form-grid">
+        <label>
+          <span>{% translate 'Recipients' %}</span>
+          <select name="recipient_group">
+            {% for value, label in recipient_groups %}
+            <option value="{{ value }}"{% if member_form.recipient_group == value %} selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          <span>{% translate 'Limit' %}</span>
+          <input type="number" name="limit" min="1" max="1000" value="{{ member_form.limit }}">
+        </label>
+      </div>
+      <label>
+        <span>{% translate 'Subject' %}</span>
+        <input type="text" name="member_subject" value="{{ member_form.subject }}" required>
+      </label>
+      <label>
+        <span>{% translate 'Body' %}</span>
+        <textarea name="member_body" rows="8" required>{{ member_form.body }}</textarea>
+      </label>
+      <label class="g5-admin-confirm-row">
+        <input type="checkbox" name="send_confirm" value="1">
+        <span>{% translate 'Confirm member email send' %}</span>
+      </label>
+      <div class="g5-admin-report-filter-actions">
+        <button class="button" type="submit">{% translate 'Preview or send member email' %}</button>
+      </div>
+    </form>
+  </section>
+</div>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Recipient preview' %}</p>
+      <h2>{% translate 'Matched member emails' %}</h2>
+    </div>
+    <span class="g5-admin-print-meta">{{ preview_count }} / {{ preview_limit }}</span>
+  </div>
+  <div class="g5-admin-preview-list">
+    {% for email in preview_emails %}
+    <span>{{ email }}</span>
+    {% empty %}
+    <p class="g5-admin-empty">{% translate 'No member email recipients matched the selected group.' %}</p>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">발송 이력</p>
+      <h2>최근 메일 캠페인</h2>
+    </div>
+    <nav class="g5-admin-export-actions" aria-label="메일 이력 바로가기">
+      <a class="button g5-admin-button-secondary" href="{% url 'admin:core_mailcampaign_changelist' %}">캠페인 전체</a>
+      <a class="button g5-admin-button-secondary" href="{% url 'admin:core_mailsendlog_changelist' %}">발송 로그</a>
+    </nav>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="g5-admin-mini-table">
+      <thead>
+        <tr>
+          <th scope="col">캠페인</th>
+          <th scope="col">대상</th>
+          <th scope="col">상태</th>
+          <th scope="col">성공</th>
+          <th scope="col">실패</th>
+          <th scope="col">발송일시</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for campaign in recent_campaigns %}
+        <tr>
+          <td><a href="{% url 'admin:core_mailcampaign_change' campaign.id %}">{{ campaign.title|default:campaign.subject }}</a></td>
+          <td>{{ campaign.get_recipient_group_display }} · {{ campaign.recipient_count }}</td>
+          <td>{{ campaign.get_status_display }}</td>
+          <td>{{ campaign.sent_count }}</td>
+          <td>{{ campaign.failed_count }}</td>
+          <td>{{ campaign.sent_at|default:"-" }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="g5-admin-empty">아직 발송된 메일 캠페인이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

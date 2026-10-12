@@ -1,0 +1,88 @@
+{% load i18n %}
+
+{% if order_detail_ops %}
+<section class="g5-admin-order-detail-console" aria-label="{% translate 'Order detail command center' %}">
+  <div class="g5-admin-order-detail-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Order detail command center' %}</p>
+      <h2>{{ order_detail_ops.order_id }}</h2>
+      <p>
+        <strong>{{ order_detail_ops.customer }}</strong>
+        <span>{{ order_detail_ops.email }}</span>
+        <span>{{ order_detail_ops.phone }}</span>
+      </p>
+    </div>
+    <nav class="g5-admin-order-detail-actions" aria-label="{% translate 'Order detail shortcuts' %}">
+      {% for link in order_detail_ops.links %}
+      <a href="{{ link.url }}">
+        <span class="material-symbols-outlined" aria-hidden="true">{{ link.icon }}</span>
+        {{ link.label }}
+      </a>
+      {% endfor %}
+    </nav>
+  </div>
+
+  <div class="g5-admin-order-detail-status">
+    <article>
+      <span>{% translate 'Status' %}</span>
+      <strong class="g5-admin-badge g5-admin-badge-{{ order_detail_ops.status_tone }}">{{ order_detail_ops.status }}</strong>
+      <small>{{ order_detail_ops.created }}</small>
+    </article>
+    <article>
+      <span>{% translate 'Settlement' %}</span>
+      <strong>{{ order_detail_ops.settle_case }} / {{ order_detail_ops.pg }}</strong>
+      <small>{% translate 'Receipt' %} {{ order_detail_ops.receipt }} · {% translate 'Outstanding' %} {{ order_detail_ops.outstanding }}</small>
+    </article>
+    <article>
+      <span>{% translate 'Shipping' %}</span>
+      <strong>{{ order_detail_ops.delivery_company }}</strong>
+      <small>{{ order_detail_ops.invoice }} · {{ order_detail_ops.invoice_time }}</small>
+    </article>
+    <article>
+      <span>{% translate 'Receipt proof' %}</span>
+      <strong>{{ order_detail_ops.cash_no }}</strong>
+      <small>{{ order_detail_ops.transaction_no }} · {{ order_detail_ops.approval_no }}</small>
+    </article>
+  </div>
+
+  <div class="g5-admin-order-detail-grid">
+    <section class="g5-admin-order-detail-risks" aria-label="{% translate 'Risk signals' %}">
+      <div class="g5-admin-order-detail-section-title">
+        <p class="g5-admin-eyebrow">{% translate 'Risk signals' %}</p>
+        <h3>{% translate 'Needs attention' %}</h3>
+      </div>
+      <div class="g5-admin-order-risk-list">
+        {% for risk in order_detail_ops.risks %}
+        <article class="g5-admin-order-risk g5-admin-order-risk-{{ risk.tone }}">
+          <span>{{ risk.label }}</span>
+          <strong>{{ risk.value }}</strong>
+          <small>{{ risk.hint }}</small>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="g5-admin-order-detail-metrics" aria-label="{% translate 'Related records' %}">
+      <div class="g5-admin-order-detail-section-title">
+        <p class="g5-admin-eyebrow">{% translate 'Related records' %}</p>
+        <h3>{% translate 'Operational links' %}</h3>
+      </div>
+      <div class="g5-admin-order-detail-metric-list">
+        {% for metric in order_detail_ops.metrics %}
+        <article>
+          <span>{{ metric.label }}</span>
+          <strong>{{ metric.value }}</strong>
+          <small>{{ metric.hint }}</small>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
+
+  <section class="g5-admin-order-recipient" aria-label="{% translate 'Recipient summary' %}">
+    <span>{% translate 'Recipient' %}</span>
+    <strong>{{ order_detail_ops.recipient }}</strong>
+    <small>{{ order_detail_ops.recipient_phone }} · {{ order_detail_ops.recipient_address }}</small>
+  </section>
+</section>
+{% endif %}

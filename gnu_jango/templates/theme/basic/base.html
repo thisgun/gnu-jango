@@ -1,0 +1,254 @@
+<!doctype html>
+{% load i18n %}
+{% load static widgets sekizai_tags %}
+<html lang="{{ LANGUAGE_CODE|default:"ko" }}" class="{% block html_class %}no-js{% endblock %}">
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <title>{% block title %}{{ site_title }}{% endblock %}</title>
+    {% block mobileView %}
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    {% endblock %}
+    {% block headcss %}
+    <!-- CSS -->
+    <link rel="stylesheet" type="text/css" href="{% static_url_version 'basic/css/default.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static_url_version 'font-awesome/css/font-awesome.min.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static_url_version 'css/toastr.min.css' %}">
+    {% endblock %}
+    {% render_block "headcss" %}
+    {% block styles %}
+    {% endblock %}
+    {% block head_inline_scripts %}
+    <script>
+    var gnu_is_user = {{ is_user }};
+    var gnu_is_admin = "{{ is_admin }}";
+    var gnu_editor = "{{ gnu_editor }}";
+    var gnu_cookie_domain = "{{ gnu_cookie_domain }}";
+    </script>
+    {% endblock %}
+    {% block head_js_scripts %}
+    <!-- JQuery -->
+    <script src="{% static_url_version 'js/jquery-3.6.0.min.js' %}"></script>
+    <script src="{% static_url_version 'js/jquery-migrate-3.4.0.min.js' %}"></script>
+    <script src="{% static_url_version 'js/common.js' %}"></script>
+    <script src="{% static_url_version 'basic/js/jquery.menu.js' %}"></script>
+    {% endblock %}
+    {% block extrahead %}
+    {% endblock %}
+</head>
+<body id="{% block body_id %}default{% endblock %}" class="{% block body_class %}default{% endblock %}" onload="{% block body_onload %}{% endblock %}">
+
+{% block head_sub %}
+{% comment %} {% if messages %}
+    {% for message in messages %}
+        {{ message.tags }}
+        {{ message.message }}
+    {% endfor %}
+{% endif %} {% endcomment %}
+<!-- 상단 시작 { -->
+<div id="hd">
+    <h1 id="hd_h1">{{ site_title }}</h1>
+    <div id="skip_to_container"><a href="#container">본문 바로가기</a></div>
+
+    {{ popup_content }}
+    <div id="tnb">
+    	<div class="inner">
+			<ul id="hd_qnb">
+	            <li><a href="#">FAQ</a></li>
+	            <li><a href="#">Q&A</a></li>
+	            <li><a href="#">새글</a></li>
+	        </ul>
+		</div>
+    </div>
+
+    <div id="hd_wrapper">
+
+        <div id="logo">
+            <a href="{{ home_url }}"><img src="{% static 'img/logo.png' %}" alt="{{ config.cf_title }}"></a>
+        </div>
+
+        <div class="hd_sch_wr">
+            <fieldset id="hd_sch">
+                <legend>사이트 내 전체검색</legend>
+                <form name="fsearchbox" method="get" action="#" onsubmit="return fsearchbox_submit(this);">
+                <input type="hidden" name="sfl" value="wr_subject||wr_content">
+                <input type="hidden" name="sop" value="and">
+                <label for="sch_stx" class="sound_only">검색어 필수</label>
+                <input type="text" name="stx" id="sch_stx" maxlength="20" placeholder="검색어를 입력해주세요">
+                <button type="submit" id="sch_submit" value="검색"><i class="fa fa-search" aria-hidden="true"></i><span class="sound_only">검색</span></button>
+                </form>
+
+                <script>
+                function fsearchbox_submit(f)
+                {
+                    if (f.stx.value.length < 2) {
+                        alert("검색어는 두글자 이상 입력하십시오.");
+                        f.stx.select();
+                        f.stx.focus();
+                        return false;
+                    }
+
+                    // 검색에 많은 부하가 걸리는 경우 이 주석을 제거하세요.
+                    var cnt = 0;
+                    for (var i=0; i<f.stx.value.length; i++) {
+                        if (f.stx.value.charAt(i) == ' ')
+                            cnt++;
+                    }
+
+                    if (cnt > 1) {
+                        alert("빠른 검색을 위하여 검색어에 공백은 한개만 입력할 수 있습니다.");
+                        f.stx.select();
+                        f.stx.focus();
+                        return false;
+                    }
+
+                    return true;
+                }
+                </script>
+
+            </fieldset>
+        </div>
+        <ul class="hd_login">        
+            {% if user.is_authenticated %}
+            <li><a href="#">정보수정</a></li>
+            <li><a href="{{ logout_url }}">로그아웃</a></li>
+            {% if user.is_superuser %}
+            <li class="tnb_admin"><a href="{% url 'admin:index' %}">관리자</a></li>
+            {% endif %}
+            {% else %}
+            <li><a href="{{ register_url }}">회원가입</a></li>
+            <li><a href="{{ login_url }}">로그인</a></li>
+            {% endif %}
+        </ul>
+    </div>
+    <nav id="gnb">
+        <h2>메인메뉴</h2>
+        <div class="gnb_wrap">
+            <ul id="gnb_1dul">
+                <li class="gnb_1dli gnb_mnal"><button type="button" class="gnb_menu_btn" title="전체메뉴"><i class="fa fa-bars" aria-hidden="true"></i><span class="sound_only">전체메뉴열기</span></button></li>
+                {% load gnu_menus %}{% gnu_menu main_menu %}{% for i, menu in menuitems.items %}
+                <li class="gnb_1dli {% if menu.sub %}gnb_al_li_plus{% endif %}" style="z-index:{{ forloop.revcounter }}">
+                    <a href="{{ menu.me_link }}" target="_{{ menu.me_target }}" class="gnb_1da">{{ menu.me_name }}</a>
+                {% for submenu in menu.sub %}
+                    {% if forloop.first %}
+                    <span class="bg">하위분류</span>
+                    <div class="gnb_2dul">
+                        <ul class="gnb_2dul_box">
+                    {% endif %}
+                        <li class="gnb_2dli"><a href="{{ submenu.me_link }}" target="_{{ submenu.me_target }}" class="gnb_2da">{{ submenu.me_name }}</a></li>
+                    {% if forloop.last %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+                </li>
+                {% empty %}
+                <li class="gnb_empty">메뉴 준비 중입니다.{% if user.is_superuser %}<a href="{{ gnu_menu_admin_url }}">관리자모드 &gt; 환경설정 &gt; 메뉴설정</a>에서 설정하실 수 있습니다.{% endif %}</li>
+                {% endfor %}
+            </ul>
+            <div id="gnb_all">
+                <h2>전체메뉴</h2>
+                <ul class="gnb_al_ul">
+                    <li class="gnb_empty">메뉴 준비 중입니다.{% if user.is_superuser %} <br><a href="{{ gnu_menu_admin_url }}">관리자모드 &gt; 환경설정 &gt; 메뉴설정</a>에서 설정하실 수 있습니다.{% endif %}</li>
+                </ul>
+                <button type="button" class="gnb_close_btn"><i class="fa fa-times" aria-hidden="true"></i></button>
+            </div>
+            <div id="gnb_all_bg"></div>
+        </div>
+    </nav>
+    <script>
+    
+    jQuery(function($){
+        $(".gnb_menu_btn").click(function(){
+            $("#gnb_all, #gnb_all_bg").show();
+        });
+        $(".gnb_close_btn, #gnb_all_bg").click(function(){
+            $("#gnb_all, #gnb_all_bg").hide();
+        });
+    });
+
+    </script>
+</div>
+<!-- } 상단 끝 -->
+
+<!-- 콘텐츠 시작 { -->
+<div id="wrapper">
+    <div id="container_wr">
+        <div id="container" class="{% block container_class %}{% endblock %}">
+            {% if not IS_INDEX_PAGE %}<h2 id="container_title"><span title="{{ content_title }}">{{ content_title }}</span></h2>{% endif %}
+{% endblock %}{# head_sub end #}
+
+        <!-- 기본 템플릿 안에 삽입될 내용 Start -->
+        {% block content %}
+        {% endblock %}
+        <!-- 기본 템플릿 안에 삽입될 내용 End -->
+
+{% block tail_sub %}
+        </div>
+        {% block aside %}
+        <div id="aside">
+            {% outlogin %}
+        </div>
+        {% endblock %}
+    </div>
+</div>
+<!-- } 콘텐츠 끝 -->
+
+<!-- 하단 시작 { -->
+<div id="ft">
+
+    <div id="ft_wr">
+        <div id="ft_link" class="ft_cnt">
+            <a href="#">회사소개</a>
+            <a href="#">개인정보처리방침</a>
+            <a href="#">서비스이용약관</a>
+            <a href="#">모바일버전</a>
+        </div>
+        <div id="ft_company" class="ft_cnt">
+        	<h2>사이트 정보</h2>
+	        <p class="ft_info">
+	        	회사명 : 회사명 / 대표 : 대표자명<br>
+				주소  : OO도 OO시 OO구 OO동 123-45<br>
+				사업자 등록번호  : 123-45-67890<br>
+				전화 :  02-123-4567  팩스  : 02-123-4568<br>
+				통신판매업신고번호 :  제 OO구 - 123호<br>
+				개인정보관리책임자 :  정보책임자명<br>
+			</p>
+	    </div>
+	</div>
+    <div id="ft_copy">Copyright &copy; <b>소유하신 도메인.</b> All rights reserved.</div>
+
+    <button type="button" id="top_btn">
+    	<i class="fa fa-arrow-up" aria-hidden="true"></i><span class="sound_only">상단으로</span>
+    </button>
+    <script>
+    jQuery(function($) {
+        $("#top_btn").on("click", function() {
+            $("html, body").animate({scrollTop:0}, '500');
+            return false;
+        });
+    });
+    </script>
+</div>
+
+<!-- } 하단 끝 -->
+{% endblock %}{# tail_sub end #}
+
+<script src="{% static 'js/toastr.min.js' %}"></script>
+{% if messages %}
+{% for message in messages %}
+<script type=text/javascript>
+    toastr.options.progressBar = true;
+    toastr.options.positionClass = "toast-bottom-left";
+    toastr.{{ message.tags }}('{{ message }}')
+</script>
+{% endfor %}
+{% endif %}
+
+
+<!-- 자바스크립트 Start -->
+{% block script %}
+{% endblock %}
+<!-- 자바스크립트 End -->
+</body>
+</html>
