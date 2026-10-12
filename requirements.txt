@@ -42,7 +42,7 @@ six==1.17.0
 
 # Storage / database
 dj-database-url==3.1.2
-psycopg2==2.9.12
+psycopg2==2.9.13
 PyMySQL==1.2.0
 
 # Background work
