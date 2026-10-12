@@ -15,3 +15,12 @@ react_example/node_modules
 build
 dist
 /.tmp-nextjs-runtime
+# not needed at runtime: the theme is prebuilt into gnu_jango/templates, tests run in CI
+nextjs
+docs
+scripts
+react_example
+deploy
+.github
+**/tests.py
+**/test_*.py
