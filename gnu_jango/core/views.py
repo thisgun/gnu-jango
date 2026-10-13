@@ -20,6 +20,7 @@ from django.views.static import serve
 from gnu_jango.bbs.models import Group, Board, Post
 from gnu_jango.shop.models import ShopCategory
 from gnu_jango.config import config
+from gnu_jango.config.sample_data import SAMPLE_ASSET_SIZES
 from gnu_jango.core.legacy_assets import legacy_area_roots
 
 from gnu_jango.utils.add_sample import add_sample_data
@@ -759,6 +760,8 @@ def nextjs25_public_asset(request, path):
         "sitemap-posts.xml",
         "sitemap.xml",
         "sw.js",
+        # Images that admin-created sample posts, products and banners link to.
+        *(f"sample-data/{name}" for name in SAMPLE_ASSET_SIZES),
     }
     if path not in allowed_assets:
         raise Http404("Asset not found")

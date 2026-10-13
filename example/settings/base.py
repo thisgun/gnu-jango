@@ -573,7 +573,7 @@ REST_FRAMEWORK = {
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "GnuJango API",
-    "DESCRIPTION": "Gnuboard5-compatible community, shop, member, and admin API.",
+    "DESCRIPTION": "Gnuboard5-compatible community, shop, and member API. Administration is the Django admin at /admin/.",
     "VERSION": "1.0.0",
 }
 

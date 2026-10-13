@@ -19,6 +19,7 @@ MANIFEST_NAME = "g5_sample_data_manifest_v1"
 MANIFEST_VERSION = 1
 SAMPLE_IMAGES = tuple(f"product-{number:02}.webp" for number in range(1, 7))
 SAMPLE_BANNER = "banner.webp"
+BASE36_DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz"
 SAMPLE_ASSET_SIZES = {
     "product-01.webp": 15778,
     "product-02.webp": 11238,
@@ -51,7 +52,7 @@ BOARD_CONTENT = {
         "posts": [
             ("새로운 커뮤니티에 오신 것을 환영합니다", "이곳에서 공지와 서비스 소식을 확인할 수 있습니다. 편하게 둘러보세요.", True, None),
             ("샘플 콘텐츠 안내", "관리자 샘플 데이터 메뉴에서 예시 게시글과 상품을 추가하거나 정리할 수 있습니다.", False, None),
-            ("게시판 이용 방법", "질문과 의견은 자유게시판이나 질문과 답변 게시판에 남겨 주세요.", False, None),
+            ("게시판 이용 방법", "질문과 의견은 자유게시판이나 질문답변 게시판에 남겨 주세요.", False, None),
         ],
     },
     "free": {
@@ -65,7 +66,7 @@ BOARD_CONTENT = {
         ],
     },
     "qa": {
-        "subject": "질문과 답변",
+        "subject": "질문답변",
         "posts": [
             ("게시글에 사진을 올리려면 어떻게 하나요?", "글쓰기 화면에서 이미지 파일을 선택한 뒤 등록하면 됩니다.", False, None),
             ("상품 목록은 어디에서 볼 수 있나요?", "상단 메뉴의 쇼핑몰을 선택하면 상품과 카테고리를 확인할 수 있습니다.", False, None),
@@ -190,10 +191,11 @@ def get_status():
 
 
 def _public_board(board):
-    return board.bo_list_level <= 1 and board.bo_read_level <= 1
+    group = board.group
+    return board.bo_list_level <= 1 and board.bo_read_level <= 1 and not (group and group.gr_use_access)
 
 
-def _new_board(group, table, subject, token, manifest):
+def _new_board(table, subject, token, manifest):
     candidates = (table, f"sample-{table}", f"demo-{table}-{token[:5]}")
     for candidate in candidates:
         existing = Board.objects.filter(bo_table=candidate).first()
@@ -202,8 +204,14 @@ def _new_board(group, table, subject, token, manifest):
                 return existing
             continue
 
+        # Sites that name tables in Korean (/bbs/자유게시판) already have this board under its subject.
+        same_subject = Board.objects.filter(bo_subject=subject).order_by("pk")
+        existing = next((board for board in same_subject if _public_board(board)), None)
+        if existing:
+            return existing
+
         board = Board.objects.create(
-            group=group,
+            group=_get_sample_group(manifest),
             bo_subject=subject,
             bo_table=candidate,
             bo_mobile_subject=subject,
@@ -245,6 +253,24 @@ def _get_sample_group(manifest):
     group = Group.objects.create(gr_id="sample", gr_subject="샘플 콘텐츠")
     manifest["groups"].append(group.pk)
     return group
+
+
+def _free_root_category_id():
+    """A two-character root code that no category starts with, and that starts with none.
+
+    YoungCart codes nest two characters per level and product listings match by prefix, so a
+    longer code would read as a sub-category and could land inside a real one. The prefix match
+    ignores case on SQLite and most MySQL collations, so codes are compared in lower case.
+    """
+    codes = {ca_id.lower() for ca_id in ShopCategory.objects.values_list("ca_id", flat=True) if ca_id}
+    taken = {code[:2] for code in codes}
+    for first in reversed(BASE36_DIGITS[1:]):
+        if first in codes:
+            continue
+        for second in BASE36_DIGITS:
+            if first + second not in taken:
+                return first + second
+    raise SampleDataError("샘플 분류에 사용할 빈 분류 코드가 없습니다.")
 
 
 def _create_post(board, definition, created_at, manifest):
@@ -315,15 +341,12 @@ def create_sample_data():
 
         manifest = empty_manifest()
         token = uuid.uuid4().hex
-        group = None
         boards = {}
         posts_by_table = {}
         now = timezone.now()
 
         for table, board_definition in BOARD_CONTENT.items():
-            if group is None:
-                group = _get_sample_group(manifest)
-            board = _new_board(group, table, board_definition["subject"], token, manifest)
+            board = _new_board(table, board_definition["subject"], token, manifest)
             boards[table] = board
             if board.pk not in manifest["boards_used"]:
                 manifest["boards_used"].append(board.pk)
@@ -343,7 +366,7 @@ def create_sample_data():
             board.save(update_fields=["bo_count_write", "bo_count_comment"])
 
         category = ShopCategory.objects.create(
-            ca_id=uuid.uuid4().hex[:10],
+            ca_id=_free_root_category_id(),
             ca_name="데모 스토어",
             ca_order=1,
             ca_use=True,

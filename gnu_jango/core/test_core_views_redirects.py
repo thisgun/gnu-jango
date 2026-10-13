@@ -755,6 +755,30 @@ class PublicAssetTests(TestCase):
                 self.assertEqual(response["Content-Type"], "image/png")
                 self.assertEqual(response["X-Content-Type-Options"], "nosniff")
 
+    def test_bundled_sample_data_images_are_served(self):
+        # Sample posts, products and the banner point at /sample-data/*.webp, and Django serves the theme.
+        from gnu_jango.config.sample_data import SAMPLE_ASSET_SIZES
+
+        for name, size in SAMPLE_ASSET_SIZES.items():
+            with self.subTest(name=name):
+                response = self.client.get(f"/sample-data/{name}")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response["Content-Type"], "image/webp")
+                self.assertEqual(int(response["Content-Length"]), size)
+
+    def test_unlisted_sample_data_files_are_not_served(self):
+        from unittest import mock
+
+        from gnu_jango.config.sample_data import SAMPLE_ASSET_SIZES
+
+        for path in ("/sample-data/other.webp", "/sample-data/", "/sample-data/../manifest.json"):
+            with self.subTest(path=path):
+                self.assertEqual(self.client.get(path).status_code, 404)
+        # A file that exists in the theme folder is still refused once it leaves the list.
+        listed = {name: size for name, size in SAMPLE_ASSET_SIZES.items() if name != "product-01.webp"}
+        with mock.patch.dict(SAMPLE_ASSET_SIZES, listed, clear=True):
+            self.assertEqual(self.client.get("/sample-data/product-01.webp").status_code, 404)
+
     def test_service_worker_scope_follows_the_script_prefix(self):
         root = self.client.get("/sw.js")
         prefixed = self.client.get("/sw.js", SCRIPT_NAME="/sub")

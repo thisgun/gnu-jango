@@ -22,6 +22,7 @@ urlpatterns = [
     path("sitemap-posts.xml", views.nextjs25_public_asset, {"path": "sitemap-posts.xml"}, name="nextjs25_sitemap_posts"),
     path("sitemap.xml", views.nextjs25_public_asset, {"path": "sitemap.xml"}, name="nextjs25_sitemap"),
     path("sw.js", views.nextjs25_public_asset, {"path": "sw.js"}, name="nextjs25_service_worker"),
+    re_path(r"^(?P<path>sample-data/[\w.-]+)$", views.nextjs25_public_asset, name="nextjs25_sample_data"),
     path("data/<str:area>/<path:path>", views.legacy_data_asset, name="legacy_data_asset"),
     path("index.txt", views.nextjs25_root_text_payload, {"template_path": "index"}, name="nextjs25_index_text"),
     path("rss/<str:bo_table>", views.nextjs25_board_rss, name="nextjs25_board_rss"),
