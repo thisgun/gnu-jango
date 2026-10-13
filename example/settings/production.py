@@ -86,14 +86,21 @@ if _database_from_url:
 if IS_HEROKU:
 	configure_heroku(locals())
 
-# Enable WhiteNoise's compression and caching of static assets. STATICFILES_STORAGE
-# was removed in Django 5.1; the optional Heroku integration may set it, so use STORAGES
-# and apply this after that integration.
+# Enable WhiteNoise's compression and caching of static assets on persistent hosts.
+# Vercel serves collected assets from its static output, outside the Python function
+# bundle. A manifest storage lookup there cannot inspect STATIC_ROOT at request time,
+# so use plain /static/... URLs for the function to avoid failing admin page renders.
+# STATICFILES_STORAGE was removed in Django 5.1; the optional Heroku integration may
+# set it, so use STORAGES and apply this after that integration.
+_staticfiles_backend = "gnu_jango.core.static_storage.LegacyTolerantManifestStorage"
+if os.environ.get("VERCEL") == "1":
+    _staticfiles_backend = "django.contrib.staticfiles.storage.StaticFilesStorage"
+
 STORAGES = {
 	**STORAGES,
 	"staticfiles": {
-		# hashed + compressed like WhiteNoise, but references to files the legacy skins never shipped stay as written
-		"BACKEND": "gnu_jango.core.static_storage.LegacyTolerantManifestStorage",
+		# Hashed + compressed on persistent hosts; plain paths on Vercel's static output.
+		"BACKEND": _staticfiles_backend,
 	},
 }
 
