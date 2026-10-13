@@ -90,7 +90,8 @@ class ProductionSettingsSerializationTests(SimpleTestCase):
         production = _load_production_settings(ci_env)
         json.dumps(production.DATABASES, default=str)
 
-    def test_vercel_settings_scan_can_serialize_lazy_settings(self):
+    def _run_vercel_settings_scan(self, **overrides):
+        """Import the settings the way Vercel's build scan does, in a clean process."""
         repo_root = Path(__file__).resolve().parents[2]
         scanner = r"""
 import importlib
@@ -129,14 +130,20 @@ print(json.dumps({"settings_module": settings_module, "django_settings": setting
             "ALLOWED_HOSTS": "localhost",
             "DATABASE_URL": "",
             "DB_ENGINE": "",
-            "MEDIA_STORAGE": "local",
+            # Vercel needs shared media storage and a shared cache (production.py refuses others).
+            "MEDIA_STORAGE": "s3",
+            "S3_BUCKET": "scan-test-bucket",
+            "S3_REGION": "ap-northeast-2",
+            "S3_ACCESS_KEY_ID": "scan-test-key",
+            "S3_SECRET_ACCESS_KEY": "scan-test-secret",
             "EMAIL_BACKEND": "django.core.mail.backends.console.EmailBackend",
             "DEBUG": "False",
-            "CACHE_URL": "",
+            "CACHE_URL": "db://",
             "LOG_TO_FILE": "False",
         })
+        env.update(overrides)
 
-        result = subprocess.run(
+        return subprocess.run(
             [sys.executable, "-c", scanner],
             cwd=repo_root,
             env=env,
@@ -144,6 +151,9 @@ print(json.dumps({"settings_module": settings_module, "django_settings": setting
             text=True,
             check=False,
         )
+
+    def test_vercel_settings_scan_can_serialize_lazy_settings(self):
+        result = self._run_vercel_settings_scan()
 
         error_tail = "\n".join(result.stderr.strip().splitlines()[-12:])
         self.assertEqual(
@@ -153,6 +163,19 @@ print(json.dumps({"settings_module": settings_module, "django_settings": setting
         )
         serialized = json.loads(result.stdout)
         self.assertEqual(serialized["django_settings"]["WSGI_APPLICATION"], "example.wsgi.application")
+
+    def test_vercel_refuses_local_media_storage(self):
+        # Each function instance has its own disk, so uploads would vanish between requests.
+        result = self._run_vercel_settings_scan(MEDIA_STORAGE="local")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Vercel requires MEDIA_STORAGE=s3", result.stderr)
+
+    def test_vercel_refuses_a_per_process_cache(self):
+        result = self._run_vercel_settings_scan(CACHE_URL="")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Vercel requires a shared cache", result.stderr)
 
 
 class MediaStorageConfigTests(SimpleTestCase):
