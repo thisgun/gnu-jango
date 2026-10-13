@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, LayoutGrid, List, Search } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";

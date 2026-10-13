@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import { g5ShortHref } from "@/lib/g5-short-url";
 import { Badge } from "@/components/ui/badge";

@@ -2,7 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { G5Link as Link } from "@/components/ui/g5-link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { ChevronLeft, ChevronRight, Search, Star } from "lucide-react";
 import type { ShopReview } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";

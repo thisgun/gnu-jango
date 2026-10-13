@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import { Suspense } from "react";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/providers/AuthProvider";
-import { PageLoadingProvider } from "@/components/providers/PageLoadingProvider";
+import { NavigationProgressProvider } from "@/components/providers/NavigationProgressProvider";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { Toaster } from "@/components/ui/toaster";
@@ -135,23 +134,22 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           defaultTheme="light"
           disableTransitionOnChange
         >
-          <AuthProvider initialUser={initialUser}>
-            <div className="min-h-screen flex flex-col">
-              <Header initialMenus={menus} initialUser={initialUser} />
-              <main id="main-content" className="flex-1 overflow-x-clip">{children}</main>
-              <Footer />
-            </div>
-            <Toaster />
-            <BackToTop />
-            <CompareTray />
-            <PWAProvider />
-            <WebVitals />
-            <LegacyRouteBridge />
-            <RuntimeNavigationBridge />
-            <Suspense fallback={null}>
-              <PageLoadingProvider />
-            </Suspense>
-          </AuthProvider>
+          <NavigationProgressProvider>
+            <AuthProvider initialUser={initialUser}>
+              <div className="min-h-screen flex flex-col">
+                <Header initialMenus={menus} initialUser={initialUser} />
+                <main id="main-content" className="flex-1 overflow-x-clip">{children}</main>
+                <Footer />
+              </div>
+              <Toaster />
+              <BackToTop />
+              <CompareTray />
+              <PWAProvider />
+              <WebVitals />
+              <LegacyRouteBridge />
+              <RuntimeNavigationBridge />
+            </AuthProvider>
+          </NavigationProgressProvider>
         </ThemeProvider>
       </body>
     </html>

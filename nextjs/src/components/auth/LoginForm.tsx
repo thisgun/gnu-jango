@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useState } from "react";
 import { G5Link as Link } from "@/components/ui/g5-link";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import { useAuthStore } from "@/store/auth";
 import { Input } from "@/components/ui/input";

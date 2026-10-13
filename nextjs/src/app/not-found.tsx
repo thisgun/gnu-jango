@@ -1,7 +1,7 @@
 "use client";
 
 import { G5Link as Link } from "@/components/ui/g5-link";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { Button } from "@/components/ui/button";
 
 export default function NotFound() {

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import { useAuthStore } from "@/store/auth";
 import {

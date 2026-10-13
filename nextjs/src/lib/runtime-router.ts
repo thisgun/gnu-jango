@@ -6,6 +6,7 @@ import {
   stripG5BasePath,
 } from "@/lib/config";
 import { toG5ShortPath } from "@/lib/g5-short-url";
+import { announceDocumentNavigation } from "@/lib/navigation-progress";
 
 type RouterLike = {
   push(href: string): void;
@@ -58,6 +59,7 @@ function navigate(router: RouterLike, href: string, mode: NavigationMode) {
     const targetPath = isG5ThemeRuntime() ? toG5ShortPath(runtimePath) : runtimePath;
     const target = g5PathForRuntime(targetPath);
 
+    announceDocumentNavigation();
     if (mode === "replace") {
       window.location.replace(target);
     } else {

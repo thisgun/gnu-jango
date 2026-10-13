@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import { useAuthStore } from "@/store/auth";
 import { api } from "@/lib/api";

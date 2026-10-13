@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { submitOrder, type UseOrderSubmitOptions } from "./orderSubmitHandler";
 
 export function useOrderSubmit({

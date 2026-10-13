@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { ArrowLeft, Pencil, Plus, Trash2 } from "lucide-react";
 import { useRuntimeRouteParam } from "@/hooks/use-runtime-route-param";
 import { runtimeRouterPush } from "@/lib/runtime-router";

@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState, useCallback, type FormEvent } from "react";
 import dynamic from "next/dynamic";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { ApiError, api } from "@/lib/api";
 import type { ShopPolicy, ShopProduct, ShopReview, ShopReviewSummary, ShopQA } from "@/lib/api";
 import type { ShopNaverPayConfig, ShopNaverPayOrderOption } from "@/lib/api";

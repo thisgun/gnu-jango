@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, memo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import dynamic from "next/dynamic";
 import { apiClient } from "@/lib/api";
 import { apiUrl } from "@/lib/config";

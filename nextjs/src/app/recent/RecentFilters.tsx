@@ -1,6 +1,7 @@
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import type { RecentGroup } from "@/lib/types";

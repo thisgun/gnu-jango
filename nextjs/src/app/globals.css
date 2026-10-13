@@ -970,24 +970,6 @@
 .scrollbar-hide::-webkit-scrollbar { display: none; }
 .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-@keyframes page-loading-bar {
-  0% {
-    transform: translateX(-55%) scaleX(0.28);
-  }
-  45% {
-    transform: translateX(8%) scaleX(0.55);
-  }
-  100% {
-    transform: translateX(115%) scaleX(0.35);
-  }
-}
-
-.page-loading-bar {
-  width: 58%;
-  transform-origin: left center;
-  animation: page-loading-bar 1.15s ease-in-out infinite;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

@@ -6,7 +6,7 @@
     <description></description>
     <language>ko-KR</language>
     <atom:link href="http://localhost:3000/rss/board" rel="self" type="application/rss+xml"/>
-    <lastBuildDate>Tue, 13 Oct 2026 07:06:37 GMT</lastBuildDate>
+    <lastBuildDate>Tue, 13 Oct 2026 12:50:01 GMT</lastBuildDate>
     <item>
       <title>ㅇㅇ</title>
       <link>http://localhost:3000/bbs/board/800</link>

@@ -19,7 +19,7 @@ import type { ServerUser } from "@/lib/auth-server";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuthStore } from "@/store/auth";
 import { runtimeRouterPush } from "@/lib/runtime-router";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 
 const DEFAULT_NAVIGATION_MENUS: MenuItem[] = [
   {

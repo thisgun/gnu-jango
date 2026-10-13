@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { G5Link as Link } from "@/components/ui/g5-link";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import {
   LogOutIcon,
   MenuIcon,

@@ -2,7 +2,8 @@
 
 import { G5Link as Link } from "@/components/ui/g5-link";
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { HelpCircle, Search } from "lucide-react";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import { Breadcrumb } from "@/components/ui/breadcrumb";

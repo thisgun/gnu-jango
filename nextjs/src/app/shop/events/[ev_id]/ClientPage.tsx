@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { api } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
 import { useRuntimeRouteParam } from "@/hooks/use-runtime-route-param";

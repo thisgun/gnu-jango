@@ -555,6 +555,8 @@ export default function PostViewClient({ boTable, wrId }: ClientPageProps) {
                       <a
                         href={downloadUrl}
                         className="break-all text-primary hover:underline"
+                        // A download keeps the reader on this page, so it must not start the navigation bar.
+                        data-disable-progress="true"
                         onClick={(event) => {
                           if (!isCheckedDownloadUrl(downloadUrl)) return;
                           event.preventDefault();

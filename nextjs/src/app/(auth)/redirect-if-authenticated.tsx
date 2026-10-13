@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { runtimeRouterReplace } from "@/lib/runtime-router";
 import { useAuthStore } from "@/store/auth";
 

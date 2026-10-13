@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { api } from "@/lib/api";
 import { gaPurchase } from "@/lib/analytics";
 import {

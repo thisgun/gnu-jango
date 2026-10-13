@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import type { ShopWishItem } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
 import { formatPrice } from "@/lib/utils";

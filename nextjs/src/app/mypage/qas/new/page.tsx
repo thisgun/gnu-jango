@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { ArrowLeft } from "lucide-react";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import type { QaConfig, QaItem } from "@/lib/types";

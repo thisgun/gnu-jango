@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import {

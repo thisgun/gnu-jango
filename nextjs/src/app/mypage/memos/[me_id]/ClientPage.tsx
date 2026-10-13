@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { G5Link as Link } from "@/components/ui/g5-link";
-import { useRouter } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { ArrowLeft, Reply, Trash2 } from "lucide-react";
 import { useRuntimeRouteParam } from "@/hooks/use-runtime-route-param";
 import { runtimeRouterPush } from "@/lib/runtime-router";

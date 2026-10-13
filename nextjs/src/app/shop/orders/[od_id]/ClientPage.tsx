@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback, useId, useRef, type FormEvent } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import Image from "next/image";
 import { useRuntimeRouteParam } from "@/hooks/use-runtime-route-param";

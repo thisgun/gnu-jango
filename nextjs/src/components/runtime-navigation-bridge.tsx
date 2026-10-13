@@ -10,6 +10,7 @@ import {
   stripG5BasePath,
 } from "@/lib/config";
 import { toG5ShortPath } from "@/lib/g5-short-url";
+import { announceDocumentNavigation } from "@/lib/navigation-progress";
 
 function isPlainClick(event: MouseEvent): boolean {
   return (
@@ -91,6 +92,7 @@ export function RuntimeNavigationBridge() {
       if (`${url.pathname}${url.search}${url.hash}` === target && !forcesDocumentLoad(url)) return;
 
       event.preventDefault();
+      announceDocumentNavigation();
       window.location.assign(target);
     }
 

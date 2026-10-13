@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "@bprogress/next/app";
 import { LayoutGrid, List } from "lucide-react";
 import type { ShopCategory, ShopProduct } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
