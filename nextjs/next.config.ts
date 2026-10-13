@@ -9,6 +9,10 @@ const withBundleAnalyzer = bundleAnalyzer({
 const STATIC_EXPORT = process.env.G5_NEXT_RUNTIME !== 'server';
 const shortBoardSegment =
   ':bo_table((?!__g5_static__$|admin/|admin$|api/|api$|baby/|baby$|bbs/|bbs$|boards/|boards$|content/|content$|faq/|faq$|login/|login$|members/|members$|mobile/|mobile$|mypage/|mypage$|offline/|offline$|polls/|polls$|recent/|recent$|register/|register$|rss/|rss$|search/|search$|shop/|shop$)[A-Za-z0-9_]+)';
+// Board pages are published under /bbs/<bo_table>[/<wr_id>|/write]; board names may be Korean, and
+// bbs/*.php stays the Gnuboard5 file handler (src/app/bbs/[...path]/route.ts).
+const bbsBoardSegment = ':bo_table((?!.*\\.php$)[^/]+)';
+const boardsRouteSegment = ':bo_table((?!__g5_static__$)[^/]+)';
 
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
@@ -251,23 +255,23 @@ const serverRuntimeConfig: NextConfig = STATIC_EXPORT
         return [
           ...(await youngCartServerRedirects()),
           {
-            source: `/boards/${shortBoardSegment}/rss`,
+            source: `/boards/${boardsRouteSegment}/rss`,
             destination: '/rss/:bo_table',
             permanent: true,
           },
           {
-            source: `/boards/${shortBoardSegment}/write`,
-            destination: '/:bo_table/write',
+            source: `/boards/${boardsRouteSegment}/write`,
+            destination: '/bbs/:bo_table/write',
             permanent: true,
           },
           {
-            source: `/boards/${shortBoardSegment}/:wr_id`,
-            destination: '/:bo_table/:wr_id',
+            source: `/boards/${boardsRouteSegment}/:wr_id((?!0$)[^/]+)`,
+            destination: '/bbs/:bo_table/:wr_id',
             permanent: true,
           },
           {
-            source: `/boards/${shortBoardSegment}`,
-            destination: '/:bo_table',
+            source: `/boards/${boardsRouteSegment}`,
+            destination: '/bbs/:bo_table',
             permanent: true,
           },
           {
@@ -288,7 +292,12 @@ const serverRuntimeConfig: NextConfig = STATIC_EXPORT
           },
           {
             source: '/board',
-            destination: '/boards',
+            destination: '/bbs',
+            permanent: true,
+          },
+          {
+            source: '/boards',
+            destination: '/bbs',
             permanent: true,
           },
           {
@@ -301,6 +310,23 @@ const serverRuntimeConfig: NextConfig = STATIC_EXPORT
       async rewrites() {
         const g5ApiUrl = apiRewriteDestination();
         return {
+          // /bbs/<bo_table>... must win over the bbs/*.php route handler, so it is rewritten to
+          // the /boards pages before the file-system routes are matched.
+          beforeFiles: [
+            { source: '/bbs', destination: '/boards' },
+            {
+              source: `/bbs/${bbsBoardSegment}/write`,
+              destination: STATIC_EXPORT ? '/boards/__g5_static__/write' : '/boards/:bo_table/write',
+            },
+            {
+              source: `/bbs/${bbsBoardSegment}/:wr_id((?!.*\\.php$)[^/]+)`,
+              destination: STATIC_EXPORT ? '/boards/__g5_static__/0' : '/boards/:bo_table/:wr_id',
+            },
+            {
+              source: `/bbs/${bbsBoardSegment}`,
+              destination: STATIC_EXPORT ? '/boards/__g5_static__' : '/boards/:bo_table',
+            },
+          ],
           afterFiles: [
             // Product uploads use Gnuboard's /data/* paths. In independent
             // Next.js server mode, send those media requests to the G5 host so

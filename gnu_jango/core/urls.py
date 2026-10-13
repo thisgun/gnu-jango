@@ -30,6 +30,17 @@ urlpatterns = [
     re_path(r"^mobile/(?P<legacy_path>.+?)/?$", views.legacy_mobile_route, name="legacy_mobile_route"),
     re_path(r"^bbs/(?P<legacy_path>.+\.php)$", views.legacy_bbs_php_route, name="legacy_bbs_php_route"),
     re_path(r"^shop/(?P<legacy_path>.+\.php)$", views.legacy_shop_php_route, name="legacy_shop_php_route"),
+    # Board pages: /bbs (list of boards), /bbs/<bo_table>, /bbs/<bo_table>/<wr_id|seo-title|write>.
+    # The bbs/*.php pattern above keeps the Gnuboard5 file addresses working.
+    path("bbs.txt", views.nextjs25_root_text_payload, {"template_path": "boards"}, name="nextjs25_bbs_index_text"),
+    re_path(r"^bbs/?$", views.nextjs25_root_theme, {"template_path": "boards"}, name="nextjs25_bbs_index"),
+    re_path(
+        r"^bbs/(?P<bo_table>[^/]+)(?:/(?P<board_path>[^/]+))?\.txt$",
+        views.nextjs25_board_text_payload,
+        name="nextjs25_board_text_payload",
+    ),
+    re_path(r"^bbs/(?P<bo_table>[^/]+)/(?P<board_path>[^/]+)/?$", views.nextjs25_board_theme, name="nextjs25_board_theme_path"),
+    re_path(r"^bbs/(?P<bo_table>[^/]+)/?$", views.nextjs25_board_theme, name="nextjs25_board_theme"),
     re_path(
         r"^(?P<template_path>(?:login(?:/social-callback)?|register(?:/result)?|forgot-password|email-certify|boards(?:/.*)?|content/[^/]+|members/[^/]+|mypage(?:/.*)?|shop(?:/.*)?|faq|polls|recent|search|baby|offline))\.txt$",
         views.nextjs25_root_text_payload,
@@ -47,6 +58,7 @@ urlpatterns = [
         views.nextjs25_shop_categories_canonical_redirect,
         name="nextjs25_shop_category_canonical",
     ),
+    re_path(r"^boards/?$", views.nextjs25_boards_canonical_redirect, name="nextjs25_boards_index_canonical"),
     re_path(
         r"^boards/(?P<board_path>.+?)/?$",
         views.nextjs25_boards_canonical_redirect,
@@ -63,18 +75,19 @@ urlpatterns = [
     path("nextjs_default/<path:template_path>", views.nextjs25_theme, name="nextjs_default_theme_path"),
     re_path(
         r"^(?P<bo_table>(?!(?:admin|api|api-auth|_next|media|static|nextjs25|nextjs_default|bbs|user|users|editor|adm|__debug__)$)[^/]+)(?:/(?P<board_path>[^/]+))?\.txt$",
-        views.nextjs25_short_board_text_payload,
+        views.nextjs25_board_text_payload,
         name="nextjs25_short_board_text_payload",
     ),
+    # The old short board addresses redirect to /bbs/... (permanently).
     re_path(
         r"^(?P<bo_table>(?!(?:admin|api|api-auth|_next|media|static|nextjs25|nextjs_default|bbs|user|users|editor|adm|__debug__)$)[^/]+)/(?P<board_path>[^/]+)/?$",
-        views.nextjs25_short_board_theme,
-        name="nextjs25_short_board_theme_path",
+        views.nextjs25_short_board_redirect,
+        name="nextjs25_short_board_redirect_path",
     ),
     re_path(
         r"^(?P<bo_table>(?!(?:admin|api|api-auth|_next|media|static|nextjs25|nextjs_default|bbs|user|users|editor|adm|__debug__)$)[^/]+)/?$",
-        views.nextjs25_short_board_theme,
-        name="nextjs25_short_board_theme",
+        views.nextjs25_short_board_redirect,
+        name="nextjs25_short_board_redirect",
     ),
     path("adm/_ajax_/add_menu/", add_menu_form, name="add_menu_form"),
 ]

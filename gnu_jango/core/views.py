@@ -30,6 +30,9 @@ from django.utils import timezone
 from .models import New_win
 from .middleware import build_content_security_policy
 from .legacy_redirects import (  # noqa: F401 - views and urls address these through this module
+    BOARD_URL_PREFIX,
+    board_clean_segments,
+    board_url,
     LEGACY_DATA_ALLOWED_AREAS,
     LEGACY_GNUBOARD5_BASE_URL,
     LEGACY_SAFE_SEGMENT_RE,
@@ -198,8 +201,9 @@ def _nextjs25_public_metadata_path(path):
     if not clean_path:
         return "/"
     parts = clean_path.split("/")
-    if parts[0] == "boards" and len(parts) >= 2:
-        return "/" + "/".join(parts[1:])
+    if parts[0] == "boards":
+        # The internal /boards route is published under /bbs.
+        return "/".join([BOARD_URL_PREFIX, *parts[1:]])
     if parts[0] == "shop" and len(parts) >= 3:
         if parts[1] == "products":
             return "/shop/" + "/".join(parts[2:])
@@ -435,7 +439,7 @@ def _nextjs25_sitemap_urlset(request, paths):
 def _nextjs25_sitemap_response(request):
     paths = [
         "/",
-        "/boards",
+        BOARD_URL_PREFIX,
         "/faq",
         "/recent",
         "/search",
@@ -650,14 +654,14 @@ def nextjs25_root_text_payload(request, template_path=""):
     return _render_nextjs25_text_payload(request, mapped_path)
 
 
-def nextjs25_boards_canonical_redirect(request, board_path):
-    segments = _legacy_clean_segments(board_path)
+def nextjs25_boards_canonical_redirect(request, board_path=""):
+    """/boards[/...] (the internal Next.js route) moves to the public /bbs/... address."""
+    segments = board_clean_segments(board_path)
     if not segments:
-        return _legacy_local_redirect(request, "/boards", status_code=308)
+        return _legacy_local_redirect(request, BOARD_URL_PREFIX, status_code=308)
     if len(segments) == 2 and segments[1].lower() == "rss":
         return _legacy_local_redirect(request, f"/rss/{quote(segments[0], safe='')}", status_code=308)
-    target = "/" + "/".join(quote(segment, safe="") for segment in segments)
-    return _legacy_local_redirect(request, target, status_code=308)
+    return _legacy_local_redirect(request, board_url(*segments), status_code=308)
 
 
 def nextjs25_shop_products_canonical_redirect(request, product_path=""):
@@ -708,7 +712,7 @@ def nextjs25_board_rss(request, bo_table):
     board_title = board.bo_subject or board.bo_table
     feed = Rss201rev2Feed(
         title=f"{site_title} - {board_title}",
-        link=request.build_absolute_uri(f"/{board.bo_table}"),
+        link=request.build_absolute_uri(board_url(board.bo_table)),
         description=f"{board_title} RSS",
         language="ko",
     )
@@ -728,30 +732,34 @@ def nextjs25_board_rss(request, bo_table):
     return HttpResponse(feed.writeString("utf-8"), content_type="application/rss+xml; charset=utf-8")
 
 
-def nextjs25_short_board_theme(request, bo_table, board_path=""):
+def _nextjs25_board_template(bo_table, board_path):
+    """Exported placeholder page of a board address; a board that does not exist is a 404."""
     board_key = NEXTJS25_BOARD_TABLE_ALIASES.get(bo_table, bo_table)
     if not Board.objects.filter(bo_table=board_key).exists():
         raise Http404("Board not found")
     if board_path == "write":
-        mapped_path = "boards/__g5_static__/write"
-    elif board_path:
-        mapped_path = "boards/__g5_static__/0"
-    else:
-        mapped_path = "boards/__g5_static__"
-    return _render_nextjs25_template(request, mapped_path)
+        return "boards/__g5_static__/write"
+    if board_path:
+        return "boards/__g5_static__/0"
+    return "boards/__g5_static__"
 
 
-def nextjs25_short_board_text_payload(request, bo_table, board_path=""):
-    board_key = NEXTJS25_BOARD_TABLE_ALIASES.get(bo_table, bo_table)
-    if not Board.objects.filter(bo_table=board_key).exists():
-        raise Http404("Board not found")
-    if board_path == "write":
-        mapped_path = "boards/__g5_static__/write"
-    elif board_path:
-        mapped_path = "boards/__g5_static__/0"
-    else:
-        mapped_path = "boards/__g5_static__"
-    return _render_nextjs25_text_payload(request, mapped_path)
+def nextjs25_board_theme(request, bo_table, board_path=""):
+    """/bbs/<bo_table>[/<wr_id>|/<seo-title>/|/write]: the board pages of the Next.js site."""
+    return _render_nextjs25_template(request, _nextjs25_board_template(bo_table, board_path))
+
+
+def nextjs25_board_text_payload(request, bo_table, board_path=""):
+    return _render_nextjs25_text_payload(request, _nextjs25_board_template(bo_table, board_path))
+
+
+def nextjs25_short_board_redirect(request, bo_table, board_path=""):
+    """The old short addresses (/<bo_table>[/<wr_id>]) move to /bbs/... for good."""
+    _nextjs25_board_template(bo_table, board_path)  # 404 for an address that is not a board
+    target = board_url(bo_table, board_path) if board_path else board_url(bo_table)
+    if board_path and request.path.endswith("/"):
+        target += "/"  # an SEO-title post address keeps its trailing slash
+    return _legacy_local_redirect(request, target, status_code=308)
 
 
 def nextjs25_static(request, path):

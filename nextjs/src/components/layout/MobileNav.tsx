@@ -1,13 +1,14 @@
 "use client";
 
 import { G5Link as Link } from "@/components/ui/g5-link";
+import { g5ShortHref } from "@/lib/g5-short-url";
 import { usePathname } from "next/navigation";
 import { Home, MessageSquare, ShoppingBag, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const tabs = [
   { href: "/", label: "홈", icon: Home },
-  { href: "/boards", label: "게시판", icon: MessageSquare },
+  { href: g5ShortHref("/boards"), label: "게시판", icon: MessageSquare },
   { href: "/shop", label: "쇼핑", icon: ShoppingBag },
   { href: "/mypage", label: "MY", icon: User },
 ] as const;

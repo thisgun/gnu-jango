@@ -58,15 +58,29 @@ if (![appShortUrl, g5ShortHref, toG5ShortPath].every((value) => typeof value ===
   fail("g5-short-url exports are missing");
 }
 
+const KOREAN_BOARD = "%EC%9E%90%EC%9C%A0%EA%B2%8C%EC%8B%9C%ED%8C%90"; // 자유게시판
+
 const cases = [
-  ["/boards/free", "/free"],
-  ["/boards/free?sca=notice#top", "/free?sca=notice#top"],
-  ["/boards/free/6", "/free/6"],
-  ["/boards/free/write", "/free/write"],
-  ["/bbs/board.php?bo_table=free&page=2", "/free?page=2"],
-  ["/bbs/board.php?bo_table=free&wr_id=6&page=2#reply", "/free/6?page=2#reply"],
-  ["/bbs/board.php?bo_table=free&wr_seo_title=hello-world", "/free/hello-world/"],
-  ["/bbs/write.php?bo_table=free&w=u&wr_id=6", "/free/write?w=u&wr_id=6"],
+  // Board pages are published under /bbs/ (the internal Next.js route stays /boards).
+  ["/boards", "/bbs"],
+  ["/boards?group=community", "/bbs?group=community"],
+  ["/boards/free", "/bbs/free"],
+  ["/boards/free?sca=notice#top", "/bbs/free?sca=notice#top"],
+  ["/boards/free/6", "/bbs/free/6"],
+  ["/boards/free/write", "/bbs/free/write"],
+  ["/boards/free/hello-world/", "/bbs/free/hello-world/"],
+  ["/boards/free/rss", "/rss/free"],
+  ["/boards/" + KOREAN_BOARD, "/bbs/" + KOREAN_BOARD],
+  ["/boards/" + KOREAN_BOARD + "/6", "/bbs/" + KOREAN_BOARD + "/6"],
+  ["/bbs/free/6", "/bbs/free/6"],
+  ["/bbs/board.php?bo_table=free&page=2", "/bbs/free?page=2"],
+  ["/bbs/board.php?bo_table=free&wr_id=6&page=2#reply", "/bbs/free/6?page=2#reply"],
+  ["/bbs/board.php?bo_table=free&wr_seo_title=hello-world", "/bbs/free/hello-world/"],
+  ["/bbs/board.php", "/bbs"],
+  ["/bbs/write.php?bo_table=free&w=u&wr_id=6", "/bbs/free/write?w=u&wr_id=6"],
+  ["/bbs/write.php", "/bbs"],
+  ["/bbs/group.php?gr_id=community", "/bbs?group=community"],
+  ["/mobile/group.php?gr_id=community", "/bbs?group=community"],
   ["/bbs/content.php?co_id=company", "/content/company"],
   ["/bbs/search.php?stx=delivery&sfl=wr_subject&bo_table=free&page=2", "/search?sfl=wr_subject&bo_table=free&page=2&q=delivery"],
   ["/bbs/login.php?url=%2Ffree%3Fpage%3D2", "/login?redirect=%2Ffree%3Fpage%3D2"],
@@ -96,8 +110,8 @@ for (const [input, expected] of cases) {
   }
 }
 
-if (g5ShortHref("/boards/free/6") !== "/free/6") {
-  fail("g5ShortHref did not apply the short board URL");
+if (g5ShortHref("/boards/free/6") !== "/bbs/free/6") {
+  fail("g5ShortHref did not apply the /bbs board URL");
 }
 if (appShortUrl("/shop/products/1446772772") !== "https://nextjs.thisgun.net/shop/1446772772") {
   fail("appShortUrl did not apply the short product URL");

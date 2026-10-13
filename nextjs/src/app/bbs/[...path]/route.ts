@@ -129,7 +129,7 @@ async function handleBbs(request: NextRequest, params: Promise<BbsParams>) {
       });
     case "write.php": {
       const boTable = firstLegacyParam(request, ["bo_table"]);
-      return legacyYoungcartRedirect(request, boTable ? `/${encodeURIComponent(boTable)}/write` : "/boards", {
+      return legacyYoungcartRedirect(request, boTable ? `/bbs/${encodeURIComponent(boTable)}/write` : "/bbs", {
         drop: ["bo_table", "rewrite"],
         permanent: false,
       });
@@ -155,7 +155,7 @@ async function handleBbs(request: NextRequest, params: Promise<BbsParams>) {
     }
     case "group.php": {
       const groupId = firstLegacyParam(request, ["gr_id"]);
-      return legacyYoungcartRedirect(request, "/boards", {
+      return legacyYoungcartRedirect(request, "/bbs", {
         drop: ["gr_id", "rewrite"],
         set: groupId ? { group: groupId } : {},
         permanent: false,
@@ -180,9 +180,9 @@ async function handleBbs(request: NextRequest, params: Promise<BbsParams>) {
 
 function legacyBoardPath(request: NextRequest) {
   const boTable = firstLegacyParam(request, ["bo_table"]);
-  if (!boTable) return "/boards";
+  if (!boTable) return "/bbs";
 
-  const boardPath = `/${encodeURIComponent(boTable)}`;
+  const boardPath = `/bbs/${encodeURIComponent(boTable)}`;
   const seoTitle = firstLegacyParam(request, ["wr_seo_title"]);
   if (seoTitle) return `${boardPath}/${encodeURIComponent(seoTitle)}/`;
 

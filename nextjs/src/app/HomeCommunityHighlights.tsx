@@ -20,7 +20,6 @@ import type { Board, WritePost } from "@/lib/types";
 import { HomeAccountSidebar } from "./HomeAccountSidebar";
 
 export type HomePost = WritePost & {
-  boardHref: string;
   boardSubject: string;
   href: string;
 };
@@ -261,7 +260,6 @@ function toHomePosts(boards: Board[], postsByBoard: Array<{ board: Board; posts:
       ...post,
       bo_table: board.bo_table,
       bo_subject: board.bo_subject,
-      boardHref: `/${board.bo_table}`,
       boardSubject: board.bo_subject,
       href: boardPostHref(board.bo_table, post, rewriteMode),
     }))

@@ -2,6 +2,7 @@
 
 import { ChevronRight, CircleUserRound, MessageSquareText } from "lucide-react";
 import { G5Link as Link } from "@/components/ui/g5-link";
+import { g5ShortHref } from "@/lib/g5-short-url";
 import { useAuthStore } from "@/store/auth";
 import type { HomePost } from "./HomeCommunityHighlights";
 
@@ -29,7 +30,7 @@ export function HomeAccountSidebar({ latestPosts }: { latestPosts: HomePost[] })
             {user ? (
               <>
                 <Link href="/mypage" className="btn btn-primary btn-sm">마이페이지</Link>
-                <Link href="/boards" className="btn btn-outline btn-sm">글 둘러보기</Link>
+                <Link href={g5ShortHref("/boards")} className="btn btn-outline btn-sm">글 둘러보기</Link>
               </>
             ) : (
               <>
@@ -46,7 +47,7 @@ export function HomeAccountSidebar({ latestPosts }: { latestPosts: HomePost[] })
           <h2 id="home-quick-links" className="section-title">바로가기</h2>
         </div>
         <ul className="menu menu-sm w-full gap-0 p-2">
-          <li><Link href="/boards" className="g5-sidebar-link">전체 게시판<ChevronRight aria-hidden="true" className="size-4" /></Link></li>
+          <li><Link href={g5ShortHref("/boards")} className="g5-sidebar-link">전체 게시판<ChevronRight aria-hidden="true" className="size-4" /></Link></li>
           <li><Link href="/recent" className="g5-sidebar-link">최신글<ChevronRight aria-hidden="true" className="size-4" /></Link></li>
           <li><Link href="/faq" className="g5-sidebar-link">자주 묻는 질문<ChevronRight aria-hidden="true" className="size-4" /></Link></li>
           <li><Link href="/shop" className="g5-sidebar-link">쇼핑몰<ChevronRight aria-hidden="true" className="size-4" /></Link></li>

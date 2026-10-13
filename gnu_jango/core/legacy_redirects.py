@@ -20,6 +20,12 @@ LEGACY_GNUBOARD5_BASE_URL = "http://127.0.0.9"
 
 LEGACY_SAFE_SEGMENT_RE = re.compile(r"^[a-zA-Z0-9._-]+$")
 
+# The board pages of the Next.js site live under /bbs/<bo_table>[/<wr_id>|/write] (Gnuboard5's bbs/
+# directory); the short /<bo_table> addresses and /boards/... redirect there. Board names are unicode
+# slugs (Board.bo_table), so a board segment may hold any word character, Korean included.
+BOARD_URL_PREFIX = "/bbs"
+BOARD_SAFE_SEGMENT_RE = re.compile(r"^[\w.-]+$")
+
 
 # Browsers drop tab/newline characters inside a URL ("/\t/evil" becomes "//evil"), so no
 # control character may appear in a redirect target.
@@ -96,14 +102,24 @@ def _legacy_safe_relative_redirect(value):
     return value
 
 
-def _legacy_clean_segments(path):
+def _legacy_clean_segments(path, pattern=LEGACY_SAFE_SEGMENT_RE):
     segments = []
     for segment in (path or "").split("/"):
         value = segment.strip()
-        if not value or value in {".", ".."} or not LEGACY_SAFE_SEGMENT_RE.match(value):
+        if not value or value in {".", ".."} or not pattern.match(value):
             return []
         segments.append(value)
     return segments
+
+
+def board_clean_segments(path):
+    return _legacy_clean_segments(path, BOARD_SAFE_SEGMENT_RE)
+
+
+def board_url(bo_table, *rest):
+    """Public address of a board page: /bbs/<bo_table>[/<segment>...], every segment %-escaped."""
+    segments = [bo_table, *rest]
+    return BOARD_URL_PREFIX + "".join(f"/{quote(str(segment), safe='')}" for segment in segments)
 
 
 def _legacy_encoded_path(prefix, segments):
@@ -172,8 +188,8 @@ def _legacy_product_path(request):
 def _legacy_board_path(request):
     bo_table = _legacy_first_param(request, ["bo_table"])
     if not bo_table:
-        return "/boards"
-    board_path = f"/{quote(bo_table, safe='')}"
+        return BOARD_URL_PREFIX
+    board_path = board_url(bo_table)
     seo_title = _legacy_first_param(request, ["wr_seo_title"])
     if seo_title:
         return f"{board_path}/{quote(seo_title, safe='')}/"
@@ -287,7 +303,7 @@ def legacy_bbs_php_route(request, legacy_path):
         bo_table = _legacy_first_param(request, ["bo_table"])
         return _legacy_local_redirect(
             request,
-            f"/{quote(bo_table, safe='')}/write" if bo_table else "/boards",
+            board_url(bo_table, "write") if bo_table else BOARD_URL_PREFIX,
             drop=["bo_table", "rewrite"],
         )
     if file_name == "content.php":
@@ -308,7 +324,7 @@ def legacy_bbs_php_route(request, legacy_path):
         group_id = _legacy_first_param(request, ["gr_id"])
         return _legacy_local_redirect(
             request,
-            "/boards",
+            BOARD_URL_PREFIX,
             drop=["gr_id", "rewrite"],
             set_params={"group": group_id or None},
         )
@@ -516,7 +532,7 @@ def legacy_mobile_route(request, legacy_path=""):
         return _legacy_local_redirect(request, "/")
     if file_name == "group.php":
         group_id = _legacy_first_param(request, ["gr_id"])
-        return _legacy_local_redirect(request, "/boards", drop=["gr_id"], set_params={"group": group_id or None})
+        return _legacy_local_redirect(request, BOARD_URL_PREFIX, drop=["gr_id"], set_params={"group": group_id or None})
     if file_name == "content.php":
         content_id = _legacy_first_param(request, ["co_id"])
         if content_id:

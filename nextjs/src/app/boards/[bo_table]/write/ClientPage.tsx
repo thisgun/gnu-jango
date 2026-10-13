@@ -97,7 +97,7 @@ export default function WritePage({ boTable: fallbackBoTable }: WritePageProps) 
   const isReplyRequest = searchParams.get("w") === "r" && !!replyParentId;
   const routeBoTable = useRuntimeRouteParam(
     "bo_table",
-    ["/boards/:bo_table/write", "/:bo_table/write"],
+    ["/bbs/:bo_table/write", "/boards/:bo_table/write", "/:bo_table/write"],
     fallbackBoTable
   );
   const { user, isInitialized } = useAuthStore();

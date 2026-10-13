@@ -159,6 +159,19 @@ const G5_NON_ROUTE_ROOTS = new Set([
   "theme",
 ]);
 
+/**
+ * Public board pages: /bbs, /bbs/<bo_table> and /bbs/<bo_table>/<wr_id|seo-title|write>. Django
+ * serves the /boards export there; bbs/*.php and file names stay Gnuboard5 file addresses.
+ */
+export function isPublicBoardPath(pathname: string): boolean {
+  const path = normalizedPathname(pathname);
+  if (path === "/bbs") return true;
+  const match = path.match(/^\/bbs\/([^/]+)(?:\/([^/]+))?$/);
+  if (!match) return false;
+  // Board names are slugs: a dot means a file (skin.css, board.php), never a board.
+  return !match[1].includes(".") && !/\.php$/i.test(match[2] || "");
+}
+
 export function shouldRouteThroughG5(pathname: string): boolean {
   const path = normalizedPathname(pathname);
   if (path === "/") return true;
@@ -167,6 +180,7 @@ export function shouldRouteThroughG5(pathname: string): boolean {
   const root = parts[0] || "";
 
   if (G5_APP_ROUTE_ROOTS.has(root)) return true;
+  if (root === "bbs") return isPublicBoardPath(path);
   if (G5_NON_ROUTE_ROOTS.has(root) || root.includes(".")) return false;
 
   return /^\/[0-9A-Za-z_]+(?:\/(?:write|[0-9]+|[^/]+))?$/.test(path);

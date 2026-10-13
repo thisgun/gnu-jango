@@ -26,6 +26,7 @@ from rest_framework.permissions import AllowAny
 from .authentication import SessionJWTAuthentication as JWTAuthentication
 
 from gnu_jango.bbs.models import Board, Comment, Post, Post_scrap, validate_upload_file_content
+from gnu_jango.bbs.utils import get_pretty_url
 from gnu_jango.config import config
 from gnu_jango.config.models import Config
 from gnu_jango.core.models import (
@@ -126,7 +127,8 @@ logger = logging.getLogger(__name__)
 
 
 def _board_post_url(board, post):
-    return "/boards/%s/%s" % (board.bo_table, _public_post_id(post))
+    # The public post address (/bbs/<bo_table>/<id>, %-escaped), as Post.get_absolute_url builds it.
+    return get_pretty_url(board.bo_table, _public_post_id(post))
 
 
 def _public_post_id(post):

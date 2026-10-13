@@ -5,6 +5,7 @@ import {
   g5BasePathForRuntime,
   g5PathForRuntime,
   isG5ThemeRuntime,
+  isPublicBoardPath,
   shouldRouteThroughG5,
   stripG5BasePath,
 } from "@/lib/config";
@@ -56,11 +57,21 @@ export function RuntimeNavigationBridge() {
       const runtimePath = `${stripG5BasePath(pathname)}${suffix}`;
       const targetPath = shouldShorten ? toG5ShortPath(runtimePath) : runtimePath;
       const targetRoute = targetPath.split(/[?#]/)[0] || "/";
+      // /bbs/... has no Next.js route of its own (Django serves the /boards export there), so a
+      // link to it always loads the document instead of a client-side transition.
+      const publicBoardAddress = shouldShorten && isPublicBoardPath(targetRoute);
 
-      if (targetPath === runtimePath && !basePath) return null;
-      if (!shouldRouteThroughG5(targetRoute) && targetPath === runtimePath) return null;
+      if (targetPath === runtimePath && !basePath && !publicBoardAddress) return null;
+      if (!shouldRouteThroughG5(targetRoute) && targetPath === runtimePath && !publicBoardAddress) return null;
 
       return g5PathForRuntime(targetPath);
+    }
+
+    function forcesDocumentLoad(url: URL): boolean {
+      // A link to another spot on the same page (#c_1) stays an in-page jump.
+      const samePage =
+        url.pathname === window.location.pathname && url.search === window.location.search;
+      return shouldShorten && !samePage && isPublicBoardPath(stripG5BasePath(url.pathname));
     }
 
     function handleClick(event: MouseEvent) {
@@ -77,7 +88,7 @@ export function RuntimeNavigationBridge() {
       const url = new URL(href, window.location.href);
       const target = runtimeTargetFor(url);
       if (!target) return;
-      if (`${url.pathname}${url.search}${url.hash}` === target) return;
+      if (`${url.pathname}${url.search}${url.hash}` === target && !forcesDocumentLoad(url)) return;
 
       event.preventDefault();
       window.location.assign(target);

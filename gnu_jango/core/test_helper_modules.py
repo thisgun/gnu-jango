@@ -79,8 +79,8 @@ class BoardNumberHelpersTests(TestCase):
             bbs_utils.get_board_skin_path(self.board_one, is_register_statics=True),
             "board/basic/",
         )
-        self.assertEqual(bbs_utils.get_pretty_url("board name"), "/board%20name/")
-        self.assertEqual(bbs_utils.get_pretty_url("board", "17"), "/board/17")
+        self.assertEqual(bbs_utils.get_pretty_url("board name"), "/bbs/board%20name")
+        self.assertEqual(bbs_utils.get_pretty_url("board", "17"), "/bbs/board/17")
         self.assertEqual(bbs_utils.get_image_type_number("image/webp"), 18)
         self.assertEqual(bbs_utils.get_image_type_number("image/unknown"), 0)
         self.assertEqual(bbs_utils.generate_wr_slug("한글 제목", board_id=self.board_one.pk), "한글-제목")

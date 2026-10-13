@@ -782,7 +782,7 @@ class BbsDownloadSecurityTests(TestCase):
 
 
 #: Board/post/comment detail rendering moved from server-rendered Django views
-#: to the Next.js SPA (core.views.nextjs25_short_board_theme serves the static
+#: to the Next.js SPA (core.views.nextjs25_board_theme serves the static
 #: shell). Secret / read-level / cross-board access is now enforced by the API
 #: (api.access.readable_post_queryset) and covered by
 #: MainApiLatestTests.test_article_detail_hides_secret_post_without_session.

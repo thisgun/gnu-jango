@@ -32,7 +32,7 @@ class DynamicThemeFallbackTests(TestCase):
         )
 
     def test_post_created_after_export_resolves_through_theme_fallback_and_api(self):
-        page = self.client.get(f"/{self.board.bo_table}/{self.post.pk}")
+        page = self.client.get(f"/bbs/{self.board.bo_table}/{self.post.pk}")
         self.assertEqual(page.status_code, 200)
         self.assertTrue(page["Content-Type"].startswith("text/html"))
 

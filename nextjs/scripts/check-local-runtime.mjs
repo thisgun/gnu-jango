@@ -20,7 +20,7 @@ const privateNoindexPaths = parseCsv(
 const publicHtmlAssets = parseCsv(process.env.LOCAL_SMOKE_PUBLIC_HTML_ASSETS || '');
 const publicMetadataPaths = parseCsv(
   process.env.LOCAL_SMOKE_PUBLIC_METADATA_PATHS ||
-    '/,/boards,/faq,/recent,/polls,/search,/shop,/free/6,/shop/1446772772,/shop/list-2010101010,/shop/reviews,/shop/qas,/shop/search?q=TH,/shop/largeimage?it_id=1446772772&no=1'
+    '/,/bbs,/faq,/recent,/polls,/search,/shop,/bbs/free/6,/shop/1446772772,/shop/list-2010101010,/shop/reviews,/shop/qas,/shop/search?q=TH,/shop/largeimage?it_id=1446772772&no=1'
 );
 const legacyShopPassthroughPaths = parseCsv(
   process.env.LOCAL_SMOKE_LEGACY_SHOP_PASSTHROUGH_PATHS ||
@@ -30,14 +30,14 @@ const defaultLegacyShopRedirects = [
   '/mobile=>/',
   '/mobile/=>/',
   '/mobile/index.php=>/',
-  '/mobile/group.php?gr_id=shop&page=2=>/boards?page=2&group=shop',
+  '/mobile/group.php?gr_id=shop&page=2=>/bbs?page=2&group=shop',
   '/mobile/content.php?co_id=company=>/content/company',
   '/mobile/content.php?co_seo_title=%ED%9A%8C%EC%82%AC%EC%86%8C%EA%B0%9C=>/content/%ED%9A%8C%EC%82%AC%EC%86%8C%EA%B0%9C/',
-  '/bbs/board.php?bo_table=free&page=2=>/free?page=2',
-  '/bbs/board.php?bo_table=free&wr_id=6=>/free/6',
-  '/bbs/write.php?bo_table=free=>/free/write',
+  '/bbs/board.php?bo_table=free&page=2=>/bbs/free?page=2',
+  '/bbs/board.php?bo_table=free&wr_id=6=>/bbs/free/6',
+  '/bbs/write.php?bo_table=free=>/bbs/free/write',
   '/bbs/content.php?co_id=company=>/content/company',
-  '/bbs/group.php?gr_id=shop&page=2=>/boards?page=2&group=shop',
+  '/bbs/group.php?gr_id=shop&page=2=>/bbs?page=2&group=shop',
   '/bbs/faq.php?fm_id=1=>/faq?fm_id=1',
   '/bbs/new.php?gr_id=shop&page=2=>/recent?gr_id=shop&page=2',
   '/bbs/search.php?stx=delivery&sfl=wr_subject&bo_table=free&page=2=>/search?sfl=wr_subject&bo_table=free&page=2&q=delivery',
@@ -102,7 +102,7 @@ const legacyShopRedirects = parseRedirects(
 );
 const canonicalRedirects = parseRedirects(
   process.env.LOCAL_SMOKE_CANONICAL_REDIRECTS ||
-    '/boards/free=>/free,/boards/free/6=>/free/6,/boards/free/write=>/free/write,/boards/free/rss=>/rss/free,/shop/products/1446772772=>/shop/1446772772,/shop/categories/2010101010=>/shop/list-2010101010,/shop/products?it_type1=1=>/shop/type-1?it_type1=1'
+    '/boards/free=>/bbs/free,/boards/free/6=>/bbs/free/6,/boards/free/write=>/bbs/free/write,/boards/free/rss=>/rss/free,/shop/products/1446772772=>/shop/1446772772,/shop/categories/2010101010=>/shop/list-2010101010,/shop/products?it_type1=1=>/shop/type-1?it_type1=1'
 );
 const rscPayloads =
   process.env.RUNTIME_SKIP_STATIC_RSC_PAYLOADS === '1'

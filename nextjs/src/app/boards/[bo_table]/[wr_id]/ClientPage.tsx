@@ -101,7 +101,7 @@ function formatPostDate(value?: string | null): string {
 }
 
 export default function PostViewClient({ boTable, wrId }: ClientPageProps) {
-  const routePatterns = ["/boards/:bo_table/:wr_id", "/:bo_table/:wr_id"];
+  const routePatterns = ["/bbs/:bo_table/:wr_id", "/boards/:bo_table/:wr_id", "/:bo_table/:wr_id"];
   const bo_table = useRuntimeRouteParam("bo_table", routePatterns, boTable);
   const wr_id = useRuntimeRouteParam("wr_id", routePatterns, wrId);
   const searchParams = useSearchParams();
@@ -114,7 +114,7 @@ export default function PostViewClient({ boTable, wrId }: ClientPageProps) {
     const value = searchParams.get(key);
     if (value) listParams.set(key, value);
   }
-  const listHref = bo_table ? boardListHref(bo_table, listParams.toString()) : "/boards";
+  const listHref = bo_table ? boardListHref(bo_table, listParams.toString()) : g5ShortHref("/boards");
   const [post, setPost] = useState<PostDetail | null>(null);
   const [board, setBoard] = useState<Board | null>(null);
   const [boardList, setBoardList] = useState<{

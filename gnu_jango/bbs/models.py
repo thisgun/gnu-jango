@@ -220,7 +220,7 @@ class Board(models.Model):
 
     # https://stackoverflow.com/questions/63053210/changing-id-field-to-slug-field-in-django
     def get_absolute_url(self):
-        # The board list on the Next.js site (served by core.views.nextjs25_short_board_theme).
+        # The board list on the Next.js site (served by core.views.nextjs25_board_theme).
         return bbs_utils.get_pretty_url(self.bo_table)
 
     # https://stackoverflow.com/questions/64306819/triyng-to-slugify-url-from-title-posts-in-a-django-blog

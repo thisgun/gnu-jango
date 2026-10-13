@@ -100,8 +100,8 @@ class LegacyBbsRedirectTests(RedirectAssertions, TestCase):
             "/bbs/search.php?stx=hello": "/search?q=hello",
             "/bbs/search.php?q=hello": "/search?q=hello",
             "/bbs/search.php": "/search",
-            "/bbs/group.php?gr_id=community": "/boards?group=community",
-            "/bbs/group.php": "/boards",
+            "/bbs/group.php?gr_id=community": "/bbs?group=community",
+            "/bbs/group.php": "/bbs",
         }
         for url, target in cases.items():
             with self.subTest(url=url):
@@ -109,14 +109,15 @@ class LegacyBbsRedirectTests(RedirectAssertions, TestCase):
 
     def test_board_php_redirects_to_the_board_or_post_page(self):
         cases = {
-            "/bbs/board.php?bo_table=free": "/free",
-            "/bbs/board.php?bo_table=free&wr_id=12&page=2": "/free/12?page=2",
-            "/bbs/board.php?bo_table=free&wr_seo_title=hello-world": "/free/hello-world/",
-            "/bbs/board.php?bo_table=free&wr_id=abc": "/free",
-            "/bbs/board.php": "/boards",
-            "/bbs/board.php?wr_id=12": "/boards",
-            "/bbs/write.php?bo_table=free": "/free/write",
-            "/bbs/write.php": "/boards",
+            "/bbs/board.php?bo_table=free": "/bbs/free",
+            "/bbs/board.php?bo_table=free&wr_id=12&page=2": "/bbs/free/12?page=2",
+            "/bbs/board.php?bo_table=free&wr_seo_title=hello-world": "/bbs/free/hello-world/",
+            "/bbs/board.php?bo_table=free&wr_id=abc": "/bbs/free",
+            "/bbs/board.php?bo_table=%EC%9E%90%EC%9C%A0%EA%B2%8C%EC%8B%9C%ED%8C%90": "/bbs/%EC%9E%90%EC%9C%A0%EA%B2%8C%EC%8B%9C%ED%8C%90",
+            "/bbs/board.php": "/bbs",
+            "/bbs/board.php?wr_id=12": "/bbs",
+            "/bbs/write.php?bo_table=free": "/bbs/free/write",
+            "/bbs/write.php": "/bbs",
             "/bbs/content.php?co_id=company": "/content/company",
             "/bbs/content.php?co_seo_title=about-us": "/content/about-us/",
             "/bbs/content.php": "/content",
@@ -127,7 +128,7 @@ class LegacyBbsRedirectTests(RedirectAssertions, TestCase):
 
     def test_huge_and_unicode_post_ids_do_not_crash_the_redirect(self):
         huge = "9" * 400
-        response = self.assertLocalRedirect(f"/bbs/board.php?bo_table=free&wr_id={huge}", f"/free/{huge}")
+        response = self.assertLocalRedirect(f"/bbs/board.php?bo_table=free&wr_id={huge}", f"/bbs/free/{huge}")
         self.assertEqual(response.status_code, 307)
         for value in ("한글", "%F0%9F%98%80", "../..", "1;DROP TABLE", "\x00"):
             with self.subTest(wr_id=value):
@@ -150,7 +151,7 @@ class LegacyBbsRedirectTests(RedirectAssertions, TestCase):
 
     def test_user_supplied_segments_are_percent_encoded_in_the_location(self):
         response = self.client.get("/bbs/board.php", {"bo_table": "a/b?c#d e", "wr_id": "3"})
-        self.assertEqual(urlsplit(response["Location"]).path, "/a%2Fb%3Fc%23d%20e/3")
+        self.assertEqual(urlsplit(response["Location"]).path, "/bbs/a%2Fb%3Fc%23d%20e/3")
         response = self.client.get("/bbs/content.php", {"co_id": "x/../y"})
         self.assertEqual(urlsplit(response["Location"]).path, "/content/x%2F..%2Fy")
 
@@ -335,8 +336,8 @@ class LegacyMobileRedirectTests(RedirectAssertions, TestCase):
 
     def test_mobile_group_and_content_pages_map_to_nextjs_pages(self):
         cases = {
-            "/mobile/group.php?gr_id=community": "/boards?group=community",
-            "/mobile/group.php": "/boards",
+            "/mobile/group.php?gr_id=community": "/bbs?group=community",
+            "/mobile/group.php": "/bbs",
             "/mobile/content.php?co_id=company": "/content/company",
             "/mobile/content.php?co_seo_title=about": "/content/about/",
             "/mobile/content.php": "/content",
@@ -376,14 +377,19 @@ class LegacyMobileRedirectTests(RedirectAssertions, TestCase):
 
 
 class CanonicalRedirectTests(RedirectAssertions, TestCase):
-    def test_boards_paths_redirect_to_the_short_board_urls(self):
+    def test_boards_paths_redirect_to_the_bbs_board_urls(self):
         cases = {
-            "/boards/free": "/free",
-            "/boards/free/12": "/free/12",
-            "/boards/free/write": "/free/write",
+            "/boards": "/bbs",
+            "/boards/": "/bbs",
+            "/boards/free": "/bbs/free",
+            "/boards/free/12": "/bbs/free/12",
+            "/boards/free/write": "/bbs/free/write",
             "/boards/free/rss": "/rss/free",
             "/boards/free/RSS": "/rss/free",
-            "/boards/free/12?page=3": "/free/12?page=3",
+            "/boards/free/12?page=3": "/bbs/free/12?page=3",
+            "/boards?group=community": "/bbs?group=community",
+            # Korean board names are ordinary board names (Board.bo_table is a unicode slug).
+            "/boards/%EC%9E%90%EC%9C%A0%EA%B2%8C%EC%8B%9C%ED%8C%90": "/bbs/%EC%9E%90%EC%9C%A0%EA%B2%8C%EC%8B%9C%ED%8C%90",
         }
         for url, target in cases.items():
             with self.subTest(url=url):
@@ -392,12 +398,12 @@ class CanonicalRedirectTests(RedirectAssertions, TestCase):
     def test_boards_paths_with_unsafe_segments_fall_back_to_the_board_list(self):
         for url in (
             "/boards//evil.example", "/boards/..", "/boards/a/../b", "/boards/\\evil.example",
-            "/boards/a%20b", "/boards/한글", "/boards/%2e%2e/%2e%2e", "/boards/a//b", "/boards/https:evil.example",
+            "/boards/a%20b", "/boards/%2e%2e/%2e%2e", "/boards/a//b", "/boards/https:evil.example",
         ):
             with self.subTest(url=url):
                 response = self.assertStaysOnSite(url)
                 self.assertEqual(response.status_code, 308)
-                self.assertEqual(urlsplit(response["Location"]).path, "/boards")
+                self.assertEqual(urlsplit(response["Location"]).path, "/bbs")
 
     def test_shop_products_paths_redirect_to_product_pages(self):
         cases = {
@@ -418,10 +424,10 @@ class CanonicalRedirectTests(RedirectAssertions, TestCase):
         response = self.client.get("/shop/products/I1/")
         self.assertEqual((response.status_code, urlsplit(response.get("Location", "")).path), (308, "/shop/I1"))
 
-    def test_a_trailing_slash_still_redirects_to_the_short_board_url(self):
+    def test_a_trailing_slash_still_redirects_to_the_bbs_board_url(self):
         # Rule: the trailing slash is not part of the captured board path.
         response = self.client.get("/boards/free/")
-        self.assertEqual((response.status_code, urlsplit(response.get("Location", "")).path), (308, "/free"))
+        self.assertEqual((response.status_code, urlsplit(response.get("Location", "")).path), (308, "/bbs/free"))
 
     def test_mobile_shop_with_a_trailing_slash_opens_the_shop(self):
         # Rule: /mobile/shop/ is PHP mobile/shop/index.php, the shop home.
@@ -486,6 +492,43 @@ def make_post(board, subject="Hello", **extra):
     return Post.objects.create(board=board, **values)
 
 
+class ShortBoardAddressTests(RedirectAssertions, TestCase):
+    """The board pages live under /bbs/; the old short addresses and /boards/ move there for good."""
+
+    def setUp(self):
+        self.board = make_board("free")
+
+    def test_short_board_addresses_redirect_to_bbs(self):
+        cases = {
+            "/free": "/bbs/free",
+            "/free/": "/bbs/free",
+            "/free/12": "/bbs/free/12",
+            "/free/12?page=3": "/bbs/free/12?page=3",
+            "/free/write": "/bbs/free/write",
+            "/free/hello-slug/": "/bbs/free/hello-slug/",
+        }
+        for url, target in cases.items():
+            with self.subTest(url=url):
+                self.assertLocalRedirect(url, target, status=308)
+
+    def test_a_short_address_of_a_missing_board_is_a_404_not_a_redirect(self):
+        for url in ("/no-such-board", "/no-such-board/12"):
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 404)
+
+    def test_korean_board_pages_are_served_and_the_short_address_redirects(self):
+        make_board("자유게시판")
+        encoded = "/bbs/%EC%9E%90%EC%9C%A0%EA%B2%8C%EC%8B%9C%ED%8C%90"
+        self.assertEqual(self.client.get(encoded).status_code, 200)
+        self.assertEqual(self.client.get(f"{encoded}/3").status_code, 200)
+        self.assertLocalRedirect("/%EC%9E%90%EC%9C%A0%EA%B2%8C%EC%8B%9C%ED%8C%90", encoded, status=308)
+
+    def test_board_and_post_absolute_urls_use_bbs(self):
+        post = make_post(self.board)
+        self.assertEqual(self.board.get_absolute_url(), "/bbs/free")
+        self.assertEqual(post.get_absolute_url(), f"/bbs/free/{post.legacy_wr_id or post.pk}")
+
+
 class NextjsShellViewTests(TestCase):
     def setUp(self):
         self.board = make_board("free")
@@ -493,7 +536,7 @@ class NextjsShellViewTests(TestCase):
     def test_public_pages_are_served_from_the_static_export(self):
         paths = (
             "/", "/login", "/login/", "/login/social-callback", "/register", "/register/result", "/forgot-password",
-            "/email-certify", "/boards", "/faq", "/polls", "/recent", "/search", "/baby", "/offline", "/shop",
+            "/email-certify", "/bbs", "/bbs/", "/faq", "/polls", "/recent", "/search", "/baby", "/offline", "/shop",
             "/shop/cart", "/shop/couponzone", "/shop/compare", "/shop/events", "/shop/order", "/shop/orders",
             "/shop/search", "/shop/wishlist", "/mypage", "/mypage/profile", "/mypage/orders",
             "/admin", "/admin/boards", "/admin/members", "/admin/qas", "/admin/settings", "/admin/shop/categories",
@@ -510,23 +553,24 @@ class NextjsShellViewTests(TestCase):
             "/members/bob", "/shop/list-10", "/shop/categories", "/shop/type-2", "/shop/events/3", "/shop/orders/2026",
             "/shop/personalpay/5", "/shop/personalpay/5/pay", "/shop/I1", "/admin/boards/free", "/admin/members/bob",
             "/admin/qas/4", "/admin/shop/orders/12", "/admin/shop/products/abc", "/admin/shop/products",
-            "/free", "/free/12", "/free/write", "/free/hello-slug/",
+            "/bbs/free", "/bbs/free/", "/bbs/free/12", "/bbs/free/write", "/bbs/free/hello-slug/",
         )
         for path in paths:
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 200)
 
     def test_unknown_pages_are_a_404(self):
-        for path in ("/mypage/no-such-page", "/shop/a/b/c/d", "/no-such-board", "/no-such-board/12", "/login/other", "/bbs/plain"):
+        for path in ("/mypage/no-such-page", "/shop/a/b/c/d", "/no-such-board", "/no-such-board/12", "/login/other", "/bbs/plain", "/bbs/plain/3"):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 404)
                 self.assertTrue(response["Content-Type"].startswith("text/html"))
 
     def test_board_alias_cm_free_resolves_to_the_free_board(self):
-        self.assertEqual(self.client.get("/cm_free").status_code, 200)
-        self.assertEqual(self.client.get("/cm_free/3").status_code, 200)
+        self.assertEqual(self.client.get("/bbs/cm_free").status_code, 200)
+        self.assertEqual(self.client.get("/bbs/cm_free/3").status_code, 200)
         self.assertEqual(self.client.get("/cm_free.txt").status_code, 200)
+        self.assertEqual(self.client.get("/cm_free").status_code, 308)
 
     def test_page_scripts_carry_the_per_response_nonce_from_the_csp_header(self):
         first = self.client.get("/login")
@@ -548,10 +592,10 @@ class NextjsShellViewTests(TestCase):
         self.assertIn("window.__G5_NEXTJS25_CONFIG__", body)
         self.assertIn('"apiBaseUrl":"http://testserver/api/v1"', body)
 
-    def test_short_board_pages_use_the_post_address_as_canonical_url(self):
-        body = self.client.get("/free/12").content.decode()
+    def test_board_pages_use_the_post_address_as_canonical_url(self):
+        body = self.client.get("/bbs/free/12").content.decode()
         self.assertIn('rel="canonical"', body)
-        self.assertIn("http://testserver/free/12", body)
+        self.assertIn("http://testserver/bbs/free/12", body)
 
     def test_request_path_is_kept_inside_the_runtime_config_json(self):
         hostile = "/mypage/qas/%3C/script%3E%3Cscript%3Ealert(1)%3C/script%3E%22%26"
@@ -564,7 +608,7 @@ class NextjsShellViewTests(TestCase):
         self.assertIn(chr(92) + "u003C/script" + chr(92) + "u003E", body)
 
     def test_text_payloads_are_private_and_use_the_flight_content_type(self):
-        for path in ("/index.txt", "/login.txt", "/mypage.txt", "/mypage/qas/5.txt", "/shop/I1.txt", "/free.txt", "/free/12.txt", "/free/write.txt", "/boards.txt"):
+        for path in ("/index.txt", "/login.txt", "/mypage.txt", "/mypage/qas/5.txt", "/shop/I1.txt", "/free.txt", "/free/12.txt", "/free/write.txt", "/boards.txt", "/bbs.txt", "/bbs/free.txt", "/bbs/free/12.txt", "/bbs/free/write.txt"):
             with self.subTest(path=path):
                 response = self.client.get(path)
                 self.assertEqual(response.status_code, 200)
@@ -573,7 +617,7 @@ class NextjsShellViewTests(TestCase):
                 self.assertIn("no-store", response["Cache-Control"])
 
     def test_text_payload_for_unknown_board_or_page_is_a_404(self):
-        for path in ("/nope.txt", "/nope/12.txt", "/mypage/none.txt"):
+        for path in ("/nope.txt", "/nope/12.txt", "/bbs/nope.txt", "/mypage/none.txt"):
             with self.subTest(path=path):
                 self.assertEqual(self.client.get(path).status_code, 404)
 
@@ -625,8 +669,9 @@ class NextjsShellViewTests(TestCase):
         from gnu_jango.core.views import _nextjs25_public_metadata_path as metadata_path
 
         self.assertEqual(metadata_path(""), "/")
-        self.assertEqual(metadata_path("/boards/free/12?x=1"), "/free/12")
-        self.assertEqual(metadata_path("/boards"), "/boards")
+        self.assertEqual(metadata_path("/boards/free/12?x=1"), "/bbs/free/12")
+        self.assertEqual(metadata_path("/boards"), "/bbs")
+        self.assertEqual(metadata_path("/bbs/free/12"), "/bbs/free/12")
         self.assertEqual(metadata_path("/shop/products/I1"), "/shop/I1")
         self.assertEqual(metadata_path("/shop/categories/10"), "/shop/list-10")
         self.assertEqual(metadata_path("/shop/I1"), "/shop/I1")
@@ -862,7 +907,7 @@ class PrivatePageHeaderTests(TestCase):
                 self.assertFalse(any(token in cache_control for token in ("max-age=", "public", "s-maxage")), cache_control)
 
     def test_public_pages_are_indexable(self):
-        for path in ("/", "/boards", "/faq", "/shop", "/shop/I1"):
+        for path in ("/", "/bbs", "/faq", "/shop", "/shop/I1"):
             with self.subTest(path=path):
                 self.assertNotIn("X-Robots-Tag", self.client.get(path))
 
@@ -892,7 +937,7 @@ class SitemapTests(TestCase):
 
         locs = self.locs()
 
-        for path in ("/", "/boards", "/faq", "/shop", "/shop/products", "/content/company", "/shop/list-10", "/shop/P1"):
+        for path in ("/", "/bbs", "/faq", "/shop", "/shop/products", "/content/company", "/shop/list-10", "/shop/P1"):
             self.assertIn(f"http://testserver{path}", locs)
         self.assertEqual(len(locs), len(set(locs)))
 
@@ -959,9 +1004,9 @@ class PostSitemapTests(TestCase):
         self.assertEqual(response.status_code, 200)
         return [node.text for node in ET.fromstring(response.content).findall("sm:url/sm:loc", SITEMAP_NS)]
 
-    def test_public_posts_are_listed_by_their_short_url(self):
+    def test_public_posts_are_listed_by_their_bbs_url(self):
         post = make_post(self.open, "Public")
-        self.assertEqual(self.locs(), [f"http://testserver/open/{post.pk}"])
+        self.assertEqual(self.locs(), [f"http://testserver/bbs/open/{post.pk}"])
 
     def test_secret_posts_are_never_listed(self):
         make_post(self.open, "Public")
@@ -972,7 +1017,7 @@ class PostSitemapTests(TestCase):
 
     def test_original_post_numbers_are_used_for_imported_posts(self):
         make_post(self.open, "Imported", legacy_wr_id=4242)
-        self.assertEqual(self.locs(), ["http://testserver/open/4242"])
+        self.assertEqual(self.locs(), ["http://testserver/bbs/open/4242"])
 
     def test_empty_sitemap_is_valid_xml(self):
         self.assertEqual(self.locs(), [])
@@ -1016,7 +1061,7 @@ class BoardRssTests(TestCase):
         items = self.feed().findall("channel/item")
 
         self.assertEqual([item.findtext("title") for item in items], ["Post 0", "Post 1"])
-        self.assertTrue(items[0].findtext("link").startswith("http://testserver/news/"))
+        self.assertTrue(items[0].findtext("link").startswith("http://testserver/bbs/news/"))
         self.assertIn("News & Views", self.feed().findtext("channel/title"))
 
     def test_secret_posts_do_not_appear_in_the_feed(self):
@@ -1211,7 +1256,7 @@ class SubPathDeploymentTests(TestCase):
         targets = []
         for url in ("/bbs/board.php?bo_table=free&wr_id=2", "/boards/free", "/shop/item.php?it_id=A"):
             targets.append(urlsplit(self.client.get(url, SCRIPT_NAME="/sub")["Location"]).path)
-        self.assertEqual(targets, ["/sub/free/2", "/sub/free", "/sub/shop/A"])
+        self.assertEqual(targets, ["/sub/bbs/free/2", "/sub/bbs/free", "/sub/shop/A"])
 
 
 class RedirectHelperTests(TestCase):

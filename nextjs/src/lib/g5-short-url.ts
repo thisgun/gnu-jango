@@ -265,11 +265,14 @@ function legacyProductShortPath(search: string): string {
   return "/shop/products";
 }
 
+// Board pages are published under /bbs/ (Django serves them; the Next.js route stays /boards).
+const BOARD_URL_PREFIX = "/bbs";
+
 function legacyBoardShortPath(search: string): string {
   const boTable = firstSearchParam(search, ["bo_table"]);
-  if (!boTable) return "/boards";
+  if (!boTable) return BOARD_URL_PREFIX;
 
-  const boardPath = `/${encodeURIComponent(boTable)}`;
+  const boardPath = `${BOARD_URL_PREFIX}/${encodeURIComponent(boTable)}`;
   const seoTitle = firstSearchParam(search, ["wr_seo_title"]);
   if (seoTitle) return `${boardPath}/${encodeURIComponent(seoTitle)}/`;
 
@@ -394,7 +397,7 @@ function legacyGnuboardPhpShortPath(pathname: string, search: string, hash: stri
   if (pathname === "/bbs/write.php") {
     const boTable = firstSearchParam(search, ["bo_table"]);
     return withSuffix(
-      boTable ? `/${encodeURIComponent(boTable)}/write` : "/boards",
+      boTable ? `${BOARD_URL_PREFIX}/${encodeURIComponent(boTable)}/write` : BOARD_URL_PREFIX,
       searchWithChanges(search, ["bo_table", "rewrite"]),
       hash
     );
@@ -425,7 +428,7 @@ function legacyGnuboardPhpShortPath(pathname: string, search: string, hash: stri
   if (pathname === "/bbs/group.php") {
     const groupId = firstSearchParam(search, ["gr_id"]);
     return withSuffix(
-      "/boards",
+      BOARD_URL_PREFIX,
       searchWithChanges(search, ["gr_id", "rewrite"], groupId ? { group: groupId } : {}),
       hash
     );
@@ -470,7 +473,7 @@ export function toG5ShortPath(value: string): string {
     const groupId = firstSearchParam(search, ["gr_id"]);
 
     return withSuffix(
-      "/boards",
+      BOARD_URL_PREFIX,
       searchWithChanges(search, ["gr_id"], groupId ? { group: groupId } : {}),
       hash
     );
@@ -657,25 +660,16 @@ export function toG5ShortPath(value: string): string {
     );
   }
 
-  let match = pathname.match(/^\/boards\/([0-9A-Za-z_]+)$/);
-  if (match) return withSuffix(`/${match[1]}`, search, hash);
+  // The internal /boards route is published under /bbs. Board names may be Korean (any segment).
+  if (pathname === "/boards" || pathname === "/boards/") {
+    return withSuffix(BOARD_URL_PREFIX, search, hash);
+  }
 
-  match = pathname.match(/^\/boards\/([0-9A-Za-z_]+)\/rss$/);
+  let match = pathname.match(/^\/boards\/([^/]+)\/rss$/);
   if (match) return withSuffix(`/rss/${match[1]}`, search, hash);
 
-  match = pathname.match(/^\/boards\/([0-9A-Za-z_]+)\/write$/);
-  if (match) return withSuffix(`/${match[1]}/write`, search, hash);
-
-  match = pathname.match(/^\/boards\/([0-9A-Za-z_]+)\/([0-9]+)$/);
-  if (match) return withSuffix(`/${match[1]}/${match[2]}`, search, hash);
-
-  match = pathname.match(/^\/boards\/([0-9A-Za-z_]+)\/([^/]+)\/$/);
-  if (match) return withSuffix(`/${match[1]}/${match[2]}/`, search, hash);
-
-  match = pathname.match(/^\/boards\/([0-9A-Za-z_]+)\/([^/]+)$/);
-  if (match && match[2] !== "write" && match[2] !== "rss") {
-    return withSuffix(`/${match[1]}/${match[2]}`, search, hash);
-  }
+  match = pathname.match(/^\/boards\/([^/]+)(\/(?:[^/]+\/?)?)?$/);
+  if (match) return withSuffix(`${BOARD_URL_PREFIX}/${match[1]}${match[2] || ""}`, search, hash);
 
   match = pathname.match(/^\/shop\/categories\/([0-9A-Za-z]+)$/);
   if (match) return withSuffix(`/shop/list-${match[1]}`, search, hash);

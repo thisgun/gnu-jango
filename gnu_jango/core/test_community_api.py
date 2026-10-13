@@ -746,7 +746,7 @@ class RecentAndSearchTests(CommunityApiBase):
         self.assertEqual([row["wr_subject"] for row in data["data"]], ["newer", "older"])
         first = data["data"][0]
         self.assertEqual((first["bo_table"], first["gr_id"], first["gr_subject"], first["is_comment"]), ("cm-side", "cm-other", "Elsewhere", False))
-        self.assertEqual(first["href"], f"/boards/cm-side/{new.pk}")
+        self.assertEqual(first["href"], f"/bbs/cm-side/{new.pk}")
         self.assertEqual(first["mb_id"], "cm-alice")
         self.assertEqual(data["meta"]["total"], 2)
         self.assertIn(old.pk, [row["wr_id"] for row in data["data"]])

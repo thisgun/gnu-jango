@@ -97,6 +97,7 @@ NEXTJS25_DEBUG_TOOLBAR_BLOCKED_PREFIXES = (
     "/register",
     "/forgot-password",
     "/email-certify",
+    "/bbs",
     "/boards",
     "/notice",
     "/free",

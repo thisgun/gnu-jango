@@ -394,11 +394,11 @@ def get_pretty_url(bo_table, post_id=0, **kwargs):
 
         bo_table = board.bo_table
 
-    # The Next.js site's short board URLs (core.views.nextjs25_short_board_theme serves them).
+    # The Next.js site's board pages under /bbs/ (core.views.nextjs25_board_theme serves them).
     if post_id:
-        return "/%s/%s" % (quote(str(bo_table)), int(post_id))
+        return "/bbs/%s/%s" % (quote(str(bo_table), safe=""), int(post_id))
 
-    return "/%s/" % quote(str(bo_table))
+    return "/bbs/%s" % quote(str(bo_table), safe="")
 
 
 def get_image_type_number(mimetype):

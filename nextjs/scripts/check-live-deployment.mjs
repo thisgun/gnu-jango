@@ -22,14 +22,14 @@ const defaultLegacyShopRedirects = [
   '/mobile=>/',
   '/mobile/=>/',
   '/mobile/index.php=>/',
-  '/mobile/group.php?gr_id=shop&page=2=>/boards?page=2&group=shop',
+  '/mobile/group.php?gr_id=shop&page=2=>/bbs?page=2&group=shop',
   '/mobile/content.php?co_id=company=>/content/company',
   '/mobile/content.php?co_seo_title=%ED%9A%8C%EC%82%AC%EC%86%8C%EA%B0%9C=>/content/%ED%9A%8C%EC%82%AC%EC%86%8C%EA%B0%9C/',
-  '/bbs/board.php?bo_table=free&page=2=>/free?page=2',
-  '/bbs/board.php?bo_table=free&wr_id=6=>/free/6',
-  '/bbs/write.php?bo_table=free=>/free/write',
+  '/bbs/board.php?bo_table=free&page=2=>/bbs/free?page=2',
+  '/bbs/board.php?bo_table=free&wr_id=6=>/bbs/free/6',
+  '/bbs/write.php?bo_table=free=>/bbs/free/write',
   '/bbs/content.php?co_id=company=>/content/company',
-  '/bbs/group.php?gr_id=shop&page=2=>/boards?page=2&group=shop',
+  '/bbs/group.php?gr_id=shop&page=2=>/bbs?page=2&group=shop',
   '/bbs/faq.php?fm_id=1=>/faq?fm_id=1',
   '/bbs/new.php?gr_id=shop&page=2=>/recent?gr_id=shop&page=2',
   '/bbs/search.php?stx=delivery&sfl=wr_subject&bo_table=free&page=2=>/search?sfl=wr_subject&bo_table=free&page=2&q=delivery',
@@ -589,8 +589,8 @@ await checkLegacyAdminLogin();
 for (const redirect of legacyShopRedirects) {
   await checkLegacyShopRedirect(redirect);
 }
-await checkRedirect('/boards/free', '/free');
-await checkRedirect('/boards/free/6', '/free/6');
+await checkRedirect('/boards/free', '/bbs/free');
+await checkRedirect('/boards/free/6', '/bbs/free/6');
 await checkRedirect('/shop/products/1446772772', '/shop/1446772772');
 await checkRedirect('/shop/categories/2010101010', '/shop/list-2010101010');
 

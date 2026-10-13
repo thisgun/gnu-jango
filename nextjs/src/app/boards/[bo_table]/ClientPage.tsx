@@ -55,7 +55,7 @@ function toPage(value: string | null): number {
 
 export default function BoardPostListClient({ boTable }: ClientPageProps) {
   const user = useAuthStore((state) => state.user);
-  const bo_table = useRuntimeRouteParam("bo_table", ["/boards/:bo_table", "/:bo_table"], boTable);
+  const bo_table = useRuntimeRouteParam("bo_table", ["/bbs/:bo_table", "/boards/:bo_table", "/:bo_table"], boTable);
   const searchParams = useSearchParams();
   const queryKey = searchParams.toString();
 
@@ -205,7 +205,7 @@ export default function BoardPostListClient({ boTable }: ClientPageProps) {
             </p>
           </div>
           <Button asChild>
-            <Link href="/boards">게시판 목록으로</Link>
+            <Link href={g5ShortHref("/boards")}>게시판 목록으로</Link>
           </Button>
         </div>
       </div>
@@ -245,7 +245,7 @@ export default function BoardPostListClient({ boTable }: ClientPageProps) {
     <div className="site-container pb-20 md:pb-12 solune-board-list-page">
       <div className="solune-content-shell">
         <main className="solune-main-content">
-      <Breadcrumb items={[{ label: "게시판", href: "/boards" }, { label: board.bo_subject }]} />
+      <Breadcrumb items={[{ label: "게시판", href: g5ShortHref("/boards") }, { label: board.bo_subject }]} />
 
       <header className="flex flex-col justify-between gap-4 pb-1 md:flex-row md:items-end md:pb-5">
         <div>
