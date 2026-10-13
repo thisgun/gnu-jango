@@ -15,6 +15,16 @@ def main():
             "available on your PYTHONPATH environment variable? Did you "
             "forget to activate a virtual environment?"
         ) from exc
+
+    # Vercel discovers Django settings by invoking manage.py with no command and
+    # serializing the uppercase settings before importing the WSGI application.
+    # Initialize the app registry first so settings that contain gettext_lazy
+    # values (for example, Unfold's admin menu) can be serialized safely.
+    if os.environ.get("VERCEL") == "1" and len(sys.argv) == 1:
+        import django
+
+        django.setup()
+
     execute_from_command_line(sys.argv)
 
 

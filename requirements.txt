@@ -60,7 +60,8 @@ redis==5.3.1
 # Serving / deployment
 gunicorn==26.2.0
 whitenoise==6.12.0
-django-heroku==0.3.1
+# Optional for legacy Heroku dynos only: `pip install django-heroku==0.3.1`.
+# Keep it out of shared requirements: it pulls source-built psycopg2, which needs pg_config on Vercel.
 python-decouple==3.8
 sentry-sdk[django]==2.63.0
 

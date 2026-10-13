@@ -1,5 +1,6 @@
 from .base import *
 from .deploy import database_from_env, vercel_allowed_hosts
+from django.core.exceptions import ImproperlyConfigured
 
 ALLOWED_HOSTS = de_config("ALLOWED_HOSTS", default="", cast=csv_config)
 # On Vercel (VERCEL=1) also accept the deployment, branch and production *.vercel.app hosts.
@@ -57,6 +58,21 @@ DATABASES = {
 
 IS_HEROKU = "DYNO" in os.environ
 
+
+def configure_heroku(settings_mapping):
+	"""Apply the optional legacy Heroku settings integration with actionable setup guidance."""
+	try:
+		import django_heroku
+	except ModuleNotFoundError as exc:
+		if exc.name != "django_heroku":
+			raise
+		raise ImproperlyConfigured(
+			"Heroku deployment detected (DYNO is set), but django-heroku is not installed. "
+			"Install the optional Heroku dependency with `pip install django-heroku==0.3.1`."
+		) from exc
+
+	django_heroku.settings(settings_mapping)
+
 MAX_CONN_AGE = 600
 
 # DATABASE_URL wins over DB_*; resolved exactly like development.py (example/settings/deploy.py) but
@@ -66,21 +82,13 @@ MAX_CONN_AGE = 600
 _database_from_url = database_from_env(DEPLOY_ENV, default_conn_max_age=MAX_CONN_AGE, default_ssl_require=True)
 if _database_from_url:
     DATABASES["default"] = _database_from_url
-
-    # Enable test database if found in CI environment.
-    if "CI" in os.environ:
-        DATABASES["default"]["TEST"] = DATABASES["default"]
         
 if IS_HEROKU:
-	import django_heroku
-
-	#Heroku 환경 추가
-	# 맨 마지막줄 추가
-	django_heroku.settings(locals())
+	configure_heroku(locals())
 
 # Enable WhiteNoise's compression and caching of static assets. STATICFILES_STORAGE
-# was removed in Django 5.1, so this has to be set through STORAGES. django_heroku
-# still writes the obsolete setting, which Django ignores, so apply this after it.
+# was removed in Django 5.1; the optional Heroku integration may set it, so use STORAGES
+# and apply this after that integration.
 STORAGES = {
 	**STORAGES,
 	"staticfiles": {

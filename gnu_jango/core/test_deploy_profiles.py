@@ -5,7 +5,12 @@ they only assert on the dicts the helpers return (or the errors they raise).
 """
 
 import json
+import importlib
+import os
+import subprocess
+import sys
 from io import StringIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
@@ -16,7 +21,7 @@ from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIClient
 
-from example.settings import deploy
+from example.settings import deploy, production
 from gnu_jango.core import deploy_profile, scheduled_jobs
 
 S3_ENV = {
@@ -27,6 +32,109 @@ S3_ENV = {
     "S3_ACCESS_KEY_ID": "access-key-placeholder",
     "S3_SECRET_ACCESS_KEY": "secret-key-placeholder",
 }
+
+
+class HerokuOptionalDependencyTests(SimpleTestCase):
+    def test_missing_django_heroku_has_actionable_error(self):
+        with mock.patch.dict("sys.modules", {"django_heroku": None}):
+            with self.assertRaisesMessage(ImproperlyConfigured, "pip install django-heroku==0.3.1"):
+                production.configure_heroku({})
+
+    def test_installed_django_heroku_receives_settings(self):
+        django_heroku = mock.Mock()
+        settings_mapping = {"SECRET_KEY": "test"}
+
+        with mock.patch.dict("sys.modules", {"django_heroku": django_heroku}):
+            production.configure_heroku(settings_mapping)
+
+        django_heroku.settings.assert_called_once_with(settings_mapping)
+
+
+class ProductionSettingsSerializationTests(SimpleTestCase):
+    def test_ci_database_settings_are_serializable(self):
+        ci_env = {
+            "CI": "1",
+            "DATABASE_URL": "postgresql://ci:ci@localhost:5432/ci",
+            "DB_CONN_MAX_AGE": "0",
+            "DB_SSL_REQUIRE": "false",
+            "DB_DISABLE_SERVER_SIDE_CURSORS": "true",
+            "ALLOWED_HOSTS": "localhost",
+            "SECRET_KEY": "ci-settings-serialization-only",
+            "MEDIA_STORAGE": "local",
+            "EMAIL_BACKEND": "django.core.mail.backends.console.EmailBackend",
+        }
+
+        try:
+            with mock.patch.dict("os.environ", ci_env):
+                os.environ.pop("DYNO", None)
+                importlib.reload(production)
+                json.dumps(production.DATABASES, default=str)
+        finally:
+            importlib.reload(production)
+
+    def test_vercel_settings_scan_can_serialize_lazy_settings(self):
+        repo_root = Path(__file__).resolve().parents[2]
+        scanner = r"""
+import importlib
+import json
+import os
+import runpy
+import sys
+import django.core.management
+
+class StopAfterManagePySetsSettings(Exception):
+    pass
+
+def stop(*args, **kwargs):
+    raise StopAfterManagePySetsSettings
+
+django.core.management.execute_from_command_line = stop
+sys.argv = ["manage.py"]
+try:
+    runpy.run_path("manage.py", run_name="__main__")
+except StopAfterManagePySetsSettings:
+    pass
+
+settings_module = os.environ["DJANGO_SETTINGS_MODULE"]
+module = importlib.import_module(settings_module)
+settings = {key: getattr(module, key) for key in dir(module) if key.isupper()}
+print(json.dumps({"settings_module": settings_module, "django_settings": settings}, default=str))
+"""
+        env = {key: os.environ[key] for key in ("PATH", "PATHEXT", "SYSTEMROOT", "WINDIR", "TEMP", "TMP") if key in os.environ}
+        env.update({
+            "PYTHONPATH": str(repo_root),
+            "DJANGO_SETTINGS_MODULE": "example.settings",
+            "ENVIRONMENT": "Production",
+            "VERCEL": "1",
+            "CI": "1",
+            "SECRET_KEY": "vercel-settings-scan-test-only",
+            "ALLOWED_HOSTS": "localhost",
+            "DATABASE_URL": "",
+            "DB_ENGINE": "",
+            "MEDIA_STORAGE": "local",
+            "EMAIL_BACKEND": "django.core.mail.backends.console.EmailBackend",
+            "DEBUG": "False",
+            "CACHE_URL": "",
+            "LOG_TO_FILE": "False",
+        })
+
+        result = subprocess.run(
+            [sys.executable, "-c", scanner],
+            cwd=repo_root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        error_tail = "\n".join(result.stderr.strip().splitlines()[-12:])
+        self.assertEqual(
+            result.returncode,
+            0,
+            f"Vercel's settings scan could not serialize Django settings:\n{error_tail}",
+        )
+        serialized = json.loads(result.stdout)
+        self.assertEqual(serialized["django_settings"]["WSGI_APPLICATION"], "example.wsgi.application")
 
 
 class MediaStorageConfigTests(SimpleTestCase):

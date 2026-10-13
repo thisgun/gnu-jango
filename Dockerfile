@@ -23,7 +23,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ENVIRONMENT=Production \
     MEDIA_ROOT=/app/media
 
-# libpq: a transitive dependency (django-heroku) may build psycopg2 from source in the builder stage.
+# Keep the PostgreSQL client library available to the runtime image.
 # The app runs as an unprivileged user; it writes only to media/ and logs/.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libpq5 \
