@@ -9,15 +9,29 @@ from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, Ou
 from gnu_jango.users.models import Profile
 
 
-class CsrfExemptSessionAuthentication(SessionAuthentication):
-    """Keep the existing API's session-cookie behaviour for admin browser requests."""
-
-    def enforce_csrf(self, request):
-        return None
-
-
 class SessionJWTAuthentication(JWTAuthentication):
     """Reject access tokens after their password version or refresh-token session is revoked."""
+
+    def authenticate(self, request):
+        # Bearer tokens are not ambient browser credentials, so the parent handler is sufficient.
+        authenticated = super().authenticate(request)
+        if authenticated is not None:
+            return authenticated
+
+        # The browser keeps the access token in an HttpOnly cookie after a page reload. Treat that
+        # cookie as a CSRF-sensitive credential and run the same Django CSRF check as session auth.
+        raw_token = request.COOKIES.get("g5_token")
+        if not raw_token:
+            return None
+
+        try:
+            validated_token = self.get_validated_token(raw_token)
+        except AuthenticationFailed:
+            # An expired access cookie must not prevent the refresh endpoint or an
+            # independent Django admin session from authenticating the request.
+            return None
+        SessionAuthentication().enforce_csrf(request)
+        return self.get_user(validated_token), validated_token
 
     def get_user(self, validated_token):
         user = super().get_user(validated_token)

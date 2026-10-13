@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 const envProductionPath = join(repoRoot, '.env.production');
+const envTemplatePath = join(repoRoot, '.env.production.example');
 const envLocalPath = join(repoRoot, '.env.production.local');
 const vercelJsonPath = join(repoRoot, 'vercel.json');
 
@@ -16,6 +17,7 @@ const REQUIRED_URLS = [
     name: 'NEXT_PUBLIC_API_URL',
     mustEndWith: '/api/v1',
     description: 'Django API URL exposed to browser/server components',
+    optional: true,
   },
   {
     name: 'G5_API_INTERNAL_URL',
@@ -83,7 +85,7 @@ function unquoteEnvValue(value) {
 
 function mergedEnv() {
   return {
-    ...parseEnvFile(envProductionPath),
+    ...parseEnvFile(args.has('--template') ? envTemplatePath : envProductionPath),
     ...parseEnvFile(envLocalPath),
     ...process.env,
   };
@@ -106,6 +108,7 @@ function containsPlaceholder(value) {
 function assertUrl(env, rule) {
   const value = String(env[rule.name] || '').trim();
   if (!value) {
+    if (rule.optional) return null;
     fail(`${rule.name} is required`, { usage: rule.description });
   }
 
@@ -195,18 +198,28 @@ function assertVercelJson() {
 
 const env = mergedEnv();
 const parsedUrls = Object.fromEntries(REQUIRED_URLS.map((rule) => [rule.name, assertUrl(env, rule)]));
+if (!parsedUrls.NEXT_PUBLIC_API_URL && env.G5_NEXT_RUNTIME !== 'server') {
+  fail('NEXT_PUBLIC_API_URL may be unset only when G5_NEXT_RUNTIME=server enables the same-origin API proxy', {
+    usage: 'Set G5_API_INTERNAL_URL and G5_NEXT_RUNTIME=server for proxy mode.',
+  });
+}
+if (parsedUrls.NEXT_PUBLIC_API_URL && env.G5_NEXT_RUNTIME === 'server') {
+  fail('NEXT_PUBLIC_API_URL must be unset in G5_NEXT_RUNTIME=server proxy mode', {
+    usage: 'The browser should call the same-origin /api/v1 proxy; set G5_API_INTERNAL_URL for server-side forwarding.',
+  });
+}
 for (const rule of REQUIRED_VALUES) {
   assertValue(env, rule);
 }
 assertVercelJson();
 
 if (strict) {
-  const apiOrigin = parsedUrls.NEXT_PUBLIC_API_URL.origin;
+  const apiOrigin = parsedUrls.NEXT_PUBLIC_API_URL?.origin;
   const internalApiOrigin = parsedUrls.G5_API_INTERNAL_URL.origin;
   const g5Origin = parsedUrls.NEXT_PUBLIC_G5_URL.origin;
   const appOrigin = parsedUrls.NEXT_PUBLIC_APP_URL.origin;
 
-  if (apiOrigin !== internalApiOrigin) {
+  if (apiOrigin && apiOrigin !== internalApiOrigin) {
     console.warn('[check-vercel-env] NEXT_PUBLIC_API_URL and G5_API_INTERNAL_URL use different origins.');
   }
   if (appOrigin === apiOrigin && !args.has('--allow-same-origin')) {

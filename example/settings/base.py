@@ -549,9 +549,8 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "gnu_jango.api.authentication.SessionJWTAuthentication",
-        # CSRF-exempt session auth so a concurrent admin session in the same
-        # browser does not block token-based API POSTs (see the class docstring).
-        "gnu_jango.api.authentication.CsrfExemptSessionAuthentication",
+        # Browser session cookies are ambient credentials and must pass Django's CSRF check.
+        "rest_framework.authentication.SessionAuthentication",
         "rest_framework.authentication.BasicAuthentication",
     ),
     "DEFAULT_THROTTLE_RATES": {

@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "comment": "Security headers for the static-export demo on Vercel. next.config.ts headers() do not apply under `output: export`, so they are mirrored here and in scripts/write-apache-static-headers.mjs (Apache deploy). connect-src/img-src use the https: wildcard so headless API hosts need no per-env entry.",
+  "comment": "Security headers for Vercel deployments. Static exports need this file because next.config.ts headers() do not apply under `output: export`; server mode keeps the same policy. Apache static deployments mirror these headers in scripts/write-apache-static-headers.mjs. connect-src/img-src use the https: wildcard so headless API hosts need no per-env entry.",
   "headers": [
     {
       "source": "/(.*)",

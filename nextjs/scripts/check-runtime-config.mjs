@@ -448,7 +448,7 @@ for (const token of [
 for (const token of [
   '"DEFAULT_AUTHENTICATION_CLASSES"',
   '"gnu_jango.api.authentication.SessionJWTAuthentication"',
-  '"gnu_jango.api.authentication.CsrfExemptSessionAuthentication"',
+  '"rest_framework.authentication.SessionAuthentication"',
   'CORS_ALLOW_CREDENTIALS',
   'CORS_ALLOW_ALL_ORIGINS',
 ]) {
@@ -464,11 +464,41 @@ for (const token of ['class SessionJWTAuthentication(JWTAuthentication):', 'toke
 }
 
 for (const token of [
-  'class CsrfExemptSessionAuthentication(SessionAuthentication):',
-  'def enforce_csrf(self, request):',
+  'SessionAuthentication().enforce_csrf(request)',
+  'request.COOKIES.get("g5_token")',
+  'except AuthenticationFailed:',
 ]) {
   if (!djangoSessionAuthSource.includes(token)) {
-    fail(`Django API session authentication is missing security contract token ${token}`);
+    fail(`Django JWT cookie authentication is missing CSRF contract token ${token}`);
+  }
+}
+
+for (const token of [
+  'def csrf_token_view(request):',
+  'get_token(request)',
+  'Cache-Control',
+  'SessionAuthentication().enforce_csrf(request)',
+  'request.COOKIES.get("g5_refresh")',
+]) {
+  if (!djangoAuthSource.includes(token)) {
+    fail(`Django API CSRF bootstrap endpoint is missing token ${token}`);
+  }
+}
+
+for (const token of ["path(\"auth/csrf\", v1_auth.csrf_token_view", "path(\"auth/refresh\""]) {
+  if (!djangoApiUrlsSource.includes(token)) {
+    fail(`Django API is missing CSRF/auth route token ${token}`);
+  }
+}
+
+for (const token of [
+  "'/auth/csrf'",
+  "'/auth/logout'",
+  "'X-CSRFToken'",
+  'this.getCsrfToken()',
+]) {
+  if (!apiClientSource.includes(token)) {
+    fail(`Browser API client is missing CSRF protection token ${token}`);
   }
 }
 

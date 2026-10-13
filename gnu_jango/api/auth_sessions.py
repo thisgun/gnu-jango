@@ -12,6 +12,7 @@ from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, Ou
 from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 
 from gnu_jango.users.models import Profile
+from gnu_jango.utils.lib import get_client_ip
 
 from .response import api_error, api_response
 
@@ -53,9 +54,9 @@ def issue_refresh_token(user, request=None, login_at=None):
     refresh["sid"] = refresh["jti"]
     refresh["lat"] = _login_time(login_at) or int(refresh["iat"])
     user_agent = request.headers.get("User-Agent") if request else ""
-    remote_addr = request.META.get("REMOTE_ADDR") if request else ""
+    remote_addr = get_client_ip(request) if request else ""
     refresh["ua"] = user_agent[:512] if isinstance(user_agent, str) else ""
-    refresh["ip"] = remote_addr[:64] if isinstance(remote_addr, str) else ""
+    refresh["ip"] = str(remote_addr or "")[:64]
     OutstandingToken.objects.filter(user_id=user.pk, jti=refresh["jti"]).update(token=str(refresh))
     return refresh
 

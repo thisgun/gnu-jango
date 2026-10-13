@@ -1,9 +1,9 @@
 """Regression tests for the admin/API hardening done in this work cycle.
 
-Covers behaviour that the smoke check (page rendering only) does not:
+Tests behaviour that the smoke check (page rendering only) does not:
 - migrate_gnuboard5 raw-SQL table-name guard
 - ConfigsForm secret masking + mass-assignment guard
-- CsrfExemptSessionAuthentication (admin session must not 403 token API POSTs)
+- JWT bearer requests must coexist with a Django admin session without disabling CSRF checks
 - add_menu_form staff/POST guard + the result_list fix
 """
 
@@ -13,6 +13,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.test import Client, SimpleTestCase, TestCase
 from django.urls import reverse
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from gnu_jango.config.Configforms import SECRET_CONFIG_FIELDS, ConfigsForm
 from gnu_jango.config.models import Config
@@ -59,21 +60,22 @@ class ConfigsFormSecurityTests(TestCase):
 
 
 class AdminApiCsrfCoexistenceTests(TestCase):
-    def test_session_auth_does_not_block_token_api_post(self):
-        # An admin Django session in the same browser must not make DRF's
-        # SessionAuthentication 403 a token-based API POST ("CSRF Failed").
+    def test_bearer_token_post_coexists_with_admin_session(self):
+        # A valid bearer credential is explicit, so a concurrent admin
+        # session must not replace JWT auth or trigger the session CSRF check.
         user = User.objects.create_user(
             username="sessionuser", email="su@example.com", password="pw12345678"
         )
         client = Client(enforce_csrf_checks=True)
         client.force_login(user)
+        token = str(RefreshToken.for_user(user).access_token)
         resp = client.post(
             reverse("api_v1:auth-login"),
             data=json.dumps({"mb_id": "nobody", "mb_password": "wrong-password"}),
             content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
         )
-        # Without CsrfExemptSessionAuthentication this is 403 before the view
-        # runs; now it reaches the view (invalid creds -> 401/422).
+        # It reaches the view and fails only because these are bad credentials.
         self.assertNotEqual(resp.status_code, 403)
 
 

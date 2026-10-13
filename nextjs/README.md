@@ -43,7 +43,8 @@ both build and start, leaving the active `.next` directory untouched. Set
 
 Use `.env.example` as the shared reference.
 
-- `NEXT_PUBLIC_API_URL`: API URL used by the browser bundle (and SSR fallback). Leave **unset** for proxy mode (see Cross-Domain Authentication) so the browser uses the relative `/api/v1` proxy.
+- `NEXT_PUBLIC_API_URL`: optional browser API URL for static export/direct API mode. Leave **unset** for the recommended Node proxy mode so the browser uses the relative `/api/v1` path.
+- `G5_NEXT_RUNTIME`: set to `server` for the Next.js Node server and same-origin API proxy. The Django theme export always builds in static mode independently.
 - `G5_API_INTERNAL_URL`: server-only API URL that backs the `/api/v1` and `/api/g5` Next.js rewrites and direct SSR/RSC fetches.
 - `NEXT_PUBLIC_G5_URL`: original Gnuboard site URL for legacy links and assets.
 - `NEXT_PUBLIC_APP_URL`: public app URL used for metadata, RSS, and canonical links.
@@ -59,12 +60,12 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXT_PUBLIC_GALLERY_BOARDS=n_gallery,gallery
 ```
 
-The tracked `.env.production` file is a deployment template. Replace the
-placeholder domains with real HTTPS values in Vercel project environment
-variables before building or deploying:
+The tracked `.env.production.example` file documents the required production
+variables. Copy it to an ignored `.env.production.local` file for a local
+production build, or set the values in the Vercel project environment:
 
 ```env
-NEXT_PUBLIC_API_URL=https://your-django-api.example.com/api/v1
+G5_NEXT_RUNTIME=server
 G5_API_INTERNAL_URL=https://your-django-api.example.com/api/v1
 NEXT_PUBLIC_G5_URL=https://your-django-api.example.com
 NEXT_PUBLIC_APP_URL=https://your-vercel-app.example.com
@@ -73,8 +74,8 @@ NEXT_PUBLIC_GALLERY_BOARDS=n_gallery,gallery
 ```
 
 For local static theme builds, copy `nextjs/.env.production.local.example` to
-`nextjs/.env.production.local`. That copied file is intentionally ignored by git
-and overrides `.env.production` during `npm run build:theme`.
+`nextjs/.env.production.local`. That file is ignored by git and is loaded by
+`npm run build:theme` without exposing deployment values in the repository.
 
 ```powershell
 Copy-Item .env.production.local.example .env.production.local
@@ -104,12 +105,11 @@ first-party to whatever origin the **browser** actually talks to.
 - The Django admin (`/admin/`) is a *separate* Django session that lives only on
   the API domain. It is not shared with the front-end; you log into it directly
   at `https://<api-domain>/admin/`.
-- Backend coexistence fix: `gnu_jango.api.authentication.CsrfExemptSessionAuthentication`
-  (wired into `REST_FRAMEWORK["DEFAULT_AUTHENTICATION_CLASSES"]`) lets an admin
-  session and a front-end JWT session live in the **same browser**. Without it,
-  being logged into `/admin/` makes every token-based API `POST` fail with
-  `403 CSRF Failed`. The Django admin keeps its own CSRF protection
-  (`CsrfViewMiddleware`) and the session cookie is `SameSite=Lax`, so this is safe.
+- Browser requests authenticated by the HttpOnly `g5_token` cookie use Django's
+  CSRF check. The frontend obtains a masked token from `/auth/csrf` and sends it
+  in `X-CSRFToken` for mutations. Bearer-token requests remain usable alongside
+  a Django admin session in the same browser; admin session requests continue to
+  use DRF's built-in `SessionAuthentication` CSRF enforcement.
 
 ### Recommended: Next.js proxy (BFF)
 The browser only ever talks to the front-end origin; Next.js forwards
@@ -127,13 +127,16 @@ CORS and no `SameSite=None`**.
    needed — the browser is same-origin with the front-end and the proxy hop is
    server-to-server.
 
-> Caveat: `npm run check:vercel-env` currently requires `NEXT_PUBLIC_API_URL` to
-> be set and end in `/api/v1`. Proxy mode wants it unset for the browser, so
-> relax or skip that gate when deploying in proxy mode.
+`check:vercel-env` accepts an unset `NEXT_PUBLIC_API_URL` only when
+`G5_NEXT_RUNTIME=server`; `check:release:vercel` then builds the configured
+runtime instead of forcing a static export. Static export deployments must set
+`NEXT_PUBLIC_API_URL` because they have no Next.js server to proxy browser API
+requests. In proxy mode the checker also requires `NEXT_PUBLIC_API_URL` to stay
+unset so browser API calls use the same-origin proxy.
 
 ### Alternative: direct cross-origin
-The browser calls the API host directly (the default `.env.production`
-template): set both `NEXT_PUBLIC_API_URL` and `G5_API_INTERNAL_URL` to
+The browser calls the API host directly: set both `NEXT_PUBLIC_API_URL` and
+`G5_API_INTERNAL_URL` to
 `https://<api-domain>/api/v1`. Then on the API:
 
 - `CORS_ALLOWED_ORIGINS=https://<vercel-app>` and `CORS_ALLOW_CREDENTIALS=True`.
@@ -217,8 +220,10 @@ npm run check:release:vercel
 
 `check:vercel-env` fails if required URLs are missing, still point at
 `example.com`/localhost placeholders, do not use HTTPS, or do not point API
-variables at `/api/v1`. It also checks that `vercel.json` still carries the
-static-export security headers needed on Vercel.
+variables at `/api/v1`. For the Node proxy profile, leave `NEXT_PUBLIC_API_URL`
+unset and set `G5_NEXT_RUNTIME=server`; static export requires the public API
+URL. The gate also checks that `vercel.json` carries the required security
+headers.
 
 The `:auth` and `:all` variants fail when the required credentials are missing,
 so they are safer gates before release.

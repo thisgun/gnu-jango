@@ -65,7 +65,7 @@
     "check:release:live:runtime": "node scripts/check-release-live.mjs --skip-browser",
     "check:release:live:desktop": "node scripts/check-release-live.mjs --skip-mobile",
     "check:release:live:nginx": "node scripts/check-release-live.mjs --require-nginx",
-    "check:release:vercel": "npm run check:vercel-env && npm run build -- --runtime=static",
+    "check:release:vercel": "npm run check:vercel-env && npm run build",
     "check:local-actions:all": "node scripts/check-local-actions.mjs",
     "check:local-auth-actions": "node scripts/check-local-auth-actions.mjs",
     "check:local-user-actions": "node scripts/check-local-user-actions.mjs",

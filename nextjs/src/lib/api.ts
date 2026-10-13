@@ -63,6 +63,8 @@ class ApiClient {
   private baseUrl: string;
   private token: string | null = null;
   private refreshToken: string | null = null;
+  private csrfToken: string | null = null;
+  private csrfTokenInFlight: Promise<string> | null = null;
   /**
    * 동시 요청 여럿이 같이 401 받아도 refresh 는 한 번만 — 진행 중 promise 공유.
    */
@@ -89,6 +91,33 @@ class ApiClient {
 
   private canAttemptCookieRefresh(): boolean {
     return typeof window !== 'undefined';
+  }
+
+  private async getCsrfToken(): Promise<string> {
+    if (this.csrfToken) return this.csrfToken;
+    if (this.csrfTokenInFlight) return this.csrfTokenInFlight;
+
+    this.csrfTokenInFlight = (async () => {
+      const res = await fetch(`${this.baseUrl}/auth/csrf`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      const env = parseApiEnvelope<{ csrf_token?: string }>(await res.json());
+      const token = env.data?.csrf_token;
+      if (!res.ok || !env.success || !token) {
+        throw new ApiError(env.message || 'Could not obtain a CSRF token.', res.status || 500);
+      }
+      this.csrfToken = token;
+      return token;
+    })();
+
+    try {
+      return await this.csrfTokenInFlight;
+    } finally {
+      this.csrfTokenInFlight = null;
+    }
   }
 
   private shouldAttemptRefresh(path: string): boolean {
@@ -164,9 +193,13 @@ class ApiClient {
     this.refreshInFlight = (async () => {
       try {
         const body = this.refreshToken ? JSON.stringify({ refresh_token: this.refreshToken }) : undefined;
+        const headers = new Headers({ 'Content-Type': 'application/json', Accept: 'application/json' });
+        if (this.canAttemptCookieRefresh()) {
+          headers.set('X-CSRFToken', await this.getCsrfToken());
+        }
         const res = await fetch(`${this.baseUrl}/auth/refresh`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          headers,
           credentials: 'include',
           body,
         });
@@ -201,20 +234,27 @@ class ApiClient {
     body?: unknown,
     options?: RequestInit & { _retried?: boolean }
   ): Promise<ApiResponse<T>> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
+    const headers = new Headers(options?.headers);
+    if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
 
+    const cookieRefreshPath = ['/auth/logout'].includes(path.split(/[?#]/)[0] || '');
     if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
+      headers.set('Authorization', `Bearer ${this.token}`);
+    }
+    if (
+      this.canAttemptCookieRefresh() &&
+      (!this.token || cookieRefreshPath) &&
+      !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method.toUpperCase())
+    ) {
+      headers.set('X-CSRFToken', await this.getCsrfToken());
     }
 
     const res = await fetch(`${this.baseUrl}${path}`, {
+      ...options,
       method,
       headers,
       credentials: options?.credentials ?? 'include',
       body: body !== undefined ? JSON.stringify(body) : undefined,
-      ...options,
     });
 
     // 401 + refresh 가능 + 미재시도 + refresh 대상 엔드포인트인 경우 → access 교환 후 재시도.
@@ -293,9 +333,11 @@ class ApiClient {
     formData: FormData,
     options?: { _retried?: boolean }
   ): Promise<ApiResponse<T>> {
-    const headers: Record<string, string> = {};
+    const headers = new Headers();
     if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
+      headers.set('Authorization', `Bearer ${this.token}`);
+    } else if (this.canAttemptCookieRefresh()) {
+      headers.set('X-CSRFToken', await this.getCsrfToken());
     }
 
     const res = await fetch(`${this.baseUrl}${path}`, {

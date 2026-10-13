@@ -16,10 +16,12 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.http import HttpResponse, HttpResponseRedirect
+from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
 from rest_framework import status
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.throttling import ScopedRateThrottle
@@ -1072,6 +1074,15 @@ def _auth_payload(user, request, *, refresh_token=None, auto_login=False):
 
 @api_view(["GET"])
 @permission_classes([AllowAny])
+def csrf_token_view(request):
+    """Issue a CSRF cookie and a masked token for browser API mutations."""
+    response = api_response(data={"csrf_token": get_token(request)})
+    response["Cache-Control"] = "no-store, private"
+    return response
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
 def check_id_view(request):
     mb_id = (request.query_params.get("mb_id") or "").strip()
     if not mb_id:
@@ -1386,6 +1397,10 @@ def me_view(request):
 @permission_classes([AllowAny])
 def refresh_view(request):
     data = _request_data(request)
+    if request.COOKIES.get("g5_refresh"):
+        # Refresh cookies are ambient browser credentials even when the access
+        # token has expired and SessionJWTAuthentication therefore cannot run.
+        SessionAuthentication().enforce_csrf(request)
     refresh_token = data.get("refresh_token") or data.get("refresh") or request.COOKIES.get("g5_refresh")
     if not refresh_token:
         return api_error("Refresh token is required.", status=status.HTTP_401_UNAUTHORIZED, code="refresh_required")
@@ -1445,6 +1460,8 @@ def refresh_view(request):
 @permission_classes([AllowAny])
 def logout_view(request):
     data = _request_data(request)
+    if request.COOKIES.get("g5_refresh"):
+        SessionAuthentication().enforce_csrf(request)
     refresh_token = data.get("refresh_token") or data.get("refresh") or request.COOKIES.get("g5_refresh")
     user = _token_user_from_request(request)
     revoke_current_session(request, user, str(refresh_token or ""))

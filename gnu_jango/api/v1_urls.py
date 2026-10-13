@@ -8,6 +8,7 @@ urlpatterns = [
     path("status", v1_views.status_view, name="status"),
     path("captcha/audio", v1_auth.captcha_audio_view, name="captcha-audio"),
     path("captcha", v1_auth.captcha_view, name="captcha"),
+    path("auth/csrf", v1_auth.csrf_token_view, name="auth-csrf"),
     path("auth/check-id", v1_auth.check_id_view, name="auth-check-id"),
     path("auth/check-email", v1_auth.check_email_view, name="auth-check-email"),
     path("auth/login", v1_auth.login_view, name="auth-login"),

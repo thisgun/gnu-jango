@@ -76,7 +76,7 @@ function hostOf(value: string | undefined): string | undefined {
   }
 }
 
-// the site's own host comes from NEXT_PUBLIC_APP_URL (set per deployment, e.g. in .env.production)
+// the site's own host comes from NEXT_PUBLIC_APP_URL (set in the deployment environment)
 const SITE_IMAGE_HOST = hostOf(process.env.NEXT_PUBLIC_APP_URL);
 
 const DEFAULT_IMAGE_HOSTS = [

@@ -68,11 +68,43 @@ jobs:
     # CI runs in the public repository only; a private copy of the code skips it.
     if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
+    env:
+      DJANGO_SETTINGS_MODULE: example.settings
+      ENVIRONMENT: Development
+      DEBUG: "False"
+      SECRET_KEY: ci-nextjs-static-build-key
+      ALLOWED_HOSTS: 127.0.0.1,localhost
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:8000/api/v1
+      G5_API_INTERNAL_URL: http://127.0.0.1:8000/api/v1
+      NEXT_PUBLIC_G5_URL: http://127.0.0.1:8000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      NEXT_PUBLIC_AUTH_MODE: g5-jwt
+      NEXT_PUBLIC_GALLERY_BOARDS: n_gallery,gallery
     defaults:
       run:
         working-directory: nextjs
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Django dependencies
+        working-directory: ${{ github.workspace }}
+        run: pip install -r requirements.txt
+      - name: Prepare local API database
+        working-directory: ${{ github.workspace }}
+        run: python manage.py migrate --noinput
+      - name: Start local API for the static theme build
+        working-directory: ${{ github.workspace }}
+        run: |
+          python manage.py runserver 127.0.0.1:8000 > /tmp/gnu-jango-static-api.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8000/api/v1/status >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/gnu-jango-static-api.log
+          exit 1
       - uses: actions/setup-node@v7
         with:
           node-version: "22"
@@ -80,12 +112,16 @@ jobs:
           cache-dependency-path: nextjs/package-lock.json
       - name: Install Node dependencies
         run: npm ci
+      - name: Validate the production environment template
+        run: npm run check:vercel-env:template
       - name: Typecheck
         run: npm run typecheck
       - name: Lint
         run: npm run lint
       - name: Payment return tests
         run: npm run test:payment:return
+      - name: Build and synchronize the Django static theme
+        run: npm run build:theme
 
   docker:
     # Builds the image the CD workflow publishes (without pushing) and smoke-tests it, so a broken

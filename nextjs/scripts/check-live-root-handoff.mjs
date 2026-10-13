@@ -27,7 +27,7 @@ const packageImpactingPrefixes = [
   'theme/nextjs25/',
 ];
 const packageImpactingFiles = new Set([
-  'nextjs/.env.production',
+  'nextjs/.env.production.example',
   'nextjs/components.json',
   'nextjs/next.config.ts',
   'nextjs/package-lock.json',
