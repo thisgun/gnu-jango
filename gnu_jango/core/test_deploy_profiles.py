@@ -21,7 +21,7 @@ from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase, override_settings
 from rest_framework.test import APIClient
 
-from example.settings import deploy, production
+from example.settings import deploy
 from gnu_jango.core import deploy_profile, scheduled_jobs
 
 S3_ENV = {
@@ -34,18 +34,41 @@ S3_ENV = {
 }
 
 
+def _load_production_settings(env=None):
+    settings_env = {
+        "ALLOWED_HOSTS": "localhost",
+        "SECRET_KEY": "production-settings-tests-only",
+        "DATABASE_URL": "",
+        "DB_ENGINE": "",
+        "DB_CONN_MAX_AGE": "0",
+        "DB_SSL_REQUIRE": "false",
+        "DB_DISABLE_SERVER_SIDE_CURSORS": "true",
+        "MEDIA_STORAGE": "local",
+        "EMAIL_BACKEND": "django.core.mail.backends.console.EmailBackend",
+        "DEBUG": "False",
+        "CACHE_URL": "",
+        "LOG_TO_FILE": "False",
+        "VERCEL": "0",
+    }
+    settings_env.update(env or {})
+    with mock.patch.dict(os.environ, settings_env):
+        os.environ.pop("DYNO", None)
+        module = importlib.import_module("example.settings.production")
+        return importlib.reload(module)
+
+
 class HerokuOptionalDependencyTests(SimpleTestCase):
     def test_missing_django_heroku_has_actionable_error(self):
         with mock.patch.dict("sys.modules", {"django_heroku": None}):
             with self.assertRaisesMessage(ImproperlyConfigured, "pip install django-heroku==0.3.1"):
-                production.configure_heroku({})
+                _load_production_settings().configure_heroku({})
 
     def test_installed_django_heroku_receives_settings(self):
         django_heroku = mock.Mock()
         settings_mapping = {"SECRET_KEY": "test"}
 
         with mock.patch.dict("sys.modules", {"django_heroku": django_heroku}):
-            production.configure_heroku(settings_mapping)
+            _load_production_settings().configure_heroku(settings_mapping)
 
         django_heroku.settings.assert_called_once_with(settings_mapping)
 
@@ -64,13 +87,8 @@ class ProductionSettingsSerializationTests(SimpleTestCase):
             "EMAIL_BACKEND": "django.core.mail.backends.console.EmailBackend",
         }
 
-        try:
-            with mock.patch.dict("os.environ", ci_env):
-                os.environ.pop("DYNO", None)
-                importlib.reload(production)
-                json.dumps(production.DATABASES, default=str)
-        finally:
-            importlib.reload(production)
+        production = _load_production_settings(ci_env)
+        json.dumps(production.DATABASES, default=str)
 
     def test_vercel_settings_scan_can_serialize_lazy_settings(self):
         repo_root = Path(__file__).resolve().parents[2]
