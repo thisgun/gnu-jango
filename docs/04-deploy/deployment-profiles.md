@@ -109,6 +109,10 @@ Django 전체가 하나의 Vercel Python 함수(Fluid compute)로 실행됩니�
    `VERCEL=1`일 때 `ALLOWED_HOSTS`에 자동으로 추가되므로 `ALLOWED_HOSTS`에는 커스텀 도메인만 적습니다.
    빌드 시에도 설정을 불러오므로 Production·Preview 모두에 입력하세요.
 3. 루트 `vercel.json`이 하는 일:
+   - `regions: ["icn1"]`: 함수를 서울에서 실행해 Supabase(`ap-northeast-2`)와 같은 리전에 둡니다. 지정하지 않으면
+     Vercel 기본값인 미국 동부(`iad1`)에서 실행되어 쿼리마다 태평양을 왕복합니다(측정: 쿼리 1개 API 1.5초,
+     8개 API 2.8초). Supabase를 다른 리전에 만들었다면 가장 가까운 Vercel 리전으로 바꾸세요. Hobby는 리전 1개만
+     지정할 수 있습니다. 응답 헤더 `X-Vercel-Id: icn1::icn1::...`의 두 번째 값이 실제 함수 리전입니다.
    - `functions["example/wsgi.py"]`: `maxDuration` 60초, `excludeFiles`로 `nextjs/`, `docs/`, `node_modules/`,
      `.tmp-nextjs-runtime/`, 테스트(`tests.py`, `test_*.py`, `test/`), `scripts/`, `build/`, `dist/`, `media/`,
      `*.sqlite3`, 로그를 함수 번들에서 뺍니다(Python 함수 번들 한도 500MB, 자동 tree-shaking 없음).
