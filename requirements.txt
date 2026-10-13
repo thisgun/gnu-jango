@@ -65,7 +65,7 @@ python-decouple==3.8
 sentry-sdk[django]==2.63.0
 
 # Security
-django-recaptcha==3.0.0
+django-recaptcha==4.1.0
 
 # Development helpers
 django-seed==0.3.1

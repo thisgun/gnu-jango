@@ -16,7 +16,7 @@ from django.core.exceptions import (
 # from django_tuieditor.widgets import MarkdownEditorWidget
 
 
-from captcha.fields import ReCaptchaField
+from django_recaptcha.fields import ReCaptchaField
 
 from .models import Comment, Post, Post_file, validate_upload_file_content
 

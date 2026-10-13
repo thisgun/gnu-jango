@@ -118,7 +118,7 @@ INSTALLED_APPS = [
     "rest_framework_simplejwt.token_blacklist",
     "drf_spectacular",
     "corsheaders",
-    "captcha",
+    "django_recaptcha",
     "sekizai",
     "django_seed",
     # 'drf_multiple_model',

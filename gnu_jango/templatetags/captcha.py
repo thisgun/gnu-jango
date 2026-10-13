@@ -1,7 +1,7 @@
 from django import forms, template
 
 
-from captcha.fields import ReCaptchaField
+from django_recaptcha.fields import ReCaptchaField
 
 register = template.Library()
 

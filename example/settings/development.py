@@ -136,7 +136,7 @@ DEBUG_TOOLBAR_CONFIG = {
     "IS_RUNNING_TESTS": False,
 }
 
-SILENCED_SYSTEM_CHECKS = ["captcha.recaptcha_test_key_error"]
+SILENCED_SYSTEM_CHECKS = ["django_recaptcha.recaptcha_test_key_error"]
 
 LOGGING["loggers"]["django.db.backends"] = {
     "handlers": ["console"],
