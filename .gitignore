@@ -209,3 +209,6 @@ test/
 # Deployment env templates (placeholders only). The ENV/ pattern above matches deploy/env/ on
 # case-insensitive filesystems (Windows, macOS), so re-include it explicitly.
 !deploy/env/
+
+# Local Vercel project linkage can contain account and project metadata.
+/.vercel/
