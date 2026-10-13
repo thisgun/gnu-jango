@@ -121,13 +121,13 @@ export function MemberSideview({
             <>
               <li className="my-1 border-t" aria-hidden />
               <SideviewItem
-                href={`/admin/members/${encodeURIComponent(mbId)}`}
+                href={`/admin/auth/user/?q=${encodeURIComponent(mbId)}`}
                 external
               >
                 회원정보변경
               </SideviewItem>
               <SideviewItem
-                href={`/admin/members/${encodeURIComponent(mbId)}/points`}
+                href={`/admin/users/user_point/?q=${encodeURIComponent(mbId)}`}
                 external
               >
                 포인트내역

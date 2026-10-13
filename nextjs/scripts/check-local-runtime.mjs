@@ -15,7 +15,7 @@ const sitemapForbiddenParts = parseCsv(
 );
 const privateNoindexPaths = parseCsv(
   process.env.LOCAL_SMOKE_PRIVATE_NOINDEX_PATHS ||
-    '/login,/register,/forgot-password,/members/demo,/mypage,/admin,/shop/cart,/shop/order,/shop/orders,/shop/payment/success,/shop/wishlist'
+    '/login,/register,/forgot-password,/members/demo,/mypage,/shop/cart,/shop/order,/shop/orders,/shop/payment/success,/shop/wishlist'
 );
 const publicHtmlAssets = parseCsv(process.env.LOCAL_SMOKE_PUBLIC_HTML_ASSETS || '');
 const publicMetadataPaths = parseCsv(
@@ -214,7 +214,7 @@ function isLocalSitePath(path) {
   }
 
   if (
-    /^\/(?:admin|boards|content|faq|forgot-password|login|mypage|polls|recent|register|rss|search|shop)(?:\/|$)/.test(
+    /^\/(?:boards|content|faq|forgot-password|login|mypage|polls|recent|register|rss|search|shop)(?:\/|$)/.test(
       normalized
     )
   ) {

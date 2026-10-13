@@ -13,8 +13,7 @@ from django.test import SimpleTestCase
 API_DIR = Path(__file__).resolve().parents[1] / "api"
 SHOP_DIR = Path(__file__).resolve().parents[1] / "shop"
 MESSAGES_TS = Path(__file__).resolve().parents[2] / "nextjs" / "src" / "lib" / "api-messages.ts"
-# The staff API is not part of the visitor-facing site.
-SKIPPED_MODULES = {"v1_admin.py"}
+SKIPPED_MODULES = set()
 ERROR_CALLS = {"api_error", "StockAdjustmentError"}
 
 

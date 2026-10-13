@@ -13,7 +13,6 @@ const authServerPath = join(repoRoot, 'src/lib/auth-server.ts');
 const authStorePath = join(repoRoot, 'src/store/auth.ts');
 const authProviderPath = join(repoRoot, 'src/components/providers/AuthProvider.tsx');
 const shareButtonsPath = join(repoRoot, 'src/components/ShareButtons.tsx');
-const adminLayoutPath = join(repoRoot, 'src/app/admin/layout.tsx');
 const orderDataActionsPath = join(repoRoot, 'src/app/shop/order/orderDataActions.ts');
 const legacyShopActionPath = join(repoRoot, 'src/app/shop/_legacy-action.ts');
 const sanitizePath = join(repoRoot, 'src/lib/sanitize.ts');
@@ -202,7 +201,6 @@ const authServerSource = readFileSync(authServerPath, 'utf8');
 const authStoreSource = readFileSync(authStorePath, 'utf8');
 const authProviderSource = readFileSync(authProviderPath, 'utf8');
 const shareButtonsSource = readFileSync(shareButtonsPath, 'utf8');
-const adminLayoutSource = readFileSync(adminLayoutPath, 'utf8');
 const orderDataActionsSource = readFileSync(orderDataActionsPath, 'utf8');
 const legacyShopActionSource = readFileSync(legacyShopActionPath, 'utf8');
 const sanitizeSource = readFileSync(sanitizePath, 'utf8');
@@ -549,14 +547,6 @@ if (!authProviderSource.includes('api.hasAuthHint()')) {
 const safeSharePopupCount = shareButtonsSource.match(/width=600,height=400,noopener,noreferrer/g)?.length ?? 0;
 if (safeSharePopupCount < 3) {
   fail('ShareButtons external popups must use noopener,noreferrer');
-}
-
-if (adminLayoutSource.includes('const token = api.getToken()')) {
-  fail('admin layout must not redirect before trying /auth/me with HttpOnly cookies');
-}
-
-if (!adminLayoutSource.includes('api.hasAuthHint()')) {
-  fail('admin layout must use the non-sensitive auth hint before probing /auth/me on guest pages');
 }
 
 if (orderDataActionsSource.includes('api.getToken()')) {

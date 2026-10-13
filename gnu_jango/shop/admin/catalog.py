@@ -7,6 +7,8 @@ from django.contrib import messages
 from unfold.forms import ActionForm
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import OuterRef, Subquery, Value
+from django.db.models.functions import Coalesce
 from django.http import Http404, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -177,9 +179,42 @@ def option_stock_map(options):
 
 @admin.register(ShopCategory)
 class ShopCategoryAdmin(ModelAdmin):
-    list_display = ("ca_id", "ca_name", "ca_parent", "ca_order", "ca_use")
+    """YoungCart categorylist.php: the tree (two ca_id characters per level), item counts, and the
+    order and use flags edited in the list."""
+
+    list_display = ("ca_id", "tree_name", "product_count", "ca_order", "ca_use")
+    list_display_links = ("ca_id", "tree_name")
+    list_editable = ("ca_order", "ca_use")
     search_fields = ("ca_id", "ca_name")
     list_filter = ("ca_use",)
+    ordering = ("ca_id",)
+
+    def get_queryset(self, request):
+        # A product counts once for each category it belongs to through ca_id, ca_id2 or ca_id3.
+        category = OuterRef("pk")
+        members = (
+            ShopProduct.objects.filter(Q(category=category) | Q(category2=category) | Q(category3=category))
+            .order_by()
+            .annotate(group=Value(1))
+            .values("group")
+            .annotate(total=Count("it_id"))
+            .values("total")
+        )
+        return super().get_queryset(request).annotate(
+            item_total=Coalesce(Subquery(members, output_field=IntegerField()), 0)
+        )
+
+    @admin.display(description=_("Category"), ordering="ca_id")
+    def tree_name(self, obj):
+        depth = max(len(obj.ca_id or "") // 2 - 1, 0)
+        if not depth:
+            return obj.ca_name
+        return format_html('<span style="padding-left:{}rem">└ {}</span>', depth * 1.25, obj.ca_name)
+
+    @admin.display(description="상품 수", ordering="item_total")
+    def product_count(self, obj):
+        total = getattr(obj, "item_total", 0)
+        return format_html('<span data-product-count="{}">{}</span>', total, total)
 
 
 @admin.register(ShopProduct)

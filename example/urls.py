@@ -14,38 +14,19 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path, include, re_path
+from django.urls import path, include
+from django.views.generic import RedirectView
 from django.conf import settings
 from django.conf.urls.static import static
 from gnu_jango.api import v1_auth
-from gnu_jango.core import views as core_views
 from gnu_jango.config import theme_admin
 from gnu_jango.config import sample_data_admin
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
-NEXTJS25_ADMIN_ROUTE_PATTERN = (
-    r"admin/(?:"
-    r"boards(?:/[^/]+)?|"
-    r"members(?:/[^/]+)?|"
-    r"qas(?:/[^/]+)?|"
-    r"settings|"
-    r"shop(?:/(?:categories|orders(?:/[^/]+)?|products(?:/[^/]+)?))?"
-    r")"
-)
-
+# The site administration is the Django admin at /admin/; the former Next.js admin pages were removed
+# and their address /admin moves there (APPEND_SLASH is off for the Next.js routes).
 urlpatterns = [
-    path("admin", core_views.nextjs25_root_theme, {"template_path": "admin"}, name="nextjs25_admin_root"),
-    path("admin.txt", core_views.nextjs25_root_text_payload, {"template_path": "admin"}, name="nextjs25_admin_root_text"),
-    re_path(
-        rf"^(?P<template_path>{NEXTJS25_ADMIN_ROUTE_PATTERN})\.txt$",
-        core_views.nextjs25_root_text_payload,
-        name="nextjs25_admin_text_payload",
-    ),
-    re_path(
-        rf"^(?P<template_path>{NEXTJS25_ADMIN_ROUTE_PATTERN})/?$",
-        core_views.nextjs25_root_theme,
-        name="nextjs25_admin_theme",
-    ),
+    path("admin", RedirectView.as_view(pattern_name="admin:index", permanent=True, query_string=True)),
     path(
         "admin/theme/",
         admin.site.admin_view(theme_admin.theme_settings),

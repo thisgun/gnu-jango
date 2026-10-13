@@ -22,7 +22,6 @@ const actionScripts = [
   'check:local-point-actions',
   'check:local-poll-actions',
   'check:local-post-reaction-actions',
-  'check:local-admin-actions',
 ];
 
 const maxRetries = Number.parseInt(process.env.LOCAL_ACTION_CHECK_RETRIES || '1', 10);

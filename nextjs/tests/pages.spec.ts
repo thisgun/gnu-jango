@@ -7,7 +7,6 @@ const pages = [
   { name: '게시판 목록', path: '/boards' },
   { name: '쇼핑몰', path: '/shop' },
   { name: '검색', path: '/search' },
-  { name: '관리자', path: '/admin' },
   { name: '마이페이지', path: '/mypage' },
 ];
 

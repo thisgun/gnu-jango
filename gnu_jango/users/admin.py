@@ -1,7 +1,9 @@
 import csv
+import uuid
 from datetime import timedelta
 
-from django.contrib import admin
+from django import forms
+from django.contrib import admin, messages
 from django.contrib.admin.sites import NotRegistered
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
@@ -17,6 +19,8 @@ from unfold.contrib.filters.admin import DropdownFilter
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
 from gnu_jango.api.auth_sessions import revoke_member_tokens
+from gnu_jango.config.models import Config
+from gnu_jango.users import point_ledger
 
 from .models import Profile, User_Memo, User_Point, User_Scrap
 from gnu_jango.utils.admin_display import (
@@ -182,7 +186,48 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
     )
     list_select_related = ("profile",)
     list_fullwidth = True
-    actions = tuple(getattr(BaseUserAdmin, "actions", ()) or ()) + ("export_selected_members_csv",)
+    actions = tuple(getattr(BaseUserAdmin, "actions", ()) or ()) + (
+        "block_selected_members",
+        "leave_selected_members",
+        "export_selected_members_csv",
+    )
+
+    def _apply_to_members(self, request, queryset, apply, log_message):
+        """Run ``apply`` on each selected member. Super admins, the acting admin and (for a staff
+        member who is not a superuser) other staff accounts are left alone; adm/member_list_update.php
+        refuses to change the super admin."""
+        site_admin = (Config.objects.filter(name="cf_admin").values_list("value", flat=True).first() or "").strip()
+        changed = skipped = 0
+        for user in queryset:
+            protected = (
+                user.is_superuser
+                or user.pk == request.user.pk
+                or (site_admin and user.get_username() == site_admin)
+                or (user.is_staff and not request.user.is_superuser)
+            )
+            if protected:
+                skipped += 1
+                continue
+            apply(user)
+            self.log_change(request, user, log_message)
+            changed += 1
+        if changed:
+            self.message_user(request, f"{changed}명을 처리했습니다.", messages.SUCCESS)
+        if skipped:
+            self.message_user(request, f"최고 관리자·본인·관리자 계정 {skipped}개는 건너뛰었습니다.", messages.WARNING)
+
+    @admin.action(description="선택 회원 차단", permissions=["change"])
+    def block_selected_members(self, request, queryset):
+        from gnu_jango.api.member_lifecycle import block_member
+
+        self._apply_to_members(request, queryset, block_member, "회원 차단")
+
+    @admin.action(description="선택 회원 탈퇴 처리", permissions=["change"])
+    def leave_selected_members(self, request, queryset):
+        from gnu_jango.api.member_lifecycle import block_member, leave_member
+
+        # g5_leave_member stamps the leave date; a member who already left is only kept blocked.
+        self._apply_to_members(request, queryset, lambda user: leave_member(user) or block_member(user), "회원 탈퇴 처리")
 
     def save_related(self, request, form, formsets, change):
         # After the inlines: the profile inline saves the Profile row too, so the token version is
@@ -366,6 +411,28 @@ class UserAdmin(BaseUserAdmin, ModelAdmin):
         )
 
 
+class UserPointGrantForm(forms.ModelForm):
+    """adm/point_update.php: grant (or, negative, take) points; the ledger keeps the balance in step."""
+
+    class Meta:
+        model = User_Point
+        fields = ("user", "po_point", "po_content")
+        labels = {"po_point": "포인트(차감은 음수)", "po_content": "내용"}
+
+    def clean(self):
+        cleaned = super().clean()
+        user, point = cleaned.get("user"), cleaned.get("po_point")
+        if not point:
+            raise forms.ValidationError({"po_point": "0이 아닌 포인트를 입력하세요."})
+        if not point_ledger.points_enabled():
+            raise forms.ValidationError("포인트 사용이 꺼져 있습니다. 환경설정에서 포인트 사용을 켠 뒤 지급하세요.")
+        if user and point < 0 and point_ledger.point_balance(user) < -point:
+            raise forms.ValidationError(
+                {"po_point": f"현재 포인트({point_ledger.point_balance(user)}점)보다 많이 차감할 수 없습니다."}
+            )
+        return cleaned
+
+
 class UserPointAdmin(ModelAdmin):
     list_display = (
         "id",
@@ -385,10 +452,36 @@ class UserPointAdmin(ModelAdmin):
     readonly_fields = ("point_snapshot",)
     list_fullwidth = True
 
-    def get_fieldsets(self, request, obj=None):
-        fieldsets = fieldsets_without(tuple(super().get_fieldsets(request, obj)), "point_snapshot")
+    def get_form(self, request, obj=None, **kwargs):
         if obj is None:
-            return fieldsets
+            kwargs["form"] = UserPointGrantForm
+            kwargs["fields"] = UserPointGrantForm.Meta.fields
+        return super().get_form(request, obj, **kwargs)
+
+    def save_model(self, request, obj, form, change):
+        if change:
+            return super().save_model(request, obj, form, change)
+        # The ledger writes the row and the balance together (a plain save would leave the balance stale).
+        rel_action = f"{request.user.get_username()}-{uuid.uuid4().hex[:13]}"
+        result = point_ledger.insert_point(
+            obj.user,
+            obj.po_point,
+            obj.po_content or "관리자 포인트",
+            "@passive",
+            0,
+            rel_action,
+            require_balance=True,
+        )
+        if result != point_ledger.APPLIED:
+            raise PermissionDenied(f"포인트를 처리하지 못했습니다 ({result}).")
+        row = User_Point.objects.get(user=obj.user, po_rel_table="@passive", po_rel_action=rel_action)
+        obj.__dict__.update({key: value for key, value in row.__dict__.items() if not key.startswith("_")})
+        obj._state.adding = False
+
+    def get_fieldsets(self, request, obj=None):
+        if obj is None:
+            return ((None, {"fields": UserPointGrantForm.Meta.fields}),)
+        fieldsets = fieldsets_without(tuple(super().get_fieldsets(request, obj)), "point_snapshot")
         return (
             (
                 _("Point snapshot"),

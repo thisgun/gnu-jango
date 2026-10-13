@@ -824,6 +824,16 @@ class ShopQA(models.Model):
         verbose_name_plural = _("Shop QAs")
 
 
+class GeneralInquiry(ShopQA):
+    """1:1 inquiries (Gnuboard5 bbs/qa*): ShopQA rows on the "__general_qa__" pseudo product, kept apart
+    from product questions in the admin."""
+
+    class Meta:
+        proxy = True
+        verbose_name = "1:1 문의"
+        verbose_name_plural = "1:1 문의"
+
+
 # Some shop records keep companion rows in the Config side table, keyed by the
 # record's id. Until now only the API delete paths cleared them, so deleting
 # through the admin or a queryset left the companion row behind -- a cleanup
@@ -836,6 +846,7 @@ class ShopQA(models.Model):
 
 
 @receiver(models.signals.post_delete, sender=ShopQA)
+@receiver(models.signals.post_delete, sender=GeneralInquiry)  # deletes from the 1:1 admin send the proxy
 def delete_qa_meta_on_delete(sender, instance, **kwargs):
     """Drop the qa_meta config row (and its attachments) with the Q&A."""
     from gnu_jango.api.v1_community import _qa_delete_meta

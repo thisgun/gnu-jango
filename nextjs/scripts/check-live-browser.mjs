@@ -4,10 +4,6 @@ process.env.LOCAL_REPO_API_URL ||= process.env.LOCAL_EXPECTED_API_URL;
 process.env.LOCAL_SMOKE_LOGIN_ID ||= process.env.LIVE_SMOKE_LOGIN_ID || process.env.LIVE_SMOKE_ADMIN_LOGIN_ID || '';
 process.env.LOCAL_SMOKE_LOGIN_PASSWORD ||=
   process.env.LIVE_SMOKE_LOGIN_PASSWORD || process.env.LIVE_SMOKE_ADMIN_LOGIN_PASSWORD || '';
-process.env.LOCAL_SMOKE_ADMIN_LOGIN_ID ||= process.env.LIVE_SMOKE_ADMIN_LOGIN_ID || '';
-process.env.LOCAL_SMOKE_ADMIN_LOGIN_PASSWORD ||= process.env.LIVE_SMOKE_ADMIN_LOGIN_PASSWORD || '';
-process.env.LOCAL_SMOKE_AUTH_ADMIN_MEMBER_DETAIL_ID ||=
-  process.env.LIVE_SMOKE_AUTH_ADMIN_MEMBER_DETAIL_ID || process.env.LIVE_SMOKE_ADMIN_LOGIN_ID || '';
 
 process.env.LOCAL_SMOKE_POST_TITLE ||= '[Test] Long content sample';
 process.env.LOCAL_SMOKE_POST_H1 ||= '[Test] Long content sample';

@@ -226,8 +226,6 @@ function pathOnly(target: string): string {
 function requiresDocumentNavigation(target: string): boolean {
   const path = pathOnly(target);
   return [
-    /^\/admin\/(?:boards|members|qas)\/[^/]+$/,
-    /^\/admin\/shop\/(?:orders|products)\/[^/]+$/,
     /^\/boards\/[^/]+$/,
     /^\/boards\/[^/]+\/(?:[^/]+|write)$/,
     /^\/content\/[^/]+$/,

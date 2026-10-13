@@ -1,11 +1,21 @@
+import json
+
 from gnu_jango.shop.admin._common import *  # noqa: F401,F403
 from django import forms
 from unfold.forms import ActionForm
 from django.contrib import messages
 from django.db import transaction
 from django.utils import timezone
-from django.utils.html import strip_tags
+from django.utils.html import format_html_join, strip_tags
+from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
+
+from django.db.models import CharField, OuterRef, Subquery, Value
+from django.db.models.functions import Cast, Concat
+
+from gnu_jango.api.community_common import GENERAL_QA_PRODUCT_ID, QA_META_CONFIG_PREFIX
+from gnu_jango.config.models import Config
+from gnu_jango.shop.models import GeneralInquiry
 
 
 class ShopStockNotificationActionForm(ActionForm):
@@ -357,6 +367,10 @@ class ShopQAAdmin(ModelAdmin):
     def has_add_permission(self, request):
         return False
 
+    def get_queryset(self, request):
+        # 1:1 inquiries have their own admin (GeneralInquiryAdmin below).
+        return super().get_queryset(request).exclude(product_id=GENERAL_QA_PRODUCT_ID)
+
     @admin.display(description=_("Answer"))
     def answer_status(self, obj):
         if str(obj.iq_answer or "").strip():
@@ -372,6 +386,114 @@ class ShopQAAdmin(ModelAdmin):
         if bool(obj.iq_secret):
             return badge(_("Private"), "warning")
         return badge(_("Public"), "neutral")
+
+
+class GeneralInquiryAdminForm(forms.ModelForm):
+    answer_subject = forms.CharField(
+        label="답변 제목",
+        required=False,
+        max_length=255,
+        help_text="비워 두면 \"RE: 문의 제목\"으로 저장됩니다.",
+    )
+    iq_answer = forms.CharField(label="답변 내용", required=False, widget=forms.Textarea(attrs={"rows": 10}))
+
+    class Meta:
+        model = GeneralInquiry
+        fields = ("iq_answer",)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            from gnu_jango.api.community_qas import _qa_load_meta
+
+            self.fields["answer_subject"].initial = _qa_load_meta(self.instance.pk).get("answer_subject", "")
+
+
+@admin.register(GeneralInquiry)
+class GeneralInquiryAdmin(ModelAdmin):
+    """1:1 inquiries (bbs/qalist.php, adm/qa*): read the question and its attachments, then answer."""
+
+    form = GeneralInquiryAdminForm
+    list_display = ("id", "iq_subject", "inquirer", "answer_status", "attachment_count", "iq_time")
+    list_display_links = ("id", "iq_subject")
+    search_fields = ("iq_subject", "iq_question", "iq_answer", "mb_id", "mb_nick", "iq_name")
+    list_filter = (ShopQAAnswerFilter, "iq_time")
+    list_select_related = ("user",)
+    date_hierarchy = "iq_time"
+    list_per_page = 50
+    readonly_fields = ("inquirer", "iq_subject", "iq_question", "attachments", "iq_email", "iq_hp", "iq_time")
+    fieldsets = (
+        ("문의", {"fields": ("inquirer", "iq_subject", "iq_question", "attachments", "iq_time")}),
+        ("답변", {"fields": ("answer_subject", "iq_answer")}),
+        ("연락처", {"classes": ("collapse",), "fields": (("iq_email", "iq_hp"),)}),
+    )
+
+    def get_queryset(self, request):
+        # The attachment metadata (Config row qa_meta_<id>) comes along in one query, not one per row.
+        meta_name = Concat(Value(QA_META_CONFIG_PREFIX), Cast(OuterRef("pk"), CharField()))
+        meta = Config.objects.filter(name=meta_name).values("value")[:1]
+        return (
+            super()
+            .get_queryset(request)
+            .filter(product_id=GENERAL_QA_PRODUCT_ID)
+            .annotate(meta_raw=Subquery(meta, output_field=CharField()))
+        )
+
+    def has_add_permission(self, request):
+        return False
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if not str(obj.iq_answer or "").strip():
+            return
+        from gnu_jango.api.community_qas import _qa_load_meta, _qa_save_meta
+
+        # qa_answer_view: the answer subject defaults to "RE: <question subject>".
+        meta = _qa_load_meta(obj.pk)
+        meta["answer_subject"] = form.cleaned_data.get("answer_subject", "").strip() or f"RE: {obj.iq_subject or ''}"
+        _qa_save_meta(obj.pk, meta)
+
+    def _files(self, obj):
+        from gnu_jango.api.community_qas import _qa_file_slot, _qa_load_meta, _qa_normalize_meta
+
+        cached = getattr(obj, "_attachment_files", None)
+        if cached is not None:
+            return cached
+        raw = getattr(obj, "meta_raw", None)
+        if raw is None:
+            meta = _qa_load_meta(obj.pk)
+        else:
+            try:
+                meta = _qa_normalize_meta(json.loads(raw))
+            except (TypeError, ValueError):
+                meta = _qa_normalize_meta({})
+        obj._attachment_files = [slot for slot in (_qa_file_slot(meta, 1), _qa_file_slot(meta, 2)) if slot["url"]]
+        return obj._attachment_files
+
+    @admin.display(description="문의자")
+    def inquirer(self, obj):
+        return compact_text(obj.iq_name or obj.mb_nick, f"({obj.mb_id})" if obj.mb_id else "")
+
+    @admin.display(description=_("Answer"))
+    def answer_status(self, obj):
+        if str(obj.iq_answer or "").strip():
+            return badge(_("Answered"), "success")
+        return badge(_("Needs answer"), "warning")
+
+    @admin.display(description="첨부")
+    def attachment_count(self, obj):
+        return len(self._files(obj))
+
+    @admin.display(description="첨부파일")
+    def attachments(self, obj):
+        files = self._files(obj)
+        if not files:
+            return "-"
+        return format_html_join(
+            mark_safe("<br>"),
+            '<a href="{}" target="_blank" rel="noopener">{}</a>',
+            ((item["url"], item["name"] or item["path"]) for item in files),
+        )
 
 
 @admin.register(ShopShippingPolicy)

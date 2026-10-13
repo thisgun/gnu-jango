@@ -57,6 +57,13 @@ def _site_admin_id():
     return (Config.objects.filter(name="cf_admin").values_list("value", flat=True).first() or "").strip()
 
 
+def block_member(user):
+    """adm/member_list_update.php mb_intercept_date: deactivate the member and sign them out everywhere.
+    Lifting the block later does not bring back the tokens issued before it."""
+    User.objects.filter(pk=user.pk).update(is_active=False)
+    revoke_member_tokens(user)
+
+
 def leave_member(user):
     """g5_leave_member(): record the leave date and clear the certification data. Returns the leave
     date, or None when the member already left (the update runs only on a member still present)."""

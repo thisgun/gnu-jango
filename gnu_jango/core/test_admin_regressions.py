@@ -13,7 +13,6 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.test import Client, SimpleTestCase, TestCase
 from django.urls import reverse
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from gnu_jango.config.Configforms import SECRET_CONFIG_FIELDS, ConfigsForm
 from gnu_jango.config.models import Config
@@ -76,30 +75,6 @@ class AdminApiCsrfCoexistenceTests(TestCase):
         # Without CsrfExemptSessionAuthentication this is 403 before the view
         # runs; now it reaches the view (invalid creds -> 401/422).
         self.assertNotEqual(resp.status_code, 403)
-
-
-class AdminApiPermissionTests(TestCase):
-    def test_admin_api_rejects_anonymous_requests_at_permission_layer(self):
-        resp = self.client.get(reverse("api_v1:admin-dashboard-stats"))
-
-        self.assertIn(resp.status_code, (401, 403))
-
-    def test_admin_api_accepts_staff_jwt(self):
-        staff = User.objects.create_user(
-            username="staff-api",
-            email="staff-api@example.com",
-            password="pw12345678",
-            is_staff=True,
-        )
-        token = RefreshToken.for_user(staff).access_token
-
-        resp = self.client.get(
-            reverse("api_v1:admin-dashboard-stats"),
-            HTTP_AUTHORIZATION=f"Bearer {token}",
-        )
-
-        self.assertEqual(resp.status_code, 200)
-        self.assertIn("total_members", resp.json()["data"])
 
 
 class AddMenuFormSecurityTests(TestCase):

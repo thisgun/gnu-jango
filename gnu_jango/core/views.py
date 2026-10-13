@@ -109,14 +109,6 @@ NEXTJS25_EXACT_ROOT_TEMPLATE_PATHS = {
     "search",
     "baby",
     "offline",
-    "admin",
-    "admin/boards",
-    "admin/members",
-    "admin/qas",
-    "admin/settings",
-    "admin/shop/categories",
-    "admin/shop/orders",
-    "admin/shop/products",
     "shop",
     "shop/cart",
     "shop/couponzone",
@@ -482,19 +474,6 @@ def _map_nextjs25_root_template_path(template_path):
     first = parts[0]
 
     if clean_path in NEXTJS25_EXACT_ROOT_TEMPLATE_PATHS:
-        return clean_path
-
-    if first == "admin":
-        if len(parts) == 1:
-            return clean_path
-        if parts[1] in {"boards", "members"} and len(parts) >= 3:
-            return f"admin/{parts[1]}/__g5_static__"
-        if parts[1] == "qas" and len(parts) >= 3:
-            return "admin/qas/0"
-        if parts[1] == "shop" and len(parts) >= 3:
-            if parts[2] in {"orders", "products"} and len(parts) >= 4:
-                return f"admin/shop/{parts[2]}/__g5_static__"
-            return clean_path
         return clean_path
 
     if first == "boards":

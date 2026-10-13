@@ -539,7 +539,6 @@ class NextjsShellViewTests(TestCase):
             "/email-certify", "/bbs", "/bbs/", "/faq", "/polls", "/recent", "/search", "/baby", "/offline", "/shop",
             "/shop/cart", "/shop/couponzone", "/shop/compare", "/shop/events", "/shop/order", "/shop/orders",
             "/shop/search", "/shop/wishlist", "/mypage", "/mypage/profile", "/mypage/orders",
-            "/admin", "/admin/boards", "/admin/members", "/admin/qas", "/admin/settings", "/admin/shop/categories",
         )
         for path in paths:
             with self.subTest(path=path):
@@ -551,8 +550,7 @@ class NextjsShellViewTests(TestCase):
         paths = (
             "/mypage/qas/5", "/mypage/qas/new", "/mypage/memos/9", "/mypage/memos/new", "/content/company",
             "/members/bob", "/shop/list-10", "/shop/categories", "/shop/type-2", "/shop/events/3", "/shop/orders/2026",
-            "/shop/personalpay/5", "/shop/personalpay/5/pay", "/shop/I1", "/admin/boards/free", "/admin/members/bob",
-            "/admin/qas/4", "/admin/shop/orders/12", "/admin/shop/products/abc", "/admin/shop/products",
+            "/shop/personalpay/5", "/shop/personalpay/5/pay", "/shop/I1",
             "/bbs/free", "/bbs/free/", "/bbs/free/12", "/bbs/free/write", "/bbs/free/hello-slug/",
         )
         for path in paths:
@@ -689,9 +687,6 @@ class NextjsShellViewTests(TestCase):
             "shop/products/x": "shop/products/__g5_static__", "shop/orders/x": "shop/orders/__g5_static__",
             "shop/events/x": "shop/events/0", "shop/personalpay/x": "shop/personalpay/__g5_static__",
             "shop/personalpay/x/pay": "shop/personalpay/__g5_static__/pay", "shop/abc": "shop/products/__g5_static__",
-            "admin": "admin", "admin/boards/x": "admin/boards/__g5_static__", "admin/qas/3": "admin/qas/0",
-            "admin/shop/orders/3": "admin/shop/orders/__g5_static__", "admin/shop/products/3": "admin/shop/products/__g5_static__",
-            "admin/shop/categories": "admin/shop/categories", "admin/other": "admin/other",
         }
         for source, target in expected.items():
             with self.subTest(source=source):
@@ -885,7 +880,7 @@ class PrivatePageHeaderTests(TestCase):
     PRIVATE = (
         "/login", "/register", "/forgot-password", "/email-certify", "/mypage", "/mypage/orders", "/mypage/qas/5",
         "/shop/cart", "/shop/order", "/shop/orders", "/shop/orders/2026", "/shop/personalpay", "/shop/personalpay/5/pay",
-        "/shop/wishlist", "/shop/payment/success", "/shop/payment/fail", "/admin", "/admin/members", "/admin/shop/orders/3",
+        "/shop/wishlist", "/shop/payment/success", "/shop/payment/fail",
         "/members/bob",
     )
 

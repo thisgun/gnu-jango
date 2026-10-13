@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import member_lifecycle, v1_admin, v1_auth, v1_board, v1_community, v1_shop, v1_views
+from . import member_lifecycle, v1_auth, v1_board, v1_community, v1_shop, v1_views
 
 app_name = "api_v1"
 
@@ -120,30 +120,6 @@ urlpatterns = [
     path("shop/personalpay/<str:pp_id>/start", v1_shop.personalpay_start_view, name="shop-personalpay-start"),
     path("shop/personalpay/<str:pp_id>", v1_shop.personalpay_view, name="shop-personalpay-detail"),
     path("shop/personalpay", v1_shop.personalpay_view, name="shop-personalpay"),
-    path("admin/dashboard/stats", v1_admin.dashboard_stats_view, name="admin-dashboard-stats"),
-    path("admin/dashboard/recent-orders", v1_admin.recent_orders_view, name="admin-dashboard-recent-orders"),
-    path("admin/dashboard/recent-members", v1_admin.recent_members_view, name="admin-dashboard-recent-members"),
-    path("admin/settings", v1_admin.settings_view, name="admin-settings"),
-    path("admin/boards/<str:bo_table>", v1_admin.board_detail_view, name="admin-board-detail"),
-    path("admin/boards", v1_admin.boards_view, name="admin-boards"),
-    path("admin/members/<str:mb_id>/ban", v1_admin.member_ban_view, name="admin-member-ban"),
-    path("admin/members/<str:mb_id>/leave", v1_admin.member_leave_view, name="admin-member-leave"),
-    path("admin/members/<str:mb_id>", v1_admin.member_detail_view, name="admin-member-detail"),
-    path("admin/members", v1_admin.members_view, name="admin-members"),
-    path("admin/shop/categories/<str:ca_id>/order", v1_admin.shop_category_order_view, name="admin-shop-category-order"),
-    path("admin/shop/categories/<str:ca_id>", v1_admin.shop_category_detail_view, name="admin-shop-category-detail"),
-    path("admin/shop/categories", v1_admin.shop_categories_view, name="admin-shop-categories"),
-    path("admin/shop/products/<str:it_id>/images", v1_admin.shop_product_images_view, name="admin-shop-product-images"),
-    path("admin/shop/products/<str:it_id>", v1_admin.shop_product_detail_view, name="admin-shop-product-detail"),
-    path("admin/shop/products", v1_admin.shop_products_view, name="admin-shop-products"),
-    path("admin/shop/reports/summary", v1_admin.shop_report_summary_view, name="admin-shop-report-summary"),
-    path("admin/shop/reports/sales", v1_admin.shop_report_sales_view, name="admin-shop-report-sales"),
-    path("admin/shop/reports/coupons", v1_admin.shop_report_coupons_view, name="admin-shop-report-coupons"),
-    path("admin/shop/orders/<str:od_id>/cancel", v1_admin.shop_order_cancel_view, name="admin-shop-order-cancel"),
-    path("admin/shop/orders/<str:od_id>", v1_admin.shop_order_detail_view, name="admin-shop-order-detail"),
-    path("admin/shop/orders", v1_admin.shop_orders_view, name="admin-shop-orders"),
-    path("admin/qas/<int:qa_id>", v1_admin.qa_detail_view, name="admin-qa-detail"),
-    path("admin/qas", v1_admin.qas_view, name="admin-qas"),
     path("upload", v1_board.editor_upload_view, name="editor-upload"),
     path("boards", v1_board.board_list_view, name="boards"),
     path("boards/<str:bo_table>/posts", v1_board.board_posts_view, name="board-posts"),

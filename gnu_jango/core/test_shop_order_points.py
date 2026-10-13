@@ -6,7 +6,8 @@ return on cancel) is written to the member's point history.
 """
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import Client, TestCase
+from django.urls import reverse
 from rest_framework.test import APIClient
 
 from gnu_jango.config.models import Config
@@ -273,10 +274,13 @@ class OrderBenefitEdgeTests(CouponOrderBase):
         self.profile.save(update_fields=["user_point"])
         order = self.order_with(cp_id=coupon.cp_id, point_use=20000)
         admin = get_user_model().objects.create_superuser(username="point-admin", email="point-admin@example.test", password="password")
-        admin_client = APIClient()
-        admin_client.force_authenticate(user=admin)
-        response = admin_client.patch(f"/api/v1/admin/shop/orders/{order.od_id}/cancel", {"reason": "admin"}, format="json")
-        self.assertEqual(response.status_code, 200, response.content[:300])
+        admin_client = Client()
+        admin_client.force_login(admin)
+        response = admin_client.post(
+            reverse("admin:shop_shoporder_changelist"),
+            {"action": "change_selected_order_status", "_selected_action": [order.pk], "od_status": "취소"},
+        )
+        self.assertEqual(response.status_code, 302, response.content[:300])
         self.profile.refresh_from_db()
         coupon.refresh_from_db()
         self.assertEqual(self.profile.user_point, 80000)

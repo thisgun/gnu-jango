@@ -8,20 +8,10 @@ const expectedApiUrl = trimTrailingSlash(
 );
 let authId = process.env.LOCAL_SMOKE_LOGIN_ID || '';
 let authPassword = process.env.LOCAL_SMOKE_LOGIN_PASSWORD || '';
-let adminAuthId = process.env.LOCAL_SMOKE_ADMIN_LOGIN_ID || '';
-let adminAuthPassword = process.env.LOCAL_SMOKE_ADMIN_LOGIN_PASSWORD || '';
-let adminSmokeQaId = process.env.LOCAL_SMOKE_ADMIN_QA_ID || '';
-let adminSmokeOrderId = process.env.LOCAL_SMOKE_ADMIN_ORDER_ID || '';
-const adminMemberDetailId =
-  process.env.LOCAL_SMOKE_AUTH_ADMIN_MEMBER_DETAIL_ID || 'nextjs_admin_smoke';
 const requireAuth =
   process.argv.includes('--require-auth') || process.env.LOCAL_SMOKE_REQUIRE_AUTH === '1';
-const requireAdminAuth =
-  process.argv.includes('--require-admin') || process.env.LOCAL_SMOKE_REQUIRE_ADMIN === '1';
 const seedAuth =
   process.argv.includes('--seed-auth') || process.env.LOCAL_SMOKE_SEED_AUTH === '1';
-const seedAdminAuth =
-  process.argv.includes('--seed-admin') || process.env.LOCAL_SMOKE_SEED_ADMIN === '1';
 const mobileViewport =
   process.argv.includes('--mobile') || process.env.LOCAL_SMOKE_MOBILE === '1';
 const activeViewport = mobileViewport
@@ -44,12 +34,10 @@ function parseCsvEnv(name, fallback) {
 }
 
 for (const arg of process.argv.slice(2)) {
-  if (
-    !['--require-auth', '--require-admin', '--seed-auth', '--seed-admin', '--mobile'].includes(arg)
-  ) {
+  if (!['--require-auth', '--seed-auth', '--mobile'].includes(arg)) {
     console.error(`[check-local-browser] Unknown argument: ${arg}`);
     console.error(
-      '[check-local-browser] Supported arguments: --require-auth, --require-admin, --seed-auth, --seed-admin, --mobile'
+      '[check-local-browser] Supported arguments: --require-auth, --seed-auth, --mobile'
     );
     process.exit(1);
   }
@@ -234,17 +222,6 @@ const smokePaths = [
     skipSeoUrlCheck: true,
   },
   {
-    label: 'admin orders requires login',
-    path: process.env.LOCAL_SMOKE_ADMIN_ORDERS_PATH || '/admin/shop/orders',
-    expectedFinalPath:
-      process.env.LOCAL_SMOKE_ADMIN_ORDERS_FINAL_PATH ||
-      '/login?redirect=%2Fadmin%2Fshop%2Forders',
-    expectedApiParts: ['/settings'],
-    forbiddenApiParts: ['/admin/shop/orders', '/me'],
-    expectedSelectors: ['form', 'input[name="mb_id"]', 'input[name="mb_password"]'],
-    skipSeoUrlCheck: true,
-  },
-  {
     label: 'shop orders guest lookup',
     path: process.env.LOCAL_SMOKE_ORDERS_PATH || '/shop/orders',
     expectedApiParts: ['/settings'],
@@ -288,105 +265,6 @@ const authSmokePaths = [
     label: 'shop wishlist authenticated',
     path: process.env.LOCAL_SMOKE_AUTH_WISHLIST_PATH || '/shop/wishlist',
     expectedApiParts: ['/auth/me', '/shop/wishlist'],
-    forbiddenFinalPathParts: ['/login'],
-  },
-];
-
-const adminAuthSmokePaths = [
-  {
-    label: 'admin dashboard authenticated',
-    path: process.env.LOCAL_SMOKE_AUTH_ADMIN_DASHBOARD_PATH || '/admin',
-    expectedApiParts: [
-      '/auth/me',
-      '/admin/dashboard/stats',
-      '/admin/dashboard/recent-orders?limit=5',
-      '/admin/dashboard/recent-members?limit=5',
-    ],
-    forbiddenFinalPathParts: ['/login'],
-  },
-  {
-    label: 'admin orders authenticated',
-    path: process.env.LOCAL_SMOKE_AUTH_ADMIN_ORDERS_PATH || '/admin/shop/orders',
-    expectedApiParts: ['/auth/me', '/admin/shop/orders?page=1&per_page=20'],
-    expectedSelectors: ['table'],
-    forbiddenFinalPathParts: ['/login'],
-  },
-  {
-    label: 'admin members authenticated',
-    path: process.env.LOCAL_SMOKE_AUTH_ADMIN_MEMBERS_PATH || '/admin/members',
-    expectedApiParts: ['/auth/me', '/admin/members?page=1&per_page=20'],
-    expectedSelectors: ['form', 'table'],
-    forbiddenFinalPathParts: ['/login'],
-  },
-  {
-    label: 'admin member detail authenticated',
-    path:
-      process.env.LOCAL_SMOKE_AUTH_ADMIN_MEMBER_DETAIL_PATH ||
-      `/admin/members/${encodeURIComponent(adminMemberDetailId)}`,
-    expectedApiParts: ['/auth/me', `/admin/members/${encodeURIComponent(adminMemberDetailId)}`],
-    expectedSelectors: ['form'],
-    forbiddenFinalPathParts: ['/login'],
-  },
-  {
-    label: 'admin boards authenticated',
-    path: process.env.LOCAL_SMOKE_AUTH_ADMIN_BOARDS_PATH || '/admin/boards',
-    expectedApiParts: ['/auth/me', '/admin/boards'],
-    expectedSelectors: ['form', 'table'],
-    forbiddenFinalPathParts: ['/login'],
-  },
-  {
-    label: 'admin board detail authenticated',
-    path: process.env.LOCAL_SMOKE_AUTH_ADMIN_BOARD_DETAIL_PATH || '/admin/boards/free',
-    expectedApiParts: ['/auth/me', '/admin/boards/free'],
-    expectedSelectors: ['form'],
-    forbiddenFinalPathParts: ['/login'],
-  },
-  {
-    label: 'admin settings authenticated',
-    path: process.env.LOCAL_SMOKE_AUTH_ADMIN_SETTINGS_PATH || '/admin/settings',
-    expectedApiParts: ['/auth/me', '/admin/settings'],
-    expectedSelectors: ['form'],
-    forbiddenFinalPathParts: ['/login'],
-  },
-  {
-    label: 'admin qas authenticated',
-    path: process.env.LOCAL_SMOKE_AUTH_ADMIN_QAS_PATH || '/admin/qas',
-    expectedApiParts: ['/auth/me', '/qas?page=1&per_page=20&scope=admin&sfl=qa_subject'],
-    expectedSelectors: ['form', 'table'],
-    forbiddenFinalPathParts: ['/login'],
-  },
-  {
-    label: 'admin shop categories authenticated',
-    path: process.env.LOCAL_SMOKE_AUTH_ADMIN_CATEGORIES_PATH || '/admin/shop/categories',
-    expectedApiParts: ['/auth/me', '/admin/shop/categories'],
-    expectedSelectors: ['form'],
-    forbiddenFinalPathParts: ['/login'],
-  },
-  {
-    label: 'admin shop products authenticated',
-    path: process.env.LOCAL_SMOKE_AUTH_ADMIN_PRODUCTS_PATH || '/admin/shop/products',
-    expectedApiParts: [
-      '/auth/me',
-      '/admin/shop/products?page=1&per_page=20',
-      '/admin/shop/categories',
-    ],
-    expectedSelectors: ['form', 'table'],
-    forbiddenFinalPathParts: ['/login'],
-    // Legacy catalog rows can reference images that no longer exist. The
-    // page replaces these failed thumbnails with its neutral placeholder.
-    allowedBadResponses: ['/_next/image?url=%2Fdata%2Fitem%2Fimage'],
-  },
-  {
-    label: 'admin shop product detail authenticated',
-    path:
-      process.env.LOCAL_SMOKE_AUTH_ADMIN_PRODUCT_DETAIL_PATH ||
-      '/admin/shop/products/1446772772',
-    expectedApiParts: [
-      '/auth/me',
-      '/admin/shop/categories',
-      '/admin/shop/products/1446772772',
-    ],
-    expectedSelectors: ['form'],
     forbiddenFinalPathParts: ['/login'],
   },
 ];
@@ -448,43 +326,8 @@ if (seedAuth) {
   seedLocalSmokeUser();
 }
 
-if (seedAdminAuth) {
-  seedLocalSmokeAdmin();
-  seedLocalSmokeOrder();
-  seedLocalSmokeQa();
-}
-
-if (adminSmokeOrderId) {
-  adminAuthSmokePaths.push({
-    label: 'admin order detail authenticated',
-    path:
-      process.env.LOCAL_SMOKE_AUTH_ADMIN_ORDER_DETAIL_PATH ||
-      `/admin/shop/orders/${adminSmokeOrderId}`,
-    expectedApiParts: ['/auth/me', `/admin/shop/orders/${adminSmokeOrderId}`],
-    expectedSelectors: ['table', '#tracking'],
-    forbiddenFinalPathParts: ['/login'],
-  });
-}
-
-if (adminSmokeQaId) {
-  adminAuthSmokePaths.push({
-    label: 'admin qa detail authenticated',
-    path:
-      process.env.LOCAL_SMOKE_AUTH_ADMIN_QA_DETAIL_PATH || `/admin/qas/${adminSmokeQaId}`,
-    expectedApiParts: ['/auth/me', `/qas/${adminSmokeQaId}`],
-    expectedSelectors: ['form'],
-    forbiddenFinalPathParts: ['/login'],
-  });
-}
-
 if (requireAuth && (!authId || !authPassword)) {
   fail('authenticated checks require LOCAL_SMOKE_LOGIN_ID and LOCAL_SMOKE_LOGIN_PASSWORD');
-}
-
-if (requireAdminAuth && (!adminAuthId || !adminAuthPassword)) {
-  fail(
-    'admin authenticated checks require LOCAL_SMOKE_ADMIN_LOGIN_ID and LOCAL_SMOKE_ADMIN_LOGIN_PASSWORD'
-  );
 }
 
 async function authenticateContext(context, credentials) {
@@ -585,140 +428,6 @@ function seedLocalSmokeUser() {
 
   authId = String(payload.id);
   authPassword = String(payload.password);
-}
-
-function seedLocalSmokeAdmin() {
-  const scriptPath = fileURLToPath(
-    new URL('../../scripts/seed_nextjs_smoke_user.php', import.meta.url)
-  );
-  const seedEnv = {
-    ...process.env,
-    LOCAL_SMOKE_ADMIN_LOGIN_ID: adminAuthId || 'nextjs_admin_smoke',
-    LOCAL_SMOKE_ADMIN_LOGIN_PASSWORD: adminAuthPassword || 'NextjsAdminSmoke123!',
-  };
-
-  const result = spawnSync('php', [scriptPath, '--admin', '--json'], {
-    env: seedEnv,
-    encoding: 'utf8',
-    windowsHide: true,
-  });
-
-  if (result.error) {
-    fail(`failed to run local smoke admin seed: ${result.error.message}`);
-  }
-
-  if (result.status !== 0) {
-    fail('local smoke admin seed failed', {
-      status: result.status,
-      stderr: result.stderr.trim(),
-      stdout: result.stdout.trim(),
-    });
-  }
-
-  let payload = null;
-  try {
-    payload = JSON.parse(result.stdout.trim());
-  } catch {
-    fail('local smoke admin seed returned invalid JSON', {
-      stdout: result.stdout.trim(),
-      stderr: result.stderr.trim(),
-    });
-  }
-
-  if (!payload?.success || !payload.id || !payload.password) {
-    fail('local smoke admin seed did not return credentials', payload);
-  }
-
-  adminAuthId = String(payload.id);
-  adminAuthPassword = String(payload.password);
-}
-
-function seedLocalSmokeOrder() {
-  const scriptPath = fileURLToPath(
-    new URL('../../scripts/seed_nextjs_smoke_order.php', import.meta.url)
-  );
-  const seedEnv = {
-    ...process.env,
-    LOCAL_SMOKE_ADMIN_LOGIN_ID: adminAuthId || 'nextjs_admin_smoke',
-  };
-
-  const result = spawnSync('php', [scriptPath, '--json'], {
-    env: seedEnv,
-    encoding: 'utf8',
-    windowsHide: true,
-  });
-
-  if (result.error) {
-    fail(`failed to run local smoke order seed: ${result.error.message}`);
-  }
-
-  if (result.status !== 0) {
-    fail('local smoke order seed failed', {
-      status: result.status,
-      stderr: result.stderr.trim(),
-      stdout: result.stdout.trim(),
-    });
-  }
-
-  let payload = null;
-  try {
-    payload = JSON.parse(result.stdout.trim());
-  } catch {
-    fail('local smoke order seed returned invalid JSON', {
-      stdout: result.stdout.trim(),
-      stderr: result.stderr.trim(),
-    });
-  }
-
-  if (!payload?.success || !payload.id) {
-    fail('local smoke order seed did not return an id', payload);
-  }
-
-  adminSmokeOrderId = String(payload.id);
-}
-
-function seedLocalSmokeQa() {
-  const scriptPath = fileURLToPath(
-    new URL('../../scripts/seed_nextjs_smoke_qa.php', import.meta.url)
-  );
-  const seedEnv = {
-    ...process.env,
-    LOCAL_SMOKE_ADMIN_LOGIN_ID: adminAuthId || 'nextjs_admin_smoke',
-  };
-
-  const result = spawnSync('php', [scriptPath, '--json'], {
-    env: seedEnv,
-    encoding: 'utf8',
-    windowsHide: true,
-  });
-
-  if (result.error) {
-    fail(`failed to run local smoke Q&A seed: ${result.error.message}`);
-  }
-
-  if (result.status !== 0) {
-    fail('local smoke Q&A seed failed', {
-      status: result.status,
-      stderr: result.stderr.trim(),
-      stdout: result.stdout.trim(),
-    });
-  }
-
-  let payload = null;
-  try {
-    payload = JSON.parse(result.stdout.trim());
-  } catch {
-    fail('local smoke Q&A seed returned invalid JSON', {
-      stdout: result.stdout.trim(),
-      stderr: result.stderr.trim(),
-    });
-  }
-
-  if (!payload?.success || !payload.id) {
-    fail('local smoke Q&A seed did not return an id', payload);
-  }
-
-  adminSmokeQaId = String(payload.id);
 }
 
 function sameUrlWithoutTrailingSlash(actual, expected) {
@@ -1463,33 +1172,6 @@ try {
     );
   } else {
     results.push(...authenticated.results);
-  }
-
-  const adminAuthenticated = await runChecks(
-    browser,
-    filterSkippedChecks(adminAuthSmokePaths).map((check) => ({ ...check, skipSeoUrlCheck: true })),
-    {
-      authenticated: true,
-      credentials: {
-        id: adminAuthId,
-        password: adminAuthPassword,
-        label: 'admin authenticated',
-        idEnv: 'LOCAL_SMOKE_ADMIN_LOGIN_ID',
-        passwordEnv: 'LOCAL_SMOKE_ADMIN_LOGIN_PASSWORD',
-      },
-    }
-  );
-  if (adminAuthenticated.skipped) {
-    if (requireAdminAuth) {
-      fail(
-        'admin authenticated checks require LOCAL_SMOKE_ADMIN_LOGIN_ID and LOCAL_SMOKE_ADMIN_LOGIN_PASSWORD'
-      );
-    }
-    console.log(
-      '[check-local-browser] admin authenticated checks skipped (set LOCAL_SMOKE_ADMIN_LOGIN_ID and LOCAL_SMOKE_ADMIN_LOGIN_PASSWORD)'
-    );
-  } else {
-    results.push(...adminAuthenticated.results);
   }
 
   console.table(results);

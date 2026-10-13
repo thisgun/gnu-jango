@@ -44,6 +44,7 @@ ROLE_PRESETS = {
             ("shop", "shoporder"),
             ("shop", "shoporderitem"),
             ("shop", "shoppersonalpay"),
+            ("shop", "generalinquiry"),
             ("core", "notification"),
             ("core", "mailcampaign"),
             ("core", "mailsendlog"),

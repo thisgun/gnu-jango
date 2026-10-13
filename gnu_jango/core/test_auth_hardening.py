@@ -19,7 +19,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from django.core.cache import cache
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import Client, RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -203,35 +203,22 @@ class AdminBlockRevocationTests(HardeningBase):
     def setUp(self):
         super().setUp()
         self.admin_user = User.objects.create_superuser(username="site_admin", email="admin@example.test", password=PASSWORD)
-        self.admin_client = APIClient()
-        self.admin_client.force_authenticate(user=self.admin_user)
 
-    def test_an_api_block_revokes_the_tokens_for_good_even_after_the_block_is_lifted(self):
-        member = self.make_member("api_blocked")
-        device = self.login("api_blocked")
+    def test_the_block_action_revokes_the_tokens_for_good_even_after_the_block_is_lifted(self):
+        member = self.make_member("action_blocked")
+        device = self.login("action_blocked")
+        admin_client = Client()
+        admin_client.force_login(self.admin_user)
 
-        response = self.admin_client.patch(f"/api/v1/admin/members/{member.username}/ban", {}, format="json")
+        response = admin_client.post(
+            reverse("admin:auth_user_changelist"),
+            {"action": "block_selected_members", "_selected_action": [member.pk]},
+        )
 
-        self.assertEqual(response.status_code, 200, response.content[:300])
+        self.assertEqual(response.status_code, 302, response.content[:300])
         self.assert_signed_out(device)
         User.objects.filter(pk=member.pk).update(is_active=True)
         self.assert_signed_out(device)
-
-    def test_an_admin_api_e_mail_change_signs_the_member_out(self):
-        member = self.make_member("api_mail")
-        device = self.login("api_mail")
-        response = self.admin_client.patch(
-            f"/api/v1/admin/members/{member.username}", {"mb_email": "admin-set@example.test"}, format="json"
-        )
-        self.assertEqual(response.status_code, 200, response.content[:300])
-        self.assert_signed_out(device)
-
-    def test_an_admin_api_edit_of_other_fields_keeps_the_member_signed_in(self):
-        member = self.make_member("api_level")
-        device = self.login("api_level")
-        response = self.admin_client.patch(f"/api/v1/admin/members/{member.username}", {"mb_level": 5}, format="json")
-        self.assertEqual(response.status_code, 200, response.content[:300])
-        self.assert_signed_in(device)
 
     def django_admin_save(self, member, changed):
         model_admin = admin.site._registry[User]

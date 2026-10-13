@@ -242,51 +242,23 @@ class SecondaryCategoryApiTests(SecondaryCategoryFixtureMixin, TestCase):
         self.assertEqual(counts["10"], 2)
 
 
-class SecondaryCategoryAdminApiTests(SecondaryCategoryFixtureMixin, TestCase):
+class SecondaryCategoryAdminTests(SecondaryCategoryFixtureMixin, TestCase):
+    """The category admin counts a product once in each of its ca_id, ca_id2 and ca_id3 categories."""
+
     def setUp(self):
         self.build_catalog()
-        admin = get_user_model().objects.create_user(
-            username="sec-admin", password="password123", is_staff=True, is_superuser=True
+        self.admin = get_user_model().objects.create_superuser(
+            username="sec-admin", email="sec-admin@example.test", password="password123"
         )
-        self.api = APIClient()
-        self.api.force_authenticate(admin)
-
-    def patch(self, payload):
-        return self.api.patch(
-            "/api/v1/admin/shop/products/SEC001",
-            data=json.dumps(payload),
-            content_type="application/json",
-        )
-
-    def test_patch_sets_secondary_categories(self):
-        response = self.patch({"ca_id": "10", "ca_id2": "40", "ca_id3": ""})
-        self.assertEqual(response.status_code, 200, response.content[:300])
-        stored = ShopProduct.objects.get(pk="SEC001")
-        self.assertEqual(stored.category2_id, "40")
-        self.assertIsNone(stored.category3_id)
-        self.assertEqual(response.json()["data"]["ca_id2"], "40")
-
-    def test_patch_without_secondary_keys_keeps_existing_values(self):
-        response = self.patch({"ca_id": "10", "it_name": "Renamed"})
-        self.assertEqual(response.status_code, 200, response.content[:300])
-        stored = ShopProduct.objects.get(pk="SEC001")
-        self.assertEqual(stored.category2_id, "20")
-        self.assertEqual(stored.category3_id, "30")
-
-    def test_patch_with_unknown_secondary_category_id_keeps_the_stored_value(self):
-        response = self.patch({"ca_id": "10", "ca_id2": "does-not-exist"})
-        self.assertEqual(response.status_code, 200, response.content[:300])
-        self.assertEqual(ShopProduct.objects.get(pk="SEC001").category2_id, "20")
-
-    def test_patch_with_empty_secondary_category_id_clears_it(self):
-        response = self.patch({"ca_id": "10", "ca_id2": ""})
-        self.assertEqual(response.status_code, 200, response.content[:300])
-        self.assertIsNone(ShopProduct.objects.get(pk="SEC001").category2_id)
 
     def test_admin_category_list_counts_secondary_assignments(self):
-        response = self.api.get("/api/v1/admin/shop/categories")
-        self.assertEqual(response.status_code, 200, response.content[:300])
-        counts = {item["ca_id"]: item["item_count"] for item in response.json()["data"]}
+        from django.contrib import admin
+        from django.test import RequestFactory
+
+        request = RequestFactory().get("/admin/shop/shopcategory/")
+        request.user = self.admin
+        queryset = admin.site._registry[ShopCategory].get_queryset(request)
+        counts = dict(queryset.values_list("ca_id", "item_total"))
         self.assertEqual(counts["10"], 2)
         self.assertEqual(counts["20"], 1)
         self.assertEqual(counts["30"], 1)

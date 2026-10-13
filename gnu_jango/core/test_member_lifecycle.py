@@ -18,7 +18,8 @@ from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.cache import cache
-from django.test import TestCase
+from django.test import Client, TestCase
+from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
@@ -180,21 +181,29 @@ class MemberLeaveTests(LifecycleTestBase):
         self.assertFalse(Config.objects.filter(name=name("naver", "n-1")).exists())
         self.assertTrue(Config.objects.filter(name=name("naver", "n-2")).exists())
 
+    def admin_client(self):
+        admin_user = self.user_model.objects.create_superuser(
+            username="life_admin", email="life_admin@example.test", password=PASSWORD
+        )
+        client = Client()
+        client.force_login(admin_user)
+        return client
+
     def test_the_admin_sees_the_stored_leave_date(self):
-        staff = self.make_member("life_staff", is_staff=True)
-        Profile.objects.filter(user=self.member).update(leave_date=timezone.localdate() - timedelta(days=3))
+        left_on = timezone.localdate() - timedelta(days=3)
+        Profile.objects.filter(user=self.member).update(leave_date=left_on)
         self.user_model.objects.filter(pk=self.member.pk).update(is_active=False)
-        response = self.client_for(staff).get("/api/v1/admin/members/leaver")
+        response = self.admin_client().get(reverse("admin:auth_user_change", args=[self.member.pk]))
         self.assertEqual(response.status_code, 200)
-        expected = (timezone.localdate() - timedelta(days=3)).strftime("%Y%m%d")
-        self.assertEqual(response.json()["data"]["mb_leave_date"], expected)
+        self.assertIn(left_on.isoformat(), response.content.decode())
 
     def test_the_admin_leave_action_stores_the_leave_date(self):
-        staff = self.make_member("life_staff", is_staff=True)
-        response = self.client_for(staff).patch("/api/v1/admin/members/leaver/leave", {}, format="json")
-        self.assertEqual(response.status_code, 200)
+        response = self.admin_client().post(
+            reverse("admin:auth_user_changelist"),
+            {"action": "leave_selected_members", "_selected_action": [self.member.pk]},
+        )
+        self.assertEqual(response.status_code, 302)
         self.assertEqual(self.profile(self.member).leave_date, timezone.localdate())
-        self.assertEqual(response.json()["data"]["mb_leave_date"], timezone.localdate().strftime("%Y%m%d"))
 
 
 class RegistrationCertifyTests(LifecycleTestBase):

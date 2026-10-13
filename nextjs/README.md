@@ -180,7 +180,9 @@ npm run check:vercel-env:template
 the local frontend origin.
 
 `check:local-browser` opens the local static theme with Playwright and checks
-the main public, board, shop, cart, and guest-protected flows. To include
+the main public, board, shop, cart, and guest-protected flows. Site
+administration is the Django admin at `/admin/`, so admin pages are not part of
+this smoke. To include
 authenticated mypage/order/wishlist checks against a disposable local member,
 seed it and run the auth gate in one step:
 
@@ -197,21 +199,7 @@ $env:LOCAL_SMOKE_LOGIN_PASSWORD="testpassword"
 npm run check:local-browser:auth
 ```
 
-To also include admin pages, provide a local super-admin account:
-
-```powershell
-$env:LOCAL_SMOKE_ADMIN_LOGIN_ID="admin"
-$env:LOCAL_SMOKE_ADMIN_LOGIN_PASSWORD="admin-password"
-npm run check:local-browser:all
-```
-
-For a disposable local super-admin smoke account, run:
-
-```powershell
-npm run check:local-browser:all:seeded
-```
-
-To run the same authenticated/admin coverage at a mobile viewport, run:
+To run the same authenticated coverage at a mobile viewport, run:
 
 ```powershell
 npm run check:local-browser:all:seeded:mobile
@@ -245,7 +233,7 @@ npm run check:release:local
 
 This verifies typecheck, static theme sync, local runtime settings, static and
 server-runtime YoungCart legacy routes, legacy short URLs,
-authenticated/admin browser smoke paths on desktop and mobile, accessibility
+authenticated browser smoke paths on desktop and mobile, accessibility
 basics, mobile page-level horizontal overflow, and the local API origin. When
 frontend source changed and you need to rebuild the static theme output first,
 run:
@@ -256,7 +244,7 @@ npm run check:release:local:build
 
 Before a wider release, run the full gate. It also executes the local write
 action smokes for auth, boards, shop, order, member, memo, coupon, poll, point,
-post reactions, and admin flows:
+and post reactions:
 
 ```powershell
 npm run check:release:local:full

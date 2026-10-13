@@ -128,7 +128,6 @@ export function g5PathForRuntime(path: string): string {
 }
 
 const G5_APP_ROUTE_ROOTS = new Set([
-  "admin",
   "boards",
   "content",
   "faq",
@@ -146,6 +145,7 @@ const G5_APP_ROUTE_ROOTS = new Set([
 const G5_NON_ROUTE_ROOTS = new Set([
   "_next",
   "adm",
+  "admin",
   "api",
   "bbs",
   "css",

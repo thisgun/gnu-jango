@@ -1,7 +1,42 @@
 from gnu_jango.shop.admin._common import *  # noqa: F401,F403
+from django import forms
+from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
+from unfold.forms import ActionForm
+
+from gnu_jango.api.shop_common import CANCELLED_STATUSES
+
+# YoungCart order states an operator moves an order through (adm/shop_admin/orderlist.php).
+ADMIN_ORDER_STATUSES = ("주문", "입금", "준비", "배송", "완료", "취소")
+
+
+def set_order_status(order, status, reason):
+    """Move an order to ``status``: its items follow, and a cancellation goes through the shared
+    cancel path (stock back, coupons and points refunded once).
+
+    Returns False for an order that is already cancelled: reopening it would not take back the
+    stock, coupons and points the cancellation returned."""
+    current = ShopOrder.objects.filter(pk=order.pk).values_list("od_status", flat=True).first()
+    if str(current or "") in CANCELLED_STATUSES:
+        return False
+    if status in CANCELLED_STATUSES:
+        from gnu_jango.api.v1_shop import cancel_order_and_refund_benefits
+
+        cancel_order_and_refund_benefits(order, reason)
+        return True
+    ShopOrder.objects.filter(pk=order.pk).update(od_status=status)
+    order.items.exclude(ct_status__in=CANCELLED_STATUSES).update(ct_status=status)
+    return True
+
+
+class OrderStatusActionForm(ActionForm):
+    od_status = forms.ChoiceField(
+        label="변경할 주문 상태",
+        required=False,
+        choices=[("", "상태 선택")] + [(status, status) for status in ADMIN_ORDER_STATUSES],
+    )
 
 
 @admin.register(ShopOrder)
@@ -34,8 +69,52 @@ class ShopOrderAdmin(ModelAdmin):
     list_fullwidth = True
     list_horizontal_scrollbar_top = True
     list_filter_submit = True
-    actions = ("export_selected_orders_csv", "export_selected_receipts_csv")
+    actions = ("change_selected_order_status", "export_selected_orders_csv", "export_selected_receipts_csv")
+    action_form = OrderStatusActionForm
     inlines = [ShopOrderItemInline, ShopOrderDataInline]
+
+    @admin.action(description="선택 주문 상태 변경", permissions=["change"])
+    def change_selected_order_status(self, request, queryset):
+        status = str(request.POST.get("od_status") or "").strip()
+        if status not in ADMIN_ORDER_STATUSES:
+            self.message_user(request, "변경할 주문 상태를 고르세요.", messages.WARNING)
+            return
+        reason = f"관리자 취소 ({request.user.get_username()})"
+        changed = skipped = 0
+        for order in queryset:
+            if set_order_status(order, status, reason):
+                self.log_change(request, order, f"주문 상태를 '{status}'(으)로 변경")
+                changed += 1
+            else:
+                skipped += 1
+        if changed:
+            self.message_user(request, f"주문 {changed}건을 '{status}' 상태로 바꿨습니다.", messages.SUCCESS)
+        if skipped:
+            self.message_user(request, f"이미 취소된 주문 {skipped}건은 바꾸지 않았습니다.", messages.WARNING)
+
+    def save_model(self, request, obj, form, change):
+        changed = set(getattr(form, "changed_data", ()) or ())
+        if obj.od_invoice and not obj.od_invoice_time:
+            obj.od_invoice_time = timezone.localtime().strftime("%Y-%m-%d %H:%M:%S")
+        if change and "od_status" in changed:
+            # The new status is applied in save_related, after the item inlines are saved (an item row
+            # saved later would overwrite a cancellation). The other edits are saved under the old
+            # status, because the cancel path refunds only an order that is not cancelled yet.
+            request._pending_order_status = obj.od_status
+            obj.od_status = form.initial.get("od_status", obj.od_status)
+        super().save_model(request, obj, form, change)
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        status = getattr(request, "_pending_order_status", None)
+        if status is None:
+            return
+        request._pending_order_status = None
+        order = form.instance
+        if set_order_status(order, status, f"관리자 취소 ({request.user.get_username()})"):
+            order.refresh_from_db()
+        else:
+            self.message_user(request, "취소된 주문은 다른 상태로 되돌릴 수 없습니다.", messages.WARNING)
     readonly_fields = (
         "operations_snapshot",
         "settlement_snapshot",

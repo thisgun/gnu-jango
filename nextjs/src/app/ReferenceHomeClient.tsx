@@ -163,7 +163,7 @@ function LoginWidget() {
             </div>
             <dl className="solune-member-stats"><div><dt>포인트</dt><dd>{formatNumber(Number(user.mb_point) || 0)}P</dd></div></dl>
             <div className="solune-member-actions">
-              {user.is_super_admin ? <Link className="solune-member-admin" href="/admin">관리자</Link> : null}
+              {user.is_super_admin ? <a className="solune-member-admin" href="/admin/">관리자</a> : null}
               <Link href="/mypage">마이페이지</Link>
               <button type="button" onClick={() => void logout()}>로그아웃</button>
             </div>

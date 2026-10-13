@@ -11,7 +11,8 @@ from django.utils.translation import gettext_lazy as _
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from gnu_jango.core.models import MailCampaign, MailSendLog, SearchKeyword, VisitLog
-from gnu_jango.shop.models import ShopOrder, ShopOrderData, ShopPersonalPay
+from gnu_jango.api.community_common import GENERAL_QA_PRODUCT_ID
+from gnu_jango.shop.models import ShopOrder, ShopOrderData, ShopPersonalPay, ShopQA
 from gnu_jango.users.models import Profile, User_Memo, User_Point
 from gnu_jango.utils.admin_display import format_number, money_sum
 
@@ -199,6 +200,7 @@ def _build_admin_ops_summary():
         )
     )
     unread_memos = User_Memo.objects.select_related("user").filter(me_type="recv", me_read_datetime__isnull=True)
+    waiting_inquiries = ShopQA.objects.filter(product_id=GENERAL_QA_PRODUCT_ID, iq_answer="")
 
     return {
         "metrics": [
@@ -290,6 +292,14 @@ def _build_admin_ops_summary():
                 "/admin/shop/shoppersonalpay/?personal_pay_state=due",
                 "warning" if pending_personal_pays.exists() else "success",
                 "payments",
+            ),
+            queue_item(
+                "답변 대기 1:1 문의",
+                waiting_inquiries.count(),
+                "답변하지 않은 1:1 문의",
+                "/admin/shop/generalinquiry/?answer_status=pending",
+                "warning" if waiting_inquiries.exists() else "success",
+                "support_agent",
             ),
             queue_item(
                 _("Unread memos"),
