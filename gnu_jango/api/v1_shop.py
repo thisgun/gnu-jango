@@ -1196,7 +1196,11 @@ def banners_view(request):
     data = []
     for banner in banners:
         image_url = banner.image_file.url if banner.image_file else legacy_shop_asset_url(banner.image_url)
-        if image_url.startswith("/"):
+        if image_url.startswith("/sample-data/"):
+            # These bundled demo assets are served by the Next.js frontend. Keep them relative so
+            # they resolve on that host even when Django's API runs as a separate Vercel project.
+            pass
+        elif image_url.startswith("/"):
             image_url = request.build_absolute_uri(image_url)
         data.append(
             {

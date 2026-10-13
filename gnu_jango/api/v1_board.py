@@ -317,7 +317,10 @@ def _legacy_file_url(request, post_file):
 
 
 def _file_payload(post_file, request):
-    file_url = _field_file_url(request, post_file.bf_file) or _legacy_file_url(request, post_file)
+    if post_file.bf_storage == "sample_static":
+        file_url = post_file.bf_thumburl or post_file.bf_fileurl
+    else:
+        file_url = _field_file_url(request, post_file.bf_file) or _legacy_file_url(request, post_file)
     checked_url = _download_url(post_file) if file_url and post_file.bf_file else ""
     return {
         "bf_no": post_file.bf_no,
@@ -407,6 +410,8 @@ def _comment_payload(comment, request):
 def _thumbnail_from_files(files, request):
     for post_file in files:
         if post_file.bf_type > 0:
+            if post_file.bf_storage == "sample_static":
+                return post_file.bf_thumburl or post_file.bf_fileurl
             return _field_file_url(request, post_file.bf_file)
     return ""
 

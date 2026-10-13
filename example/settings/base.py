@@ -275,6 +275,12 @@ UNFOLD = {
                         "link": reverse_lazy("admin:bbs_post_changelist"),
                     },
                     {
+                        "title": _("샘플 데이터"),
+                        "icon": "database",
+                        "link": reverse_lazy("admin-sample-data"),
+                        "permission": lambda request: request.user.is_superuser,
+                    },
+                    {
                         "title": _("Members"),
                         "icon": "groups",
                         "link": reverse_lazy("admin:auth_user_changelist"),

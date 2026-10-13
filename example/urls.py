@@ -20,6 +20,7 @@ from django.conf.urls.static import static
 from gnu_jango.api import v1_auth
 from gnu_jango.core import views as core_views
 from gnu_jango.config import theme_admin
+from gnu_jango.config import sample_data_admin
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 NEXTJS25_ADMIN_ROUTE_PATTERN = (
@@ -49,6 +50,11 @@ urlpatterns = [
         "admin/theme/",
         admin.site.admin_view(theme_admin.theme_settings),
         name="admin-theme-settings",
+    ),
+    path(
+        "admin/sample-data/",
+        admin.site.admin_view(sample_data_admin.sample_data_settings),
+        name="admin-sample-data",
     ),
     path(
         "admin/theme/<slug:theme_name>/preview/",

@@ -1,0 +1,153 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static humanize %}
+
+{% block title %}{% translate "샘플 데이터" %} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'admin_next/css/sample_data_settings.css' %}">
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+  &rsaquo; {% translate "샘플 데이터" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<main class="g5-sample-admin">
+  <section class="g5-admin-dashboard-hero g5-sample-hero">
+    <div>
+      <p class="g5-admin-eyebrow">DEMO CONTENT</p>
+      <h1>{% translate "샘플 데이터" %}</h1>
+      <p class="g5-admin-hero-copy">{% translate "홈페이지와 게시판, 쇼핑몰을 미리 살펴볼 수 있는 예시 콘텐츠를 관리합니다." %}</p>
+    </div>
+    <a class="button g5-admin-button-secondary" href="/" target="_blank" rel="noopener">{% translate "홈페이지 보기" %}</a>
+  </section>
+
+  {% if messages %}
+  <div class="g5-sample-messages" aria-live="polite">
+    {% for message in messages %}
+    <div role="alert" class="alert alert-{{ message.tags }} g5-sample-alert">
+      <span>{{ message }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <section class="g5-sample-status" aria-labelledby="sample-status-title">
+    <div class="g5-sample-section-heading">
+      <div>
+        <h2 id="sample-status-title">{% translate "관리 중인 샘플" %}</h2>
+        <p>{% translate "아래 수치는 이 페이지가 만든 항목만 집계합니다." %}</p>
+      </div>
+      {% if has_data %}
+      <span class="g5-sample-state is-ready">{% translate "샘플 데이터 있음" %}</span>
+      {% else %}
+      <span class="g5-sample-state">{% translate "아직 추가되지 않음" %}</span>
+      {% endif %}
+    </div>
+
+    <div class="g5-sample-count-grid">
+      <article class="card card-border g5-sample-count-card">
+        <div class="card-body"><span>{% translate "게시판" %}</span><strong>{{ counts.boards|intcomma }}</strong></div>
+      </article>
+      <article class="card card-border g5-sample-count-card">
+        <div class="card-body"><span>{% translate "게시글" %}</span><strong>{{ counts.posts|intcomma }}</strong></div>
+      </article>
+      <article class="card card-border g5-sample-count-card">
+        <div class="card-body"><span>{% translate "댓글" %}</span><strong>{{ counts.comments|intcomma }}</strong></div>
+      </article>
+      <article class="card card-border g5-sample-count-card">
+        <div class="card-body"><span>{% translate "갤러리 이미지" %}</span><strong>{{ counts.gallery_images|intcomma }}</strong></div>
+      </article>
+      <article class="card card-border g5-sample-count-card">
+        <div class="card-body"><span>{% translate "쇼핑 상품" %}</span><strong>{{ counts.products|intcomma }}</strong></div>
+      </article>
+      <article class="card card-border g5-sample-count-card">
+        <div class="card-body"><span>{% translate "쇼핑 카테고리" %}</span><strong>{{ counts.categories|intcomma }}</strong></div>
+      </article>
+      <article class="card card-border g5-sample-count-card">
+        <div class="card-body"><span>{% translate "쇼핑 배너" %}</span><strong>{{ counts.banners|intcomma }}</strong></div>
+      </article>
+      <article class="card card-border g5-sample-count-card">
+        <div class="card-body"><span>{% translate "FAQ" %}</span><strong>{{ counts.faqs|intcomma }}</strong></div>
+      </article>
+      <article class="card card-border g5-sample-count-card">
+        <div class="card-body"><span>{% translate "설문" %}</span><strong>{{ counts.polls|intcomma }}</strong></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="g5-sample-content-grid">
+    <article class="card card-border g5-sample-panel">
+      <div class="card-body">
+        <div class="g5-sample-panel-heading">
+          <span class="g5-sample-icon" aria-hidden="true">＋</span>
+          <div>
+            <h2>{% translate "샘플 데이터 추가" %}</h2>
+            <p>{% translate "게시판 글과 갤러리, 댓글, 상품, 배너, FAQ와 설문을 한 번에 만듭니다." %}</p>
+          </div>
+        </div>
+        <ul class="g5-sample-list">
+          <li>{% translate "공지사항·자유게시판·질문과 답변·갤러리 예시" %}</li>
+          <li>{% translate "상품 6개와 쇼핑몰 배너 1개" %}</li>
+          <li>{% translate "FAQ 4개와 참여 가능한 설문 1개" %}</li>
+        </ul>
+        <form method="post" action="{% url 'admin-sample-data' %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="add">
+          {% if has_data %}
+          <button class="btn btn-primary button g5-sample-action" type="submit" disabled>{% translate "먼저 기존 샘플을 삭제하세요" %}</button>
+          {% else %}
+          <button class="btn btn-primary button g5-sample-action" type="submit">{% translate "샘플 데이터 추가" %}</button>
+          {% endif %}
+        </form>
+      </div>
+    </article>
+
+    <article class="card card-border g5-sample-panel g5-sample-delete-panel">
+      <div class="card-body">
+        <div class="g5-sample-panel-heading">
+          <span class="g5-sample-icon is-delete" aria-hidden="true">−</span>
+          <div>
+            <h2>{% translate "샘플 데이터 삭제" %}</h2>
+            <p>{% translate "이 페이지가 기록한 샘플 항목만 대상으로 정리합니다." %}</p>
+          </div>
+        </div>
+        <div role="note" class="alert alert-warning g5-sample-note">
+          {% translate "샘플 게시글에 실제 댓글이 달렸거나 상품에 주문·후기 기록이 생긴 경우 해당 항목은 보존합니다." %}
+        </div>
+        <form method="post" action="{% url 'admin-sample-data' %}" class="g5-sample-delete-form">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="delete">
+          <label for="sample-delete-confirmation">{% translate "삭제하려면 아래에 ‘삭제’를 입력하세요." %}</label>
+          <div class="g5-sample-delete-controls">
+            <input id="sample-delete-confirmation" class="vTextField" type="text" name="confirmation" placeholder="삭제" pattern="삭제" autocomplete="off" {% if has_data %}required{% else %}disabled{% endif %}>
+            <button class="btn btn-error button g5-sample-delete-button" type="submit" {% if not has_data %}disabled{% endif %}>{% translate "샘플 데이터 삭제" %}</button>
+          </div>
+        </form>
+      </div>
+    </article>
+  </section>
+
+  <section class="card card-border g5-sample-assets">
+    <div class="card-body">
+      <div class="g5-sample-section-heading">
+        <div>
+          <h2>{% translate "샘플 이미지 최적화" %}</h2>
+          <p>{% translate "상품과 갤러리는 같은 WebP 파일을 사용해 전송량과 저장 공간을 줄입니다." %}</p>
+        </div>
+        <span class="g5-sample-size">{{ assets.total_bytes|filesizeformat }} {% translate "전체" %}</span>
+      </div>
+      <div class="g5-sample-image-list">
+        {% for asset in assets.items %}
+        <div><code>{{ asset.name }}</code><span>{{ asset.bytes|filesizeformat }}</span></div>
+        {% endfor %}
+      </div>
+      <p class="g5-sample-footnote">{% translate "이미지는 앱 정적 리소스로 한 번만 배포됩니다. 샘플을 삭제하면 데이터베이스의 참조가 지워지고, 주문 기록 등 연결된 실제 활동은 남겨 둡니다." %}</p>
+    </div>
+  </section>
+</main>
+{% endblock %}

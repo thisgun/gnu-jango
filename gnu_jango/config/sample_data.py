@@ -1,0 +1,560 @@
+"""Create and remove a small, trackable set of public demo content."""
+
+import json
+import uuid
+from datetime import timedelta
+
+from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
+from django.utils import timezone
+
+from gnu_jango.bbs.models import Board, Comment, Group, Post, Post_file
+from gnu_jango.bbs.utils import get_next_num
+from gnu_jango.config.models import Config
+from gnu_jango.core.models import FAQItem, FAQMaster, Poll, PollChoice
+from gnu_jango.shop.models import ShopBanner, ShopCategory, ShopProduct
+
+
+MANIFEST_NAME = "g5_sample_data_manifest_v1"
+MANIFEST_VERSION = 1
+SAMPLE_IMAGES = tuple(f"product-{number:02}.webp" for number in range(1, 7))
+SAMPLE_BANNER = "banner.webp"
+SAMPLE_ASSET_SIZES = {
+    "product-01.webp": 15778,
+    "product-02.webp": 11238,
+    "product-03.webp": 14112,
+    "product-04.webp": 12400,
+    "product-05.webp": 10332,
+    "product-06.webp": 8790,
+    "banner.webp": 11552,
+}
+
+MANIFEST_LIST_FIELDS = (
+    "groups",
+    "boards",
+    "boards_used",
+    "posts",
+    "comments",
+    "post_files",
+    "categories",
+    "products",
+    "banners",
+    "faq_masters",
+    "faq_items",
+    "polls",
+    "poll_choices",
+)
+
+BOARD_CONTENT = {
+    "notice": {
+        "subject": "공지사항",
+        "posts": [
+            ("새로운 커뮤니티에 오신 것을 환영합니다", "이곳에서 공지와 서비스 소식을 확인할 수 있습니다. 편하게 둘러보세요.", True, None),
+            ("샘플 콘텐츠 안내", "관리자 샘플 데이터 메뉴에서 예시 게시글과 상품을 추가하거나 정리할 수 있습니다.", False, None),
+            ("게시판 이용 방법", "질문과 의견은 자유게시판이나 질문과 답변 게시판에 남겨 주세요.", False, None),
+        ],
+    },
+    "free": {
+        "subject": "자유게시판",
+        "posts": [
+            ("커뮤니티에 오신 걸 환영합니다", "관심 있는 이야기와 새로운 소식을 자유롭게 나눠 보세요.", False, None),
+            ("요즘 책상 위에 두고 쓰는 것", "자주 쓰는 물건을 가까이에 두니 하루가 한결 정돈되는 느낌입니다.", False, None),
+            ("좋은 도구를 고르는 기준", "오래 쓸 수 있는지, 지금 하는 일에 꼭 필요한지 먼저 살펴봅니다.", False, None),
+            ("오늘의 작은 기록", "바쁜 하루 중 잠깐 멈춰서 마음에 남은 장면을 적어 봅니다.", False, None),
+            ("처음 오셨다면 인사를 남겨 주세요", "이야기를 나누고 싶은 주제가 있다면 새 글로 시작해 보세요.", False, None),
+        ],
+    },
+    "qa": {
+        "subject": "질문과 답변",
+        "posts": [
+            ("게시글에 사진을 올리려면 어떻게 하나요?", "글쓰기 화면에서 이미지 파일을 선택한 뒤 등록하면 됩니다.", False, None),
+            ("상품 목록은 어디에서 볼 수 있나요?", "상단 메뉴의 쇼핑몰을 선택하면 상품과 카테고리를 확인할 수 있습니다.", False, None),
+            ("모바일에서도 게시판을 이용할 수 있나요?", "화면 크기에 맞춰 게시판과 쇼핑몰이 자동으로 정리됩니다.", False, None),
+            ("계정 정보를 바꾸고 싶어요", "로그인한 뒤 마이페이지에서 프로필과 계정 설정을 확인해 주세요.", False, None),
+        ],
+    },
+    "gallery": {
+        "subject": "갤러리",
+        "posts": [
+            ("기록이 시작되는 책상", "일과 기록을 차분히 시작할 수 있는 공간을 담았습니다.", False, 1),
+            ("나무결이 돋보이는 데스크 매트", "책상 위에 따뜻한 질감을 더하는 작은 소품입니다.", False, 2),
+            ("가볍게 높이를 더하는 노트북 스탠드", "작업 공간을 단정하게 정리하는 데 도움이 됩니다.", False, 3),
+            ("투명한 유리 머그", "아침의 빛이 잘 어울리는 데일리 컵입니다.", False, 4),
+            ("오래 쓰는 주방 도구", "매일 사용하는 도구는 손에 편안하게 잡히는 것이 좋습니다.", False, 5),
+            ("하루를 천천히 준비하는 시간", "좋아하는 차와 함께 여유로운 아침을 준비해 봅니다.", False, 6),
+        ],
+    },
+}
+
+PRODUCTS = (
+    ("책상 위의 작은 기록 세트", 28000, "노트와 펜을 한곳에 두고 하루를 기록해 보세요."),
+    ("슬림 데스크 선반", 42000, "자주 쓰는 소품을 편리하게 올려둘 수 있는 선반입니다."),
+    ("내추럴 우드 데스크 매트", 35000, "차분한 나무 질감으로 작업 공간을 정돈해 줍니다."),
+    ("알루미늄 노트북 스탠드", 39000, "시선을 편안하게 맞추고 책상 공간을 넓혀 줍니다."),
+    ("데일리 글라스 머그", 16000, "가볍고 투명한 유리로 만든 데일리 머그입니다."),
+    ("스테인리스 드립 포트", 54000, "물을 천천히 따르기 좋은 작은 드립 포트입니다."),
+)
+
+FAQS = (
+    ("샘플 데이터는 어떻게 정리하나요?", "관리자 메뉴의 샘플 데이터 페이지에서 ‘샘플 데이터 삭제’를 선택하면 이 페이지가 만든 콘텐츠만 정리합니다."),
+    ("샘플 이미지가 저장 공간을 많이 차지하나요?", "이미지는 WebP로 최적화되어 앱의 정적 리소스로 제공됩니다. 갤러리 글과 상품은 같은 작은 이미지를 함께 사용합니다."),
+    ("샘플 상품으로 주문할 수 있나요?", "예시 상품은 쇼핑몰 화면을 살펴보기 위한 데이터입니다. 실제 결제 연동은 설정하지 않습니다."),
+    ("기존 게시판이나 상품도 삭제되나요?", "삭제 작업은 생성 기록에 저장된 샘플 항목만 대상으로 합니다. 샘플에 실제 댓글이나 주문 이력이 연결되어 있으면 해당 항목을 남깁니다."),
+)
+
+POLL_CHOICES = ("커뮤니티 게시글", "사진 갤러리", "라이프스타일 상품", "사용 팁과 가이드")
+
+
+class SampleDataError(Exception):
+    """A safe, user-facing sample-data operation error."""
+
+
+def empty_manifest():
+    return {
+        "version": MANIFEST_VERSION,
+        "created_at": timezone.now().isoformat(),
+        **{field: [] for field in MANIFEST_LIST_FIELDS},
+    }
+
+
+def _decode_manifest(config_row):
+    if not config_row:
+        return None
+    try:
+        manifest = json.loads(config_row.value)
+    except (TypeError, ValueError) as exc:
+        raise SampleDataError("샘플 데이터 관리 기록을 읽을 수 없습니다. 관리자에게 확인해 주세요.") from exc
+    if not isinstance(manifest, dict) or manifest.get("version") != MANIFEST_VERSION:
+        raise SampleDataError("이 샘플 데이터 관리 기록은 현재 버전과 맞지 않습니다.")
+    for field in MANIFEST_LIST_FIELDS:
+        if not isinstance(manifest.get(field), list):
+            raise SampleDataError("샘플 데이터 관리 기록의 형식이 올바르지 않습니다.")
+    return manifest
+
+
+def _ids(manifest, field):
+    return manifest.get(field, []) if manifest else []
+
+
+def _asset_size(name):
+    if name not in (*SAMPLE_IMAGES, SAMPLE_BANNER):
+        raise SampleDataError("등록되지 않은 샘플 이미지입니다.")
+    return SAMPLE_ASSET_SIZES[name]
+
+
+def sample_asset_summary():
+    items = []
+    for name in (*SAMPLE_IMAGES, SAMPLE_BANNER):
+        items.append({"name": name, "bytes": _asset_size(name)})
+    return {"items": items, "total_bytes": sum(item["bytes"] for item in items)}
+
+
+def managed_counts(manifest):
+    if not manifest:
+        return {
+            "groups": 0,
+            "boards": 0,
+            "posts": 0,
+            "comments": 0,
+            "gallery_images": 0,
+            "categories": 0,
+            "products": 0,
+            "banners": 0,
+            "faqs": 0,
+            "polls": 0,
+        }
+    return {
+        "groups": Group.objects.filter(pk__in=_ids(manifest, "groups")).count(),
+        "boards": Board.objects.filter(pk__in=_ids(manifest, "boards")).count(),
+        "posts": Post.objects.filter(pk__in=_ids(manifest, "posts")).count(),
+        "comments": Comment.objects.filter(pk__in=_ids(manifest, "comments")).count(),
+        "gallery_images": Post_file.objects.filter(pk__in=_ids(manifest, "post_files")).count(),
+        "categories": ShopCategory.objects.filter(pk__in=_ids(manifest, "categories")).count(),
+        "products": ShopProduct.objects.filter(pk__in=_ids(manifest, "products")).count(),
+        "banners": ShopBanner.objects.filter(pk__in=_ids(manifest, "banners")).count(),
+        "faqs": FAQItem.objects.filter(pk__in=_ids(manifest, "faq_items")).count(),
+        "polls": Poll.objects.filter(pk__in=_ids(manifest, "polls")).count(),
+    }
+
+
+def get_status():
+    config_row = Config.objects.filter(name=MANIFEST_NAME).first()
+    manifest = _decode_manifest(config_row)
+    counts = managed_counts(manifest)
+    return {
+        "manifest": manifest,
+        "counts": counts,
+        "has_data": any(counts.values()),
+        "assets": sample_asset_summary(),
+    }
+
+
+def _public_board(board):
+    return board.bo_list_level <= 1 and board.bo_read_level <= 1
+
+
+def _new_board(group, table, subject, token, manifest):
+    candidates = (table, f"sample-{table}", f"demo-{table}-{token[:5]}")
+    for candidate in candidates:
+        existing = Board.objects.filter(bo_table=candidate).first()
+        if existing:
+            if _public_board(existing):
+                return existing
+            continue
+
+        board = Board.objects.create(
+            group=group,
+            bo_subject=subject,
+            bo_table=candidate,
+            bo_mobile_subject=subject,
+            bo_list_level=1,
+            bo_read_level=1,
+            bo_write_level=1,
+            bo_reply_level=1,
+            bo_comment_level=1,
+            bo_upload_level=1,
+            bo_download_level=1,
+            bo_html_level=1,
+            bo_link_level=1,
+            bo_skin="basic",
+            bo_mobile_skin="basic",
+            bo_table_width=100,
+            bo_subject_len=60,
+            bo_mobile_subject_len=30,
+            bo_page_rows=15,
+            bo_mobile_page_rows=15,
+            bo_image_width=720,
+            bo_gallery_cols=3,
+            bo_gallery_width=240,
+            bo_gallery_height=240,
+            bo_mobile_gallery_width=160,
+            bo_mobile_gallery_height=160,
+            bo_upload_count=1,
+            bo_upload_size=1024 * 1024,
+            bo_use_search=True,
+        )
+        manifest["boards"].append(board.pk)
+        return board
+    raise SampleDataError(f"{subject} 샘플 게시판을 만들 수 없습니다.")
+
+
+def _get_sample_group(manifest):
+    group = Group.objects.filter(gr_id="sample").first()
+    if group:
+        return group
+    group = Group.objects.create(gr_id="sample", gr_subject="샘플 콘텐츠")
+    manifest["groups"].append(group.pk)
+    return group
+
+
+def _create_post(board, definition, created_at, manifest):
+    subject, content, is_notice, image_number = definition
+    post = Post.objects.create(
+        board=board,
+        wr_num=get_next_num(board_id=board.pk),
+        wr_parent=0,
+        wr_subject=subject,
+        wr_content=content,
+        wr_slug="",
+        wr_name="샘플 운영자",
+        wr_datetime=created_at,
+        wr_last=created_at,
+        is_notice=1 if is_notice else 0,
+    )
+    post.wr_parent = post.pk
+    post.save(update_fields=["wr_parent"])
+    manifest["posts"].append(post.pk)
+
+    if image_number:
+        filename = SAMPLE_IMAGES[image_number - 1]
+        image_url = f"/sample-data/{filename}"
+        post_file = Post_file.objects.create(
+            board=board,
+            post=post,
+            bf_no=0,
+            bf_source=filename,
+            bf_fileurl=image_url,
+            bf_thumburl=image_url,
+            bf_storage="sample_static",
+            bf_filesize=_asset_size(filename),
+            bf_width=600,
+            bf_height=600,
+            bf_type=18,
+            bf_datetime=created_at,
+        )
+        post.wr_file = 1
+        post.save(update_fields=["wr_file"])
+        manifest["post_files"].append(post_file.pk)
+    return post
+
+
+def _create_comment(post, content, created_at, manifest):
+    comment = Comment.objects.create(
+        board=post.board,
+        post=post,
+        wr_content=content,
+        wr_name="커뮤니티 회원",
+        wr_datetime=created_at,
+        wr_last=created_at,
+    )
+    manifest["comments"].append(comment.pk)
+    Post.objects.filter(pk=post.pk).update(
+        wr_comment=Comment.objects.filter(post=post).count(),
+        wr_last=created_at,
+    )
+
+
+def create_sample_data():
+    """Create one public batch and record only rows created by this operation."""
+    sample_asset_summary()
+    with transaction.atomic():
+        config_row = Config.objects.select_for_update().filter(name=MANIFEST_NAME).first()
+        existing_manifest = _decode_manifest(config_row)
+        if any(managed_counts(existing_manifest).values()):
+            raise SampleDataError("샘플 데이터가 이미 있습니다. 먼저 현재 샘플을 삭제해 주세요.")
+
+        manifest = empty_manifest()
+        token = uuid.uuid4().hex
+        group = None
+        boards = {}
+        posts_by_table = {}
+        now = timezone.now()
+
+        for table, board_definition in BOARD_CONTENT.items():
+            if group is None:
+                group = _get_sample_group(manifest)
+            board = _new_board(group, table, board_definition["subject"], token, manifest)
+            boards[table] = board
+            if board.pk not in manifest["boards_used"]:
+                manifest["boards_used"].append(board.pk)
+            posts_by_table[table] = []
+            for index, definition in enumerate(board_definition["posts"]):
+                created_at = now - timedelta(days=(index % 5) + 1, hours=index)
+                post = _create_post(board, definition, created_at, manifest)
+                posts_by_table[table].append(post)
+
+        _create_comment(posts_by_table["free"][0], "반갑습니다. 게시판이 보기 좋게 정리되어 있네요.", now - timedelta(hours=2), manifest)
+        _create_comment(posts_by_table["free"][1], "저도 책상 정리부터 해봐야겠습니다.", now - timedelta(hours=1), manifest)
+        _create_comment(posts_by_table["gallery"][0], "공간 사진 잘 봤습니다. 차분한 분위기가 좋네요.", now - timedelta(minutes=30), manifest)
+
+        for board in boards.values():
+            board.bo_count_write = board.posts.count()
+            board.bo_count_comment = board.comments.count()
+            board.save(update_fields=["bo_count_write", "bo_count_comment"])
+
+        category = ShopCategory.objects.create(
+            ca_id=uuid.uuid4().hex[:10],
+            ca_name="데모 스토어",
+            ca_order=1,
+            ca_use=True,
+        )
+        manifest["categories"].append(category.pk)
+
+        for index, (name, price, description) in enumerate(PRODUCTS, start=1):
+            image_url = f"/sample-data/{SAMPLE_IMAGES[index - 1]}"
+            product = ShopProduct.objects.create(
+                it_id=f"SAMPLE{token[:8]}{index:02d}",
+                category=category,
+                it_name=name,
+                it_seo_title=f"demo-product-{index:02d}-{token[:5]}",
+                it_brand="SOLUNE",
+                it_price=price,
+                it_basic_price=price,
+                it_hit=12 + index * 7,
+                it_update_time=now - timedelta(hours=index),
+                it_order=index,
+                it_stock_qty=20,
+                it_use="1",
+                it_basic=description,
+                it_content=description,
+                image_url=image_url,
+                images=[image_url],
+            )
+            manifest["products"].append(product.pk)
+
+        banner = ShopBanner.objects.create(
+            bn_alt="차분한 일상을 위한 데모 스토어",
+            bn_url="/shop",
+            bn_position="메인",
+            bn_device="both",
+            bn_order=1,
+            image_url=f"/sample-data/{SAMPLE_BANNER}",
+            is_active=True,
+        )
+        manifest["banners"].append(banner.pk)
+
+        faq_master = FAQMaster.objects.create(fm_subject="자주 묻는 질문", fm_order=1, fm_use=1)
+        manifest["faq_masters"].append(faq_master.pk)
+        for index, (subject, content) in enumerate(FAQS, start=1):
+            item = FAQItem.objects.create(
+                master=faq_master,
+                fa_subject=subject,
+                fa_content=content,
+                fa_order=index,
+                fa_use=1,
+            )
+            manifest["faq_items"].append(item.pk)
+
+        poll = Poll.objects.create(
+            po_subject="어떤 콘텐츠를 가장 기대하시나요?",
+            po_etc="샘플 설문입니다.",
+            po_use=1,
+            po_date=timezone.localdate(),
+            po_begin_date=timezone.localdate() - timedelta(days=1),
+            po_end_date=timezone.localdate() + timedelta(days=30),
+        )
+        manifest["polls"].append(poll.pk)
+        for index, choice in enumerate(POLL_CHOICES, start=1):
+            poll_choice = PollChoice.objects.create(poll=poll, num=index, content=choice)
+            manifest["poll_choices"].append(poll_choice.pk)
+
+        if config_row:
+            config_row.value = json.dumps(manifest, ensure_ascii=False)
+            config_row.save(update_fields=["value"])
+        else:
+            Config.objects.create(name=MANIFEST_NAME, value=json.dumps(manifest, ensure_ascii=False))
+    return manifest
+
+
+def _has_related_rows(instance):
+    """Keep a managed row if other records now depend on it."""
+    for relation in instance._meta.related_objects:
+        accessor = relation.get_accessor_name()
+        if not accessor:
+            continue
+        try:
+            related = getattr(instance, accessor)
+        except ObjectDoesNotExist:
+            continue
+        if hasattr(related, "exists"):
+            if related.exists():
+                return True
+        elif related is not None:
+            return True
+    return False
+
+
+def remove_sample_data():
+    """Remove tracked sample rows while preserving any that gained real activity."""
+    with transaction.atomic():
+        config_row = Config.objects.select_for_update().filter(name=MANIFEST_NAME).first()
+        manifest = _decode_manifest(config_row)
+        if not manifest:
+            return {"deleted": 0, "retained": 0, "manifest": None}
+
+        before_counts = managed_counts(manifest)
+        tracked_comments = _ids(manifest, "comments")
+        tracked_files = _ids(manifest, "post_files")
+        tracked_posts = _ids(manifest, "posts")
+        tracked_products = _ids(manifest, "products")
+        tracked_categories = _ids(manifest, "categories")
+        tracked_masters = _ids(manifest, "faq_masters")
+        tracked_polls = _ids(manifest, "polls")
+
+        Comment.objects.filter(pk__in=tracked_comments).delete()
+        Post_file.objects.filter(pk__in=tracked_files).delete()
+
+        retained_posts = []
+        for post in Post.objects.select_for_update().filter(pk__in=tracked_posts).order_by("pk"):
+            if _has_related_rows(post):
+                latest_comment = post.comments.order_by("-wr_datetime", "-pk").first()
+                post.wr_comment = post.comments.count()
+                post.wr_last = latest_comment.wr_datetime if latest_comment else post.wr_datetime
+                post.save(update_fields=["wr_comment", "wr_last"])
+                retained_posts.append(post.pk)
+            else:
+                post.delete()
+
+        retained_products = []
+        for product in ShopProduct.objects.select_for_update().filter(pk__in=tracked_products).order_by("pk"):
+            if _has_related_rows(product):
+                retained_products.append(product.pk)
+            else:
+                product.delete()
+
+        ShopBanner.objects.filter(pk__in=_ids(manifest, "banners")).delete()
+        FAQItem.objects.filter(pk__in=_ids(manifest, "faq_items")).delete()
+
+        retained_masters = []
+        for master in FAQMaster.objects.select_for_update().filter(pk__in=tracked_masters).order_by("pk"):
+            if _has_related_rows(master):
+                retained_masters.append(master.pk)
+            else:
+                master.delete()
+
+        retained_polls = []
+        retained_choices = []
+        choice_ids = _ids(manifest, "poll_choices")
+        for poll in Poll.objects.select_for_update().filter(pk__in=tracked_polls).order_by("pk"):
+            if poll.votes.exists() or poll.comments.exists():
+                retained_polls.append(poll.pk)
+                retained_choices.extend(poll.choices.filter(pk__in=choice_ids).values_list("pk", flat=True))
+                continue
+            PollChoice.objects.filter(pk__in=choice_ids, poll=poll).delete()
+            if _has_related_rows(poll):
+                retained_polls.append(poll.pk)
+            else:
+                poll.delete()
+
+        retained_categories = []
+        for category in ShopCategory.objects.select_for_update().filter(pk__in=tracked_categories).order_by("pk"):
+            if _has_related_rows(category):
+                retained_categories.append(category.pk)
+            else:
+                category.delete()
+
+        retained_boards = []
+        for board in Board.objects.select_for_update().filter(pk__in=_ids(manifest, "boards")).order_by("pk"):
+            if _has_related_rows(board):
+                retained_boards.append(board.pk)
+            else:
+                board.delete()
+
+        retained_groups = []
+        for group in Group.objects.select_for_update().filter(pk__in=_ids(manifest, "groups")).order_by("pk"):
+            if _has_related_rows(group):
+                retained_groups.append(group.pk)
+            else:
+                group.delete()
+
+        retained_used_boards = list(
+            Post.objects.filter(pk__in=retained_posts)
+            .order_by()
+            .values_list("board_id", flat=True)
+            .distinct()
+        )
+        for board in Board.objects.select_for_update().filter(pk__in=_ids(manifest, "boards_used")):
+            board.bo_count_write = board.posts.count()
+            board.bo_count_comment = board.comments.count()
+            board.save(update_fields=["bo_count_write", "bo_count_comment"])
+
+        next_manifest = {
+            **manifest,
+            "groups": retained_groups,
+            "boards": retained_boards,
+            "boards_used": retained_used_boards,
+            "posts": retained_posts,
+            "comments": [],
+            "post_files": [],
+            "categories": retained_categories,
+            "products": retained_products,
+            "banners": [],
+            "faq_masters": retained_masters,
+            "faq_items": [],
+            "polls": retained_polls,
+            "poll_choices": retained_choices,
+        }
+        if any(next_manifest[field] for field in MANIFEST_LIST_FIELDS if field != "boards_used"):
+            config_row.value = json.dumps(next_manifest, ensure_ascii=False)
+            config_row.save(update_fields=["value"])
+            remaining_manifest = next_manifest
+        else:
+            config_row.delete()
+            remaining_manifest = None
+
+        after_counts = managed_counts(remaining_manifest)
+        return {
+            "deleted": sum(before_counts.values()) - sum(after_counts.values()),
+            "retained": sum(after_counts.values()),
+            "manifest": remaining_manifest,
+        }
