@@ -44,7 +44,7 @@ six==1.17.0
 dj-database-url==3.1.2
 # The binary wheel ships libpq, so it installs where no compiler or pg_config exists (the Vercel
 # Python build image); same `psycopg2` module and version as the source package it replaces.
-psycopg2-binary==2.9.12
+psycopg2-binary==2.9.13
 PyMySQL==1.2.0
 # MEDIA_STORAGE=s3 (Supabase Storage or any S3-compatible bucket, docs/04-deploy/deployment-profiles.md).
 # Imported only when MEDIA_STORAGE=s3. Pinned to the current releases (2026-10-12); not yet exercised
