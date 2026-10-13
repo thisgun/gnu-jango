@@ -72,8 +72,12 @@ export function ShopHomePopular() {
     return (
       <EmptyState
         className="mb-8"
-        title="표시할 상품이 없습니다"
-        description="상품을 등록하면 쇼핑몰 첫 화면에 표시됩니다."
+        title={error ? "상품을 불러오지 못했습니다" : "표시할 상품이 없습니다"}
+        description={
+          error
+            ? "상품 정보를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요."
+            : "상품을 등록하면 쇼핑몰 첫 화면에 표시됩니다."
+        }
       />
     );
   }

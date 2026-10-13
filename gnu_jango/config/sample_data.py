@@ -95,6 +95,21 @@ PRODUCTS = (
     ("데일리 글라스 머그", 16000, "가볍고 투명한 유리로 만든 데일리 머그입니다."),
     ("스테인리스 드립 포트", 54000, "물을 천천히 따르기 좋은 작은 드립 포트입니다."),
 )
+DISCOUNTED_SAMPLE_PRODUCT_NUMBERS = frozenset({2, 5})
+
+
+def _sample_product_fields(number, price):
+    discounted = number in DISCOUNTED_SAMPLE_PRODUCT_NUMBERS
+    compare_price = ((price * 5 + 3999) // 4000) * 1000 if discounted else 0
+    return {
+        "it_cust_price": compare_price,
+        "it_type1": "1",
+        "it_type2": "1",
+        "it_type3": "1",
+        "it_type4": "1",
+        "it_type5": "1" if discounted else "",
+    }
+
 
 FAQS = (
     ("샘플 데이터는 어떻게 정리하나요?", "관리자 메뉴의 샘플 데이터 페이지에서 ‘샘플 데이터 삭제’를 선택하면 이 페이지가 만든 콘텐츠만 정리합니다."),
@@ -383,6 +398,7 @@ def create_sample_data():
                 it_brand="SOLUNE",
                 it_price=price,
                 it_basic_price=price,
+                **_sample_product_fields(index, price),
                 it_hit=12 + index * 7,
                 it_update_time=now - timedelta(hours=index),
                 it_order=index,
@@ -437,6 +453,35 @@ def create_sample_data():
         else:
             Config.objects.create(name=MANIFEST_NAME, value=json.dumps(manifest, ensure_ascii=False))
     return manifest
+
+
+def repair_sample_product_types():
+    """Apply the demo store's home sections to only products tracked by its manifest."""
+    with transaction.atomic():
+        config_row = Config.objects.select_for_update().filter(name=MANIFEST_NAME).first()
+        manifest = _decode_manifest(config_row)
+        product_ids = _ids(manifest, "products")
+        if not product_ids:
+            return 0
+
+        products_by_id = {
+            product.pk: product for product in ShopProduct.objects.filter(pk__in=product_ids)
+        }
+        updated_products = []
+        for number, product_id in enumerate(product_ids, start=1):
+            product = products_by_id.get(product_id)
+            if product is None:
+                continue
+            for field, value in _sample_product_fields(number, product.it_price).items():
+                setattr(product, field, value)
+            updated_products.append(product)
+
+        if updated_products:
+            ShopProduct.objects.bulk_update(
+                updated_products,
+                ("it_cust_price", "it_type1", "it_type2", "it_type3", "it_type4", "it_type5"),
+            )
+        return len(updated_products)
 
 
 def _has_related_rows(instance):

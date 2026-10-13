@@ -27,6 +27,16 @@ def sample_data_settings(request):
                     _("샘플 데이터를 추가했습니다. 게시글 %(posts)s개, 댓글 %(comments)s개, 상품 %(products)s개, FAQ %(faqs)s개를 만들었습니다.")
                     % counts,
                 )
+            elif action == "repair_product_types":
+                repaired = sample_data.repair_sample_product_types()
+                if repaired:
+                    messages.success(
+                        request,
+                        _("샘플 상품 %(products)s개의 쇼핑몰 노출 분류를 보정했습니다.")
+                        % {"products": repaired},
+                    )
+                else:
+                    messages.info(request, _("보정할 샘플 상품이 없습니다."))
             elif action == "delete":
                 if request.POST.get("confirmation", "").strip() != "삭제":
                     messages.error(request, _("삭제하려면 확인란에 ‘삭제’를 입력해 주세요."))

@@ -160,9 +160,18 @@ export async function getShopProductList(
   params: ShopProductParams
 ): Promise<ShopProductListResult> {
   const response = await apiClient.get<unknown>("/shop/products", { params });
+  const parsed = shopProductListSchema.safeParse(response.data);
+
+  if (!parsed.success) {
+    console.error(
+      "[shop.products] API response schema validation failed",
+      parsed.error.issues
+    );
+    throw new Error("쇼핑 상품 응답 형식이 올바르지 않습니다.");
+  }
 
   return {
-    products: validateApiData(response.data, shopProductListSchema, []),
+    products: parsed.data,
     meta: response.meta,
   };
 }

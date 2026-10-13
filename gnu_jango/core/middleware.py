@@ -107,7 +107,12 @@ class G5SecurityHeadersMiddleware:
         if path.startswith("/api/"):
             response["Referrer-Policy"] = "no-referrer"
             patch_vary_headers(response, ("Authorization", "Cookie"))
-            if request.COOKIES or request.headers.get("Authorization") or path.startswith(PRIVATE_API_PREFIXES):
+            if (
+                request.COOKIES
+                or request.headers.get("Authorization")
+                or path.startswith(PRIVATE_API_PREFIXES)
+                or response.status_code == 404
+            ):
                 response["Cache-Control"] = "no-store, private"
                 response["Pragma"] = "no-cache"
         else:

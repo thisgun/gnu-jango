@@ -104,6 +104,13 @@
           <button class="btn btn-primary button g5-sample-action" type="submit">{% translate "샘플 데이터 추가" %}</button>
           {% endif %}
         </form>
+        {% if has_data and counts.products %}
+        <form method="post" action="{% url 'admin-sample-data' %}" class="mt-3">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="repair_product_types">
+          <button class="btn btn-secondary button g5-sample-action" type="submit">{% translate "쇼핑 상품 분류 보정" %}</button>
+        </form>
+        {% endif %}
       </div>
     </article>
 

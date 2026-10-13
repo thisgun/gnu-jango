@@ -104,4 +104,17 @@ STORAGES = {
 	},
 }
 
+if os.environ.get("VERCEL") == "1":
+    if STORAGES["default"].get("BACKEND") != "storages.backends.s3.S3Storage":
+        raise ImproperlyConfigured(
+            "Vercel requires MEDIA_STORAGE=s3 so uploaded files persist across function instances."
+        )
+    if CACHES["default"].get("BACKEND") not in {
+        "django.core.cache.backends.db.DatabaseCache",
+        "django.core.cache.backends.redis.RedisCache",
+    }:
+        raise ImproperlyConfigured(
+            "Vercel requires a shared cache. Set CACHE_URL=db:// or CACHE_URL=redis://... ."
+        )
+
 DEBUG = bool_config("DEBUG", default=False)
