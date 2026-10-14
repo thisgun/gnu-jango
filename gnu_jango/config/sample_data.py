@@ -8,6 +8,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.utils import timezone
 
+from gnu_jango.api.page_bootstrap import batch_bootstrap_changes
 from gnu_jango.bbs.models import Board, Comment, Group, Post, Post_file
 from gnu_jango.bbs.utils import get_next_num
 from gnu_jango.config.models import Config
@@ -345,6 +346,7 @@ def _create_comment(post, content, created_at, manifest):
     )
 
 
+@batch_bootstrap_changes()
 def create_sample_data():
     """Create one public batch and record only rows created by this operation."""
     sample_asset_summary()
@@ -455,6 +457,7 @@ def create_sample_data():
     return manifest
 
 
+@batch_bootstrap_changes()
 def repair_sample_product_types():
     """Apply the demo store's home sections to only products tracked by its manifest."""
     with transaction.atomic():
@@ -481,6 +484,9 @@ def repair_sample_product_types():
                 updated_products,
                 ("it_cust_price", "it_type1", "it_type2", "it_type3", "it_type4", "it_type5"),
             )
+            from gnu_jango.api.page_bootstrap import invalidate_page_bootstrap
+
+            invalidate_page_bootstrap()
         return len(updated_products)
 
 
@@ -502,6 +508,7 @@ def _has_related_rows(instance):
     return False
 
 
+@batch_bootstrap_changes()
 def remove_sample_data():
     """Remove tracked sample rows while preserving any that gained real activity."""
     with transaction.atomic():

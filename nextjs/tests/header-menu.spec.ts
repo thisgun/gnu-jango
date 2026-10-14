@@ -4,7 +4,7 @@ test('헤더 메뉴가 DB에서 로드되어 표시되는지 확인', async ({ p
   await page.goto('/', { waitUntil: 'networkidle' });
 
   // 메뉴 항목들이 헤더에 보이는지 확인
-  const header = page.locator('header');
+  const header = page.getByRole('banner');
 
   // 메뉴가 로드될 때까지 대기
   await page.waitForTimeout(1000);

@@ -7,8 +7,7 @@ import { boardListHref, boardPostHref } from "@/lib/board-url";
 import type { PublicSettings } from "@/lib/schemas";
 import type { Board, WritePost } from "@/lib/types";
 import { formatListDate, truncate } from "@/lib/utils";
-import { getBoardPosts, getBoardsResult } from "@/services/boards";
-import { getClientPublicSettings } from "@/services/settings";
+import { getShopHomeData } from "@/services/shop-home";
 
 type LoadState = "loading" | "ready" | "error";
 
@@ -30,41 +29,19 @@ export function ShopHomeSupport() {
     setSettings(null);
 
     async function loadSupportInfo() {
-      const [boardResult, settingsResult] = await Promise.allSettled([
-        getBoardsResult(),
-        getClientPublicSettings(),
-      ]);
-      if (!active) return;
-
-      if (settingsResult.status === "fulfilled") {
-        setSettings(settingsResult.value);
+      try {
+        const home = await getShopHomeData();
+        if (!active) return;
+        setSettings(home.settings);
+        setNoticeBoard(home.noticeBoard);
+        setNoticePosts(home.noticePosts);
+        setNoticeState("ready");
         setSettingsState("ready");
-      } else {
+      } catch {
+        if (!active) return;
+        setNoticeState("error");
         setSettingsState("error");
       }
-
-      if (boardResult.status !== "fulfilled" || !boardResult.value.ok) {
-        setNoticeState("error");
-        return;
-      }
-
-      const notice = boardResult.value.data.find((board) => board.bo_table === "notice")
-        ?? boardResult.value.data.find((board) => board.bo_subject.includes("공지"));
-      setNoticeBoard(notice ?? null);
-      if (!notice) {
-        setNoticeState("ready");
-        return;
-      }
-
-      const result = await getBoardPosts({ boTable: notice.bo_table, perPage: 3 });
-      if (!active) return;
-      if (result.error) {
-        setNoticeState("error");
-        return;
-      }
-
-      setNoticePosts(result.list.slice(0, 3));
-      setNoticeState("ready");
     }
 
     void loadSupportInfo();

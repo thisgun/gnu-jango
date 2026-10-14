@@ -3,9 +3,8 @@
 import { useEffect, useState } from "react";
 import type { ShopProduct } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
-import { SHOP_HOME_ROW_LIMIT, ShopProductRow, ShopProductRowSkeleton } from "@/components/shop/ShopProductRow";
-import { getShopProductList } from "@/services/shop";
-import { getClientPublicSettings } from "@/services/settings";
+import { ShopProductRow, ShopProductRowSkeleton } from "@/components/shop/ShopProductRow";
+import { getShopHomeData } from "@/services/shop-home";
 
 type SectionKey = "recommended" | "new" | "discount";
 
@@ -32,21 +31,12 @@ export function DeferredShopSections() {
   useEffect(() => {
     let alive = true;
 
-    Promise.all([
-      getShopProductList({ it_type2: "1", per_page: SHOP_HOME_ROW_LIMIT }),
-      getShopProductList({ it_type3: "1", per_page: SHOP_HOME_ROW_LIMIT }),
-      getShopProductList({ it_type5: "1", per_page: SHOP_HOME_ROW_LIMIT }),
-      getClientPublicSettings(),
-    ])
-      .then(([recommended, latest, discount, settings]) => {
+    getShopHomeData()
+      .then((home) => {
         if (!alive) return;
         setError("");
-        setSections({
-          recommended: recommended.products,
-          new: latest.products,
-          discount: discount.products,
-        });
-        setProductRewriteMode(settings.cf_bbs_rewrite);
+        setSections({ recommended: home.products.type2, new: home.products.type3, discount: home.products.type5 });
+        setProductRewriteMode(home.settings.cf_bbs_rewrite);
       })
       .catch(() => {
         if (!alive) return;

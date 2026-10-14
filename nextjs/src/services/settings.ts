@@ -2,6 +2,7 @@ import { apiClient } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
 import { fetchApiData, validateApiData } from "@/lib/api-response";
 import { publicSettingsSchema, type PublicSettings } from "@/lib/schemas";
+import { currentBootstrapScope, getPageBootstrap } from "./page-bootstrap";
 
 export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
   cf_bbs_rewrite: 0,
@@ -25,8 +26,11 @@ export function getClientPublicSettings(): Promise<PublicSettings> {
   if (clientSettings && now - clientSettings.at < CLIENT_SETTINGS_TTL_MS) {
     return clientSettings.request;
   }
-  const request = apiClient
-    .get<unknown>("/settings")
+  const scope = currentBootstrapScope();
+  const source = scope
+    ? getPageBootstrap(scope).then(payload => ({ data: payload.settings }))
+    : apiClient.get<unknown>("/settings");
+  const request = source
     .then((response) => {
       const settings = validateApiData(response.data, publicSettingsSchema, DEFAULT_PUBLIC_SETTINGS);
       // A response that failed validation falls back to the defaults; don't keep that for the next callers.

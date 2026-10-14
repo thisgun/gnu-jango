@@ -874,6 +874,10 @@ def _related_count(rows):
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
 def board_list_view(request):
+    return board_list_response(request)
+
+
+def board_list_response(request):
     # One counting subquery per table (_related_count). Counting both relations in one join multiplied every board's
     # posts by its comments before DISTINCT (2.2 s for 5,600 posts) and stalled the other home requests.
     queryset = (
@@ -986,62 +990,68 @@ def board_category_counts_view(request, bo_table):
     return api_response(data={"counts": counts, "reason": None})
 
 
-@api_view(["GET", "POST"])
-@permission_classes([AllowAny])
-@authentication_classes([JWTAuthentication, BasicAuthentication])
-def board_posts_view(request, bo_table):
+def board_posts_response(request, bo_table):
     board = _get_board(bo_table)
     if not board:
         return api_error("Board not found.", status=drf_status.HTTP_404_NOT_FOUND, code="board_not_found")
 
-    if request.method == "GET":
-        queryset = listable_post_queryset(
-            request,
-            Post.objects.filter(board=board).select_related("board", "user").prefetch_related("post_files"),
-        )
-        ordered_queryset = queryset.order_by(
-            "-is_notice",
-            "wr_num",
-            Case(
-                When(wr_reply="", then=0),
-                default=1,
-                output_field=IntegerField(),
-            ),
-            "wr_reply",
-            "wr_parent",
-        )
-        list_filter_active = bool(
-            (request.query_params.get("sca") or "").strip()
-            or (request.query_params.get("stx") or "").strip()
-        )
-        if list_filter_active:
-            posts = _filter_posts(request, ordered_queryset.filter(is_notice=False))
-            notices = ordered_queryset.none()
-        else:
-            posts = _filter_posts(request, ordered_queryset.filter(is_notice=False))
-            notices = ordered_queryset.filter(is_notice=True)
+    queryset = listable_post_queryset(
+        request,
+        Post.objects.filter(board=board).select_related("board", "user").prefetch_related("post_files"),
+    )
+    ordered_queryset = queryset.order_by(
+        "-is_notice",
+        "wr_num",
+        Case(
+            When(wr_reply="", then=0),
+            default=1,
+            output_field=IntegerField(),
+        ),
+        "wr_reply",
+        "wr_parent",
+    )
+    list_filter_active = bool(
+        (request.query_params.get("sca") or "").strip()
+        or (request.query_params.get("stx") or "").strip()
+    )
+    if list_filter_active:
+        posts = _filter_posts(request, ordered_queryset.filter(is_notice=False))
+        notices = ordered_queryset.none()
+    else:
+        posts = _filter_posts(request, ordered_queryset.filter(is_notice=False))
+        notices = ordered_queryset.filter(is_notice=True)
 
-        notice_ids = []
-        for value in (board.bo_notice or "").replace("\n", ",").split(","):
-            notice_id = _safe_int(value.strip(), -1)
-            if notice_id >= 0:
-                notice_ids.append(notice_id)
-        page_posts, meta = _paginate_board_posts(
-            request,
-            posts,
-            notices,
-            board.bo_page_rows or 20,
-            notice_ids,
-        )
-        rows = [_post_payload(post, request, list_view=True) for post in page_posts]
-        wants_excerpt = "excerpt" in {part.strip() for part in (request.query_params.get("with") or "").split(",")}
-        if wants_excerpt:
-            allowed = _excerpt_post_ids(request, board, page_posts)
-            for post, row in zip(page_posts, rows):
-                # 비밀글은 읽을 수 있는 사람에게도 카드에 본문을 내지 않는다(자물쇠 표시 · 사이트 검색과 같다).
-                if post.pk in allowed and not row["is_secret"]:
-                    row["wr_excerpt"] = _post_excerpt(post.wr_content)
-        return api_response(data=rows, meta=meta)
+    notice_ids = []
+    for value in (board.bo_notice or "").replace("\n", ",").split(","):
+        notice_id = _safe_int(value.strip(), -1)
+        if notice_id >= 0:
+            notice_ids.append(notice_id)
+    page_posts, meta = _paginate_board_posts(
+        request,
+        posts,
+        notices,
+        board.bo_page_rows or 20,
+        notice_ids,
+    )
+    rows = [_post_payload(post, request, list_view=True) for post in page_posts]
+    wants_excerpt = "excerpt" in {part.strip() for part in (request.query_params.get("with") or "").split(",")}
+    if wants_excerpt:
+        allowed = _excerpt_post_ids(request, board, page_posts)
+        for post, row in zip(page_posts, rows):
+            # 비밀글은 읽을 수 있는 사람에게도 카드에 본문을 내지 않는다(자물쇠 표시 · 사이트 검색과 같다).
+            if post.pk in allowed and not row["is_secret"]:
+                row["wr_excerpt"] = _post_excerpt(post.wr_content)
+    return api_response(data=rows, meta=meta)
+@api_view(["GET", "POST"])
+@permission_classes([AllowAny])
+@authentication_classes([JWTAuthentication, BasicAuthentication])
+def board_posts_view(request, bo_table):
+    if request.method == "GET":
+        return board_posts_response(request, bo_table)
+
+    board = _get_board(bo_table)
+    if not board:
+        return api_error("Board not found.", status=drf_status.HTTP_404_NOT_FOUND, code="board_not_found")
 
     user = _authenticated_user(request)
     data = _request_data(request)

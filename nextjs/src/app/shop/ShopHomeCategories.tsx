@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import type { ShopCategory } from "@/lib/api";
-import { getShopCategoriesResult } from "@/services/shop";
+import { getShopHomeData } from "@/services/shop-home";
 
 const categoryIcons: Array<[RegExp, LucideIcon]> = [
   [/의류|패션|옷|팬츠|상의|하의|티셔츠/i, Shirt],
@@ -44,9 +44,9 @@ export function ShopHomeCategories({ categories }: { categories: ShopCategory[] 
 
   useEffect(() => {
     let active = true;
-    getShopCategoriesResult({ cache: "no-store" }).then((result) => {
-      if (active && result.ok) setRuntimeCategories(result.data);
-    });
+    getShopHomeData().then((home) => {
+      if (active) setRuntimeCategories(home.categories);
+    }).catch(() => undefined);
 
     return () => { active = false; };
   }, []);

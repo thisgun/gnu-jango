@@ -4,16 +4,15 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "re
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { GalleryThumbnail } from "@/app/boards/[bo_table]/GalleryThumbnail";
 import { ProductImageFallback } from "@/components/shop/ProductImageFallback";
-import { SHOP_HOME_ROW_LIMIT } from "@/components/shop/ShopProductRow";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import type { ShopReview } from "@/lib/api";
 import { plainTextSummary } from "@/lib/client-metadata";
 import { shopProductHref } from "@/lib/product-url";
 import { cn, truncate } from "@/lib/utils";
-import { getShopReviews } from "@/services/shop";
+import { getShopHomeData } from "@/services/shop-home";
 
-const REVIEW_LIMIT = SHOP_HOME_ROW_LIMIT;
 const HEADING_ID = "shop-home-reviews-title";
+const REVIEW_LIMIT = 12;
 
 function stars(score: number): string {
   const full = Math.max(0, Math.min(5, Math.round(score)));
@@ -55,8 +54,8 @@ export function ShopHomeReviews() {
     let active = true;
     setLoading(true);
     setFailed(false);
-    getShopReviews({ perPage: REVIEW_LIMIT })
-      .then(({ items }) => {
+    getShopHomeData()
+      .then(({ reviews: items }) => {
         if (!active) return;
         setReviews(items.filter((review) => review.is_confirm !== "0" && review.it_id));
         setLoading(false);

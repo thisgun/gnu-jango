@@ -1,4 +1,8 @@
 import { ShopFooter } from "@/components/layout/Footer";
+import "../solune-shop.css";
+import "../solune-shop.app.css";
+import "../solune-shop.app-purchase.css";
+import "../solune-shop.app-browse.css";
 
 /**
  * 쇼핑몰 본문 뼈대 — 레퍼런스(Solune 테마 shop-shell)의 .solune-shop-page > #wrapper > #container > main, 그 뒤 푸터

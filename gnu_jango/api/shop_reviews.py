@@ -150,44 +150,46 @@ def _has_received_product(user, product):
     ).exists()
 
 
+def reviews_response(request):
+    queryset = ShopReview.objects.select_related("product")
+    user = current_user(request)
+    if not (user and (user.is_staff or user.is_superuser)):
+        queryset = queryset.filter(is_confirm="1")
+    it_id = request.query_params.get("it_id")
+    if it_id:
+        queryset = queryset.filter(product_id=it_id)
+    queryset = _search_board_list(
+        queryset, request, REVIEW_SEARCH_FIELDS, ("is_subject", "is_content", "product__it_name", "is_name", "product__it_id")
+    )
+    focus_id = safe_int(request.query_params.get("focus_is_id"), 0)
+    focus_review = (
+        queryset.filter(pk=focus_id).first()
+        if focus_id > 0 and it_id
+        else None
+    )
+    if focus_review:
+        requested_page_size = safe_int(
+            request.query_params.get("per_page") or request.query_params.get("limit"),
+            20,
+        )
+        per_page = min(max(1, requested_page_size), 100)
+        preceding = queryset.filter(
+            Q(is_time__gt=focus_review.is_time)
+            | Q(is_time=focus_review.is_time, pk__gt=focus_review.pk)
+        ).count()
+        current_page = preceding // per_page + 1
+        start = (current_page - 1) * per_page
+        page = queryset[start : start + per_page]
+        meta = pagination_meta(queryset.count(), current_page, per_page)
+    else:
+        page, meta = paginate_queryset(request, queryset, default_per_page=10)
+    return api_response(data=[review_payload(item) for item in page], meta=meta)
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
 def reviews_view(request):
     if request.method == "GET":
-        queryset = ShopReview.objects.select_related("product")
-        user = current_user(request)
-        if not (user and (user.is_staff or user.is_superuser)):
-            queryset = queryset.filter(is_confirm="1")
-        it_id = request.query_params.get("it_id")
-        if it_id:
-            queryset = queryset.filter(product_id=it_id)
-        queryset = _search_board_list(
-            queryset, request, REVIEW_SEARCH_FIELDS, ("is_subject", "is_content", "product__it_name", "is_name", "product__it_id")
-        )
-        focus_id = safe_int(request.query_params.get("focus_is_id"), 0)
-        focus_review = (
-            queryset.filter(pk=focus_id).first()
-            if focus_id > 0 and it_id
-            else None
-        )
-        if focus_review:
-            requested_page_size = safe_int(
-                request.query_params.get("per_page") or request.query_params.get("limit"),
-                20,
-            )
-            per_page = min(max(1, requested_page_size), 100)
-            preceding = queryset.filter(
-                Q(is_time__gt=focus_review.is_time)
-                | Q(is_time=focus_review.is_time, pk__gt=focus_review.pk)
-            ).count()
-            current_page = preceding // per_page + 1
-            start = (current_page - 1) * per_page
-            page = queryset[start : start + per_page]
-            meta = pagination_meta(queryset.count(), current_page, per_page)
-        else:
-            page, meta = paginate_queryset(request, queryset, default_per_page=10)
-        return api_response(data=[review_payload(item) for item in page], meta=meta)
+        return reviews_response(request)
 
     user, error = require_user(request)
     if error:

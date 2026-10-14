@@ -354,6 +354,10 @@ def visit_stats():
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
 def settings_view(request):
+    return settings_response(request)
+
+
+def settings_response(request):
     data = config.get_all()
     visit_stats_payload = visit_stats()
     return api_response(
@@ -399,6 +403,10 @@ def recent_groups_view(request):
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
 def recent_view(request):
+    return recent_response(request)
+
+
+def recent_response(request):
     view = (request.query_params.get("view") or "").strip()
     gr_id = (request.query_params.get("gr_id") or "").strip()
     mb_id = (request.query_params.get("mb_id") or "").strip()
@@ -484,6 +492,10 @@ def recent_view(request):
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
 def popular_search_view(request):
+    return popular_search_response(request)
+
+
+def popular_search_response(request):
     limit = min(max(_safe_int(request.query_params.get("limit"), 5), 1), 20)
     days = min(max(_safe_int(request.query_params.get("days"), 3), 1), 90)
     cutoff = timezone.localdate() - timedelta(days=days - 1)
@@ -993,6 +1005,10 @@ def scrap_delete_view(request, scrap_id):
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
 def faqs_view(request):
+    return faqs_response(request)
+
+
+def faqs_response(request):
     masters_qs = FAQMaster.objects.filter(fm_use__gt=0).order_by("fm_order", "fm_id")
     masters = list(masters_qs)
     fm_id = _safe_int(request.query_params.get("fm_id"), 0)

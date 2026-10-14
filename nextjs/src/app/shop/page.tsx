@@ -1,7 +1,8 @@
 import { buildPageMetadata } from "@/lib/seo";
 import { getShopBanners, getShopCategories, getShopPopups } from "@/services/shop";
 import { DeferredShopSections } from "./DeferredShopSections";
-import { ShopHomeBanners, ShopHomePopups } from "./ShopHomeMarketing";
+import { ShopHomeBanners } from "./ShopHomeMarketing";
+import { ShopHomePopups } from "./ShopHomePopups";
 import { ShopHomeCategories } from "./ShopHomeCategories";
 import { ShopHomePopular } from "./ShopHomePopular";
 import { ShopHomeHit } from "./ShopHomeHit";

@@ -2,12 +2,14 @@ from django.urls import path
 
 from gnu_jango.core import thumbnails
 
-from . import member_lifecycle, v1_auth, v1_board, v1_community, v1_shop, v1_views
+from . import member_lifecycle, page_bootstrap, v1_auth, v1_board, v1_community, v1_shop, v1_views
 
 app_name = "api_v1"
 
 urlpatterns = [
     path("status", v1_views.status_view, name="status"),
+    path("home", page_bootstrap.community_home_view, name="home"),
+    path("shop/home", page_bootstrap.shop_home_view, name="shop-home"),
     path(
         "thumbs/<str:signature>/<int:width>/<str:kind>/<path:path>",
         thumbnails.thumbnail_view,

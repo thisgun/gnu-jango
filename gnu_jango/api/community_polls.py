@@ -165,6 +165,10 @@ def _poll_payload(poll, request):
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
 def poll_current_view(request):
+    return poll_current_response(request)
+
+
+def poll_current_response(request):
     poll = _active_poll_queryset().first()
     if not poll:
         return api_error("Poll not found.", status=drf_status.HTTP_404_NOT_FOUND, code="poll_not_found")

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import MyPageClientLayout from "./ClientLayout";
+import "../solune-theme.mypage.css";
+import "../solune-theme.app-mypage.css";
 
 export const metadata: Metadata = {
   title: "마이페이지",

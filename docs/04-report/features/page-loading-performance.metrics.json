@@ -1,0 +1,911 @@
+{
+  "measured_at": "2026-10-14",
+  "baseline_commit": "3d0d1b58f",
+  "notes": [
+    "Same local dataset and uncompressed Django static asset serving; not production timings.",
+    "Three fresh browser contexts per route; warm backend.",
+    "JSON API counts exclude thumbnail image requests.",
+    "Baseline shop contentReadyMs is null because the initial selector did not match; do not use that field for before/after shop comparison.",
+    "Final font PostScript metadata normalization changes file size by 12 bytes and preserves the measured outlines, glyph coverage and loading behavior."
+  ],
+  "before": {
+    "baseUrl": "http://127.0.0.1:8081",
+    "condition": "390px; 1.6Mbps; 150ms added latency; 4x CPU; anonymous; fresh browser cache; warm backend",
+    "results": [
+      {
+        "pathname": "/",
+        "run": 1,
+        "status": 200,
+        "ttfbMs": 14,
+        "fcpMs": 8824,
+        "lcp": {
+          "ms": 11032,
+          "tag": "SPAN",
+          "url": ""
+        },
+        "contentReadyMs": 10865,
+        "resourceCount": 59,
+        "transferKB": 1955,
+        "jsCount": 27,
+        "jsTransferKB": 1020,
+        "fontCount": 9,
+        "fontTransferKB": 232,
+        "cssTransferKB": 541,
+        "apiCount": 11,
+        "apiCompleteMs": 10748,
+        "api": [
+          {
+            "path": "/api/v1/settings",
+            "startMs": 9539,
+            "durationMs": 262,
+            "bytes": 1070
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 9796,
+            "durationMs": 180,
+            "bytes": 828
+          },
+          {
+            "path": "/api/v1/boards",
+            "startMs": 9801,
+            "durationMs": 416,
+            "bytes": 27474
+          },
+          {
+            "path": "/api/v1/faqs",
+            "startMs": 9805,
+            "durationMs": 321,
+            "bytes": 8506
+          },
+          {
+            "path": "/api/v1/recent",
+            "startMs": 9810,
+            "durationMs": 256,
+            "bytes": 2754
+          },
+          {
+            "path": "/api/v1/polls/current",
+            "startMs": 9813,
+            "durationMs": 253,
+            "bytes": 2746
+          },
+          {
+            "path": "/api/v1/search/popular",
+            "startMs": 9816,
+            "durationMs": 190,
+            "bytes": 427
+          },
+          {
+            "path": "/api/v1/boards/free/posts",
+            "startMs": 10226,
+            "durationMs": 279,
+            "bytes": 8075
+          },
+          {
+            "path": "/api/v1/boards/qa/posts",
+            "startMs": 10227,
+            "durationMs": 248,
+            "bytes": 5315
+          },
+          {
+            "path": "/api/v1/boards/notice/posts",
+            "startMs": 10228,
+            "durationMs": 277,
+            "bytes": 8238
+          },
+          {
+            "path": "/api/v1/boards/gallery/posts",
+            "startMs": 10511,
+            "durationMs": 237,
+            "bytes": 11464
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/",
+        "run": 2,
+        "status": 200,
+        "ttfbMs": 14,
+        "fcpMs": 8824,
+        "lcp": {
+          "ms": 11160,
+          "tag": "SPAN",
+          "url": ""
+        },
+        "contentReadyMs": 10965,
+        "resourceCount": 59,
+        "transferKB": 1955,
+        "jsCount": 27,
+        "jsTransferKB": 1020,
+        "fontCount": 9,
+        "fontTransferKB": 232,
+        "cssTransferKB": 541,
+        "apiCount": 11,
+        "apiCompleteMs": 10841,
+        "api": [
+          {
+            "path": "/api/v1/settings",
+            "startMs": 9617,
+            "durationMs": 195,
+            "bytes": 1070
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 9889,
+            "durationMs": 180,
+            "bytes": 828
+          },
+          {
+            "path": "/api/v1/boards",
+            "startMs": 9894,
+            "durationMs": 419,
+            "bytes": 27474
+          },
+          {
+            "path": "/api/v1/faqs",
+            "startMs": 9896,
+            "durationMs": 311,
+            "bytes": 8506
+          },
+          {
+            "path": "/api/v1/recent",
+            "startMs": 9900,
+            "durationMs": 261,
+            "bytes": 2754
+          },
+          {
+            "path": "/api/v1/polls/current",
+            "startMs": 9902,
+            "durationMs": 244,
+            "bytes": 2746
+          },
+          {
+            "path": "/api/v1/search/popular",
+            "startMs": 9904,
+            "durationMs": 196,
+            "bytes": 427
+          },
+          {
+            "path": "/api/v1/boards/free/posts",
+            "startMs": 10323,
+            "durationMs": 277,
+            "bytes": 8075
+          },
+          {
+            "path": "/api/v1/boards/qa/posts",
+            "startMs": 10324,
+            "durationMs": 231,
+            "bytes": 5315
+          },
+          {
+            "path": "/api/v1/boards/notice/posts",
+            "startMs": 10325,
+            "durationMs": 275,
+            "bytes": 8238
+          },
+          {
+            "path": "/api/v1/boards/gallery/posts",
+            "startMs": 10605,
+            "durationMs": 236,
+            "bytes": 11464
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/",
+        "run": 3,
+        "status": 200,
+        "ttfbMs": 10,
+        "fcpMs": 8800,
+        "lcp": {
+          "ms": 11108,
+          "tag": "SPAN",
+          "url": ""
+        },
+        "contentReadyMs": 10866,
+        "resourceCount": 59,
+        "transferKB": 1955,
+        "jsCount": 27,
+        "jsTransferKB": 1020,
+        "fontCount": 9,
+        "fontTransferKB": 232,
+        "cssTransferKB": 541,
+        "apiCount": 11,
+        "apiCompleteMs": 10715,
+        "api": [
+          {
+            "path": "/api/v1/settings",
+            "startMs": 9536,
+            "durationMs": 232,
+            "bytes": 1070
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 9766,
+            "durationMs": 174,
+            "bytes": 828
+          },
+          {
+            "path": "/api/v1/boards",
+            "startMs": 9772,
+            "durationMs": 411,
+            "bytes": 27474
+          },
+          {
+            "path": "/api/v1/faqs",
+            "startMs": 9775,
+            "durationMs": 316,
+            "bytes": 8506
+          },
+          {
+            "path": "/api/v1/recent",
+            "startMs": 9778,
+            "durationMs": 252,
+            "bytes": 2754
+          },
+          {
+            "path": "/api/v1/polls/current",
+            "startMs": 9780,
+            "durationMs": 250,
+            "bytes": 2746
+          },
+          {
+            "path": "/api/v1/search/popular",
+            "startMs": 9782,
+            "durationMs": 203,
+            "bytes": 427
+          },
+          {
+            "path": "/api/v1/boards/free/posts",
+            "startMs": 10195,
+            "durationMs": 277,
+            "bytes": 8075
+          },
+          {
+            "path": "/api/v1/boards/qa/posts",
+            "startMs": 10195,
+            "durationMs": 230,
+            "bytes": 5315
+          },
+          {
+            "path": "/api/v1/boards/notice/posts",
+            "startMs": 10196,
+            "durationMs": 275,
+            "bytes": 8238
+          },
+          {
+            "path": "/api/v1/boards/gallery/posts",
+            "startMs": 10478,
+            "durationMs": 237,
+            "bytes": 11464
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 1,
+        "status": 200,
+        "ttfbMs": 15,
+        "fcpMs": 9148,
+        "lcp": {
+          "ms": 14740,
+          "tag": "IMG",
+          "url": "http://127.0.0.1:8081/api/v1/thumbs/d0200e7d734bfc869ecf/1440/data/banner/6?v=1790825449"
+        },
+        "contentReadyMs": null,
+        "resourceCount": 70,
+        "transferKB": 2264,
+        "jsCount": 32,
+        "jsTransferKB": 1074,
+        "fontCount": 14,
+        "fontTransferKB": 363,
+        "cssTransferKB": 541,
+        "apiCount": 14,
+        "apiCompleteMs": 14943,
+        "api": [
+          {
+            "path": "/api/v1/shop/categories",
+            "startMs": 11355,
+            "durationMs": 262,
+            "bytes": 13714
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 11369,
+            "durationMs": 172,
+            "bytes": 474
+          },
+          {
+            "path": "/api/v1/settings",
+            "startMs": 11374,
+            "durationMs": 182,
+            "bytes": 1070
+          },
+          {
+            "path": "/api/v1/shop/banners",
+            "startMs": 12439,
+            "durationMs": 266,
+            "bytes": 2680
+          },
+          {
+            "path": "/api/v1/shop/categories",
+            "startMs": 12444,
+            "durationMs": 548,
+            "bytes": 13714
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 12451,
+            "durationMs": 875,
+            "bytes": 27413
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 12456,
+            "durationMs": 703,
+            "bytes": 19789
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 12460,
+            "durationMs": 700,
+            "bytes": 20436
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 12464,
+            "durationMs": 860,
+            "bytes": 27413
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 12468,
+            "durationMs": 871,
+            "bytes": 18791
+          },
+          {
+            "path": "/api/v1/shop/reviews",
+            "startMs": 12472,
+            "durationMs": 1367,
+            "bytes": 10070
+          },
+          {
+            "path": "/api/v1/boards",
+            "startMs": 12477,
+            "durationMs": 1996,
+            "bytes": 27474
+          },
+          {
+            "path": "/api/v1/shop/popups",
+            "startMs": 12482,
+            "durationMs": 1539,
+            "bytes": 371
+          },
+          {
+            "path": "/api/v1/boards/notice/posts",
+            "startMs": 14676,
+            "durationMs": 267,
+            "bytes": 6011
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 2,
+        "status": 200,
+        "ttfbMs": 10,
+        "fcpMs": 8836,
+        "lcp": {
+          "ms": 13940,
+          "tag": "IMG",
+          "url": "http://127.0.0.1:8081/api/v1/thumbs/d0200e7d734bfc869ecf/1440/data/banner/6?v=1790825449"
+        },
+        "contentReadyMs": null,
+        "resourceCount": 71,
+        "transferKB": 2288,
+        "jsCount": 32,
+        "jsTransferKB": 1074,
+        "fontCount": 14,
+        "fontTransferKB": 363,
+        "cssTransferKB": 541,
+        "apiCount": 14,
+        "apiCompleteMs": 14203,
+        "api": [
+          {
+            "path": "/api/v1/shop/categories",
+            "startMs": 10852,
+            "durationMs": 266,
+            "bytes": 13714
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 10856,
+            "durationMs": 171,
+            "bytes": 474
+          },
+          {
+            "path": "/api/v1/settings",
+            "startMs": 10859,
+            "durationMs": 184,
+            "bytes": 1070
+          },
+          {
+            "path": "/api/v1/shop/banners",
+            "startMs": 11477,
+            "durationMs": 252,
+            "bytes": 2680
+          },
+          {
+            "path": "/api/v1/shop/categories",
+            "startMs": 11481,
+            "durationMs": 542,
+            "bytes": 13714
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 11486,
+            "durationMs": 869,
+            "bytes": 27413
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 11489,
+            "durationMs": 700,
+            "bytes": 19789
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 11491,
+            "durationMs": 698,
+            "bytes": 20436
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 11494,
+            "durationMs": 892,
+            "bytes": 27413
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 11497,
+            "durationMs": 874,
+            "bytes": 18791
+          },
+          {
+            "path": "/api/v1/shop/reviews",
+            "startMs": 11501,
+            "durationMs": 1381,
+            "bytes": 10070
+          },
+          {
+            "path": "/api/v1/boards",
+            "startMs": 11506,
+            "durationMs": 2032,
+            "bytes": 27474
+          },
+          {
+            "path": "/api/v1/shop/popups",
+            "startMs": 11508,
+            "durationMs": 1542,
+            "bytes": 371
+          },
+          {
+            "path": "/api/v1/boards/notice/posts",
+            "startMs": 13941,
+            "durationMs": 262,
+            "bytes": 6011
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 3,
+        "status": 200,
+        "ttfbMs": 13,
+        "fcpMs": 8828,
+        "lcp": {
+          "ms": 13908,
+          "tag": "IMG",
+          "url": "http://127.0.0.1:8081/api/v1/thumbs/d0200e7d734bfc869ecf/1440/data/banner/6?v=1790825449"
+        },
+        "contentReadyMs": null,
+        "resourceCount": 71,
+        "transferKB": 2288,
+        "jsCount": 32,
+        "jsTransferKB": 1074,
+        "fontCount": 14,
+        "fontTransferKB": 363,
+        "cssTransferKB": 541,
+        "apiCount": 14,
+        "apiCompleteMs": 13945,
+        "api": [
+          {
+            "path": "/api/v1/shop/categories",
+            "startMs": 10899,
+            "durationMs": 257,
+            "bytes": 13714
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 10903,
+            "durationMs": 178,
+            "bytes": 474
+          },
+          {
+            "path": "/api/v1/settings",
+            "startMs": 10906,
+            "durationMs": 190,
+            "bytes": 1070
+          },
+          {
+            "path": "/api/v1/shop/banners",
+            "startMs": 11589,
+            "durationMs": 214,
+            "bytes": 2680
+          },
+          {
+            "path": "/api/v1/shop/categories",
+            "startMs": 11594,
+            "durationMs": 585,
+            "bytes": 13714
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 11598,
+            "durationMs": 861,
+            "bytes": 27413
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 11602,
+            "durationMs": 714,
+            "bytes": 19789
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 11605,
+            "durationMs": 695,
+            "bytes": 20436
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 11608,
+            "durationMs": 876,
+            "bytes": 27413
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 11613,
+            "durationMs": 839,
+            "bytes": 18791
+          },
+          {
+            "path": "/api/v1/shop/reviews",
+            "startMs": 11617,
+            "durationMs": 1364,
+            "bytes": 10070
+          },
+          {
+            "path": "/api/v1/boards",
+            "startMs": 11622,
+            "durationMs": 1992,
+            "bytes": 27474
+          },
+          {
+            "path": "/api/v1/shop/popups",
+            "startMs": 11626,
+            "durationMs": 1536,
+            "bytes": 371
+          },
+          {
+            "path": "/api/v1/boards/notice/posts",
+            "startMs": 13718,
+            "durationMs": 227,
+            "bytes": 6011
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      }
+    ]
+  },
+  "after": {
+    "baseUrl": "http://127.0.0.1:8081",
+    "condition": "390px; 1.6Mbps; 150ms added latency; 4x CPU; anonymous; fresh browser cache; warm backend",
+    "results": [
+      {
+        "pathname": "/",
+        "run": 1,
+        "status": 200,
+        "ttfbMs": 13,
+        "fcpMs": 7740,
+        "lcp": {
+          "ms": 8956,
+          "tag": "SPAN",
+          "url": ""
+        },
+        "contentReadyMs": 8738,
+        "resourceCount": 44,
+        "transferKB": 1773,
+        "jsCount": 29,
+        "jsTransferKB": 1023,
+        "fontCount": 1,
+        "fontTransferKB": 201,
+        "cssTransferKB": 417,
+        "apiCount": 2,
+        "apiCompleteMs": 8586,
+        "api": [
+          {
+            "path": "/api/v1/home",
+            "startMs": 7957,
+            "durationMs": 629,
+            "bytes": 45150
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 8096,
+            "durationMs": 169,
+            "bytes": 828
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/",
+        "run": 2,
+        "status": 200,
+        "ttfbMs": 12,
+        "fcpMs": 7328,
+        "lcp": {
+          "ms": 9148,
+          "tag": "SPAN",
+          "url": ""
+        },
+        "contentReadyMs": 8980,
+        "resourceCount": 44,
+        "transferKB": 1773,
+        "jsCount": 29,
+        "jsTransferKB": 1023,
+        "fontCount": 1,
+        "fontTransferKB": 201,
+        "cssTransferKB": 417,
+        "apiCount": 2,
+        "apiCompleteMs": 8765,
+        "api": [
+          {
+            "path": "/api/v1/home",
+            "startMs": 8156,
+            "durationMs": 609,
+            "bytes": 45150
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 8332,
+            "durationMs": 177,
+            "bytes": 828
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/",
+        "run": 3,
+        "status": 200,
+        "ttfbMs": 12,
+        "fcpMs": 7516,
+        "lcp": {
+          "ms": 9012,
+          "tag": "SPAN",
+          "url": ""
+        },
+        "contentReadyMs": 8776,
+        "resourceCount": 44,
+        "transferKB": 1773,
+        "jsCount": 29,
+        "jsTransferKB": 1023,
+        "fontCount": 1,
+        "fontTransferKB": 201,
+        "cssTransferKB": 417,
+        "apiCount": 2,
+        "apiCompleteMs": 8616,
+        "api": [
+          {
+            "path": "/api/v1/home",
+            "startMs": 7999,
+            "durationMs": 617,
+            "bytes": 45150
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 8144,
+            "durationMs": 170,
+            "bytes": 828
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 1,
+        "status": 200,
+        "ttfbMs": 9,
+        "fcpMs": 7528,
+        "lcp": {
+          "ms": 11356,
+          "tag": "IMG",
+          "url": "http://127.0.0.1:8081/api/v1/thumbs/d0200e7d734bfc869ecf/1440/data/banner/6?v=1790825449"
+        },
+        "contentReadyMs": 10801,
+        "resourceCount": 48,
+        "transferKB": 1927,
+        "jsCount": 31,
+        "jsTransferKB": 895,
+        "fontCount": 3,
+        "fontTransferKB": 253,
+        "cssTransferKB": 539,
+        "apiCount": 2,
+        "apiCompleteMs": 10390,
+        "api": [
+          {
+            "path": "/api/v1/shop/home",
+            "startMs": 9503,
+            "durationMs": 887,
+            "bytes": 142856
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 9507,
+            "durationMs": 171,
+            "bytes": 474
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 2,
+        "status": 200,
+        "ttfbMs": 10,
+        "fcpMs": 7524,
+        "lcp": {
+          "ms": 11420,
+          "tag": "IMG",
+          "url": "http://127.0.0.1:8081/api/v1/thumbs/d0200e7d734bfc869ecf/1440/data/banner/6?v=1790825449"
+        },
+        "contentReadyMs": 10849,
+        "resourceCount": 48,
+        "transferKB": 1927,
+        "jsCount": 31,
+        "jsTransferKB": 895,
+        "fontCount": 3,
+        "fontTransferKB": 253,
+        "cssTransferKB": 539,
+        "apiCount": 2,
+        "apiCompleteMs": 10461,
+        "api": [
+          {
+            "path": "/api/v1/shop/home",
+            "startMs": 9569,
+            "durationMs": 892,
+            "bytes": 142856
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 9573,
+            "durationMs": 162,
+            "bytes": 474
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 3,
+        "status": 200,
+        "ttfbMs": 9,
+        "fcpMs": 7740,
+        "lcp": {
+          "ms": 11832,
+          "tag": "IMG",
+          "url": "http://127.0.0.1:8081/api/v1/thumbs/d0200e7d734bfc869ecf/1440/data/banner/6?v=1790825449"
+        },
+        "contentReadyMs": 11303,
+        "resourceCount": 48,
+        "transferKB": 1927,
+        "jsCount": 31,
+        "jsTransferKB": 895,
+        "fontCount": 3,
+        "fontTransferKB": 253,
+        "cssTransferKB": 539,
+        "apiCount": 2,
+        "apiCompleteMs": 10834,
+        "api": [
+          {
+            "path": "/api/v1/shop/home",
+            "startMs": 9929,
+            "durationMs": 905,
+            "bytes": 142856
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 9935,
+            "durationMs": 174,
+            "bytes": 474
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      }
+    ]
+  },
+  "initial_asset_sizes": [
+    {
+      "path": "index.html",
+      "version": "before",
+      "files": 31,
+      "rawKB": {
+        "js": 1126,
+        "css": 541
+      },
+      "gzipKB": {
+        "js": 362,
+        "css": 86
+      }
+    },
+    {
+      "path": "index.html",
+      "version": "after",
+      "files": 31,
+      "rawKB": {
+        "js": 947,
+        "css": 417
+      },
+      "gzipKB": {
+        "js": 298,
+        "css": 71
+      }
+    },
+    {
+      "path": "shop.html",
+      "version": "before",
+      "files": 36,
+      "rawKB": {
+        "js": 1178,
+        "css": 541
+      },
+      "gzipKB": {
+        "js": 381,
+        "css": 86
+      }
+    },
+    {
+      "path": "shop.html",
+      "version": "after",
+      "files": 37,
+      "rawKB": {
+        "js": 1000,
+        "css": 537
+      },
+      "gzipKB": {
+        "js": 317,
+        "css": 87
+      }
+    }
+  ]
+}

@@ -789,6 +789,10 @@ def nextjs25_public_asset(request, path):
     response = serve(request, path, document_root=document_root)
     if path == "sw.js":
         response["Service-Worker-Allowed"] = _nextjs25_public_scope(request)
+    elif path.startswith("sample-data/") or path in {"img/logo.png", "img/shop-logo.png", "og-default.png"}:
+        # These are allowlisted public files. They can be served by the CDN without
+        # invoking Django again; stable filenames are revalidated rather than immutable.
+        response["Cache-Control"] = "public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400"
     return response
 
 

@@ -2,11 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/EmptyState";
-import { SHOP_HOME_ROW_LIMIT, ShopProductRow, ShopProductRowSkeleton } from "@/components/shop/ShopProductRow";
+import { ShopProductRow, ShopProductRowSkeleton } from "@/components/shop/ShopProductRow";
 import type { ShopProduct } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
-import { getShopProductList } from "@/services/shop";
-import { getClientPublicSettings } from "@/services/settings";
+import { getShopHomeData } from "@/services/shop-home";
 
 export function ShopHomeHit() {
   const [products, setProducts] = useState<ShopProduct[]>([]);
@@ -17,14 +16,11 @@ export function ShopHomeHit() {
   useEffect(() => {
     let alive = true;
 
-    Promise.all([
-      getShopProductList({ it_type1: "1", per_page: SHOP_HOME_ROW_LIMIT }),
-      getClientPublicSettings(),
-    ])
-      .then(([popular, settings]) => {
+    getShopHomeData()
+      .then((home) => {
         if (!alive) return;
-        setProducts(popular.products);
-        setProductRewriteMode(settings.cf_bbs_rewrite);
+        setProducts(home.products.type1);
+        setProductRewriteMode(home.settings.cf_bbs_rewrite);
         setError(false);
       })
       .catch(() => {

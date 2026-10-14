@@ -943,8 +943,19 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
 def categories_view(request):
+    return categories_response(request)
+
+
+def categories_response(request):
     queryset = ShopCategory.objects.filter(ca_use=True).annotate(item_count=category_tree_item_count()).order_by("ca_order", "ca_id")
-    return api_response(data=[category_payload(category, include_children=True) for category in queryset if not category.ca_parent])
+    categories = list(queryset)
+    children = {}
+    for category in categories:
+        children.setdefault(category.ca_parent, []).append(category_payload(category))
+    return api_response(data=[
+        {**category_payload(category), "children": children.get(category.ca_id, [])}
+        for category in categories if not category.ca_parent
+    ])
 
 
 @api_view(["GET"])
@@ -982,6 +993,10 @@ def category_detail_view(request, ca_id):
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
 def products_view(request):
+    return products_response(request)
+
+
+def products_response(request, *, limit=None):
     queryset = on_sale_products().select_related("category")
     ca_id = request.query_params.get("ca_id") or request.query_params.get("category")
     q = request.query_params.get("q") or request.query_params.get("stx")
@@ -1012,7 +1027,10 @@ def products_view(request):
         review_stats=Avg("reviews__is_score"),
     )
     queryset = queryset.order_by(*shop_product_ordering(sort, request.query_params.get("sortodr")))
-    page, meta = paginate_queryset(request, queryset, default_per_page=20)
+    if limit is None:
+        page, meta = paginate_queryset(request, queryset, default_per_page=20)
+    else:
+        page, meta = queryset[:limit], {}
     return api_response(data=[product_payload(product) for product in page], meta=meta)
 
 
@@ -1184,6 +1202,10 @@ BANNER_IMAGE_WIDTH = 1440
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def banners_view(request):
+    return banners_response(request)
+
+
+def banners_response(request):
     now = timezone.now()
     position = (request.query_params.get("position") or "메인").strip()
     device = (request.query_params.get("device") or "all").strip().lower()
@@ -1246,6 +1268,10 @@ def banner_hit_view(request, bn_id):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def popups_view(request):
+    return popups_response(request)
+
+
+def popups_response(request):
     return api_response(data=[])
 
 

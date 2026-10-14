@@ -1,5 +1,7 @@
 import { apiUrl } from "@/lib/config";
 import { apiClient } from "@/lib/api";
+import { currentBootstrapScope } from "./page-bootstrap";
+import { getShopHomeData } from "./shop-home";
 import {
   fetchApiData,
   fetchApiResult,
@@ -53,12 +55,19 @@ export interface ShopProductListResult {
 }
 
 export function getShopCategories(revalidate = 300): Promise<ShopCategory[]> {
+  if (currentBootstrapScope() === "shop") {
+    return getShopHomeData().then(home => home.categories);
+  }
   return fetchApiData(apiUrl("/shop/categories"), shopCategorySchema.array(), [], {
     next: { revalidate },
   });
 }
 
 export function getShopCategoriesResult(init?: RequestInit): Promise<ApiResult<ShopCategory[]>> {
+  if (currentBootstrapScope() === "shop") {
+    return getShopHomeData().then(home => ({ ok: true as const, data: home.categories }))
+      .catch(() => ({ ok: false as const, error: "상품 분류를 불러오지 못했습니다." }));
+  }
   return fetchApiResult(apiUrl("/shop/categories"), shopCategorySchema.array(), init);
 }
 
