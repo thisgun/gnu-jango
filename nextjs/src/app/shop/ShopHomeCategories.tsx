@@ -102,7 +102,7 @@ export function ShopHomeCategories({ categories }: { categories: ShopCategory[] 
   if (visibleCategories.length === 0) return null;
 
   return (
-    <section className="site-container px-0 pb-0 pt-[19px] sm:px-2 md:pb-0 md:pt-9 lg:px-4" aria-label="상품 카테고리">
+    <section className="site-container px-0 pb-0 pt-[19px] md:pb-0 md:pt-9" aria-label="상품 카테고리">
       <div
         ref={carouselRef}
         className="carousel carousel-center scrollbar-hide w-full gap-3 overflow-x-auto overscroll-x-contain"

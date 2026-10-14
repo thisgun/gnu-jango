@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type {
   Board,
+  BoardCategoryCounts,
   Comment,
   PostFile,
   RecentGroup,
@@ -105,6 +106,11 @@ export const boardSchema = z
   .passthrough() as unknown as z.ZodType<Board>;
 
 export const boardListSchema = z.array(boardSchema);
+
+export const boardCategoryCountsSchema = z.object({
+  counts: z.record(z.string(), numberValue).nullable(),
+  reason: z.string().nullable(),
+}) as unknown as z.ZodType<BoardCategoryCounts>;
 
 const writePostShape = {
   wr_id: numberValue,
@@ -649,6 +655,9 @@ export const searchResultItemSchema = z
     wr_name: stringValue,
     wr_datetime: stringValue,
     mb_nick: optionalString,
+    ca_name: optionalString,
+    /** 검색어 주변을 잘라 낸 본문(읽을 수 있는 글만). API 가 만들어 준다 — 본문 전체는 오지 않는다. */
+    wr_content_preview: optionalString,
   })
   .passthrough();
 
@@ -656,6 +665,7 @@ export const searchResultSchema = z
   .object({
     bo_table: stringValue,
     bo_subject: stringValue,
+    count: numberValue.optional(),
     list: z.array(searchResultItemSchema).default([]),
   })
   .passthrough();
@@ -685,6 +695,8 @@ export const searchResultListSchema = z.union([
       envelope.results.map((group) => ({
         bo_table: group.bo_table,
         bo_subject: group.bo_subject,
+        // 이 게시판의 전체 일치 수. list 는 그중 한 페이지분이라, 이 값이 없으면 화면이 "더 있는지" 를 알 수 없다.
+        count: group.count,
         list: group.posts,
       }))
     ),
@@ -694,6 +706,7 @@ export const searchResultListSchema = z.union([
 export type SearchResult = {
   bo_table: string;
   bo_subject: string;
+  count?: number;
   list: z.infer<typeof searchResultItemSchema>[];
 };
 

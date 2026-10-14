@@ -57,7 +57,7 @@ export default function EmailCertifyPage() {
   const Icon = state === "pending" ? Loader2 : state === "done" ? MailCheck : MailWarning;
 
   return (
-    <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center px-4 py-12">
+    <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center px-4 py-12">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div
@@ -101,6 +101,6 @@ export default function EmailCertifyPage() {
           </Button>
         </CardFooter>
       </Card>
-    </main>
+    </div>
   );
 }

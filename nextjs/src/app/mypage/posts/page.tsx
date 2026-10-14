@@ -42,7 +42,12 @@ export default function MyPostsPage() {
       </CardHeader>
       <CardContent>
         {loading ? (
-          <p className="py-8 text-center text-muted-foreground">로딩 중...</p>
+          <div role="status" aria-label="내 게시글 로딩 중" className="space-y-4 py-3">
+            <span className="sr-only">내 게시글 로딩 중</span>
+            <div aria-hidden="true" className="space-y-3">
+              {[0, 1, 2, 3].map((item) => <div key={item} className="skeleton h-14 rounded-md" />)}
+            </div>
+          </div>
         ) : posts.length === 0 ? (
           <p className="py-8 text-center text-muted-foreground">
             작성한 게시글이 없습니다.

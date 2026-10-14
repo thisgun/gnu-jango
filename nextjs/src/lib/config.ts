@@ -253,6 +253,14 @@ export const GALLERY_BOARDS = (process.env.NEXT_PUBLIC_GALLERY_BOARDS || "")
   .map((item) => item.trim())
   .filter(Boolean);
 
+/**
+ * 갤러리(사진 카드) 목록으로 그릴 게시판. 그누보드는 게시판 스킨으로 정하므로 스킨이 gallery 면
+ * (예: "gallery", "theme/gallery") 갤러리로 보고, NEXT_PUBLIC_GALLERY_BOARDS 로 더 지정할 수도 있다.
+ */
+export function isGalleryBoard(board: { bo_table: string; bo_skin?: string | null }): boolean {
+  return GALLERY_BOARDS.includes(board.bo_table) || /(^|\/)gallery$/.test((board.bo_skin || "").trim());
+}
+
 export type AuthMode = "g5-jwt" | "authjs";
 
 export const AUTH_MODE: AuthMode =

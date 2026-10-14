@@ -1,204 +1,148 @@
 "use client";
 
-import { useEffect, useId, useState, type Dispatch, type SetStateAction } from "react";
-import {
-  Bell,
-  BellOff,
-  ChevronLeft,
-  ChevronRight,
-  CreditCard,
-  Heart,
-  Mail,
-  Minus,
-  Plus,
-  Star,
-} from "lucide-react";
+import { ChevronLeft, ChevronRight, CreditCard, Heart, Mail, Star } from "lucide-react";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import { Button } from "@/components/ui/button";
 import { ShareButtons } from "@/components/ShareButtons";
-import type { ShopNaverPayConfig, ShopProduct, ShopProductOption } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
 import { plainTextSummary } from "@/lib/client-metadata";
 import { g5ShortHref } from "@/lib/g5-short-url";
 import { shopProductHref } from "@/lib/product-url";
+import {
+  formatProductPrice,
+  hasProductDiscount,
+  productDiscountPercent,
+} from "@/lib/shop-product-state";
 import { cn, formatPrice } from "@/lib/utils";
 import {
-  clampBuyQuantity,
-  isShopOptionPurchasable,
-  type SelectedCartOption,
-} from "./productDetailHelpers";
+  ProductPurchaseControls,
+  type ProductPurchaseControlsProps,
+} from "./ProductPurchaseControls";
+import type { ProductNaverPayActions } from "./useProductNaverPay";
 
-type AvailableOptionValue = {
-  value: string;
-  price?: number;
-  soldOut?: boolean;
-};
-
-type ShippingPaymentDisplay = {
+export type ShippingPaymentDisplay = {
   label: string;
   value: string;
   detail?: string;
   selectable: boolean;
 };
 
-export function ProductPurchasePanel({
-  product,
-  productRewriteMode,
-  hasDiscount,
-  discountPercent,
-  isTelInquiry,
-  pointLabel,
-  shippingPayment,
-  ctSendCostSelection,
-  onCtSendCostSelectionChange,
-  canPurchaseProduct,
-  optionSubjects,
-  optionSelections,
-  onOptionSelectionsChange,
-  getAvailableValues,
-  supplyOptions,
-  supplyLabel,
-  supplySelection,
-  onSupplySelectionChange,
-  onAddSupplyOption,
-  quantity,
-  onQuantityChange,
-  quantityMinQty,
-  quantityMaxQty,
-  minBuyQty,
-  selectedOption,
-  selectedCartOptions,
-  onAddSelectedOption,
-  onUpdateSelectedOptionQty,
-  onRemoveSelectedOption,
-  displayTotal,
-  restockAlerted,
-  onRemoveRestockAlert,
-  onOpenRestockDialog,
-  addingToCart,
-  onAddToCart,
-  onBuyNow,
-  onWishlist,
-  onOpenRecommendDialog,
-  naverPayConfig,
-  naverPaySubmitting,
-  onNaverPayOrder,
-  naverPayWishSubmitting,
-  onNaverPayWish,
-  variant = "full",
-}: {
-  product: ShopProduct;
+export type ProductPurchasePanelProps = ProductPurchaseControlsProps & {
   productRewriteMode: BbsRewriteMode;
-  hasDiscount: boolean;
-  discountPercent: number;
-  isTelInquiry: boolean;
   pointLabel: string;
   shippingPayment: ShippingPaymentDisplay;
   ctSendCostSelection: number;
   onCtSendCostSelectionChange: (value: number) => void;
-  canPurchaseProduct: boolean;
-  optionSubjects: string[];
-  optionSelections: string[];
-  onOptionSelectionsChange: Dispatch<SetStateAction<string[]>>;
-  getAvailableValues: (levelIndex: number) => AvailableOptionValue[];
-  supplyOptions: ShopProductOption[];
-  supplyLabel: string;
-  supplySelection: string;
-  onSupplySelectionChange: (value: string) => void;
-  onAddSupplyOption: () => void;
-  quantity: number;
-  onQuantityChange: Dispatch<SetStateAction<number>>;
-  quantityMinQty: number;
-  quantityMaxQty: number;
-  minBuyQty: number;
-  selectedOption?: ShopProductOption | null;
-  selectedCartOptions: SelectedCartOption[];
-  onAddSelectedOption: () => void;
-  onUpdateSelectedOptionQty: (ioId: string, ioType: number, qty: number) => void;
-  onRemoveSelectedOption: (ioId: string, ioType: number) => void;
-  displayTotal: number;
-  restockAlerted: boolean;
-  onRemoveRestockAlert: () => void;
-  onOpenRestockDialog: () => void;
-  addingToCart: boolean;
-  onAddToCart: () => void;
-  onBuyNow: () => void;
-  onWishlist: () => void;
+  /** 지인에게 메일로 추천 창 열기 */
   onOpenRecommendDialog: () => void;
-  naverPayConfig: ShopNaverPayConfig | null;
-  naverPaySubmitting: boolean;
-  onNaverPayOrder: () => void;
-  naverPayWishSubmitting: boolean;
-  onNaverPayWish: () => void;
-  variant?: "full" | "compact";
-}) {
-  const optionIdPrefix = useId();
-  const [quantityInput, setQuantityInput] = useState(String(quantity));
-  const compact = variant === "compact";
-  const productBrand = product.it_brand?.includes("\uFFFD") ? "" : product.it_brand?.trim() || "";
-  const productSubtitle = plainTextSummary(
-    product.it_basic?.includes("\uFFFD") ? "" : product.it_basic,
-    ""
-  );
-  const productDetails = (
+  /** 네이버페이가 켜진 쇼핑몰에서만 준다. */
+  naverPay: ProductNaverPayActions | null;
+};
+
+/** 깨진 글자(U+FFFD)가 섞인 옛 데이터는 보이지 않게 비운다. */
+function cleanText(value: string | null | undefined) {
+  const text = value?.trim() ?? "";
+  return text.includes("�") ? "" : text;
+}
+
+/**
+ * 상품 상세 오른쪽 구매 패널 — 레퍼런스 앱 ProductPurchasePanel 의 마크업과 이름(product-*)을 그대로 쓴다.
+ * 테마 CSS(solune-shop.detail.css)가 이 이름들을 손잡이로 flex order 와 간격을 정한다 — 마크업 순서는 레퍼런스와 같게 둔다.
+ * 이 앱에만 있는 것: 지인에게 메일 추천 단추, 네이버페이 구매 · 찜(.product-naverpay), 깨진 브랜드 · 요약 글자 거르기.
+ */
+export function ProductPurchasePanel({
+  productRewriteMode,
+  pointLabel,
+  shippingPayment,
+  ctSendCostSelection,
+  onCtSendCostSelectionChange,
+  onOpenRecommendDialog,
+  naverPay,
+  ...controlProps
+}: ProductPurchasePanelProps) {
+  const { product, isTelInquiry, canPurchaseProduct, isSoldOut } = controlProps;
+  const brand = cleanText(product.it_brand);
+  const subtitle = plainTextSummary(cleanText(product.it_basic), "");
+  const hasDiscount = hasProductDiscount(product);
+  const metaRows = (
     [
       ["제조사", product.it_maker],
       ["원산지", product.it_origin],
       ["모델명", product.it_model],
     ] as const
   ).flatMap(([label, value]) => {
-    const normalizedValue = value?.trim();
-    return normalizedValue && !normalizedValue.includes("\uFFFD")
-      ? [{ label, value: normalizedValue }]
-      : [];
+    const text = cleanText(value);
+    return text ? [{ label, value: text }] : [];
   });
 
-  useEffect(() => {
-    setQuantityInput(String(quantity));
-  }, [quantity]);
-
-  const commitQuantityInput = () => {
-    const parsed = Number(quantityInput);
-    if (!Number.isFinite(parsed)) {
-      setQuantityInput(String(quantity));
-      return;
-    }
-    const nextQuantity = clampBuyQuantity(parsed, quantityMinQty, quantityMaxQty);
-    onQuantityChange(nextQuantity);
-    setQuantityInput(String(nextQuantity));
-  };
-
   return (
-    <div className={compact ? "space-y-4 rounded-box border border-base-300 bg-base-100 p-4 shadow-sm" : "solune-shop-purchase-panel"}>
-      {!compact && productBrand ? (
-        <p className="solune-shop-product-brand text-sm text-base-content/70">{productBrand}</p>
-      ) : !compact && product.ca_name ? (
+    <div className="product-panel space-y-6">
+      {product.ca_name ? (
         <a
           href={g5ShortHref(`/shop/categories/${product.ca_id}`)}
-          className="solune-shop-product-brand text-sm text-base-content/70 hover:text-primary"
+          className="product-brand text-sm text-muted-foreground hover:text-primary"
         >
-          {product.ca_name}
+          {brand || product.ca_name}
         </a>
+      ) : brand ? (
+        <p className="product-brand text-sm text-muted-foreground">{brand}</p>
       ) : null}
 
-      <div className="solune-shop-product-heading space-y-3">
-        {compact ? (
-          <h2 className="line-clamp-2 min-w-0 text-lg font-bold">{product.it_name}</h2>
-        ) : (
-          <>
-            <h1 className="min-w-0 break-words text-[22px] leading-7 font-bold md:text-3xl md:leading-[1.25]">{product.it_name}</h1>
-            <ShareButtons title={product.it_name} />
-          </>
-        )}
+      <div className="product-title-row flex items-center justify-between gap-4">
+        <h1 className="product-title min-w-0 break-words text-2xl font-bold">{product.it_name}</h1>
+        {/* 지인에게 메일로 추천(이 앱에만 있다)은 공유 단추 줄 끝에 — 담기 줄은 레퍼런스처럼 [장바구니][바로구매][♡] 만. */}
+        <div className="product-share flex items-center gap-1">
+          <ShareButtons title={product.it_name} />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            aria-label="지인에게 메일로 추천"
+            title="지인에게 메일로 추천"
+            onClick={onOpenRecommendDialog}
+          >
+            <Mail className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
-      {!compact && productSubtitle && (
-        <p className="solune-shop-product-subtitle text-sm text-base-content/70">{productSubtitle}</p>
+      {/* 요약설명(it_basic)은 에디터 HTML 일 수 있다. 부제로는 글자만 쓴다 — 서식은 상품설명 탭이 낸다. */}
+      {subtitle ? <p className="product-subtitle text-sm text-muted-foreground">{subtitle}</p> : null}
+
+      {(product.prev_item || product.next_item) && (
+        <nav aria-label="상품 이전 다음" className="product-siblings grid gap-2 text-sm sm:grid-cols-2">
+          {product.prev_item ? (
+            <Button variant="outline" className="h-auto justify-start gap-2 px-3 py-2 text-left" asChild>
+              <Link href={shopProductHref(product.prev_item, productRewriteMode)}>
+                <ChevronLeft className="size-4 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block text-xs text-muted-foreground">이전 상품</span>
+                  <span className="block truncate font-medium">{product.prev_item.it_name}</span>
+                </span>
+              </Link>
+            </Button>
+          ) : (
+            <span className="hidden sm:block" />
+          )}
+          {product.next_item ? (
+            <Button variant="outline" className="h-auto justify-end gap-2 px-3 py-2 text-right" asChild>
+              <Link href={shopProductHref(product.next_item, productRewriteMode)}>
+                <span className="min-w-0">
+                  <span className="block text-xs text-muted-foreground">다음 상품</span>
+                  <span className="block truncate font-medium">{product.next_item.it_name}</span>
+                </span>
+                <ChevronRight className="size-4 shrink-0" />
+              </Link>
+            </Button>
+          ) : (
+            <span className="hidden sm:block" />
+          )}
+        </nav>
       )}
 
       {product.review_count !== undefined && product.review_count > 0 && (
-        <div className="solune-shop-product-rating flex items-center gap-2">
-          <div className="flex">
+        <div className="product-rating flex items-center gap-2">
+          <div className="product-rating-stars flex">
             {Array.from({ length: 5 }).map((_, index) => (
               <Star
                 key={index}
@@ -211,34 +155,32 @@ export function ProductPurchasePanel({
               />
             ))}
           </div>
-          <span className="text-sm text-muted-foreground">
-            {product.review_avg}점 ({product.review_count}개 리뷰)
+          <span className="product-rating-text text-sm text-muted-foreground">
+            <b>{product.review_avg}</b>점 ({product.review_count}개 리뷰)
           </span>
         </div>
       )}
 
-      <div className="solune-shop-product-price space-y-1">
+      <div className="product-price space-y-1">
         {hasDiscount && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground line-through">
+          <div className="product-price-before flex items-center gap-2">
+            <span className="product-price-was text-sm text-muted-foreground line-through">
               {formatPrice(product.it_cust_price)}
             </span>
-            <span className="rounded bg-red-500 px-1.5 py-0.5 text-xs font-bold text-white">
-              {discountPercent}% OFF
+            <span className="product-price-off rounded bg-red-500 px-1.5 py-0.5 text-xs font-bold text-white">
+              {productDiscountPercent(product)}% OFF
             </span>
           </div>
         )}
-        <p className="text-3xl font-bold">
-          {isTelInquiry ? "전화문의" : formatPrice(product.it_price)}
-        </p>
+        <p className="product-price-now text-3xl font-bold">{formatProductPrice(product)}</p>
         {!isTelInquiry && pointLabel && (
-          <p className="text-sm text-muted-foreground">적립 포인트: {pointLabel}</p>
+          <p className="product-price-point text-sm text-muted-foreground">적립 포인트: {pointLabel}</p>
         )}
       </div>
 
-      <div className="solune-shop-shipping-summary text-sm">
+      <div className="product-shipping rounded-md border bg-muted/30 p-3 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="font-medium">{shippingPayment.label}</span>
+          <span className="product-shipping-label font-medium">{shippingPayment.label}</span>
           {shippingPayment.selectable ? (
             <select
               aria-label="배송비 결제 방법"
@@ -259,386 +201,54 @@ export function ProductPurchasePanel({
         )}
       </div>
 
-      {!compact && productDetails.length > 0 && (
-        <dl aria-label="상품 정보" className="solune-shop-product-info space-y-2">
-          {productDetails.map(({ label, value }) => (
-            <div
-              key={label}
-              className="solune-shop-product-info-row grid grid-cols-[5rem_minmax(0,1fr)] items-start gap-3"
-            >
-              <dt className="text-sm text-base-content/70">{label}</dt>
-              <dd className="min-w-0 break-words text-sm">{value}</dd>
+      {/* 제조사 · 원산지 · 모델명. 값이 있는 항목만 — 빈 줄이 늘어서면 정보가 아니라 잡음이 된다. */}
+      {metaRows.length > 0 && (
+        <dl className="product-meta grid gap-[0.4rem]">
+          {metaRows.map(({ label, value }) => (
+            <div key={label} className="product-meta-row grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2">
+              <dt>{label}</dt>
+              <dd className="m-0 min-w-0 break-words">{value}</dd>
             </div>
           ))}
         </dl>
       )}
 
-      <div className="solune-shop-stock text-sm">
+      <div className="product-stock text-sm">
         {isTelInquiry ? (
           <span className="font-medium text-primary">전화문의 상품</span>
-        ) : product.it_soldout === "1" ? (
+        ) : isSoldOut ? (
           <span className="font-medium text-red-700">품절</span>
         ) : product.it_stock_qty > 0 ? (
-          <span className="text-success">재고: {product.it_stock_qty}개</span>
+          <span className="text-green-700">재고: {product.it_stock_qty}개</span>
         ) : (
-          <span className="text-success">재고 있음</span>
+          <span className="text-green-700">재고 있음</span>
         )}
       </div>
 
-      {canPurchaseProduct && optionSubjects.length > 0 && (
-        <div className="space-y-3">
-          {optionSubjects.map((subject, levelIndex) => {
-            const available = getAvailableValues(levelIndex);
-            const isDisabled = levelIndex > 0 && !optionSelections[levelIndex - 1];
-            return (
-              <div key={levelIndex} className="solune-option-field" data-disabled={isDisabled || undefined}>
-                <label htmlFor={`${optionIdPrefix}-option-${levelIndex}`} className="solune-option-label">
-                  {subject}
-                </label>
-                <select
-                  id={`${optionIdPrefix}-option-${levelIndex}`}
-                  aria-label={subject}
-                  data-shop-option-select="1"
-                  value={optionSelections[levelIndex] || ""}
-                  disabled={isDisabled}
-                  onChange={(event) => {
-                    onOptionSelectionsChange((previous) => {
-                      const next = [...previous];
-                      next[levelIndex] = event.target.value;
-                      for (let i = levelIndex + 1; i < optionSubjects.length; i++) {
-                        next[i] = "";
-                      }
-                      return next;
-                    });
-                  }}
-                  className="solune-option-select"
-                >
-                  <option value="">선택해주세요</option>
-                  {available.map((item) => (
-                    <option key={item.value} value={item.value} disabled={item.soldOut}>
-                      {item.value}
-                      {item.price && item.price > 0
-                        ? ` (+${formatPrice(item.price)})`
-                        : item.price && item.price < 0
-                          ? ` (${formatPrice(item.price)})`
-                          : ""}
-                      {item.soldOut ? " [품절]" : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <ProductPurchaseControls {...controlProps} />
 
-      {canPurchaseProduct && supplyOptions.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-stretch gap-2">
-            <div className="solune-option-field min-w-0 flex-1">
-              <label htmlFor={`${optionIdPrefix}-supply`} className="solune-option-label">
-                {supplyLabel}
-              </label>
-              <select
-                id={`${optionIdPrefix}-supply`}
-                aria-label={supplyLabel}
-                value={supplySelection}
-                onChange={(event) => onSupplySelectionChange(event.target.value)}
-                className="solune-option-select"
-              >
-              <option value="">추가옵션을 선택해주세요</option>
-              {supplyOptions.map((option) => (
-                <option
-                  key={option.io_id}
-                  value={option.io_id}
-                  disabled={!isShopOptionPurchasable(option)}
-                >
-                  {option.io_value || option.io_id}
-                  {option.io_price > 0
-                    ? ` (+${formatPrice(option.io_price)})`
-                    : option.io_price < 0
-                      ? ` (${formatPrice(option.io_price)})`
-                      : ""}
-                  {!isShopOptionPurchasable(option) ? " [품절]" : ""}
-                </option>
-              ))}
-              </select>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-auto"
-              onClick={onAddSupplyOption}
-              disabled={!supplySelection}
-            >
-              추가
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {canPurchaseProduct && (
-        <div>
-          <label className="mb-1 block text-sm font-medium">수량</label>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="수량 감소"
-              onClick={() =>
-                onQuantityChange((quantity) =>
-                  clampBuyQuantity(quantity - 1, quantityMinQty, quantityMaxQty)
-                )
-              }
-              disabled={quantity <= quantityMinQty}
-            >
-              <Minus className="h-4 w-4" />
-            </Button>
-            <input
-              type="number"
-              min={quantityMinQty}
-              max={quantityMaxQty > 0 ? Math.max(quantityMinQty, quantityMaxQty) : undefined}
-              aria-label="구매 수량"
-              value={quantityInput}
-              onChange={(event) => setQuantityInput(event.target.value)}
-              onBlur={commitQuantityInput}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.blur();
-                }
-              }}
-              className="h-9 w-16 rounded-md border bg-background text-center text-sm outline-none"
-            />
-            <Button
-              variant="outline"
-              size="icon"
-              aria-label="수량 증가"
-              onClick={() =>
-                onQuantityChange((quantity) =>
-                  clampBuyQuantity(quantity + 1, quantityMinQty, quantityMaxQty)
-                )
-              }
-              disabled={quantityMaxQty > 0 && quantity >= Math.max(quantityMinQty, quantityMaxQty)}
-            >
-              <Plus className="h-4 w-4" />
-            </Button>
-          </div>
-          {(minBuyQty > 0 || quantityMaxQty > 0) && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              {[
-                minBuyQty > 0 ? `최소 ${minBuyQty}개` : "",
-                quantityMaxQty > 0 ? `최대 ${quantityMaxQty}개` : "",
-              ]
-                .filter(Boolean)
-                .join(" / ")}
-            </p>
-          )}
-        </div>
-      )}
-
-      {canPurchaseProduct && (optionSubjects.length > 0 || supplyOptions.length > 0) && (
-        <div className="space-y-3">
-          {optionSubjects.length > 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onAddSelectedOption}
-              disabled={!selectedOption}
-            >
-              선택 옵션 추가
-            </Button>
-          )}
-
-          {selectedCartOptions.length > 0 && (
-            <div className="space-y-2 rounded-lg border p-3">
-              {selectedCartOptions.map((option) => (
-                <div
-                  key={`${option.ioType}:${option.io_id}`}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted/40 p-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{option.label}</p>
-                    {option.price !== 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        {option.price > 0 ? "+" : ""}
-                        {formatPrice(option.price)}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      aria-label={`${option.label} 수량 감소`}
-                      onClick={() => onUpdateSelectedOptionQty(option.io_id, option.ioType, option.qty - 1)}
-                      disabled={option.qty <= 1}
-                    >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <input
-                      type="number"
-                      min={1}
-                      max={option.stockQty > 0 ? option.stockQty : undefined}
-                      aria-label={`${option.label} 수량`}
-                      value={option.qty}
-                      onChange={(event) =>
-                        onUpdateSelectedOptionQty(option.io_id, option.ioType, Number(event.target.value))
-                      }
-                      className="h-9 w-16 rounded-md border bg-background text-center text-sm outline-none"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      aria-label={`${option.label} 수량 증가`}
-                      onClick={() => onUpdateSelectedOptionQty(option.io_id, option.ioType, option.qty + 1)}
-                      disabled={option.stockQty > 0 && option.qty >= option.stockQty}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onRemoveSelectedOption(option.io_id, option.ioType)}
-                    >
-                      삭제
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {canPurchaseProduct && (
-        <div className="rounded-lg border bg-muted/50 p-4">
-          <div className="flex items-center justify-between">
-            <span className="font-medium">총 상품 금액</span>
-            <span className="text-xl font-bold text-primary">{formatPrice(displayTotal)}</span>
-          </div>
-        </div>
-      )}
-
-      <div className="flex flex-wrap gap-3">
-        {isTelInquiry ? (
-          <Button className="flex-1" size="lg" variant="outline" disabled>
-            전화문의
-          </Button>
-        ) : product.it_soldout === "1" ? (
-          <>
-            {product.it_stock_sms !== "1" ? (
-              <Button className="flex-1" size="lg" variant="outline" disabled>
-                품절
-              </Button>
-            ) : restockAlerted ? (
-              <Button className="flex-1" size="lg" variant="outline" onClick={onRemoveRestockAlert}>
-                <BellOff className="mr-2 h-4 w-4" />
-                알림 해제
-              </Button>
-            ) : (
-              <Button
-                className="flex-1"
-                size="lg"
-                variant="default"
-                onClick={onOpenRestockDialog}
-              >
-                <Bell className="mr-2 h-4 w-4" />
-                재입고 알림 신청
-              </Button>
-            )}
-          </>
-        ) : (
-          <>
-            <Button className="flex-1" size="lg" variant="outline" onClick={onAddToCart} disabled={addingToCart}>
-              {addingToCart ? "추가 중..." : "장바구니"}
-            </Button>
-            <Button className="flex-1" size="lg" onClick={onBuyNow}>
-              바로구매
-            </Button>
-          </>
-        )}
-        <div className="flex gap-3">
-          <Button variant="outline" size="lg" aria-label="위시리스트에 추가" onClick={onWishlist}>
-            <Heart className="h-4 w-4" />
+      {naverPay && canPurchaseProduct && (
+        <div className="product-naverpay grid gap-2 sm:grid-cols-2">
+          <Button
+            type="button"
+            className="bg-[#0c8040] text-white hover:bg-[#08783a]"
+            onClick={naverPay.onOrder}
+            disabled={naverPay.submitting}
+          >
+            <CreditCard className="mr-2 h-4 w-4" />
+            {naverPay.submitting ? "네이버페이 등록 중..." : "N Pay 구매"}
           </Button>
           <Button
+            type="button"
             variant="outline"
-            size="lg"
-            aria-label="지인에게 메일로 추천"
-            title="지인에게 메일로 추천"
-            onClick={onOpenRecommendDialog}
+            className="border-[#0c8040]/50 text-[#0c8040] hover:bg-[#0c8040]/10"
+            onClick={naverPay.onWish}
+            disabled={naverPay.wishSubmitting}
           >
-            <Mail className="h-4 w-4" />
+            <Heart className="mr-2 h-4 w-4" />
+            {naverPay.wishSubmitting ? "찜 등록 중..." : "N Pay 찜"}
           </Button>
         </div>
-      </div>
-
-      {naverPayConfig?.enabled && canPurchaseProduct && (
-        <div className="rounded-md border border-[#0c8040]/30 bg-[#0c8040]/5 p-3">
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Button
-              type="button"
-              className="bg-[#0c8040] text-white hover:bg-[#08783a]"
-              onClick={onNaverPayOrder}
-              disabled={naverPaySubmitting}
-            >
-              <CreditCard className="mr-2 h-4 w-4" />
-              {naverPaySubmitting ? "네이버페이 등록 중..." : "N Pay 구매"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="border-[#0c8040]/50 text-[#0c8040] hover:bg-[#0c8040]/10"
-              onClick={onNaverPayWish}
-              disabled={naverPayWishSubmitting}
-            >
-              <Heart className="mr-2 h-4 w-4" />
-              {naverPayWishSubmitting ? "찜 등록 중..." : "N Pay 찜"}
-            </Button>
-          </div>
-        </div>
-      )}
-      {!compact && (product.prev_item || product.next_item) && (
-        <nav aria-label="상품 이전 다음" className="grid gap-2 text-sm sm:grid-cols-2">
-          {product.prev_item ? (
-            <Button
-              variant="outline"
-              className="h-auto justify-start gap-2 px-3 py-2 text-left"
-              asChild
-            >
-              <Link href={shopProductHref(product.prev_item, productRewriteMode)}>
-                <ChevronLeft className="size-4 shrink-0" />
-                <span className="min-w-0">
-                  <span className="block text-xs text-muted-foreground">이전 상품</span>
-                  <span className="block truncate font-medium">{product.prev_item.it_name}</span>
-                </span>
-              </Link>
-            </Button>
-          ) : (
-            <span className="hidden sm:block" />
-          )}
-          {product.next_item ? (
-            <Button
-              variant="outline"
-              className="h-auto justify-end gap-2 px-3 py-2 text-right"
-              asChild
-            >
-              <Link href={shopProductHref(product.next_item, productRewriteMode)}>
-                <span className="min-w-0">
-                  <span className="block text-xs text-muted-foreground">다음 상품</span>
-                  <span className="block truncate font-medium">{product.next_item.it_name}</span>
-                </span>
-                <ChevronRight className="size-4 shrink-0" />
-              </Link>
-            </Button>
-          ) : (
-            <span className="hidden sm:block" />
-          )}
-        </nav>
       )}
     </div>
   );

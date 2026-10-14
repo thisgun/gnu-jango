@@ -1,0 +1,8 @@
+/* =====================================================================
+   App fit for the ported Solune shop stylesheets — browse pages
+   (coupon zone, shop reviews, shop Q&A, wishlist, compare, events).
+
+   Same rules as solune-shop.app.css: keep app-specific shop rules here, not
+   in the ported solune-shop.*.css files, so those stay re-copyable from the
+   reference. Scope every rule under .solune-shop-page.
+   ===================================================================== */

@@ -4,11 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useRouter } from "@bprogress/next/app";
 import Image from "next/image";
-import { ChevronLeft, ChevronRight, LayoutGrid, List, Search } from "lucide-react";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ProductCard } from "@/components/shop/ProductGridSection";
-import { ProductListCard } from "@/components/shop/ProductListCard";
+import { ShopListHeader } from "@/components/shop/ShopListHeader";
+import { SoluneProductCard } from "@/components/shop/SoluneProductCard";
+import { useShopListView } from "@/hooks/useShopListView";
 import type { BbsRewriteMode } from "@/lib/board-url";
 import { applyClientPageMetadata } from "@/lib/client-metadata";
 import { currentPathForRuntime } from "@/lib/config";
@@ -20,15 +20,6 @@ import { useShopProductSuggest } from "@/hooks/useShopProductSuggest";
 import { getShopProductList, type ShopProductParams } from "@/services/shop";
 import { getClientPublicSettings } from "@/services/settings";
 import type { ShopProduct } from "@/lib/api";
-
-const SORT_OPTIONS = [
-  { value: "popular", label: "판매많은순" },
-  { value: "price_asc", label: "낮은가격순" },
-  { value: "price_desc", label: "높은가격순" },
-  { value: "rating", label: "평점높은순" },
-  { value: "reviews", label: "후기많은순" },
-  { value: "latest", label: "최근등록순" },
-];
 
 const TYPE_CHIPS: { key: `it_type${1 | 2 | 3 | 4 | 5}`; label: string }[] = [
   { key: "it_type1", label: "베스트" },
@@ -144,7 +135,7 @@ export default function ProductListPage() {
   const [loading, setLoading] = useState(true);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [listView, setListView] = useShopListView();
   const [searchInput, setSearchInput] = useState(searchParams.get("q") || "");
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [productRewriteMode, setProductRewriteMode] = useState<BbsRewriteMode>(0);
@@ -273,44 +264,49 @@ export default function ProductListPage() {
     runtimeRouterPush(router, `${listRoute}${search ? `?${search}` : ""}`);
   }
 
+  const typeChips = (
+    <div className="flex flex-wrap gap-2">
+      <button type="button" onClick={() => setTypeChip("", true)} className={cn("filter-chip", !activeChip && "filter-chip-active")}>
+        전체
+      </button>
+      {TYPE_CHIPS.map((chip) => {
+        const active = activeChip?.key === chip.key;
+        return (
+          <button
+            key={chip.key}
+            type="button"
+            onClick={() => setTypeChip(chip.key, active)}
+            className={cn("filter-chip", active && "filter-chip-active")}
+          >
+            {chip.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div>
-      <Breadcrumb items={[{ label: "쇼핑몰", href: "/shop" }, { label: "전체 상품" }]} />
-
-      <section className="page-hero mb-4">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-          <div>
-            <p className="section-eyebrow">상품 탐색</p>
-            <h1 className="page-hero-title">{listTitle}</h1>
-            <p className="page-hero-desc">총 {total.toLocaleString("ko-KR")}개의 상품을 조건에 맞춰 살펴보세요.</p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={() => setTypeChip("", true)} className={cn("filter-chip", !activeChip && "filter-chip-active")}>
-              전체
-            </button>
-            {TYPE_CHIPS.map((chip) => {
-              const active = activeChip?.key === chip.key;
-              return (
-                <button
-                  key={chip.key}
-                  type="button"
-                  onClick={() => setTypeChip(chip.key, active)}
-                  className={cn("filter-chip", active && "filter-chip-active")}
-                >
-                  {chip.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      <div className="surface-toolbar mb-5">
-        <form onSubmit={handleSearch} className="flex min-w-0 flex-1 gap-2">
+      {/* 레퍼런스 목록 머리: 제목 · 빵부스러기 · 유형 칩 · 정렬 줄(오른쪽에 검색창 · 개수 · 리스트/갤러리 전환). */}
+      <ShopListHeader
+        title={listTitle}
+        total={total}
+        sort={sort}
+        onSortChange={(value) => updateParams({ sort: sort === value ? "" : value, sortodr: "", page: "1" })}
+        view={listView}
+        onViewChange={setListView}
+        filters={typeChips}
+        toolbar={
+        <form action={listRoute} method="get" onSubmit={handleSearch} className="flex min-w-0 flex-1 gap-2">
           <div className="relative min-w-0 flex-1 sm:max-w-[360px]">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <label htmlFor="shop-product-search-query" className="sr-only">
+              상품 검색
+            </label>
             <input
-              type="text"
+              id="shop-product-search-query"
+              name="q"
+              type="search"
               placeholder="상품 검색"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
@@ -352,72 +348,24 @@ export default function ProductListPage() {
             검색
           </Button>
         </form>
-
-      </div>
-
-      <div className="surface-toolbar mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-2" role="group" aria-label="상품 정렬">
-          {SORT_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              aria-pressed={sort === opt.value}
-              onClick={() => updateParams({ sort: sort === opt.value ? "" : opt.value, sortodr: "", page: "1" })}
-              className={cn("btn btn-sm", sort === opt.value ? "btn-primary" : "btn-outline")}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center justify-between gap-3 sm:justify-end">
-          <span className="whitespace-nowrap text-sm text-muted-foreground">총 {total.toLocaleString("ko-KR")}개</span>
-          <div className="flex rounded-[4px] border border-border bg-base-100">
-            <button
-              type="button"
-              aria-label="그리드 보기"
-              aria-pressed={viewMode === "grid"}
-              onClick={() => setViewMode("grid")}
-              className={cn("p-2 transition-colors", viewMode === "grid" ? "bg-primary text-primary-foreground" : "hover:bg-accent")}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              aria-label="목록 보기"
-              aria-pressed={viewMode === "list"}
-              onClick={() => setViewMode("list")}
-              className={cn("p-2 transition-colors", viewMode === "list" ? "bg-primary text-primary-foreground" : "hover:bg-accent")}
-            >
-              <List className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       {loading ? (
-        <ProductListSkeleton viewMode={viewMode} />
+        <ProductListSkeleton viewMode={listView} />
       ) : products.length === 0 ? (
         <div className="surface-panel flex flex-col items-center justify-center py-20 text-center">
           <p className="text-lg font-bold text-muted-foreground">상품이 없습니다</p>
           <p className="mt-1 text-sm text-muted-foreground">다른 검색어나 필터를 사용해보세요.</p>
         </div>
-      ) : viewMode === "grid" ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+      ) : (
+        // 리스트/갤러리 모양은 data-view 를 보고 CSS 가 정한다. --all 은 넓은 화면에서 한 줄에 다섯(레퍼런스 listtype.php).
+        <div className="shop-product-list shop-product-list--all grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4" data-view={listView}>
           {products.map((product, index) => (
-            <ProductCard
+            <SoluneProductCard
               key={product.it_id}
               product={product}
               priority={index < 4}
-              productRewriteMode={productRewriteMode}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {products.map((product) => (
-            <ProductListCard
-              key={product.it_id}
-              product={product}
               productRewriteMode={productRewriteMode}
             />
           ))}

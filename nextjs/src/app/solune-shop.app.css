@@ -1,0 +1,59 @@
+/* =====================================================================
+   App fit for the ported Solune shop stylesheets (solune-shop.*.css).
+
+   The reference shop shell owns its header, spacer and footer inside
+   .solune-shop-page. Here the root layout draws the header and footer, and
+   app/shop/layout.tsx only draws .solune-shop-page > .solune-shop-wrapper >
+   #container > .shop-content. These rules adjust the few places where that
+   difference matters. Keep app-specific shop rules here, not in the ported
+   files, so those can be re-copied from the reference.
+   ===================================================================== */
+
+/* The page sits below the app header, so it must not add a second screen of
+   height; instead it grows into whatever the root column leaves above the
+   footer, so a short page never shows the community background below it. */
+body[data-g5-theme-source="default"] .solune-shop-page { min-height: 0; flex: 1 0 auto; }
+
+/* The shop tokens square every daisyUI radius (Ondam is a square UI), which
+   would also square btn-circle. The reference keeps its round controls (banner
+   arrows, pause, category scroll) round, so a circle button stays a circle. */
+/* Outranks `body[…] .solune-shop-page .btn { border-radius: 0 }` in solune-shop.footer.css. */
+body[data-g5-theme-source="default"] .solune-shop-page .btn.btn-circle { border-radius: 9999px; }
+
+/* Shop home product rows (components/shop/ShopProductRow.tsx). The reference
+   pages them with Swiper; this app does not ship Swiper, so the row keeps the
+   reference's pre-init markup (slide widths from --pre-spv / --pre-gap in
+   solune-shop.carousel.css) and scrolls natively with snap points. */
+.solune-shop-page .solune-shop-swiper.solune-shop-scroll-track {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.solune-shop-page .solune-shop-scroll-track::-webkit-scrollbar { display: none; }
+.solune-shop-page .solune-shop-scroll-track .swiper-slide { flex-shrink: 0; scroll-snap-align: start; }
+.solune-shop-page .solune-shop-scroll-track .swiper-slide:last-child { margin-right: 0; }
+
+/* Shop home reviews (app/shop/ShopHomeReviews.tsx): the same native scroll
+   inside .solune-review-swiper, which stays the positioned box for the round
+   arrows so they do not scroll away with the cards. */
+.solune-shop-page .solune-review-track {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+.solune-shop-page .solune-review-track::-webkit-scrollbar { display: none; }
+.solune-shop-page .solune-review-track .swiper-slide { flex-shrink: 0; scroll-snap-align: start; }
+.solune-shop-page .solune-review-track .swiper-slide:last-child { margin-right: 0; }
+.solune-shop-page :is(.solune-review-prev, .solune-review-next):disabled { opacity: 0.35; cursor: default; }
+
+/* The help card's phone is a tel: link here (the reference prints plain text);
+   keep it looking like the reference's bold number instead of an underlined link. */
+.solune-shop-page .ondam-help-tel a { color: inherit; text-decoration: none; }
+
+/* --- product detail --- */
+/* App-only block in the purchase panel. .product-panel is a flex column whose
+   children are placed by `order` (solune-shop.detail.css), so a child without
+   one would jump to the top: N Pay sits right under the cart/buy row. */
+body[data-g5-theme-source="default"] .solune-shop-page .product-naverpay { order: 15; margin-top: 12px; }

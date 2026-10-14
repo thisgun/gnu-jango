@@ -60,6 +60,12 @@ export interface MyMemberDetails {
   mb_addr3: string;
 }
 
+/** Posts per category for a board list's chips. counts is null (with a reason) when the server skips counting. */
+export interface BoardCategoryCounts {
+  counts: Record<string, number> | null;
+  reason: string | null;
+}
+
 // 게시판 설정 (g5_board)
 export interface Board {
   bo_table: string;

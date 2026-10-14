@@ -64,7 +64,7 @@ export function RecipientInfoSection({
   setCashRequest,
 }: RecipientInfoSectionProps) {
   return (
-    <section className="box-border w-full min-w-0 rounded-lg border p-4 sm:p-6">
+    <section className="shop-order-section shop-order-section--recipient box-border w-full min-w-0 rounded-lg border p-4 sm:p-6">
       <RecipientAddressSelector
         addressSelection={addressSelection}
         handleAddressSelection={handleAddressSelection}

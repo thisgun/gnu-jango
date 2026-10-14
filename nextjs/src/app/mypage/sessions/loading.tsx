@@ -1,9 +1,9 @@
 export default function LoginSessionsLoading() {
   return (
     <div className="space-y-4">
-      <div className="h-8 w-36 animate-pulse rounded bg-muted" />
+      <div className="skeleton h-8 w-36 rounded" />
       {Array.from({ length: 3 }).map((_, index) => (
-        <div key={index} className="h-24 animate-pulse rounded-md border bg-muted/40" />
+        <div key={index} className="skeleton h-24 rounded-md border" />
       ))}
     </div>
   );

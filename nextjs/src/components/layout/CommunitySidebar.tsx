@@ -12,6 +12,7 @@ import type { RecentItem } from "@/lib/types";
 import { formatDate, formatNumber, truncate } from "@/lib/utils";
 import { getPopularKeywords } from "@/services/search";
 import { getRecentItems } from "@/services/recent";
+import { getClientPublicSettings } from "@/services/settings";
 import { useAuthStore } from "@/store/auth";
 
 const SOCIAL_LOGO_FILES = {
@@ -129,9 +130,22 @@ function PopularWidget({ keywords }: { keywords: PopularKeyword[] }) {
   );
 }
 
-export function CommunitySidebar({ rewriteMode = 0 }: { rewriteMode?: BbsRewriteMode }) {
+export function CommunitySidebar({ rewriteMode }: { rewriteMode?: BbsRewriteMode }) {
   const [comments, setComments] = useState<RecentItem[]>([]);
   const [keywords, setKeywords] = useState<PopularKeyword[]>([]);
+  const [settingsRewriteMode, setSettingsRewriteMode] = useState<BbsRewriteMode>(0);
+
+  // 레이아웃이 레일을 그릴 때는 주소 방식(cf_bbs_rewrite)을 넘겨줄 페이지가 없으니 설정에서 읽는다.
+  useEffect(() => {
+    if (rewriteMode !== undefined) return;
+    let active = true;
+    getClientPublicSettings()
+      .then((settings) => {
+        if (active) setSettingsRewriteMode(Number(settings.cf_bbs_rewrite ?? 0) as BbsRewriteMode);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [rewriteMode]);
 
   useEffect(() => {
     let active = true;
@@ -151,7 +165,7 @@ export function CommunitySidebar({ rewriteMode = 0 }: { rewriteMode?: BbsRewrite
   return (
     <aside className="solune-sidebar" aria-label="커뮤니티 위젯">
       <LoginWidget />
-      <CommentsWidget comments={comments} rewriteMode={rewriteMode} />
+      <CommentsWidget comments={comments} rewriteMode={rewriteMode ?? settingsRewriteMode} />
       <PopularWidget keywords={keywords} />
     </aside>
   );

@@ -95,7 +95,7 @@ export default function NewQaPage() {
   }
 
   if (loading) {
-    return <div className="h-64 animate-pulse rounded-lg bg-muted" />;
+    return <div className="skeleton h-64 rounded-lg" />;
   }
 
   return (

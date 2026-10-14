@@ -9,6 +9,7 @@ import {
   SearchIcon,
   SettingsIcon,
   UserIcon,
+  UserRoundIcon,
   XIcon,
 } from "lucide-react";
 import { useSearchSuggestions } from "@/hooks/useSearchSuggestions";
@@ -340,7 +341,7 @@ export function HeaderClientActions({
         ) : !isCommunity ? (
           <div className="solune-shop-account-action flex w-10 shrink-0 items-center justify-center md:w-auto">
             <Button variant="ghost" size="icon" className="solune-shop-account-trigger rounded-full border border-base-300" type="button" onClick={openLoginModal} aria-label="로그인">
-              <UserIcon className="size-5" />
+              <UserRoundIcon className="size-5" />
             </Button>
           </div>
         ) : null}

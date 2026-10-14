@@ -91,7 +91,7 @@ test('points on the checkout are rounded to the shop unit', async ({ page }) => 
   await page.goto('/shop/order');
   await expect(page.getByRole('button', { name: /결제하기/ })).toBeVisible({ timeout: 25000 });
   // coupons and points load after the form; wait for the balance as a buyer would
-  await expect(page.getByText(`보유 ${balance.toLocaleString('ko-KR')}`)).toBeVisible({ timeout: 15000 });
+  await expect(page.locator('.shop-order-point').getByText(`${balance.toLocaleString('ko-KR')}점`, { exact: true }).first()).toBeVisible({ timeout: 15000 });
   const pointInput = page.locator('#order-point-use');
   await pointInput.fill(String(unit + 1));
   await pointInput.blur();

@@ -492,7 +492,8 @@ for (const token of ["path(\"auth/csrf\", v1_auth.csrf_token_view", "path(\"auth
 }
 
 for (const token of [
-  "'/auth/csrf'",
+  // The client builds this URL as `${this.baseUrl}/auth/csrf`, so match the path without quotes.
+  "/auth/csrf",
   "'/auth/logout'",
   "'X-CSRFToken'",
   'this.getCsrfToken()',

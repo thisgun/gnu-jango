@@ -1,0 +1,35 @@
+/* =====================================================================
+   마이페이지 — 이 앱에만 있는 칸의 손질 (레퍼런스 테마 파일이 아니다).
+
+   레퍼런스 마크업 손잡이(mypage-* · wishlist-* · mypage-coupon-*)는 그대로 포팅된
+   solune-theme.internal-pages.css · solune-theme.mypage.css 가 잡는다. 여기에는 레퍼런스에
+   없는 앱 기능(회원 상세 정보 접이 · 사용 가능 쿠폰 칸)을 짙은 프로필 띠에 맞추는 규칙만 둔다.
+   ===================================================================== */
+
+/* 사용 가능 쿠폰: 띠의 큰 흰 숫자(.mypage-profile-stats p:last-child)를 그대로 물려받는 링크. */
+body[data-g5-theme-source="default"] .mypage-profile-coupon { color: inherit; text-decoration: none; }
+body[data-g5-theme-source="default"] .mypage-profile-coupon:hover,
+body[data-g5-theme-source="default"] .mypage-profile-coupon:focus-visible { text-decoration: underline; text-underline-offset: 4px; }
+
+/* 회원 상세 정보: 흰 상자 대신 띠 위의 옅은 테두리 한 줄(밝은 · 어두운 모드 모두 같은 짙은 띠). */
+body[data-g5-theme-source="default"] .mypage-profile .mypage-profile-details {
+  border-color: rgb(255 255 255 / 0.16);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 0.06);
+  color: #fff;
+}
+body[data-g5-theme-source="default"] .mypage-profile .mypage-profile-details dt { color: rgb(255 255 255 / 0.62); }
+/* daisyUI 의 collapse-arrow 는 화살표의 가로 자리를 주지 않아(left: auto → 제자리) 첫 글자 위에 겹쳤다 — 오른쪽 끝으로. */
+body[data-g5-theme-source="default"] .mypage-profile-details > .collapse-title { padding-inline-end: 3rem; }
+body[data-g5-theme-source="default"] .mypage-profile-details > .collapse-title::after { inset-inline-start: auto; inset-inline-end: 1.25rem; }
+
+/* 위시리스트 줄 카드의 단추 칸: 테마가 칸을 세로(flex-direction: column)로 세우는데 담기 단추의 flex-1(기준 0%)이
+   세로 칸에서는 높이 32px(h-8)을 지우고 글자 높이(22px)로 줄였다 — 두 단추 모두 제 높이로 둔다. */
+body[data-g5-theme-source="default"] .wishlist-actions > button { flex: 0 0 auto; }
+
+/* 1:1 문의 검색 단추: 레퍼런스 앱의 secondary 단추는 회색(#f3f4f6 · 테두리 #9aa3af)인데, 이 앱의 공용 secondary 는
+   테마 파랑 바탕 위 짙은 글자라 글자가 묻힌다. 공용 단추(components/ui/button)는 건드리지 않고 이 검색 줄에서만 맞춘다. */
+body[data-g5-theme-source="default"] .mypage-qa-search button[type="submit"] { border-color: #9aa3af; background: #f3f4f6; color: #111827; }
+body[data-g5-theme-source="default"] .mypage-qa-search button[type="submit"]:hover { border-color: #6b7280; background: #e5e7eb; color: #111827; }
+:is(:root.dark, :root[data-solune-theme="dark"], :root[data-theme="gnu-dark"]) body[data-g5-theme-source="default"] .mypage-qa-search button[type="submit"] { border-color: #4b5563; background: #27272a; color: #f8fafc; }
+:is(:root.dark, :root[data-solune-theme="dark"], :root[data-theme="gnu-dark"]) body[data-g5-theme-source="default"] .mypage-qa-search button[type="submit"]:hover { border-color: #6b7280; background: #3f3f46; }

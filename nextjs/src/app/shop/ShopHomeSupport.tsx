@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import { boardListHref, boardPostHref } from "@/lib/board-url";
 import type { PublicSettings } from "@/lib/schemas";
 import type { Board, WritePost } from "@/lib/types";
-import { formatDate } from "@/lib/utils";
+import { formatListDate, truncate } from "@/lib/utils";
 import { getBoardPosts, getBoardsResult } from "@/services/boards";
 import { getClientPublicSettings } from "@/services/settings";
 
@@ -81,16 +81,19 @@ export function ShopHomeSupport() {
     .map((account) => account.trim())
     .filter(Boolean);
 
+  const noticeHref = noticeBoard ? boardListHref(noticeBoard.bo_table) : "/boards";
+
+  // 레퍼런스 쇼핑 홈 아래 칸(BottomAside): 왼쪽 테두리 상자에 공지 세 줄, 오른쪽 옅은 바탕에 고객센터 · 무통장 입금.
   return (
-    <section
-      className="grid gap-8 border-t border-base-300 py-8 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)_minmax(0,1fr)]"
-      aria-label="쇼핑몰 안내"
-    >
-      <div className="min-w-0">
-        <div className="flex items-center justify-between gap-3 border-b border-base-300 pb-3">
-          <h2 className="text-lg font-bold text-base-content">공지사항</h2>
-          <Link href={noticeBoard ? boardListHref(noticeBoard.bo_table) : "/boards"} className="section-more">
-            전체 보기 <ChevronRight aria-hidden="true" className="size-4" />
+    <aside className="solune-shop-sidebar" aria-label="쇼핑몰 안내">
+      <section className="solune-shop-sidebar-card ondam-notice">
+        <div className="ondam-notice-head">
+          <h2>
+            <Link href={noticeHref}>공지사항</Link>
+          </h2>
+          <Link className="ondam-notice-more" href={noticeHref}>
+            전체 보기
+            <ArrowRight size={13} strokeWidth={2.6} aria-hidden />
           </Link>
         </div>
         {noticeState === "loading" ? (
@@ -106,30 +109,26 @@ export function ShopHomeSupport() {
             </button>
           </div>
         ) : noticePosts.length > 0 ? (
-          <ul className="divide-y divide-base-300">
+          <ul className="ondam-notice-list">
             {noticePosts.map((post) => (
               <li key={post.wr_id}>
-                <Link
-                  href={boardPostHref(noticeBoard?.bo_table || "notice", post, settings?.cf_bbs_rewrite)}
-                  className="flex min-h-11 items-center justify-between gap-3 py-2 text-sm text-base-content hover:text-primary"
-                >
-                  <span className="min-w-0 truncate">{post.wr_subject}</span>
-                  <time className="shrink-0 text-xs text-base-content/60" dateTime={post.wr_datetime}>
-                    {formatDate(post.wr_datetime)}
-                  </time>
+                <Link href={boardPostHref(noticeBoard?.bo_table || "notice", post, settings?.cf_bbs_rewrite)}>
+                  <span>{truncate(post.wr_subject || "제목 없음", 50)}</span>
+                  <time dateTime={post.wr_datetime}>{formatListDate(post.wr_datetime)}</time>
                 </Link>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="py-4 text-sm text-base-content/60">
-            {noticeBoard ? "등록된 공지사항이 없습니다." : "공지사항 게시판이 설정되지 않았습니다."}
+          <p className="sct_noitem">
+            {noticeBoard ? "아직 공지가 없습니다." : "공지사항 게시판이 설정되지 않았습니다."}
           </p>
         )}
-      </div>
+      </section>
 
-      <div>
-        <h2 className="border-b border-base-300 pb-3 text-lg font-bold text-base-content">고객센터</h2>
+      <section className="solune-shop-sidebar-card solune-shop-help-card ondam-help">
+        <section>
+        <h3>고객센터</h3>
         {settingsState === "loading" ? (
           <p className="flex items-center gap-2 pt-4 text-sm text-base-content/60" role="status" aria-live="polite">
             <span className="loading loading-spinner loading-xs" aria-hidden="true" />
@@ -143,22 +142,19 @@ export function ShopHomeSupport() {
             </button>
           </div>
         ) : phone ? (
-          <a href={`tel:${telephoneHref}`} className="mt-4 inline-block text-2xl font-bold text-base-content hover:text-primary">
-            {phone}
-          </a>
-        ) : (
-          <p className="mt-4 text-sm text-base-content/60">고객센터 전화번호가 설정되지 않았습니다.</p>
-        )}
-        <p className="mt-3 text-sm leading-6 text-base-content/70">
-          주문과 상품 문의는 <Link href="/faq" className="link link-hover">고객센터</Link>에서 확인해 주세요.
+          <p className="ondam-help-tel">
+            <a href={`tel:${telephoneHref}`}>{phone}</a>
+          </p>
+        ) : null}
+        <p>
+          주문과 상품 문의는 <Link href="/faq">고객센터</Link>에서 확인해 주세요.
+          <br />
+          <Link href="/shop/couponzone">쿠폰존</Link>에서 사용할 수 있는 쿠폰을 받아가세요.
         </p>
-        <p className="mt-2 text-sm leading-6 text-base-content/70">
-          <Link href="/shop/couponzone" className="link link-hover">쿠폰존</Link>에서 사용할 수 있는 쿠폰을 받아가세요.
-        </p>
-      </div>
+        </section>
 
-      <div>
-        <h2 className="border-b border-base-300 pb-3 text-lg font-bold text-base-content">무통장 입금</h2>
+        <section>
+        <h3>무통장 입금</h3>
         {settingsState === "loading" ? (
           <p className="flex items-center gap-2 pt-4 text-sm text-base-content/60" role="status" aria-live="polite">
             <span className="loading loading-spinner loading-xs" aria-hidden="true" />
@@ -172,15 +168,12 @@ export function ShopHomeSupport() {
             </button>
           </div>
         ) : bankEnabled && bankAccounts.length > 0 ? (
-          <ul className="mt-4 space-y-2 text-sm leading-6 text-base-content/75">
-            {bankAccounts.map((account, index) => <li key={`${index}-${account}`}>{account}</li>)}
-          </ul>
+          <p className="ondam-help-bank">{bankAccounts.join("\n")}</p>
         ) : (
-          <p className="mt-4 text-sm text-base-content/60">
-            {bankEnabled ? "등록된 입금 계좌가 없습니다." : "무통장 입금이 설정되어 있지 않습니다."}
-          </p>
+          <p>{bankEnabled ? "등록된 입금 계좌가 없습니다." : "무통장 입금이 설정되어 있지 않습니다."}</p>
         )}
-      </div>
-    </section>
+        </section>
+      </section>
+    </aside>
   );
 }

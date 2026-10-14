@@ -12,41 +12,34 @@ import { toastSuccess, toastError } from "@/lib/toast";
 import { sanitizeUserHtml } from "@/lib/sanitize";
 import { updateShopQa, deleteShopQa } from "@/services/shop";
 
-// 상품 후기 작성 폼 — 로그인 회원만 접근. 백엔드에서 영카트 후기 작성 정책을 검증.
+/**
+ * 상품 후기 작성 폼 — 로그인 회원만 접근. 백엔드에서 영카트 후기 작성 정책을 검증.
+ * 여닫기는 부르는 쪽이 갖는다 — 사용후기 탭의 평점 요약 상자 오른쪽 [사용후기 쓰기]가 연다(레퍼런스 solune itemuse).
+ */
 export function ReviewForm({
   itId,
   policy,
   onSubmitted,
-  initialOpen = false,
+  open,
+  onOpenChange,
 }: {
   itId: string;
   policy?: ShopPolicy | null;
   onSubmitted: () => void;
-  initialOpen?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const [subject, setSubject] = useState("");
   const [content, setContent] = useState("");
   const [score, setScore] = useState(5);
-  const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const subjectId = useId();
   const contentId = useId();
   const imageInputId = useId();
+  const setOpen = onOpenChange;
 
-  useEffect(() => {
-    if (initialOpen) {
-      setOpen(true);
-    }
-  }, [initialOpen]);
-
-  if (!open) {
-    return (
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        + 후기 작성
-      </Button>
-    );
-  }
+  if (!open) return null;
 
   return (
     <form
@@ -211,42 +204,35 @@ export function ReviewForm({
   );
 }
 
-// 상품 문의 작성 폼 — 로그인 회원만 접근. POST /shop/reviews/qna 호출.
+/**
+ * 상품 문의 작성 폼 — 로그인 회원만 접근. POST /shop/reviews/qna 호출.
+ * 여닫기는 부르는 쪽이 갖는다 — 상품문의 탭 머리의 [문의하기]가 연다(레퍼런스 solune itemqa).
+ */
 export function QaForm({
   itId,
   onSubmitted,
-  initialOpen = false,
+  open,
+  onOpenChange,
 }: {
   itId: string;
   onSubmitted: () => void;
-  initialOpen?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }) {
   const [subject, setSubject] = useState("");
   const [question, setQuestion] = useState("");
   const [email, setEmail] = useState("");
   const [hp, setHp] = useState("");
   const [secret, setSecret] = useState(false);
-  const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const subjectId = useId();
   const questionId = useId();
   const emailId = useId();
   const hpId = useId();
   const secretId = useId();
+  const setOpen = onOpenChange;
 
-  useEffect(() => {
-    if (initialOpen) {
-      setOpen(true);
-    }
-  }, [initialOpen]);
-
-  if (!open) {
-    return (
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        + 문의 작성
-      </Button>
-    );
-  }
+  if (!open) return null;
 
   return (
     <form
@@ -382,6 +368,7 @@ export function QaListItem({
   const editSecretId = useId();
   const contentId = useId();
   const isLocked = qa.can_view === false;
+  const isSecret = String(qa.iq_secret ?? "0") === "1";
   const isAnswered = qa.is_answered === true || (qa.iq_answer ?? "").trim() !== "";
   const canEdit = qa.can_edit === true && !isLocked && !isAnswered;
   const canDelete = qa.can_delete === true && !isAnswered;
@@ -450,153 +437,187 @@ export function QaListItem({
     }
   };
 
-  if (editing) {
-    return (
-      <article id={`iq_${qa.iq_id}`} data-qa-id={qa.iq_id} tabIndex={-1} className="outline-none">
-        <form className="space-y-3 rounded-lg border p-4" onSubmit={handleUpdate}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <label htmlFor={editSubjectId} className="mb-1 block text-sm font-medium">제목</label>
-            <Input
-              id={editSubjectId}
-              value={subject}
-              onChange={(event) => setSubject(event.target.value)}
-              maxLength={255}
-              required
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label htmlFor={editQuestionId} className="mb-1 block text-sm font-medium">내용</label>
-            <Textarea
-              id={editQuestionId}
-              value={question}
-              onChange={(event) => setQuestion(event.target.value)}
-              rows={4}
-              required
-            />
-          </div>
-          <div>
-            <label htmlFor={editEmailId} className="mb-1 block text-sm font-medium">이메일</label>
-            <Input
-              id={editEmailId}
-              type="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              maxLength={100}
-            />
-          </div>
-          <div>
-            <label htmlFor={editHpId} className="mb-1 block text-sm font-medium">휴대폰</label>
-            <Input
-              id={editHpId}
-              type="tel"
-              value={hp}
-              onChange={(event) => setHp(event.target.value)}
-              maxLength={30}
-            />
-          </div>
-        </div>
-        <label htmlFor={editSecretId} className="flex items-center gap-2 text-sm">
-          <input
-            id={editSecretId}
-            type="checkbox"
-            checked={secret}
-            onChange={(event) => setSecret(event.target.checked)}
-            className="size-4 accent-primary"
+  const editForm = (
+    <form className="space-y-3 rounded-lg border p-4" onSubmit={handleUpdate}>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <label htmlFor={editSubjectId} className="mb-1 block text-sm font-medium">제목</label>
+          <Input
+            id={editSubjectId}
+            value={subject}
+            onChange={(event) => setSubject(event.target.value)}
+            maxLength={255}
+            required
           />
-          비밀글
-        </label>
-        <div className="flex justify-end gap-2">
-          <Button type="submit" size="sm" disabled={submitting}>
-            {submitting ? "수정 중..." : "수정하기"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={submitting}
-            onClick={() => {
-              resetEditValues();
-              setEditing(false);
-            }}
-          >
-            취소
-          </Button>
         </div>
-        </form>
-      </article>
-    );
-  }
+        <div className="sm:col-span-2">
+          <label htmlFor={editQuestionId} className="mb-1 block text-sm font-medium">내용</label>
+          <Textarea
+            id={editQuestionId}
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            rows={4}
+            required
+          />
+        </div>
+        <div>
+          <label htmlFor={editEmailId} className="mb-1 block text-sm font-medium">이메일</label>
+          <Input
+            id={editEmailId}
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            maxLength={100}
+          />
+        </div>
+        <div>
+          <label htmlFor={editHpId} className="mb-1 block text-sm font-medium">휴대폰</label>
+          <Input
+            id={editHpId}
+            type="tel"
+            value={hp}
+            onChange={(event) => setHp(event.target.value)}
+            maxLength={30}
+          />
+        </div>
+      </div>
+      <label htmlFor={editSecretId} className="flex items-center gap-2 text-sm">
+        <input
+          id={editSecretId}
+          type="checkbox"
+          checked={secret}
+          onChange={(event) => setSecret(event.target.checked)}
+          className="size-4 accent-primary"
+        />
+        비밀글
+      </label>
+      <div className="flex justify-end gap-2">
+        <Button type="submit" size="sm" disabled={submitting}>
+          {submitting ? "수정 중..." : "수정하기"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={submitting}
+          onClick={() => {
+            resetEditValues();
+            setEditing(false);
+          }}
+        >
+          취소
+        </Button>
+      </div>
+    </form>
+  );
 
+  /* 레퍼런스 solune itemqa.skin.php 의 한 줄 — [상태 | 제목 | 작성자 | 날짜 | ▼] 가 접혀 있고, 누르면 Q(물음)와
+     A(답, 옅은 회색 바탕)가 펼쳐진다. 문의 하나를 주소로 가리킬 수 있게 #iq_N 을 단다(?iq_id= 로 찾아오면
+     useProductDetailFocusScroll 이 data-focused 로 잠깐 표시하고 초점을 준다). 고칠 때는 펼친 자리에 폼이 선다. */
   return (
     <article
       id={`iq_${qa.iq_id}`}
       data-qa-id={qa.iq_id}
       tabIndex={-1}
-      className="rounded-lg border outline-none transition-[background-color,box-shadow] data-[focused=true]:bg-primary/5 data-[focused=true]:ring-2 data-[focused=true]:ring-primary"
+      className="product-qa-item border-b outline-none transition-[background-color,box-shadow] duration-1000 data-[focused=true]:bg-primary/5 data-[focused=true]:ring-2 data-[focused=true]:ring-primary"
     >
       <button
         type="button"
-        className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 p-4 text-left"
-        aria-expanded={open}
+        className="product-qa-row grid w-full grid-cols-[auto_minmax(0,1fr)_20px] items-center gap-x-3 gap-y-1 py-4 text-left sm:grid-cols-[76px_minmax(0,1fr)_auto_auto_20px] sm:gap-x-5 sm:py-5"
+        aria-expanded={open || editing}
         aria-controls={contentId}
         onClick={() => setOpen((current) => !current)}
       >
-        <span className={cn("badge badge-sm", isAnswered ? "badge-success" : "badge-ghost")}>
+        <span
+          className={cn(
+            "product-qa-status inline-flex h-6 items-center justify-center border px-2 text-[11px] font-bold",
+            isAnswered ? "is-done border-primary bg-primary/10 text-primary" : "is-waiting bg-muted text-muted-foreground"
+          )}
+        >
           {isAnswered ? "답변완료" : "답변대기"}
         </span>
-        <span className="min-w-0 flex-1 truncate font-medium">
-          {isLocked && <LockKeyhole aria-hidden="true" className="mr-1 inline size-4" />}
-          {isLocked ? "비밀글입니다." : qa.iq_subject}
+        <span className="product-qa-subject flex min-w-0 items-center gap-2 text-sm font-semibold">
+          <span className="truncate">{isLocked ? "비밀글입니다." : qa.iq_subject}</span>
+          {isSecret && (
+            <>
+              <LockKeyhole className="h-3.5 w-3.5 flex-none text-muted-foreground" aria-hidden="true" />
+              <span className="sr-only">비밀글</span>
+            </>
+          )}
         </span>
-        <span className="text-xs text-muted-foreground">{qa.mb_nick}</span>
-        <span className="shrink-0 text-xs text-muted-foreground">{formatDate(qa.iq_time)}</span>
+        {/* 폰에서는 제목 아래 둘째 줄, 넓은 화면에서는 한 줄의 칸(display: contents). */}
+        <span className="product-qa-meta col-start-2 row-start-2 flex gap-2 text-xs text-muted-foreground sm:contents">
+          <span className="product-qa-name">{qa.mb_nick}</span>
+          <span className="product-qa-date tabular-nums">{formatDate(qa.iq_time)}</span>
+        </span>
         <ChevronDown
           aria-hidden="true"
-          className={cn("size-4 shrink-0 transition-transform", open && "rotate-180")}
+          className={cn(
+            "product-qa-caret col-start-3 row-start-1 h-4 w-4 justify-self-end text-muted-foreground transition-transform motion-reduce:transition-none sm:col-auto sm:row-auto",
+            (open || editing) && "rotate-180"
+          )}
         />
       </button>
-      <div id={contentId} hidden={!open} className="border-t px-4 pb-4 pt-3">
-        {isLocked ? (
-          <p className="text-sm text-muted-foreground">
-            작성자와 관리자만 내용을 볼 수 있습니다.
-          </p>
+
+      <div id={contentId} hidden={!open && !editing} className="product-qa-content pb-7 text-sm leading-relaxed sm:pl-[96px]">
+        {editing ? (
+          editForm
         ) : (
-          <div
-            className="prose prose-sm max-w-none text-sm text-muted-foreground"
-            dangerouslySetInnerHTML={{ __html: sanitizeUserHtml(qa.iq_question) }}
-          />
-        )}
-        {!isLocked && qa.iq_answer ? (
-          <div className="mt-3 rounded-md bg-base-200 p-3">
-            <p className="text-sm font-medium">답변</p>
-            <div
-              className="prose prose-sm mt-1 max-w-none text-sm text-muted-foreground"
-              dangerouslySetInnerHTML={{ __html: sanitizeUserHtml(qa.iq_answer) }}
-            />
-          </div>
-        ) : (
-          !isLocked && <p className="mt-3 text-sm text-muted-foreground">답변이 등록되지 않았습니다.</p>
-        )}
-        {(canEdit || canDelete) && (
-          <div className="mt-3 flex justify-end gap-1">
-            {canEdit && (
-              <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(true)}>
-                수정
-              </Button>
+          <>
+            <div className="product-qa-question relative pl-11">
+              <span className="product-qa-mark absolute left-0 top-0 text-lg font-extrabold leading-[1.6]" aria-hidden="true">Q</span>
+              <strong className="sr-only">문의 내용</strong>
+              {isLocked ? (
+                <p className="text-muted-foreground">작성자와 관리자만 내용을 볼 수 있습니다.</p>
+              ) : (
+                <div
+                  className="prose prose-sm max-w-none text-foreground"
+                  dangerouslySetInnerHTML={{ __html: sanitizeUserHtml(qa.iq_question) }}
+                />
+              )}
+            </div>
+            {!isLocked && (
+              <div className="product-qa-answer relative mt-5 bg-muted py-5 pl-16 pr-5">
+                <span className="product-qa-mark absolute left-5 top-5 text-lg font-extrabold leading-[1.6]" aria-hidden="true">A</span>
+                <strong className="sr-only">답변</strong>
+                {isAnswered ? (
+                  <div
+                    className="prose prose-sm max-w-none text-muted-foreground"
+                    dangerouslySetInnerHTML={{ __html: sanitizeUserHtml(qa.iq_answer) }}
+                  />
+                ) : (
+                  <p className="text-muted-foreground">답변이 등록되지 않았습니다.</p>
+                )}
+              </div>
             )}
-            {canDelete && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={handleDelete}
-                disabled={submitting}
-              >
-                삭제
-              </Button>
+            {(canEdit || canDelete) && (
+              <div className="product-qa-cmd mt-3 flex gap-2">
+                {canEdit && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2.5 text-xs"
+                    onClick={() => setEditing(true)}
+                  >
+                    수정
+                  </Button>
+                )}
+                {canDelete && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="product-qa-delete h-7 px-2.5 text-xs"
+                    onClick={handleDelete}
+                    disabled={submitting}
+                  >
+                    삭제
+                  </Button>
+                )}
+              </div>
             )}
-          </div>
+          </>
         )}
       </div>
     </article>

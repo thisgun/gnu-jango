@@ -1,0 +1,40 @@
+/* =====================================================================
+   App fit for the ported Solune shop stylesheets — purchase pages
+   (cart, order form, order result, order history/detail, personal pay).
+
+   Same rules as solune-shop.app.css: keep app-specific shop rules here, not
+   in the ported solune-shop.*.css files, so those stay re-copyable from the
+   reference. Scope every rule under .solune-shop-page.
+   ===================================================================== */
+
+/* --- 장바구니 (app/shop/cart) ------------------------------------------
+   레퍼런스 표 · 합계 막대 · 단추는 solune-shop.cart.css 가 cart-* 손잡이로 입힌다. 여기는 앱에만 있는 것:
+   무료배송 안내 줄과 네이버페이 단추(쇼핑 계속하기 · 주문하기 줄과 같은 폭 · 높이). */
+body[data-g5-theme-source="default"] .solune-shop-page {
+  .cart-free-shipping { color: var(--solune-muted); font-size: 12px; }
+  .cart-naverpay { max-width: 340px; }
+  .cart-naverpay-button { height: 50px; font-size: 14px; font-weight: 600; }
+}
+
+/* 선택사항수정 창(CartOptionDialog) — 상품 옵션 고르기 창과 같은 틀(solune-shop.quick-add.css)이지만 옵션 고르기 칸이
+   없어 "선택된 옵션" 상자가 몸통의 첫 칸이다. 그 상자의 윗여백(옵션 칸과 띄우는 18px)을 걷는다.
+   창은 body 로 떠 있으므로 ported 파일처럼 :has(.solune-shop-page) 로 건다. */
+body[data-g5-theme-source="default"]:has(.solune-shop-page) .product-quick-add-dialog.cart-option-dialog .product-quick-add-body > .product-selected:first-child {
+  margin-top: 0;
+}
+
+/* --- 주문서 (app/shop/order) --------------------------------------------
+   약관 동의는 레퍼런스 주문서에 없는 앱의 구역이다. 오른쪽 결제 덩어리의 다른 상자(결제수단 타일 · 입력칸)와 같은
+   모서리 10px · 옅은 테두리로 맞춘다. */
+body[data-g5-theme-source="default"] .solune-shop-page {
+  .shop-order-section--agree .shop-order-agree-all {
+    border-color: var(--solune-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: var(--solune-surface);
+    color: var(--solune-text);
+    font-size: 14px;
+  }
+  .shop-order-section--agree label { color: var(--solune-text-soft); }
+  .shop-order-section--agree input[type="checkbox"] { accent-color: var(--solune-primary); }
+}

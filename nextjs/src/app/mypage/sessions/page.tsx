@@ -102,7 +102,7 @@ export default function LoginSessionsPage() {
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="h-24 animate-pulse rounded-md border bg-muted/40" />
+              <div key={index} className="skeleton h-24 rounded-md border" />
             ))}
           </div>
         ) : sessions.length === 0 ? (

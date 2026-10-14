@@ -30,12 +30,14 @@ export default function LoginPage() {
   }, []);
 
   return (
-    <Card>
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl">로그인</CardTitle>
-        <CardDescription>계정에 로그인하세요</CardDescription>
+    <Card className="auth-card auth-card--login">
+      <CardHeader className="auth-card-head text-center">
+        {/* CardTitle 은 div 라 페이지 제목(h1)을 따로 둔다 — 레퍼런스와 같다. */}
+        <h1 className="sr-only">로그인</h1>
+        <CardTitle className="auth-card-title text-2xl">로그인</CardTitle>
+        <CardDescription className="auth-card-desc">계정에 로그인하세요</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="auth-card-body">
         <LoginForm redirectAfterLogin={redirectAfterLogin} />
       </CardContent>
     </Card>

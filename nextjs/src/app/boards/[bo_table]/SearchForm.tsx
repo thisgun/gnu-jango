@@ -44,7 +44,9 @@ export function SearchForm({ boTable, sfl, stx, sca }: SearchFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2 mb-6">
+    <form action={g5ShortHref(`/boards/${boTable}`)} method="get" onSubmit={handleSubmit} className="flex gap-2 mb-6">
+      <input type="hidden" name="sfl" value={field} />
+      {sca ? <input type="hidden" name="sca" value={sca} /> : null}
       <Select value={field} onValueChange={setField}>
         <SelectTrigger aria-label="검색 대상" className="w-[140px]">
           <SelectValue />
@@ -57,7 +59,12 @@ export function SearchForm({ boTable, sfl, stx, sca }: SearchFormProps) {
           ))}
         </SelectContent>
       </Select>
+      <label htmlFor={`${boTable}-board-search-query`} className="sr-only">
+        검색어
+      </label>
       <Input
+        id={`${boTable}-board-search-query`}
+        name="stx"
         type="text"
         placeholder="검색어를 입력하세요"
         value={keyword}

@@ -7,6 +7,19 @@ import {
   type PaymentConfig,
 } from "./orderPaymentHelpers";
 
+/*
+ * 결제수단 칸 — 레퍼런스 주문서(#od_pay_sl)의 타일 모양(shop-pay-method). 레퍼런스는 그누보드 설치본 img/ 의
+ * pay_icon*.png 를 칸 왼쪽에 깔지만 이 앱에는 그 그림이 없어, 그림 없는 칸처럼 이름을 가운데 둔다.
+ */
+const TILE_CLASS =
+  "shop-pay-method flex min-h-[58px] min-w-0 items-center justify-center gap-2.5 whitespace-normal break-keep rounded-[9px] border px-3 py-2 text-center text-[0.8125rem] font-medium leading-snug transition-colors";
+
+function tileStateClass(pressed: boolean) {
+  return pressed
+    ? "border-primary bg-primary/5 font-bold text-primary shadow-[inset_0_0_0_1px_var(--color-primary)]"
+    : "border-border hover:border-foreground/40 hover:bg-accent";
+}
+
 type OrderPaymentMethodSectionProps = {
   inputClassName: string;
   paymentMethod: string;
@@ -35,28 +48,32 @@ export function OrderPaymentMethodSection({
   );
 
   return (
-    <section className="box-border w-full min-w-0 rounded-lg border p-4 sm:p-6">
+    <section className="shop-order-section shop-order-section--payment box-border w-full min-w-0 rounded-lg border p-4 sm:p-6">
       <div className="mb-4">
         <h2 className="text-lg font-bold">결제 수단</h2>
       </div>
       {enabledMethods.length > 0 ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
-          {enabledMethods.map((method) => (
-            <button
-              key={method.value}
-              type="button"
-              onClick={() => setPaymentMethod(method.value)}
-              className={`rounded-md border px-3 py-3 text-sm font-medium transition-colors ${
-                paymentMethod === method.value
-                  ? "border-primary bg-primary/5 text-primary"
-                  : "hover:bg-accent"
-              }`}
-            >
-              {method.value === "easy_pay"
+        /* 오른쪽 좁은 칸에 들어가므로 두 칸 격자로 둔다 — 레퍼런스 주문서의 #sod_frm_paysel 과 같다. */
+        <div className="shop-pay-methods grid min-w-0 grid-cols-2 gap-2.5">
+          {enabledMethods.map((method) => {
+            const pressed = paymentMethod === method.value;
+            const label =
+              method.value === "easy_pay"
                 ? easyPayButtonLabel(paymentConfig?.easy_pay_services)
-                : method.label}
-            </button>
-          ))}
+                : method.label;
+            return (
+              <button
+                key={method.value}
+                type="button"
+                onClick={() => setPaymentMethod(method.value)}
+                aria-pressed={pressed}
+                title={label}
+                className={`${TILE_CLASS} ${tileStateClass(pressed)}`}
+              >
+                <span className="shop-pay-method-label min-w-0">{label}</span>
+              </button>
+            );
+          })}
         </div>
       ) : (
         <div className="alert alert-warning py-3 text-sm" role="status">

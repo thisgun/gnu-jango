@@ -1,56 +1,52 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { g5ShortHref } from "@/lib/g5-short-url";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { EmptyState } from "@/components/EmptyState";
+import { Pagination } from "@/components/ui/pagination";
 import { ErrorState } from "@/components/ErrorState";
-import { RecentFilters } from "./RecentFilters";
+import { useAuthStore } from "@/store/auth";
+import { RecentList } from "./RecentList";
+import { RecentSearchPanel } from "./RecentSearchPanel";
 import { getRecentGroups, getRecentItems, type RecentResult } from "@/services/recent";
 import type { RecentGroup } from "@/lib/types";
 
-function formatRecentDate(datetime: string): string {
-  if (!datetime) return "";
-  const date = datetime.substring(0, 10);
-  const today = new Date().toISOString().substring(0, 10);
-  return date === today ? datetime.substring(11, 16) : datetime.substring(5, 10);
-}
+const PAGE_SIZE = 15;
 
+/**
+ * 새글(그누보드 bbs/new.php) — 레퍼런스 app/recent 와 같은 구성: 제목 옆 건수 한 줄, 접히는 상세검색,
+ * 그룹 · 게시판 · 제목 · 이름 · 일시 표와 페이지 넘김을 한 카드에 둔다. 관리자는 선택 삭제를 쓴다.
+ */
 export default function ClientPage() {
   const searchParams = useSearchParams();
-  const view = searchParams.get("view") === "w" || searchParams.get("view") === "c" ? (searchParams.get("view") as "w" | "c") : "";
+  const rawView = searchParams.get("view");
+  const view: "" | "w" | "c" = rawView === "w" || rawView === "c" ? rawView : "";
   const grId = searchParams.get("gr_id") || "";
   const mbId = searchParams.get("mb_id") || "";
   const page = Math.max(1, Number(searchParams.get("page") || "1") || 1);
+  const { user } = useAuthStore();
   const [groups, setGroups] = useState<RecentGroup[]>([]);
   const [result, setResult] = useState<RecentResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const reload = useCallback(() => setReloadKey((value) => value + 1), []);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    setResult(null);
-    Promise.all([
-      getRecentItems({ view, grId, mbId, page, limit: 20 }),
-      getRecentGroups(),
-    ])
+    Promise.all([getRecentItems({ view, grId, mbId, page, limit: PAGE_SIZE }), getRecentGroups()])
       .then(([items, groupList]) => {
-        if (!cancelled) {
-          setResult(items);
-          setGroups(groupList);
-        }
+        if (cancelled) return;
+        setResult(items);
+        setGroups(groupList);
       })
       .catch((err) => {
-        if (!cancelled) {
-          setResult(null);
-          setGroups([]);
-          setError(err instanceof Error ? err.message : "최근글을 불러오지 못했습니다.");
-        }
+        if (cancelled) return;
+        setResult(null);
+        setError(err instanceof Error ? err.message : "새글을 불러오지 못했습니다.");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -58,50 +54,66 @@ export default function ClientPage() {
     return () => {
       cancelled = true;
     };
-  }, [view, grId, mbId, page]);
+  }, [view, grId, mbId, page, reloadKey]);
 
   const items = result?.items ?? [];
   const displayError = error || result?.error || "";
+  const lastPage = Math.max(1, result?.lastPage ?? 1);
 
   return (
-    <div className="container mx-auto space-y-4 px-4 py-6">
-      <Breadcrumb items={[{ label: "전체 게시물" }]} />
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold">전체 게시물</h1>
-        {result && <span className="text-sm text-muted-foreground">총 {result.total.toLocaleString()}건</span>}
+    <div className="recent-page container mx-auto space-y-5 px-4 py-6">
+      <Breadcrumb items={[{ label: "새글" }]} />
+      <div className="recent-head flex flex-wrap items-end justify-between gap-3 border-b pb-4">
+        <h1 className="text-2xl font-bold">새글</h1>
+        {result && (
+          <p className="recent-summary text-sm text-muted-foreground">
+            전체 <strong className="font-bold text-foreground">{result.total.toLocaleString()}</strong>건 ·{" "}
+            {page.toLocaleString()} / {lastPage.toLocaleString()} 페이지
+          </p>
+        )}
       </div>
-      <RecentFilters groups={groups} initialView={view} initialGroup={grId} mbId={mbId} />
-      {displayError && <ErrorState title="전체 게시물을 불러오지 못했습니다" description={displayError} actionHref="/recent" />}
-      {loading && (
-        <p role="status" className="text-sm text-muted-foreground">
-          로딩 중...
-        </p>
+
+      <RecentSearchPanel groups={groups} view={view} grId={grId} mbId={mbId} />
+
+      {displayError && <ErrorState title="새글을 불러오지 못했습니다" description={displayError} actionHref="/recent" />}
+
+      {loading && !result && (
+        <div role="status" aria-label="새글 로딩 중" className="overflow-hidden rounded-lg border">
+          <span className="sr-only">새글 로딩 중</span>
+          <div aria-hidden="true" className="divide-y">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={index} className="flex items-center gap-4 px-4 py-3.5">
+                <div className="skeleton hidden h-4 w-16 rounded md:block" />
+                <div className="skeleton hidden h-4 w-20 rounded md:block" />
+                <div className="skeleton h-4 min-w-0 flex-1 rounded" />
+                <div className="skeleton h-4 w-20 shrink-0 rounded" />
+                <div className="skeleton h-4 w-10 shrink-0 rounded" />
+              </div>
+            ))}
+          </div>
+        </div>
       )}
-      {!loading && result && (
-        <Card>
-          <CardContent className="p-0">
-            {items.length === 0 ? (
-              <EmptyState className="min-h-[160px] border-0" title="표시할 글이 없습니다" />
-            ) : (
-              <table className="w-full text-sm">
-                <tbody>
-                  {items.map((item) => (
-                    <tr key={item.bn_id} className="border-b hover:bg-muted/30">
-                      <td className="px-4 py-3">
-                        <a href={g5ShortHref(item.href)} className="hover:text-primary">
-                          {item.is_comment && <Badge variant="secondary" className="mr-1.5 text-xs">댓글</Badge>}
-                          {item.wr_subject}
-                        </a>
-                      </td>
-                      <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">{item.bo_subject}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{formatRecentDate(item.wr_datetime)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </CardContent>
-        </Card>
+
+      {result && (
+        <RecentList
+          items={items}
+          isAdmin={!!user && user.mb_level >= 10}
+          myMbId={user?.mb_id ?? ""}
+          filtered={Boolean(view || grId || mbId)}
+          onDeleted={reload}
+          footer={
+            lastPage > 1 ? (
+              <div className="recent-pagination flex justify-center border-t px-4 py-4">
+                <Pagination
+                  currentPage={Math.min(page, lastPage)}
+                  totalPages={lastPage}
+                  baseUrl={g5ShortHref("/recent")}
+                  searchParams={{ gr_id: grId || undefined, view: view || undefined, mb_id: mbId || undefined }}
+                />
+              </div>
+            ) : null
+          }
+        />
       )}
     </div>
   );

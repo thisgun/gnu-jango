@@ -1,0 +1,14 @@
+/* Solune shop ("Ondam") index, ported from theme.shop.css. Shop rules are scoped to .solune-shop-page.
+   The reference also imports Swiper CSS here; this app does not use Swiper, so those imports are left out. */
+@import "./solune-shop.tokens.css";
+@import "./solune-shop.shell.css";
+@import "./solune-shop.category.css";
+@import "./solune-shop.home.css";
+@import "./solune-shop.quick-add.css";
+@import "./solune-shop.carousel.css";
+@import "./solune-shop.footer.css";
+@import "./solune-shop.list.css";
+@import "./solune-shop.detail.css";
+@import "./solune-shop.cart.css";
+@import "./solune-shop.coupon.css";
+@import "./solune-shop.order.css";

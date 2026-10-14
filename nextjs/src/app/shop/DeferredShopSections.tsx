@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { ShopProduct } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
-import { ProductGridSection } from "@/components/shop/ProductGridSection";
+import { SHOP_HOME_ROW_LIMIT, ShopProductRow, ShopProductRowSkeleton } from "@/components/shop/ShopProductRow";
 import { getShopProductList } from "@/services/shop";
 import { getClientPublicSettings } from "@/services/settings";
 
@@ -18,9 +18,9 @@ const EMPTY_SECTIONS: ProductSections = {
 };
 
 const LOADING_SECTION_LABELS = [
-  { eyebrow: "NEW ARRIVAL", title: "최신상품" },
-  { eyebrow: "MD PICK", title: "추천상품" },
-  { eyebrow: "SALE", title: "할인상품" },
+  { eyebrow: "NEW ARRIVAL", title: "최신상품", subtitle: "가장 최근에 등록된 상품입니다." },
+  { eyebrow: "MD PICK", title: "추천상품", subtitle: "오래 쓰이는 것으로 골랐습니다." },
+  { eyebrow: "SALE", title: "할인상품", subtitle: "지금 값을 내린 상품입니다." },
 ];
 
 export function DeferredShopSections() {
@@ -33,9 +33,9 @@ export function DeferredShopSections() {
     let alive = true;
 
     Promise.all([
-      getShopProductList({ it_type2: "1", per_page: 8 }),
-      getShopProductList({ it_type3: "1", per_page: 8 }),
-      getShopProductList({ it_type5: "1", per_page: 8 }),
+      getShopProductList({ it_type2: "1", per_page: SHOP_HOME_ROW_LIMIT }),
+      getShopProductList({ it_type3: "1", per_page: SHOP_HOME_ROW_LIMIT }),
+      getShopProductList({ it_type5: "1", per_page: SHOP_HOME_ROW_LIMIT }),
       getClientPublicSettings(),
     ])
       .then(([recommended, latest, discount, settings]) => {
@@ -64,29 +64,11 @@ export function DeferredShopSections() {
 
   if (loading) {
     return (
-      <div aria-label="상품 섹션 로딩 중" className="space-y-8">
+      <>
         {LOADING_SECTION_LABELS.map((section) => (
-          <section key={section.title} className="home-product-section shop-home-product-row">
-            <div className="home-product-head">
-              <div className="space-y-2">
-                <p className="home-product-eyebrow">{section.eyebrow}</p>
-                <div className="h-6 w-32 rounded bg-muted" aria-label={section.title} />
-                <div className="h-4 w-48 rounded bg-muted" />
-              </div>
-              <div className="h-4 w-14 rounded bg-muted" />
-            </div>
-            <div className="scrollbar-hide grid w-full min-w-0 max-w-full grid-flow-col auto-cols-[minmax(132px,37%)] gap-1 overflow-x-auto overscroll-x-contain pb-4 sm:auto-cols-[30%] sm:gap-2 md:auto-cols-[26%] md:gap-4 lg:auto-cols-[16%]">
-              {Array.from({ length: 4 }).map((__, itemIndex) => (
-                <div key={itemIndex} className="space-y-3">
-                  <div className="aspect-square rounded-[8px] bg-muted" />
-                  <div className="h-4 w-3/4 rounded bg-muted" />
-                  <div className="h-4 w-1/2 rounded bg-muted" />
-                </div>
-              ))}
-            </div>
-          </section>
+          <ShopProductRowSkeleton key={section.title} eyebrow={section.eyebrow} title={section.title} subtitle={section.subtitle} />
         ))}
-      </div>
+      </>
     );
   }
 
@@ -108,45 +90,30 @@ export function DeferredShopSections() {
 
   return (
     <>
-      {sections.new.length > 0 && (
-        <ProductGridSection
-          eyebrow="NEW ARRIVAL"
-          title="최신상품"
-          subtitle="가장 최근에 등록된 상품입니다."
-          products={sections.new}
-          viewAllHref="/shop/type-3"
-          viewAllLabel="전체 보기"
-          productRewriteMode={productRewriteMode}
-          scroll
-          compactCarousel
-        />
-      )}
-      {sections.recommended.length > 0 && (
-        <ProductGridSection
-          eyebrow="MD PICK"
-          title="추천상품"
-          subtitle="오래 쓰이는 것으로 골랐습니다."
-          products={sections.recommended}
-          viewAllHref="/shop/type-2"
-          viewAllLabel="전체 보기"
-          productRewriteMode={productRewriteMode}
-          scroll
-          compactCarousel
-        />
-      )}
-      {sections.discount.length > 0 && (
-        <ProductGridSection
-          eyebrow="SALE"
-          title="할인상품"
-          subtitle="지금 값을 내린 상품입니다."
-          products={sections.discount}
-          viewAllHref="/shop/type-5"
-          viewAllLabel="전체 보기"
-          productRewriteMode={productRewriteMode}
-          scroll
-          compactCarousel
-        />
-      )}
+      <ShopProductRow
+        eyebrow="NEW ARRIVAL"
+        title="최신상품"
+        subtitle="가장 최근에 등록된 상품입니다."
+        products={sections.new}
+        viewAllHref="/shop/type-3"
+        productRewriteMode={productRewriteMode}
+      />
+      <ShopProductRow
+        eyebrow="MD PICK"
+        title="추천상품"
+        subtitle="오래 쓰이는 것으로 골랐습니다."
+        products={sections.recommended}
+        viewAllHref="/shop/type-2"
+        productRewriteMode={productRewriteMode}
+      />
+      <ShopProductRow
+        eyebrow="SALE"
+        title="할인상품"
+        subtitle="지금 값을 내린 상품입니다."
+        products={sections.discount}
+        viewAllHref="/shop/type-5"
+        productRewriteMode={productRewriteMode}
+      />
     </>
   );
 }

@@ -731,6 +731,12 @@ SOCIAL_ALLOWED_REDIRECT_SCHEMES = de_config(
 GNUBOARD_CERT_USE = de_config("GNUBOARD_CERT_USE", default="")
 GNUBOARD_CERT_FIND = de_config("GNUBOARD_CERT_FIND", default="")
 GNUBOARD_CERT_REQUIRED = de_config("GNUBOARD_CERT_REQUIRED", default="")
+
+# Per-category post counts on a board list's category chips. Counting groups the whole post table,
+# so it is off by default (as in the reference theme API), skipped for boards above the post limit
+# (0 = no limit), and cached for five minutes.
+BOARD_CATEGORY_COUNTS = bool_config("BOARD_CATEGORY_COUNTS", default=False)
+BOARD_CATEGORY_COUNTS_MAX_POSTS = de_config("BOARD_CATEGORY_COUNTS_MAX_POSTS", default=50000, cast=int)
 GNUBOARD_CERT_SIMPLE = de_config("GNUBOARD_CERT_SIMPLE", default="")
 GNUBOARD_CERT_HP = de_config("GNUBOARD_CERT_HP", default="")
 GNUBOARD_CERT_IPIN = de_config("GNUBOARD_CERT_IPIN", default="")

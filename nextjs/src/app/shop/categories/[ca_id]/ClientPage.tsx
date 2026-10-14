@@ -3,30 +3,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "@bprogress/next/app";
-import { LayoutGrid, List } from "lucide-react";
 import type { ShopCategory, ShopProduct } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
-import { ProductCard } from "@/components/shop/ProductGridSection";
-import { ProductListCard } from "@/components/shop/ProductListCard";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { ShopListHeader } from "@/components/shop/ShopListHeader";
+import { SoluneProductCard } from "@/components/shop/SoluneProductCard";
 import { Button } from "@/components/ui/button";
 import { applyClientPageMetadata } from "@/lib/client-metadata";
 import { g5ShortHref } from "@/lib/g5-short-url";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import { useRuntimeRouteParam } from "@/hooks/use-runtime-route-param";
-import { cn } from "@/lib/utils";
+import { useShopListView } from "@/hooks/useShopListView";
 import { getShopCategoryProductPage } from "@/services/shop";
 import { getClientPublicSettings } from "@/services/settings";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-
-const SORT_OPTIONS = [
-  { value: "popular", label: "판매많은순" },
-  { value: "price_asc", label: "낮은가격순" },
-  { value: "price_desc", label: "높은가격순" },
-  { value: "rating", label: "평점높은순" },
-  { value: "reviews", label: "후기많은순" },
-  { value: "latest", label: "최근등록순" },
-];
 
 function ProductGridSkeleton({ viewMode }: { viewMode: "grid" | "list" }) {
   if (viewMode === "list") {
@@ -79,7 +68,7 @@ export default function CategoryPage() {
   const [subcategories, setSubcategories] = useState<ShopCategory[]>([]);
   const [products, setProducts] = useState<ShopProduct[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [listView, setListView] = useShopListView();
   const [errorMessage, setErrorMessage] = useState("");
   const [productRewriteMode, setProductRewriteMode] = useState<BbsRewriteMode>(0);
   const previousCategoryRef = useRef<string | null>(null);
@@ -210,7 +199,7 @@ export default function CategoryPage() {
       <div>
         <div className="mb-9 mt-8 h-8 w-56 max-w-full animate-pulse rounded bg-muted" />
         <div className="mb-10 h-4 w-36 animate-pulse rounded bg-muted" />
-        <ProductGridSkeleton viewMode={viewMode} />
+        <ProductGridSkeleton viewMode={listView} />
       </div>
     );
   }
@@ -244,88 +233,34 @@ export default function CategoryPage() {
 
   return (
     <div>
-      <h1 className="mb-9 mt-8 text-2xl font-bold">{category.ca_name} 상품리스트</h1>
-      <div className="mb-10">
-        <Breadcrumb items={[{ label: "쇼핑몰", href: "/shop" }, { label: category.ca_name }]} />
-      </div>
-
-      {subcategories.length > 0 && (
-        <div className="mb-4 flex flex-wrap gap-2">
-          {subcategories.map((sub) => (
-            <a key={sub.ca_id} href={g5ShortHref(`/shop/categories/${sub.ca_id}`)} className="filter-chip">
-              {sub.ca_name}
-              {sub.item_count !== undefined && <span className="ml-1">({sub.item_count})</span>}
-            </a>
-          ))}
-        </div>
-      )}
-
-      <div className="mb-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-wrap gap-2" role="group" aria-label="상품 정렬">
-          {SORT_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              aria-pressed={sort === opt.value}
-              onClick={() => updateParams({ sort: sort === opt.value ? "" : opt.value, sortodr: "", page: "1" })}
-              className={cn("btn btn-sm", sort === opt.value ? "btn-primary" : "btn-outline")}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center justify-between gap-3 sm:justify-end">
-          <span className="whitespace-nowrap text-sm text-muted-foreground">총 {meta.total.toLocaleString("ko-KR")}개</span>
-          <div className="flex rounded-[4px] border border-border bg-base-100" role="group" aria-label="상품 보기 방식">
-            <button
-              type="button"
-              aria-label="그리드 보기"
-              aria-pressed={viewMode === "grid"}
-              onClick={() => setViewMode("grid")}
-              className={cn("p-2 transition-colors", viewMode === "grid" ? "bg-primary text-primary-foreground" : "hover:bg-accent")}
-            >
-              <LayoutGrid className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              aria-label="목록 보기"
-              aria-pressed={viewMode === "list"}
-              onClick={() => setViewMode("list")}
-              className={cn("p-2 transition-colors", viewMode === "list" ? "bg-primary text-primary-foreground" : "hover:bg-accent")}
-            >
-              <List className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </div>
+      {/* 레퍼런스 목록 머리: 제목 · 빵부스러기(분류 ▾) · 하위 분류 · 정렬 줄 · 리스트/갤러리 전환. */}
+      <ShopListHeader
+        title={category.ca_name}
+        category={category}
+        subcategories={subcategories}
+        total={meta.total}
+        sort={sort}
+        onSortChange={(value) => updateParams({ sort: sort === value ? "" : value, sortodr: "", page: "1" })}
+        view={listView}
+        onViewChange={setListView}
+      />
 
       {products.length === 0 ? (
         <div className="surface-panel flex flex-col items-center justify-center py-20 text-center">
           <p className="text-lg font-bold text-muted-foreground">이 카테고리에는 상품이 없습니다</p>
         </div>
       ) : (
-        viewMode === "grid" ? (
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+        // 리스트/갤러리 모양은 data-view 를 보고 solune-shop.list.css 가 정한다(카드는 같은 한 장).
+        <div className="shop-product-list grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4" data-view={listView}>
           {products.map((product, index) => (
-            <ProductCard
+            <SoluneProductCard
               key={product.it_id}
               product={product}
               priority={index < 4}
               productRewriteMode={productRewriteMode}
             />
           ))}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {products.map((product) => (
-              <ProductListCard
-                key={product.it_id}
-                product={product}
-                productRewriteMode={productRewriteMode}
-              />
-            ))}
-          </div>
-        )
+        </div>
       )}
 
       {meta.last_page > 1 && (

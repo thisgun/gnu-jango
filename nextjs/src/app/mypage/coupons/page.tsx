@@ -19,8 +19,16 @@ function isExpired(endDate: string): boolean {
   return new Date(endDate) < new Date();
 }
 
+/**
+ * 정률(%) 쿠폰인가 — 영카트 cp_type 1 = 정률, 0 = 정액. cp_method 는 적용 대상(0 상품 · 1 분류 · 2 주문금액 ·
+ * 3 배송비)이라 그것으로 고르면 10% 주문 쿠폰이 "10원 할인", 정액 분류 쿠폰이 "%" 로 보였다.
+ */
+function isPercentCoupon(coupon: Coupon): boolean {
+  return Number(coupon.cp_type ?? 0) === 1;
+}
+
 function formatDiscount(coupon: Coupon): string {
-  if (coupon.cp_method === "1") {
+  if (isPercentCoupon(coupon)) {
     return `${coupon.cp_price}%`;
   }
   return formatPrice(coupon.cp_price);
@@ -28,12 +36,12 @@ function formatDiscount(coupon: Coupon): string {
 
 function CouponCard({ coupon }: { coupon: Coupon }) {
   const expired = isExpired(coupon.cp_end) || coupon.cp_used !== "";
-  const isPercent = coupon.cp_method === "1";
+  const isPercent = isPercentCoupon(coupon);
 
   return (
     <div
       className={cn(
-        "flex overflow-hidden rounded-xl border transition-shadow",
+        "mypage-coupon flex overflow-hidden rounded-xl border transition-shadow",
         expired
           ? "border-muted bg-muted/30 opacity-60"
           : "border-primary/20 bg-background shadow-sm hover:shadow-md"
@@ -42,7 +50,7 @@ function CouponCard({ coupon }: { coupon: Coupon }) {
       {/* Left: Discount value area (ticket stub style) */}
       <div
         className={cn(
-          "flex w-28 flex-shrink-0 flex-col items-center justify-center border-r border-dashed p-4",
+          "mypage-coupon-stub flex w-28 flex-shrink-0 flex-col items-center justify-center border-r border-dashed p-4",
           expired
             ? "border-muted-foreground/20 bg-muted/50"
             : "border-primary/30 bg-primary/5"
@@ -50,7 +58,7 @@ function CouponCard({ coupon }: { coupon: Coupon }) {
       >
         <span
           className={cn(
-            "text-2xl font-extrabold leading-none",
+            "mypage-coupon-amount text-2xl font-extrabold leading-none",
             expired ? "text-muted-foreground" : "text-primary"
           )}
         >
@@ -158,7 +166,7 @@ export default function MyCouponsPage() {
             {[1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="h-20 animate-pulse rounded-xl bg-muted"
+                className="skeleton h-20 rounded-xl"
               />
             ))}
           </div>

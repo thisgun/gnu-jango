@@ -14,6 +14,7 @@ import { ApiError } from "@/lib/api";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import { sanitizeUserHtml } from "@/lib/sanitize";
 import { getMemberProfile } from "@/services/member";
+import { memberAvatarUrl, memberInitial } from "@/lib/member-avatar";
 import { useAuthStore } from "@/store/auth";
 import type { MemberProfile } from "@/lib/types";
 
@@ -101,11 +102,11 @@ export default function ClientPage({ mbId: fallbackMbId }: { mbId: string }) {
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 items-center gap-4">
                   <Avatar className="size-16 border">
-                    {profile.mb_icon_path ? (
-                      <AvatarImage src={profile.mb_icon_path} alt={profile.mb_nick} />
+                    {memberAvatarUrl(profile) ? (
+                      <AvatarImage src={memberAvatarUrl(profile)} alt={profile.mb_nick} />
                     ) : null}
                     <AvatarFallback className="text-lg">
-                      {(profile.mb_nick || profile.mb_id).charAt(0).toUpperCase()}
+                      {memberInitial(profile.mb_nick || profile.mb_id)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0">
@@ -188,10 +189,10 @@ function ProfileSkeleton() {
     <div className="mt-4 space-y-4">
       <Card>
         <CardContent className="flex items-center gap-4 p-5">
-          <div className="size-16 animate-pulse rounded-full bg-muted" />
+          <div className="skeleton size-16 rounded-full" />
           <div className="min-w-0 flex-1 space-y-2">
-            <div className="h-6 w-40 animate-pulse rounded bg-muted" />
-            <div className="h-4 w-28 animate-pulse rounded bg-muted" />
+            <div className="skeleton h-6 w-40 rounded" />
+            <div className="skeleton h-4 w-28 rounded" />
           </div>
         </CardContent>
       </Card>
@@ -199,7 +200,7 @@ function ProfileSkeleton() {
         {[0, 1, 2].map((item) => (
           <Card key={item}>
             <CardContent className="h-[86px] p-4">
-              <div className="h-full animate-pulse rounded bg-muted" />
+              <div className="skeleton h-full rounded" />
             </CardContent>
           </Card>
         ))}

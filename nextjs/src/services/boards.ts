@@ -1,12 +1,13 @@
 import { apiUrl } from "@/lib/config";
 import { fetchApiResult, type ApiResult } from "@/lib/api-response";
 import {
+  boardCategoryCountsSchema,
   boardListSchema,
   boardSchema,
   postDetailSchema,
   writePostListSchema,
 } from "@/lib/schemas";
-import type { Board, Comment, PostFile, WritePost } from "@/lib/types";
+import type { Board, BoardCategoryCounts, Comment, PostFile, WritePost } from "@/lib/types";
 
 export interface PostNavItem {
   wr_id: number;
@@ -55,6 +56,19 @@ export async function getBoard(boTable: string, revalidate = 30): Promise<Board 
   return result.ok ? result.data : null;
 }
 
+/**
+ * Posts per category for the list's category chips. Kept apart from getBoard because it groups the
+ * whole post table; counts is null when the server skips counting (off, or a large board).
+ */
+export async function getBoardCategoryCounts(boTable: string): Promise<BoardCategoryCounts | null> {
+  const result = await fetchApiResult(
+    apiUrl(`/boards/${encodeURIComponent(boTable)}/category-counts`),
+    boardCategoryCountsSchema,
+    { next: { revalidate: 300 } }
+  );
+  return result.ok ? result.data : null;
+}
+
 export async function getBoardPosts({
   boTable,
   page,
@@ -62,6 +76,7 @@ export async function getBoardPosts({
   sfl,
   stx,
   sca,
+  withExcerpt = false,
   revalidate = 30,
 }: {
   boTable: string;
@@ -70,6 +85,8 @@ export async function getBoardPosts({
   sfl?: string;
   stx?: string;
   sca?: string;
+  /** Gallery cards show a two-line excerpt (API ?with=excerpt); other lists leave it off. */
+  withExcerpt?: boolean;
   revalidate?: number;
 }): Promise<{
   list: WritePost[];
@@ -85,10 +102,11 @@ export async function getBoardPosts({
   if (sfl) params.set("sfl", sfl);
   if (stx) params.set("stx", stx);
   if (sca) params.set("sca", sca);
+  if (withExcerpt) params.set("with", "excerpt");
 
   const suffix = params.toString() ? `?${params.toString()}` : "";
   const result = await fetchApiResult(
-    apiUrl(`/boards/${boTable}/posts${suffix}`),
+    apiUrl(`/boards/${encodeURIComponent(boTable)}/posts${suffix}`),
     writePostListSchema,
     { next: { revalidate } }
   );

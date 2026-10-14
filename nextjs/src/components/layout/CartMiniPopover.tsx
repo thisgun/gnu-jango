@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import Image from "next/image";
-import { ShoppingCartIcon } from "lucide-react";
+import { ShoppingBagIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -41,7 +41,8 @@ export function CartMiniPopover() {
           className="solune-shop-cart-trigger relative rounded-full border border-base-300"
           aria-label={`미니 카트 열기${totalQty > 0 ? `, 상품 ${totalQty}개` : ""}`}
         >
-          <ShoppingCartIcon className="size-4" />
+          {/* 레퍼런스 쇼핑 머리글(themes/default/shop-shell.tsx)과 같은 가방 아이콘 */}
+          <ShoppingBagIcon className="size-4" />
           <Badge
             variant="destructive"
             className="solune-shop-cart-count absolute -right-1 -top-1 size-5 items-center justify-center rounded-full p-0 text-[10px]"

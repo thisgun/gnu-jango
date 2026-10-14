@@ -31,7 +31,7 @@ export function OrdererInfoSection({
   openPostcode,
 }: OrdererInfoSectionProps) {
   return (
-    <section className="box-border w-full min-w-0 rounded-lg border p-4 sm:p-6">
+    <section className="shop-order-section shop-order-section--orderer box-border w-full min-w-0 rounded-lg border p-4 sm:p-6">
       <h2 className="mb-4 text-lg font-bold">주문하시는 분</h2>
       <div className="grid min-w-0 gap-4 sm:grid-cols-2">
         <AddressFields

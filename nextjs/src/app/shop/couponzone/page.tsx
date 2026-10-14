@@ -36,6 +36,21 @@ interface CouponZoneEntry {
   downloaded: boolean;
 }
 
+/**
+ * 영카트 cp_method 별 쿠폰 종류(0 개별상품 · 1 카테고리 · 2 주문금액 · 3 배송비). 레퍼런스 API 는 이 한글 이름을
+ * target_label 로 주지만 이 앱의 API 는 "Order discount" 같은 영어 이름을 주므로, 종류 이름은 여기서 정한다.
+ */
+const COUPON_METHOD_LABELS: Record<number, string> = {
+  0: "개별상품할인",
+  1: "카테고리할인",
+  2: "주문금액할인",
+  3: "배송비할인",
+};
+
+function couponKindLabel(zone: CouponZoneEntry): string {
+  return COUPON_METHOD_LABELS[zone.cp_method] || zone.target_label || "주문금액할인";
+}
+
 function isExternalHref(href: string): boolean {
   return /^(?:https?:)?\/\//i.test(href);
 }
@@ -108,7 +123,7 @@ export default function CouponZonePage() {
     }
 
     return (
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="coupon-list grid gap-3 sm:grid-cols-2">
         {items.map((z) => {
           const isPercent = z.cp_type === 1;
           const isPointCoupon = z.cz_type !== 0 && z.cz_point > 0;
@@ -116,15 +131,16 @@ export default function CouponZonePage() {
             ? `${z.cp_price}%`
             : formatPrice(z.cp_price);
           const pointCostText = `${z.cz_point.toLocaleString()}P`;
-          const targetText = z.target_name || z.target_label || "";
+          const kindLabel = couponKindLabel(z);
+          const targetText = z.target_name || kindLabel;
           const targetHref = normalizedCouponTargetHref(z.target_href);
           const targetExternal = targetHref ? isExternalHref(targetHref) : false;
           return (
             <div
               key={z.cz_id}
-              className="flex overflow-hidden rounded-lg border border-primary/20 bg-background shadow-sm transition-shadow hover:shadow-md"
+              className="coupon-card flex overflow-hidden rounded-lg border border-primary/20 bg-background shadow-sm transition-shadow hover:shadow-md"
             >
-              <div className="relative flex w-36 flex-shrink-0 items-center justify-center overflow-hidden border-r border-dashed border-primary/30 bg-primary/5 sm:w-40">
+              <div className="coupon-visual relative flex w-36 flex-shrink-0 items-center justify-center overflow-hidden border-r border-dashed border-primary/30 bg-primary/5 sm:w-40">
                 {z.image_url ? (
                   <img
                     src={z.image_url}
@@ -133,7 +149,7 @@ export default function CouponZonePage() {
                     loading="lazy"
                   />
                 ) : (
-                  <div className="flex h-full min-h-36 w-full flex-col items-center justify-center p-4 text-center">
+                  <div className="coupon-visual-amount flex h-full min-h-36 w-full flex-col items-center justify-center p-4 text-center">
                     <span className="text-2xl font-extrabold leading-none text-primary">
                       {isPercent ? z.cp_price : formatPrice(z.cp_price).replace("원", "")}
                     </span>
@@ -144,17 +160,18 @@ export default function CouponZonePage() {
                 )}
               </div>
 
-              <div className="flex min-w-0 flex-1 flex-col justify-center gap-2 p-4">
-                <div>
-                  <p className="text-xs font-semibold text-primary">
-                    {z.target_label || (z.cp_method === 3 ? "배송비할인" : "주문금액할인")}
+              {/* 줄 배치(사진 · 종류/이름 · 금액 · 조건 · 버튼)는 solune-shop.coupon.css 의 coupon-* 손잡이가 정한다. */}
+              <div className="coupon-body flex min-w-0 flex-1 flex-col justify-center gap-2 p-4">
+                <div className="coupon-head">
+                  <p className="coupon-kind text-xs font-semibold text-primary">
+                    {kindLabel}
                   </p>
-                  <h3 className="mt-1 text-sm font-semibold leading-snug">
+                  <h3 className="coupon-title mt-1 text-sm font-semibold leading-snug">
                     {z.cz_subject}
                   </h3>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <div className="coupon-meta flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   <span className="inline-flex items-center gap-1">
                     <CalendarDays className="h-3 w-3" />
                     다운로드 후 {z.cz_period.toLocaleString()}일
@@ -167,7 +184,8 @@ export default function CouponZonePage() {
                   )}
                   {targetText && (
                     <span className="inline-flex min-w-0 items-center gap-1">
-                      적용:
+                      {/* 적용 대상 이름이 길면 이 글자가 줄어 "적 / 용:" 으로 꺾였다 — 이름 쪽만 말줄임한다. */}
+                      <span className="shrink-0 whitespace-nowrap">적용:</span>
                       {targetHref && targetExternal ? (
                         <a
                           href={targetHref}
@@ -197,8 +215,8 @@ export default function CouponZonePage() {
                   )}
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <span className="text-lg font-extrabold text-primary">
+                <div className="coupon-value flex flex-wrap items-center gap-2 pt-1">
+                  <span className="coupon-value-amount text-lg font-extrabold text-primary">
                     {valueText}
                   </span>
                   {z.cp_maximum > 0 && isPercent && (
@@ -208,7 +226,7 @@ export default function CouponZonePage() {
                   )}
                 </div>
 
-                <div className="pt-1">
+                <div className="coupon-action pt-1">
                   {z.downloaded ? (
                     <Button
                       size="sm"
@@ -242,10 +260,10 @@ export default function CouponZonePage() {
   };
 
   return (
-    <div>
+    <div className="couponzone-page">
       <Breadcrumb items={[{ label: "쇼핑몰", href: "/shop" }, { label: "쿠폰존" }]} />
-      <h1 className="mb-6 text-2xl font-bold">쿠폰존</h1>
-      <p className="mb-6 text-sm text-muted-foreground">
+      <h1 className="couponzone-title mb-6 text-2xl font-bold">쿠폰존</h1>
+      <p className="couponzone-intro mb-6 text-sm text-muted-foreground">
         받기 버튼을 누르면 내 쿠폰함으로 발급됩니다.{" "}
         <Link href="/mypage/coupons" className="text-primary hover:underline">
           보유 쿠폰함 →
@@ -258,7 +276,7 @@ export default function CouponZonePage() {
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 animate-pulse rounded-xl bg-muted" />
+            <div key={i} className="skeleton h-24 rounded-xl" />
           ))}
         </div>
       ) : zones.length === 0 ? (
@@ -268,7 +286,7 @@ export default function CouponZonePage() {
         </div>
       ) : (
         <div className="space-y-8">
-          <section>
+          <section className="coupon-section">
             <h2 className="text-lg font-bold">다운로드 쿠폰</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               회원이시라면 쿠폰 다운로드 후 바로 사용하실 수 있습니다.
@@ -278,7 +296,7 @@ export default function CouponZonePage() {
             </div>
           </section>
 
-          <section>
+          <section className="coupon-section">
             <h2 className="text-lg font-bold">포인트 쿠폰</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               보유하신 회원 포인트를 쿠폰으로 교환하실 수 있습니다.

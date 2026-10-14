@@ -1,130 +1,58 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "@bprogress/next/app";
-import {
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  LockKeyhole,
-  MessageCircleQuestion,
-  Search,
-} from "lucide-react";
 import type { ShopQA } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
 import type { ApiMeta } from "@/lib/api-response";
 import { shopProductHref } from "@/lib/product-url";
-import { htmlToPlainText } from "@/lib/client-metadata";
 import { runtimeRouterPush } from "@/lib/runtime-router";
-import { cn, formatDate, truncate } from "@/lib/utils";
-import { getShopQas } from "@/services/shop";
+import { shopQaListSchema } from "@/lib/schemas";
 import { getClientPublicSettings } from "@/services/settings";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { fetchShopBoardList, parseListPage } from "@/components/shop/shopBoardList";
+import { ShopBoardPagination, ShopBoardSearchForm } from "@/components/shop/ShopBoardListControls";
+import { ShopQaItem } from "./ShopQaItem";
 
-function StatusBadge({ answered }: { answered: boolean }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex h-6 items-center gap-1 rounded-[4px] border px-2 text-xs font-semibold",
-        answered
-          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-          : "border-slate-200 bg-slate-50 text-slate-600"
-      )}
-    >
-      {answered ? <CheckCircle2 className="size-3.5" /> : <Clock3 className="size-3.5" />}
-      {answered ? "답변완료" : "답변대기"}
-    </span>
-  );
-}
+/*
+ * 상품문의 전체 목록 — 그누보드 shop/itemqalist.php(레퍼런스 solune 스킨)과 같은 짜임.
+ *   검색 줄(항목 고르기 · 검색어 · 검색) → "전체 N건 | 전체보기" → 문의 하나가 한 줄인 접는 목록(ShopQaItem) → 쪽 번호.
+ *   예전의 답변 상태 단추(전체 · 답변대기 · 답변완료)는 레퍼런스에 없고, 답변 상태는 줄마다 이름표로 보인다.
+ */
 
-function Pagination({
-  page,
-  lastPage,
-  onPageChange,
-}: {
-  page: number;
-  lastPage: number;
-  onPageChange: (page: number) => void;
-}) {
-  if (lastPage <= 1) return null;
-
-  const pages: number[] = [];
-  const start = Math.max(1, page - 2);
-  const end = Math.min(lastPage, page + 2);
-  for (let next = start; next <= end; next++) pages.push(next);
-
-  return (
-    <div className="mt-8 flex items-center justify-center gap-1">
-      <Button
-        variant="outline"
-        size="icon"
-        disabled={page <= 1}
-        onClick={() => onPageChange(page - 1)}
-        aria-label="이전 페이지"
-      >
-        <ChevronLeft className="size-4" />
-      </Button>
-      {start > 1 && (
-        <>
-          <Button variant="outline" size="sm" onClick={() => onPageChange(1)}>
-            1
-          </Button>
-          {start > 2 && <span className="px-1 text-muted-foreground">...</span>}
-        </>
-      )}
-      {pages.map((next) => (
-        <Button
-          key={next}
-          variant={next === page ? "default" : "outline"}
-          size="sm"
-          onClick={() => onPageChange(next)}
-        >
-          {next}
-        </Button>
-      ))}
-      {end < lastPage && (
-        <>
-          {end < lastPage - 1 && <span className="px-1 text-muted-foreground">...</span>}
-          <Button variant="outline" size="sm" onClick={() => onPageChange(lastPage)}>
-            {lastPage}
-          </Button>
-        </>
-      )}
-      <Button
-        variant="outline"
-        size="icon"
-        disabled={page >= lastPage}
-        onClick={() => onPageChange(page + 1)}
-        aria-label="다음 페이지"
-      >
-        <ChevronRight className="size-4" />
-      </Button>
-    </div>
-  );
-}
+/** 그누보드 itemqalist 의 검색 항목(sfl). 레퍼런스 API 가 같은 이름을 받는다. */
+const SEARCH_FIELDS = [
+  { value: "i.it_name", label: "상품명" },
+  { value: "q.it_id", label: "상품코드" },
+  { value: "q.iq_subject", label: "문의제목" },
+  { value: "q.iq_question", label: "문의내용" },
+  { value: "q.iq_name", label: "작성자명" },
+  { value: "q.mb_id", label: "작성자아이디" },
+] as const;
+const DEFAULT_SEARCH_FIELD: string = SEARCH_FIELDS[0].value;
+const PER_PAGE = 15;
 
 export default function ShopQasPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const page = Math.max(1, Number(searchParams.get("page") || "1"));
-  const query = searchParams.get("q") || "";
-  const status = searchParams.get("status") || "all";
+  const page = parseListPage(searchParams.get("page"));
+  const query = (searchParams.get("q") || searchParams.get("stx") || "").trim();
+  const requestedField = searchParams.get("sfl") || "";
+  const field = SEARCH_FIELDS.some((option) => option.value === requestedField) ? requestedField : DEFAULT_SEARCH_FIELD;
 
   const [items, setItems] = useState<ShopQA[]>([]);
   const [meta, setMeta] = useState<ApiMeta | undefined>();
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
   const [searchText, setSearchText] = useState(query);
+  const [searchField, setSearchField] = useState(field);
   const [productRewriteMode, setProductRewriteMode] = useState<BbsRewriteMode>(0);
 
   useEffect(() => {
     setSearchText(query);
-  }, [query]);
+    setSearchField(field);
+  }, [query, field]);
 
   useEffect(() => {
     let alive = true;
@@ -140,39 +68,39 @@ export default function ShopQasPage() {
     };
   }, []);
 
-  const loadItems = useCallback(async () => {
+  useEffect(() => {
+    // 쪽 · 검색을 빨리 바꾸면 먼저 보낸 느린 응답이 나중 것을 덮지 않게, 지난 요청의 결과는 버린다.
+    let alive = true;
     setLoading(true);
     setErrorMessage("");
-    try {
-      const normalizedStatus =
-        status === "answered" || status === "unanswered" ? status : "all";
-      const result = await getShopQas({
-        page,
-        perPage: 20,
-        q: query,
-        status: normalizedStatus,
+    fetchShopBoardList("/shop/reviews/qna", shopQaListSchema, { page, perPage: PER_PAGE, q: query, sfl: field })
+      .then((result) => {
+        if (!alive) return;
+        setItems(result.items);
+        setMeta(result.meta);
+      })
+      .catch((err: unknown) => {
+        if (!alive) return;
+        setItems([]);
+        setMeta(undefined);
+        setErrorMessage(err instanceof Error ? err.message : "상품문의를 불러오지 못했습니다.");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
       });
-      setItems(result.items);
-      setMeta(result.meta);
-    } catch (err: unknown) {
-      setItems([]);
-      setMeta(undefined);
-      setErrorMessage(err instanceof Error ? err.message : "상품문의 목록을 불러오지 못했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  }, [page, query, status]);
-
-  useEffect(() => {
-    loadItems();
-  }, [loadItems]);
+    return () => {
+      alive = false;
+    };
+  }, [page, query, field]);
 
   const baseParams = useMemo(() => {
     const params = new URLSearchParams();
-    if (query) params.set("q", query);
-    if (status !== "all") params.set("status", status);
+    if (query) {
+      params.set("sfl", field);
+      params.set("q", query);
+    }
     return params;
-  }, [query, status]);
+  }, [field, query]);
 
   function moveTo(params: URLSearchParams) {
     runtimeRouterPush(router, `/shop/qas${params.toString() ? `?${params}` : ""}`);
@@ -182,15 +110,10 @@ export default function ShopQasPage() {
     event.preventDefault();
     const params = new URLSearchParams();
     const nextQuery = searchText.trim();
-    if (nextQuery) params.set("q", nextQuery);
-    if (status !== "all") params.set("status", status);
-    moveTo(params);
-  }
-
-  function setStatus(nextStatus: string) {
-    const params = new URLSearchParams();
-    if (query) params.set("q", query);
-    if (nextStatus !== "all") params.set("status", nextStatus);
+    if (nextQuery) {
+      params.set("sfl", searchField);
+      params.set("q", nextQuery);
+    }
     moveTo(params);
   }
 
@@ -200,125 +123,58 @@ export default function ShopQasPage() {
     moveTo(params);
   }
 
-  const totalLabel = meta
-    ? `총 ${meta.total?.toLocaleString() ?? 0}건`
-    : loading
-      ? ""
-      : "총 0건";
+  const total = meta?.total ?? 0;
 
   return (
-    <div className="space-y-6">
-      <Breadcrumb items={[{ label: "쇼핑몰", href: "/shop" }, { label: "상품문의" }]} />
-      <div className="flex flex-col gap-4 border-b pb-5 md:flex-row md:items-end md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">상품문의</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            영카트 상품문의 전체 목록입니다.
-          </p>
-        </div>
-        <form className="flex gap-2" onSubmit={submitSearch}>
-          <Input
-            value={searchText}
-            onChange={(event) => setSearchText(event.target.value)}
-            placeholder="상품명, 제목, 내용"
-            className="h-9 w-full md:w-72"
-          />
-          <Button type="submit" size="sm" variant="outline">
-            <Search className="size-4" />
-            검색
-          </Button>
-        </form>
-      </div>
+    <div className="shop-qas-page pt-6 md:pt-10">
+      <h1 className="mb-6 text-[28px] font-bold tracking-tight">상품문의</h1>
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="min-h-5 text-sm text-muted-foreground">
-          {totalLabel}
-        </div>
-        <div className="flex gap-2">
-          {[
-            ["all", "전체"],
-            ["unanswered", "답변대기"],
-            ["answered", "답변완료"],
-          ].map(([value, label]) => (
-            <Button
-              key={value}
-              type="button"
-              size="sm"
-              variant={status === value ? "default" : "outline"}
-              onClick={() => setStatus(value)}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
+      <ShopBoardSearchForm
+        idPrefix="shop-qa"
+        className="shop-qas-search"
+        fields={SEARCH_FIELDS}
+        field={searchField}
+        text={searchText}
+        onFieldChange={setSearchField}
+        onTextChange={setSearchText}
+        onSubmit={submitSearch}
+      />
+
+      <div className="mb-4 flex min-h-5 flex-wrap items-center justify-between gap-x-3 gap-y-2 text-sm text-muted-foreground">
+        <span>
+          {meta ? (
+            <>
+              {query ? "검색 결과" : "전체"}{" "}
+              <strong className="font-medium tabular-nums text-foreground">{total.toLocaleString()}</strong>건
+            </>
+          ) : null}
+        </span>
+        <Link href="/shop/qas" className="underline underline-offset-[3px] hover:text-primary">
+          전체보기
+        </Link>
       </div>
 
       {loading ? (
-        <div className="space-y-3">
+        <ul className="flex flex-col gap-2.5">
           {Array.from({ length: 6 }).map((_, index) => (
-            <div key={index} className="h-32 animate-pulse rounded-[4px] border bg-muted" />
+            <li key={index} className="skeleton h-20 rounded-xl border" />
           ))}
-        </div>
+        </ul>
       ) : errorMessage ? (
-        <div className="rounded-[4px] border border-destructive/30 bg-destructive/5 py-16 text-center text-sm text-destructive">
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 py-16 text-center text-sm text-destructive">
           {errorMessage}
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-[4px] border py-16 text-center text-muted-foreground">
-          등록된 상품문의가 없습니다.
-        </div>
+        <p className="py-16 text-center text-[13px] text-muted-foreground">자료가 없습니다.</p>
       ) : (
-        <div className="divide-y rounded-[4px] border">
-          {items.map((item) => {
-            const canView = item.can_view !== false;
-            const answered = Boolean(item.is_answered || item.iq_answer);
-            const question = canView
-              ? truncate(htmlToPlainText(item.iq_question), 180)
-              : "비밀글은 작성자와 관리자만 확인할 수 있습니다.";
-            const answer = canView ? truncate(htmlToPlainText(item.iq_answer || ""), 160) : "";
-
-            return (
-              <article key={item.iq_id} className="p-4 md:p-5">
-                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                  <div className="min-w-0">
-                    <Link
-                      href={shopProductHref(item, productRewriteMode)}
-                      className="text-sm font-medium text-primary hover:underline"
-                    >
-                      {item.it_name || item.it_id}
-                    </Link>
-                    <h2 className="mt-1 flex items-center gap-2 text-base font-bold">
-                      {item.iq_secret ? <LockKeyhole className="size-4 shrink-0 text-muted-foreground" /> : null}
-                      <span className="line-clamp-1">{item.iq_subject}</span>
-                    </h2>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <StatusBadge answered={answered} />
-                    <span className="text-xs text-muted-foreground">{formatDate(item.iq_time)}</span>
-                  </div>
-                </div>
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
-                  {question}
-                </p>
-                {answer ? (
-                  <div className="mt-3 rounded-[4px] border border-emerald-100 bg-emerald-50/60 p-3 text-sm leading-6 text-emerald-900">
-                    <div className="mb-1 flex items-center gap-1.5 font-semibold">
-                      <MessageCircleQuestion className="size-4" />
-                      답변
-                    </div>
-                    {answer}
-                  </div>
-                ) : null}
-                <div className="mt-3 text-xs text-muted-foreground">
-                  작성자 {item.mb_nick || item.iq_name}
-                </div>
-              </article>
-            );
-          })}
-        </div>
+        <ol className="flex flex-col gap-2.5">
+          {items.map((item) => (
+            <ShopQaItem key={item.iq_id} item={item} productHref={shopProductHref(item, productRewriteMode)} />
+          ))}
+        </ol>
       )}
 
-      <Pagination page={page} lastPage={meta?.last_page ?? 1} onPageChange={goToPage} />
+      <ShopBoardPagination page={page} lastPage={meta?.last_page ?? 1} onPageChange={goToPage} />
     </div>
   );
 }

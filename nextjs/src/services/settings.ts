@@ -16,7 +16,28 @@ export function getPublicSettings(revalidate = 60): Promise<PublicSettings> {
   });
 }
 
-export async function getClientPublicSettings(): Promise<PublicSettings> {
-  const response = await apiClient.get<unknown>("/settings");
-  return validateApiData(response.data, publicSettingsSchema, DEFAULT_PUBLIC_SETTINGS);
+/** The page and the community rail both read these switches — share one request for a minute. */
+const CLIENT_SETTINGS_TTL_MS = 60_000;
+let clientSettings: { at: number; request: Promise<PublicSettings> } | null = null;
+
+export function getClientPublicSettings(): Promise<PublicSettings> {
+  const now = Date.now();
+  if (clientSettings && now - clientSettings.at < CLIENT_SETTINGS_TTL_MS) {
+    return clientSettings.request;
+  }
+  const request = apiClient
+    .get<unknown>("/settings")
+    .then((response) => {
+      const settings = validateApiData(response.data, publicSettingsSchema, DEFAULT_PUBLIC_SETTINGS);
+      // A response that failed validation falls back to the defaults; don't keep that for the next callers.
+      if (settings === DEFAULT_PUBLIC_SETTINGS && clientSettings === entry) clientSettings = null;
+      return settings;
+    });
+  const entry = { at: now, request };
+  clientSettings = entry;
+  // A failed request is not reused: the next caller asks again.
+  request.catch(() => {
+    if (clientSettings === entry) clientSettings = null;
+  });
+  return request;
 }

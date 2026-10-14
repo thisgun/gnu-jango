@@ -73,7 +73,7 @@ export default function MyScrapsPage() {
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="h-16 animate-pulse rounded-md bg-muted" />
+              <div key={index} className="skeleton h-16 rounded-md" />
             ))}
           </div>
         ) : items.length === 0 ? (

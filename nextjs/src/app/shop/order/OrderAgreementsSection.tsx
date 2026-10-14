@@ -18,10 +18,10 @@ export function OrderAgreementsSection({
   handleAgreeAll,
 }: OrderAgreementsSectionProps) {
   return (
-    <section className="box-border w-full min-w-0 rounded-lg border p-4 sm:p-6">
+    <section className="shop-order-section shop-order-section--agree box-border w-full min-w-0 rounded-lg border p-4 sm:p-6">
       <h2 className="mb-4 text-lg font-bold">약관 동의</h2>
       <div className="space-y-3">
-        <label className="flex items-center gap-2 rounded-md border p-3 font-medium">
+        <label className="shop-order-agree-all flex items-center gap-2 rounded-md border p-3 font-medium">
           <input
             type="checkbox"
             checked={agreeAll}

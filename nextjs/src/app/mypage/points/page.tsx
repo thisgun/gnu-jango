@@ -106,7 +106,7 @@ export default function MyPointsPage() {
               {Array.from({ length: 5 }, (_, i) => (
                 <div
                   key={i}
-                  className="h-12 animate-pulse rounded-lg bg-muted"
+                  className="skeleton h-12 rounded-lg"
                 />
               ))}
             </div>

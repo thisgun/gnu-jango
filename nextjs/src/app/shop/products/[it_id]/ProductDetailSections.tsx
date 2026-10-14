@@ -88,9 +88,10 @@ export function ProductImageGallery({
     setFailedImages((current) => ({ ...current, [image]: true }));
   };
 
+  // 이름(product-gallery*)은 레퍼런스 앱과 같다 — 테마 CSS 가 큰 사진 모서리 16, 썸네일은 폭을 넷으로 나눈 네모로 그린다.
   return (
-    <div>
-      <div className="relative aspect-square overflow-hidden rounded-lg bg-muted">
+    <div className="product-gallery">
+      <div className="product-gallery-main relative aspect-square overflow-hidden rounded-lg bg-muted">
         {selectedSrc && !failedImages[selectedSrc] ? (
           <button
             type="button"
@@ -147,7 +148,7 @@ export function ProductImageGallery({
         )}
       </div>
       {images.length > 1 && (
-        <div className="mt-3 flex gap-2 overflow-x-auto">
+        <div className="product-gallery-thumbs mt-3 flex gap-2 overflow-x-auto">
           {images.map((image, index) => (
             <button
               key={`${product.it_id}-${image || index}`}
@@ -156,7 +157,7 @@ export function ProductImageGallery({
               aria-label={`${index + 1}번 상품 이미지 보기`}
               aria-current={index === selectedImage ? "true" : undefined}
               className={cn(
-                "relative h-[82px] w-[82px] flex-shrink-0 overflow-hidden rounded-md border-2",
+                "relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-md border-2",
                 index === selectedImage ? "border-primary" : "border-transparent"
               )}
             >
@@ -166,7 +167,7 @@ export function ProductImageGallery({
                   alt={`${product.it_name} ${index + 1}`}
                   fill
                   className="object-cover"
-                  sizes="82px"
+                  sizes="(max-width: 768px) 25vw, 180px"
                   unoptimized={shouldBypassImageOptimization(image)}
                   onError={() => markImageFailed(image)}
                 />
@@ -242,9 +243,9 @@ export function RelatedProducts({
   if (!items || items.length === 0) return null;
 
   return (
-    <section className="mt-12 border-t pt-8">
-      <h2 className="mb-6 text-xl font-bold">관련 상품</h2>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+    <section className="product-related mt-12 border-t pt-8">
+      <h2 className="product-related-title mb-6 text-xl font-bold">관련 상품</h2>
+      <div className="product-related-grid grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
         {items.map((item) => (
           <ProductGridCard
             key={item.it_id}
@@ -271,9 +272,9 @@ export function RecentlyViewed({
   if (filtered.length === 0) return null;
 
   return (
-    <section className="mt-12 border-t pt-8">
-      <h2 className="mb-6 text-xl font-bold">최근 본 상품</h2>
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+    <section className="product-related product-recent mt-12 border-t pt-8">
+      <h2 className="product-related-title mb-6 text-xl font-bold">최근 본 상품</h2>
+      <div className="product-related-grid grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
         {filtered.map((item) => (
           <ProductGridCard key={item.it_id} item={item} productRewriteMode={productRewriteMode} />
         ))}

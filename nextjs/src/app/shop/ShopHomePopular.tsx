@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { EmptyState } from "@/components/EmptyState";
-import { ProductGridSection } from "@/components/shop/ProductGridSection";
+import { SHOP_HOME_ROW_LIMIT, ShopProductRow, ShopProductRowSkeleton } from "@/components/shop/ShopProductRow";
 import type { ShopProduct } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
 import { getShopProductList } from "@/services/shop";
@@ -18,7 +18,7 @@ export function ShopHomePopular() {
     let alive = true;
 
     Promise.all([
-      getShopProductList({ it_type4: "1", per_page: 8 }),
+      getShopProductList({ it_type4: "1", per_page: SHOP_HOME_ROW_LIMIT }),
       getClientPublicSettings(),
     ])
       .then(([popular, settings]) => {
@@ -43,28 +43,7 @@ export function ShopHomePopular() {
 
   if (loading) {
     return (
-      <section className="home-product-section shop-home-product-row shop-home-popular-section" aria-label="많이 보고 계신 상품 로딩 중">
-        <div className="home-product-head">
-          <div>
-            <p className="home-product-eyebrow">POPULAR</p>
-            <div className="h-6 w-28 rounded bg-muted" />
-          </div>
-          <div className="flex shrink-0 items-center gap-1">
-            <div className="size-9 border border-base-300 bg-base-100" />
-            <div className="size-9 border border-base-300 bg-base-100" />
-            <div className="ml-1 h-4 w-14 rounded bg-muted" />
-          </div>
-        </div>
-        <div className="scrollbar-hide grid w-full min-w-0 max-w-full grid-flow-col auto-cols-[minmax(132px,37%)] gap-1 overflow-x-auto overscroll-x-contain pb-4 sm:auto-cols-[30%] sm:gap-2 md:auto-cols-[26%] md:gap-4 lg:auto-cols-[16%]">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="space-y-3">
-              <div className="aspect-square rounded-[8px] bg-muted" />
-              <div className="h-4 w-3/4 rounded bg-muted" />
-              <div className="h-4 w-1/2 rounded bg-muted" />
-            </div>
-          ))}
-        </div>
-      </section>
+      <ShopProductRowSkeleton eyebrow="POPULAR" title="많이 보고 계신 상품" peek={false} className="shop-home-popular-section" />
     );
   }
 
@@ -83,16 +62,14 @@ export function ShopHomePopular() {
   }
 
   return (
-    <ProductGridSection
+    <ShopProductRow
       eyebrow="POPULAR"
       title="많이 보고 계신 상품"
       products={products}
       viewAllHref="/shop/type-4"
-      viewAllLabel="전체 보기"
       productRewriteMode={productRewriteMode}
-      scroll
-      compactCarousel
-      className="home-product-section shop-home-popular-section"
+      peek={false}
+      className="shop-home-popular-section"
     />
   );
 }

@@ -62,8 +62,8 @@ export default function MemoDetailPage() {
   if (loading) {
     return (
       <div className="space-y-4">
-        <div className="h-8 w-40 animate-pulse rounded bg-muted" />
-        <div className="h-56 animate-pulse rounded-lg bg-muted" />
+        <div className="skeleton h-8 w-40 rounded" />
+        <div className="skeleton h-56 rounded-lg" />
       </div>
     );
   }

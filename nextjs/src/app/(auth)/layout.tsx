@@ -7,8 +7,9 @@ export const metadata: Metadata = {
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-center min-h-[calc(100vh-8rem)] py-12 px-4">
-      <div className="w-full max-w-md">
+    // auth-page · auth-shell: 레퍼런스와 같은 손잡이 — solune-theme.internal-pages.css 가 폭(536 · 회원가입 640)과 카드 모양을 정한다.
+    <div className="auth-page flex items-center justify-center min-h-[calc(100vh-8rem)] py-12 px-4">
+      <div className="auth-shell w-full max-w-md">
         <RedirectIfAuthenticated>{children}</RedirectIfAuthenticated>
       </div>
     </div>

@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { buildPageMetadata } from "@/lib/seo";
 
 export const metadata: Metadata = buildPageMetadata({
-  title: "상품 문의",
-  description: "상품 문의와 답변을 확인하세요.",
+  title: "상품문의",
+  description: "쇼핑몰 상품문의와 답변 상태를 확인하세요.",
   path: "/shop/qas",
 });
 

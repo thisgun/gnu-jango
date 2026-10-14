@@ -44,7 +44,7 @@ export default function RegisterResultPage() {
   }, []);
 
   return (
-    <main className="flex min-h-[calc(100vh-8rem)] items-center justify-center px-4 py-12">
+    <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center px-4 py-12">
       <Card className="w-full max-w-xl">
         <CardHeader className="text-center">
           <div className="mx-auto mb-3 flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -123,6 +123,6 @@ export default function RegisterResultPage() {
           </Button>
         </CardFooter>
       </Card>
-    </main>
+    </div>
   );
 }

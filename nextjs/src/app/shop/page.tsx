@@ -22,10 +22,11 @@ export default async function ShopHomePage() {
   ]);
 
   return (
-    <div className="shop-home-page -mt-4">
+    // 좌우 여백은 쇼핑몰 레이아웃의 .solune-shop-container 가 준다. 배너는 화면 폭(w-screen)으로 그 밖까지 편다.
+    <div className="shop-home-page">
       <ShopHomeBanners banners={banners} />
       <ShopHomeCategories categories={categories} />
-      <div className="site-container px-0 pb-8 sm:px-2 lg:px-4">
+      <div className="site-container px-0 pb-8">
         <ShopHomeHit />
         <DeferredShopSections />
         <ShopHomePopular />

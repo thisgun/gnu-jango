@@ -4,11 +4,10 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { apiClient } from "@/lib/api";
 import type { WritePost } from "@/lib/types";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { formatDate, formatNumber } from "@/lib/utils";
-import { Loader2, LockKeyhole } from "lucide-react";
-import { MemberSideview } from "@/components/MemberSideview";
-import { boardPostHref, type BbsRewriteMode } from "@/lib/board-url";
+import { Loader2 } from "lucide-react";
+import { useVisitedPosts } from "@/hooks/useVisitedPosts";
+import type { BbsRewriteMode } from "@/lib/board-url";
+import { PostListRow } from "./PostListRow";
 
 interface InfinitePostListProps {
   boTable: string;
@@ -23,6 +22,10 @@ interface InfinitePostListProps {
   bbsRewriteMode?: BbsRewriteMode;
   listQuery?: string;
   initialPage?: number;
+  boNew?: number;
+  boHot?: number;
+  /** 글보기 아래 목록일 때 지금 읽고 있는 글 */
+  currentWrId?: number;
 }
 
 export function InfinitePostList({
@@ -38,7 +41,11 @@ export function InfinitePostList({
   bbsRewriteMode,
   listQuery,
   initialPage = 1,
+  boNew,
+  boHot,
+  currentWrId,
 }: InfinitePostListProps) {
+  const { isVisited } = useVisitedPosts();
   const [posts, setPosts] = useState<WritePost[]>(initialPosts);
   const [notices, setNotices] = useState<WritePost[]>(initialNotices);
   const [page, setPage] = useState(initialPage);
@@ -87,98 +94,48 @@ export function InfinitePostList({
   }, [loadMore]);
 
   return (
-    <Card>
+    <Card className="board-list-card">
       <CardContent className="p-0">
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed text-sm">
-            <colgroup>
-              <col className="w-12 md:w-16" />
-              <col />
-              <col className="hidden md:table-column md:w-32" />
-              <col className="hidden md:table-column md:w-28" />
-              <col className="hidden md:table-column md:w-20" />
-            </colgroup>
+          <table className="board-list-table w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/50">
-                <th className="px-2 py-3 text-left w-12 md:w-16 md:px-4">번호</th>
-                <th className="px-4 py-3 text-left">제목</th>
-                <th className="px-4 py-3 text-left w-32 hidden md:table-cell">글쓴이</th>
-                <th className="px-4 py-3 text-center w-28 hidden md:table-cell whitespace-nowrap">날짜</th>
-                <th className="px-4 py-3 text-center w-20 hidden md:table-cell">조회</th>
+                <th className="board-col-num px-4 py-3 text-left w-16">번호</th>
+                <th className="board-col-subject px-4 py-3 text-left">제목</th>
+                <th className="board-col-author px-4 py-3 text-left w-24 hidden md:table-cell">글쓴이</th>
+                <th className="board-col-hit px-4 py-3 text-center w-16 hidden lg:table-cell">조회</th>
+                <th className="board-col-date px-4 py-3 text-center w-28 hidden md:table-cell whitespace-nowrap">날짜</th>
               </tr>
             </thead>
             <tbody>
               {notices.map((post) => (
-                <tr
+                <PostListRow
                   key={`notice-${post.wr_id}`}
-                  className="border-b bg-primary/5 hover:bg-primary/10 transition-colors"
-                >
-                  <td className="px-4 py-3">
-                    <Badge variant="default" className="text-xs">공지</Badge>
-                  </td>
-                  <td className="px-4 py-3">
-                    <a
-                      href={boardPostHref(boTable, post, bbsRewriteMode, listQuery)}
-                      className="hover:text-primary transition-colors font-medium"
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        {post.ca_name && <Badge variant="secondary" className="shrink-0 text-xs">{post.ca_name}</Badge>}
-                        {post.is_secret && <LockKeyhole className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
-                        <span className="flex min-w-0 flex-1 items-center gap-1">
-                          <span className="min-w-0 truncate">{post.wr_subject}</span>
-                          {post.wr_comment > 0 && <Badge variant="outline" className="shrink-0 border-transparent bg-primary/10 px-1 text-xs text-primary">{post.wr_comment}</Badge>}
-                        </span>
-                      </span>
-                    </a>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                    <MemberSideview
-                      mbId={post.mb_id}
-                      name={post.mb_nick || post.wr_name}
-                      email={post.wr_email}
-                      homepage={post.wr_homepage}
-                      iconUrl={post.mb_icon_path}
-                      boTable={boTable}
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-center text-muted-foreground hidden md:table-cell whitespace-nowrap">{formatDate(post.wr_datetime)}</td>
-                  <td className="px-4 py-3 text-center text-muted-foreground hidden md:table-cell whitespace-nowrap">{formatNumber(post.wr_hit)}</td>
-                </tr>
+                  post={post}
+                  boTable={boTable}
+                  boNew={boNew}
+                  boHot={boHot}
+                  isVisited={isVisited(boTable, post.wr_id)}
+                  isCurrent={post.wr_id === currentWrId}
+                  bbsRewriteMode={bbsRewriteMode}
+                  listQuery={listQuery}
+                />
               ))}
 
               {posts.map((post, idx) => (
-                <tr key={post.wr_id} className="border-b hover:bg-muted/50 transition-colors">
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {listNumStart - idx}
-                  </td>
-                  <td className="px-4 py-3">
-                    <a
-                      href={boardPostHref(boTable, post, bbsRewriteMode, listQuery)}
-                      className="hover:text-primary transition-colors"
-                    >
-                      <span className="flex min-w-0 items-center gap-2">
-                        {post.ca_name && <Badge variant="secondary" className="shrink-0 text-xs">{post.ca_name}</Badge>}
-                        {post.is_secret && <LockKeyhole className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
-                        <span className="flex min-w-0 flex-1 items-center gap-1">
-                          <span className="min-w-0 truncate">{post.wr_subject}</span>
-                          {post.wr_comment > 0 && <Badge variant="outline" className="shrink-0 border-transparent bg-primary/10 px-1 text-xs text-primary">{post.wr_comment}</Badge>}
-                        </span>
-                      </span>
-                    </a>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
-                    <MemberSideview
-                      mbId={post.mb_id}
-                      name={post.mb_nick || post.wr_name}
-                      email={post.wr_email}
-                      homepage={post.wr_homepage}
-                      iconUrl={post.mb_icon_path}
-                      boTable={boTable}
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-center text-muted-foreground hidden md:table-cell whitespace-nowrap">{formatDate(post.wr_datetime)}</td>
-                  <td className="px-4 py-3 text-center text-muted-foreground hidden md:table-cell whitespace-nowrap">{formatNumber(post.wr_hit)}</td>
-                </tr>
+                <PostListRow
+                  key={post.wr_id}
+                  post={post}
+                  boTable={boTable}
+                  number={listNumStart - idx}
+                  boNew={boNew}
+                  boHot={boHot}
+                  isVisited={isVisited(boTable, post.wr_id)}
+                  isCurrent={post.wr_id === currentWrId}
+                  bbsRewriteMode={bbsRewriteMode}
+                  listQuery={listQuery}
+                  keyboardNavRow
+                />
               ))}
 
               {posts.length === 0 && notices.length === 0 && (

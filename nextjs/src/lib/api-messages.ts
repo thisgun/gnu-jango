@@ -22,6 +22,7 @@ const API_MESSAGES: Record<string, string> = {
   "Invalid or expired refresh token.": "로그인이 만료되었습니다. 다시 로그인해 주세요.",
   "The anti-spam code is incorrect or expired.": "자동등록방지 문자가 올바르지 않거나 만료되었습니다.",
   "Board not found.": "게시판을 찾을 수 없습니다.",
+  "You do not have permission to list this board.": "이 게시판의 목록을 볼 권한이 없습니다.",
   "Post not found.": "게시글을 찾을 수 없습니다.",
   "You do not have permission to comment on this board.": "이 게시판에는 댓글을 쓸 권한이 없습니다.",
   "Comment content is required.": "댓글 내용을 입력해 주세요.",

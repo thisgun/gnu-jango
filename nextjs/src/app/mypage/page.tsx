@@ -167,42 +167,49 @@ export default function MyPageDashboard() {
       title: "주문 내역",
       count: counts.orders,
       icon: ShoppingBag,
+      color: "text-blue-600",
     },
     {
       href: "/mypage/wishlist",
       title: "위시리스트",
       count: counts.wishlist,
       icon: Heart,
+      color: "text-red-600",
     },
     {
       href: "/mypage/scraps",
       title: "스크랩",
       count: counts.scraps,
       icon: Bookmark,
+      color: "text-cyan-600",
     },
     {
       href: "/mypage/posts",
       title: "내 게시글",
       count: counts.posts,
       icon: FileText,
+      color: "text-green-700",
     },
     {
       href: "/mypage/comments",
       title: "내 댓글",
       count: counts.comments,
       icon: MessageSquare,
+      color: "text-purple-600",
     },
     {
       href: "/mypage/addresses",
       title: "배송지",
       count: counts.addresses,
       icon: MapPin,
+      color: "text-amber-700",
     },
     {
       href: "/mypage/points",
       title: "포인트",
       count: user?.mb_point ?? 0,
       icon: Coins,
+      color: "text-yellow-600",
       suffix: "점",
     },
     {
@@ -210,6 +217,7 @@ export default function MyPageDashboard() {
       title: "사용 가능 쿠폰",
       count: counts.coupons,
       icon: Ticket,
+      color: "text-orange-600",
     },
   ];
 
@@ -217,16 +225,17 @@ export default function MyPageDashboard() {
     <div className="space-y-6">
       <h2 className="text-xl font-bold">대시보드</h2>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {/* 레퍼런스 대시보드의 mypage-stats · mypage-stat-card 손잡이 — 숫자 카드마다 제 색 아이콘. */}
+      <div className="mypage-stats grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards.map((card) => {
           const Icon = card.icon;
           return (
             <Link key={card.href} href={card.href}>
-              <Card className="border-base-300 bg-base-100 transition-shadow hover:shadow-md">
+              <Card className="mypage-stat-card transition-shadow hover:shadow-md">
                 <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center justify-between text-sm font-medium text-base-content/70">
+                  <CardTitle className="flex items-center justify-between text-sm font-medium text-muted-foreground">
                     {card.title}
-                    <Icon className="h-5 w-5 text-primary" aria-hidden="true" />
+                    <Icon className={`h-5 w-5 ${card.color}`} aria-hidden="true" />
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -280,7 +289,7 @@ export default function MyPageDashboard() {
                     return (
                       <tr key={order.od_id}>
                         <th scope="row">
-                          <Link className="link link-hover font-mono" href={`/shop/orders/${encodeURIComponent(order.od_id)}`}>
+                          <Link className="link link-hover whitespace-nowrap font-mono" href={`/shop/orders/${encodeURIComponent(order.od_id)}`}>
                             {order.od_id}
                           </Link>
                         </th>

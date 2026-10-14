@@ -1,7 +1,11 @@
+import html
 import os
+import re
 import uuid
 from urllib.parse import quote, unquote, urlsplit
 
+from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import SuspiciousFileOperation, ValidationError as DjangoValidationError
 from django.core.files.storage import default_storage
 from django.db import transaction
@@ -23,7 +27,7 @@ from gnu_jango.bbs.models import Board, Comment, Post, Post_file, Post_good, Pos
 from gnu_jango.core.legacy_assets import legacy_area_roots
 from gnu_jango.bbs.utils import get_next_num
 from gnu_jango.utils.lib import check_password, get_client_ip, get_encrypt_string
-from gnu_jango.utils.users import get_user_level
+from gnu_jango.utils.users import get_user_level, is_admin as gnu_is_admin
 from gnu_jango.users import point_ledger
 
 from .access import listable_post_queryset, readable_post_queryset, secret_post_session_key
@@ -860,6 +864,92 @@ def board_detail_view(request, bo_table):
     return api_response(data=_board_payload(board))
 
 
+POST_EXCERPT_LENGTH = 70
+_EXCERPT_BREAK_RE = re.compile(r"<(br\s*/?|/p|/div|/li|/h[1-6])>", re.IGNORECASE)
+_EXCERPT_MEDIA_TOKEN_RE = re.compile(r"\{(이미지|동영상)\s*:\s*\d+\}")
+
+
+def _plain_post_text(content):
+    """A post body as one line of readable text: tags and media tokens removed, entities decoded."""
+    text = _EXCERPT_BREAK_RE.sub(" ", content or "")
+    text = _EXCERPT_MEDIA_TOKEN_RE.sub(" ", text)
+    return " ".join(html.unescape(strip_tags(text)).split())
+
+
+def _post_excerpt(content, length=POST_EXCERPT_LENGTH):
+    """Two-line plain-text excerpt for gallery cards: tags stripped, line breaks kept as spaces."""
+    text = _plain_post_text(content)
+    return f"{text[:length]}…" if len(text) > length else text
+
+
+def _excerpt_post_ids(request, board, posts):
+    """Ids of listed posts whose text the viewer may already read.
+
+    Listing a board does not grant reading it, so an excerpt needs read access (secret posts
+    included). On a board that charges read points, only the author and members who already
+    paid for that post see it, so the excerpt never gives away text the reader has not paid for.
+    """
+    ids = [post.pk for post in posts]
+    if not ids:
+        return set()
+    readable = set(readable_post_queryset(request, Post.objects.filter(pk__in=ids)).values_list("pk", flat=True))
+    if board.bo_read_point >= 0 or not point_ledger.points_enabled():
+        return readable
+    user = _authenticated_user(request)
+    if not user:
+        return set()
+    if gnu_is_admin(user):
+        # The super administrator reads every post without paying.
+        return readable
+    return {
+        post.pk
+        for post in posts
+        if post.pk in readable
+        and (
+            post.user_id == user.id
+            or point_ledger.has_point_row(user, board.bo_table, point_ledger.post_point_id(post), "읽기")
+        )
+    }
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([JWTAuthentication, BasicAuthentication])
+def board_category_counts_view(request, bo_table):
+    """Posts per category for a board list's category chips; counts is null with a reason when skipped."""
+    board = _get_board(bo_table)
+    if not board:
+        return api_error("Board not found.", status=drf_status.HTTP_404_NOT_FOUND, code="board_not_found")
+    user = _authenticated_user(request)
+    if (get_user_level(user) if user else 1) < board.bo_list_level and not _is_board_admin(user, board):
+        return api_error(
+            "You do not have permission to list this board.",
+            status=drf_status.HTTP_403_FORBIDDEN,
+            code="board_list_forbidden",
+        )
+    if not board.bo_use_category:
+        return api_response(data={"counts": None, "reason": "no_category"})
+    if not settings.BOARD_CATEGORY_COUNTS:
+        return api_response(data={"counts": None, "reason": "disabled"})
+    max_posts = settings.BOARD_CATEGORY_COUNTS_MAX_POSTS
+    if max_posts > 0 and (board.bo_count_write or 0) > max_posts:
+        return api_response(data={"counts": None, "reason": "too_many_posts"})
+
+    cache_key = f"board-category-counts:{board.bo_table}"
+    counts = cache.get(cache_key)
+    if counts is None:
+        rows = (
+            Post.objects.filter(board=board)
+            .exclude(ca_name__isnull=True)
+            .exclude(ca_name="")
+            .values("ca_name")
+            .annotate(total=Count("pk"))
+        )
+        counts = {row["ca_name"]: row["total"] for row in rows}
+        cache.set(cache_key, counts, 300)
+    return api_response(data={"counts": counts, "reason": None})
+
+
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -907,10 +997,15 @@ def board_posts_view(request, bo_table):
             board.bo_page_rows or 20,
             notice_ids,
         )
-        return api_response(
-            data=[_post_payload(post, request, list_view=True) for post in page_posts],
-            meta=meta,
-        )
+        rows = [_post_payload(post, request, list_view=True) for post in page_posts]
+        wants_excerpt = "excerpt" in {part.strip() for part in (request.query_params.get("with") or "").split(",")}
+        if wants_excerpt:
+            allowed = _excerpt_post_ids(request, board, page_posts)
+            for post, row in zip(page_posts, rows):
+                # 비밀글은 읽을 수 있는 사람에게도 카드에 본문을 내지 않는다(자물쇠 표시 · 사이트 검색과 같다).
+                if post.pk in allowed and not row["is_secret"]:
+                    row["wr_excerpt"] = _post_excerpt(post.wr_content)
+        return api_response(data=rows, meta=meta)
 
     user = _authenticated_user(request)
     data = _request_data(request)

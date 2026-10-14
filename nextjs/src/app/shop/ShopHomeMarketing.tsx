@@ -187,9 +187,10 @@ export function ShopHomeBanners({ banners }: { banners: ShopBanner[] }) {
                           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-base-content/70 sm:text-xs">
                             {eyebrow}
                           </p>
-                          <h2 className="mt-2 text-[26px] font-bold leading-snug sm:text-3xl md:text-4xl lg:text-[3.5rem]">
+                          {/* 레퍼런스 shop-banner 처럼 제목은 strong — 쇼핑몰 CSS 의 "main h2"(16px) 규칙에 걸리지 않는다. */}
+                          <strong className="mt-2 block text-[26px] font-bold leading-snug sm:text-3xl md:text-4xl lg:text-[3.5rem]">
                             {bannerHeading}
-                          </h2>
+                          </strong>
                           <span className="btn btn-neutral btn-sm mt-3 min-h-10 gap-2 rounded-none px-5">
                             자세히 보기 <ArrowRight className="size-4" />
                           </span>

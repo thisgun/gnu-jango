@@ -13,53 +13,16 @@
   margin-inline: auto;
   padding: 1.5rem 1rem 2.5rem;
 }
-.solune-board-list-page .solune-content-shell { padding-top: 0.75rem; }
-.solune-board-list-page .solune-main-content { gap: 0.75rem; }
-.solune-board-list-page .solune-main-content > :first-child { margin-bottom: 0.6875rem; }
-.solune-board-list-page .solune-main-content > header { margin-bottom: -0.6875rem; }
-.solune-board-list-page .surface-toolbar {
-  flex-direction: row;
-  flex-wrap: wrap;
-  justify-content: flex-start;
-  gap: 0.5rem;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-  box-shadow: none;
-}
-.solune-board-list-page .surface-toolbar.mb-5 { margin-bottom: 0.75rem; }
-.solune-post-detail-shell .solune-content-shell { padding-top: 1rem; }
-.solune-post-page-title { margin-top: -1.0625rem; margin-bottom: 0.1875rem; }
 @media (min-width: 640px) {
   .solune-content-shell { padding-inline: 1.5rem; }
-}
-@media (min-width: 768px) {
-  .solune-board-list-page table tbody tr { height: 53px; }
-  .solune-board-list-page table thead th {
-    font-size: 0.75rem;
-    line-height: 1.4286;
-  }
-  .solune-board-list-page table thead th.py-3 {
-    padding-block: 0.625rem;
-  }
 }
 @media (min-width: 1024px) {
   .solune-content-shell {
     grid-template-columns: minmax(0, 1fr) var(--solune-sidebar);
     padding: 2rem 2rem 3rem;
   }
-  .solune-sidebar { margin-top: 0.8125rem; }
-  .solune-post-detail-shell .solune-sidebar { margin-top: 1.0625rem; }
-  .solune-board-list-page .solune-content-shell { padding-top: 0.8125rem; }
-  .solune-board-list-page .page-hero-title {
-    font-size: 28px;
-    font-weight: 800;
-    line-height: 1.3;
-  }
-  .solune-board-list-page .solune-main-content > header { margin-bottom: -0.55rem; }
-  .solune-post-detail-shell .solune-content-shell { padding-top: 1rem; }
-  .solune-post-page-title { margin-top: -0.5625rem; margin-bottom: 0.1875rem; }
+  /* The home rail sits 13px below its panels; inner pages (layout rail) start level with the content. */
+  .solune-content-shell:not(.solune-inner-shell) > .solune-sidebar { margin-top: 0.8125rem; }
 }
 .solune-main-content {
   display: grid;

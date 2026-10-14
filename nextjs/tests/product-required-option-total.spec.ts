@@ -9,7 +9,8 @@ test("필수 옵션 상품은 옵션을 추가하기 전 합계를 0원으로 �
   await expect(optionSelectors.first()).toBeVisible();
   await expect(optionSelectors.first()).toHaveValue("");
 
-  const totals = page.getByText("총 상품 금액", { exact: true }).locator("xpath=..").locator("span").last();
+  // 공용 옵션 선택기(components/shop/ProductOptionPicker)의 합계 줄 — 레퍼런스처럼 "총 금액".
+  const totals = page.getByText("총 금액", { exact: true }).locator("xpath=..").locator("span").last();
   await expect(totals.first()).toBeVisible();
   await expect(totals.first()).toHaveText("0원");
 });

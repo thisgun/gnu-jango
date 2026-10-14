@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./solune-theme.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { NavigationProgressProvider } from "@/components/providers/NavigationProgressProvider";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { CommunityInnerShell } from "@/components/layout/CommunityInnerShell";
 import { Toaster } from "@/components/ui/toaster";
 import { BackToTop } from "@/components/layout/BackToTop";
 import { CompareTray } from "@/components/shop/CompareTray";
@@ -138,7 +140,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <AuthProvider initialUser={initialUser}>
               <div className="min-h-screen flex flex-col">
                 <Header initialMenus={menus} initialUser={initialUser} />
-                <main id="main-content" className="flex-1 overflow-x-clip">{children}</main>
+                {/* #wrapper.solune-wrapper: the reference layout's hook for inner-page styles (breadcrumb, mypage).
+                    Community inner pages get the right rail here, as in the reference layout shell. */}
+                <div id="wrapper" className="solune-wrapper flex flex-1 flex-col">
+                  <CommunityInnerShell>{children}</CommunityInnerShell>
+                </div>
                 <Footer />
               </div>
               <Toaster />

@@ -25,6 +25,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toastError, toastSuccess } from "@/lib/toast";
+import { contentText } from "../htmlText";
+import { MypagePanel } from "../MypagePanel";
 
 type StatusFilter = "all" | "confirmed" | "pending";
 
@@ -251,18 +253,17 @@ export default function MyShopReviewsPage() {
   }
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-xl font-bold">
-          상품후기 {meta ? `(${meta.total.toLocaleString()}건)` : ""}
-        </h2>
+    <MypagePanel
+      title={`상품후기${meta ? ` (${meta.total.toLocaleString()}건)` : ""}`}
+      actions={
         <Button variant="outline" size="sm" asChild>
           <Link href="/shop/products">
             <ExternalLink className="size-4" />
             상품 보기
           </Link>
         </Button>
-      </div>
+      }
+    >
 
       <div className="flex flex-col gap-3 border-b pb-3 md:flex-row md:items-center md:justify-between">
         <div className="flex gap-2">
@@ -300,11 +301,11 @@ export default function MyShopReviewsPage() {
       {loading ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index} className="h-32 animate-pulse rounded-[4px] border bg-muted" />
+            <div key={index} className="skeleton h-32 rounded-[4px] border" />
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-[4px] border py-16 text-center">
+        <div className="flex flex-col items-center justify-center py-16 text-center">
           <Star className="mb-3 size-12 text-muted-foreground/50" />
           <p className="text-sm text-muted-foreground">등록한 상품후기가 없습니다.</p>
         </div>
@@ -436,7 +437,8 @@ export default function MyShopReviewsPage() {
                   <div className="mt-4 space-y-2">
                     <p className="break-words text-sm font-semibold">{item.is_subject}</p>
                     <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
-                      {truncate(item.is_content, 320)}
+                      {/* 후기 본문은 에디터 HTML 일 수 있다 — 태그를 글자로 찍지 않고 글만 요약한다. */}
+                      {truncate(contentText(item.is_content), 320)}
                     </p>
                   </div>
                 )}
@@ -469,6 +471,6 @@ export default function MyShopReviewsPage() {
           </Button>
         </div>
       )}
-    </div>
+    </MypagePanel>
   );
 }

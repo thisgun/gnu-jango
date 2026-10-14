@@ -149,6 +149,12 @@
 .solune-community-service-switch-inner::-webkit-scrollbar { display: none; }
 
 /* --- sticky main header ---------------------------------------------- */
+/* The app header groups the service switch and the sticky bar in one
+   .g5-default-header element. A sticky box only sticks inside its parent, so
+   that group draws no box of its own: the sticky bar then sits under the
+   page-tall root column, as it does under .solune-root in the reference.
+   Custom properties (the shop tokens below) still inherit through it. */
+body[data-g5-theme-source="default"] .g5-default-header { display: contents; }
 .solune-community-header-sticky {
   position: sticky;
   z-index: 50;
@@ -769,46 +775,15 @@
   .solune-community-member-menu .solune-shop-utility-legal { display: none; }
 }
 
-/* Keep the product summary close to the original shop detail hierarchy. */
-.solune-shop-purchase-panel > * + * { margin-block-start: 1.5rem; }
-.solune-shop-purchase-panel > .solune-shop-product-heading { margin-block-start: 0.625rem; }
-.solune-shop-purchase-panel > .solune-shop-product-subtitle { margin-block-start: 1rem; }
-.solune-shop-purchase-panel > .solune-shop-product-rating { margin-block-start: 0.75rem; }
-.solune-shop-purchase-panel > .solune-shop-product-price { margin-block-start: 3.125rem; }
-.solune-shop-shipping-summary {
-  border-top: 1px solid var(--solune-border);
-  padding: 1.5rem 0 0;
-}
-.solune-shop-purchase-panel > .solune-shop-shipping-summary { margin-block-start: 1.125rem; }
-.solune-shop-product-info {
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-.solune-shop-product-info-row { min-height: 1.25rem; }
-.solune-shop-purchase-panel > .solune-shop-product-info { margin-block-start: 1rem; }
-.solune-shop-purchase-panel > .solune-shop-stock {
-  margin-block-start: 0.5rem;
-  border-bottom: 1px solid var(--solune-border);
-  padding-bottom: 1.25rem;
-}
-
-@media (max-width: 767px) {
-  .solune-shop-purchase-panel > .solune-shop-product-heading { margin-block-start: 0.25rem; }
-  .solune-shop-purchase-panel > .solune-shop-product-subtitle { margin-block-start: 1.0625rem; }
-  .solune-shop-purchase-panel > .solune-shop-product-rating { margin-block-start: 0.625rem; }
-  .solune-shop-purchase-panel > .solune-shop-product-price { margin-block-start: 2.875rem; }
-}
-
-@media (min-width: 768px) and (max-width: 1023px) {
-  .solune-shop-purchase-panel > .solune-shop-product-heading { margin-block-start: 0.625rem; }
-}
-
 /* The shop uses its own warm-neutral palette in the source theme. The shared
    app header sits outside .solune-shop-page, so give only its shop variant the
    same tokens and geometry. */
-.g5-default-header:has(.solune-community-header-actions.is-shop) {
+/* The group itself is display: contents (no box, so overflow does nothing on
+   it); clip the two rows it holds instead. */
+.g5-default-header:has(.solune-community-header-actions.is-shop) > :is(.solune-community-header-shell, .solune-community-header-sticky) {
   overflow-x: clip;
+}
+.g5-default-header:has(.solune-community-header-actions.is-shop) {
   --solune-page: #ffffff;
   --solune-surface: #ffffff;
   --solune-surface-soft: #f2f2f0;

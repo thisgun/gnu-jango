@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "@bprogress/next/app";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import Image from "next/image";
+import { shouldBypassImageOptimization } from "@/lib/image";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import { g5ShortHref } from "@/lib/g5-short-url";
 import { notifyCartChanged } from "@/lib/cart-events";
@@ -15,6 +16,7 @@ import { formatPrice } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ToastAction } from "@/components/ui/toast";
+import { ProductImageFallback } from "@/components/shop/ProductImageFallback";
 import { CreditCard, Heart, ShoppingCart, SlidersHorizontal, Trash2 } from "lucide-react";
 import { toastSuccess, toastError } from "@/lib/toast";
 import {
@@ -25,6 +27,7 @@ import {
   type ShopCartAddResponse,
 } from "@/services/cart";
 import { getClientPublicSettings } from "@/services/settings";
+import { isTelInquiry, formatProductPrice } from "@/lib/shop-product-state";
 
 function cartIdsFromAddResponse(response?: { data?: ShopCartAddResponse | null }) {
   const data = response?.data;
@@ -41,7 +44,7 @@ function cartIdsFromAddResponse(response?: { data?: ShopCartAddResponse | null }
 }
 
 function wishlistCartBlockReason(item: ShopWishItem) {
-  const isTelInquiry = String(item.it_tel_inq ?? "0") === "1";
+  const telInquiry = isTelInquiry(item);
   const isSoldout = String(item.it_soldout ?? "0") === "1";
   const isUnavailable = String(item.it_use ?? "1") !== "1";
   const optionCount = Number(item.option_count ?? 0);
@@ -51,7 +54,7 @@ function wishlistCartBlockReason(item: ShopWishItem) {
       ? "판매중지"
       : isSoldout
         ? "품절"
-        : isTelInquiry
+        : telInquiry
           ? "전화문의"
           : optionCount > 0
             ? "옵션 선택 필요"
@@ -272,14 +275,14 @@ export default function WishlistPage() {
 
   if (!isInitialized || !user || loading) {
     return (
-      <div className="animate-pulse">
-        <div className="mb-6 h-8 w-40 rounded bg-muted" />
+      <div className="space-y-4">
+        <div className="skeleton mb-6 h-8 w-40 rounded" />
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i}>
-              <div className="aspect-square rounded-lg bg-muted" />
-              <div className="mt-2 h-4 w-3/4 rounded bg-muted" />
-              <div className="mt-1 h-4 w-1/2 rounded bg-muted" />
+              <div className="skeleton aspect-square rounded-lg" />
+              <div className="skeleton mt-2 h-4 w-3/4 rounded" />
+              <div className="skeleton mt-1 h-4 w-1/2 rounded" />
             </div>
           ))}
         </div>
@@ -348,7 +351,7 @@ export default function WishlistPage() {
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
         {items.map((item) => {
-          const isTelInquiry = String(item.it_tel_inq ?? "0") === "1";
+          const telInquiry = isTelInquiry(item);
           const isSoldout = String(item.it_soldout ?? "0") === "1";
           const isUnavailable = String(item.it_use ?? "1") !== "1";
           const optionCount = Number(item.option_count ?? 0);
@@ -359,7 +362,7 @@ export default function WishlistPage() {
               ? "판매중지"
               : isSoldout
                 ? "품절"
-                : isTelInquiry
+                : telInquiry
                   ? "전화문의"
                   : optionCount > 0
                     ? "옵션 선택 필요"
@@ -368,7 +371,7 @@ export default function WishlistPage() {
           const selectable = canSelectWishlistItem(item);
           const selected = selectedIds.has(item.it_id);
           const hasDiscount =
-            !isTelInquiry &&
+            !telInquiry &&
             item.it_cust_price > 0 &&
             item.it_cust_price > item.it_basic_price;
 
@@ -393,11 +396,10 @@ export default function WishlistPage() {
                       fill
                       className="object-cover transition-transform group-hover:scale-105"
                       sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, 25vw"
+                      unoptimized={shouldBypassImageOptimization(item.image_url)}
                     />
                   ) : (
-                    <div className="flex h-full items-center justify-center text-muted-foreground">
-                      No Image
-                    </div>
+                    <ProductImageFallback compact />
                   )}
                 </div>
                 <div className="mt-2 space-y-1">
@@ -406,7 +408,7 @@ export default function WishlistPage() {
                   </h3>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-bold">
-                      {isTelInquiry ? "전화문의" : formatPrice(item.it_basic_price)}
+                      {formatProductPrice(item, item.it_basic_price)}
                     </span>
                     {hasDiscount && (
                       <span className="text-xs text-muted-foreground line-through">
@@ -423,7 +425,7 @@ export default function WishlistPage() {
               </a>
 
               <div className="mt-2 flex gap-2">
-                {optionCount > 0 && !isUnavailable && !isSoldout && !isTelInquiry ? (
+                {optionCount > 0 && !isUnavailable && !isSoldout && !telInquiry ? (
                   <Button size="sm" className="flex-1" asChild>
                     <a href={productHref}>
                       <SlidersHorizontal className="mr-1 h-3.5 w-3.5" />

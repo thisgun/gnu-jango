@@ -7,7 +7,7 @@ import { applyClientPageMetadata } from "@/lib/client-metadata";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatPrice } from "@/lib/utils";
-import { CreditCard, Loader2 } from "lucide-react";
+import { CreditCard } from "lucide-react";
 
 interface PersonalPayItem {
   pp_id: string;
@@ -98,16 +98,23 @@ export default function PersonalPayListPage() {
       </div>
 
       {loading ? (
-        <div className="flex min-h-[220px] items-center justify-center text-muted-foreground">
-          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-          불러오는 중...
+        <div role="status" aria-label="개인결제 내역 로딩 중" className="animate-pulse space-y-4 py-4">
+          <span className="sr-only">개인결제 내역 로딩 중</span>
+          <div aria-hidden="true" className="h-8 w-40 rounded bg-muted" />
+          {[0, 1, 2].map((item) => <div key={item} aria-hidden="true" className="h-16 rounded-lg bg-muted" />)}
         </div>
       ) : authRequired ? (
-        <div className="alert alert-info flex flex-col items-center justify-between gap-4 sm:flex-row">
-          <p>개인결제 목록은 로그인 후 확인할 수 있습니다.</p>
-          <Button size="sm" asChild>
-            <Link href="/login?redirect=%2Fshop%2Fpersonalpay">로그인</Link>
-          </Button>
+        // 레퍼런스는 같은 자리에 테두리 상자 안 안내 한 줄만 둔다. 이 앱은 그 줄 끝에 로그인 링크를 붙인다.
+        <div className="personalpay-login rounded-lg border p-8 text-center text-sm text-muted-foreground">
+          <p>
+            개인결제 목록은 로그인 후 확인할 수 있습니다.{" "}
+            <Link
+              href="/login?redirect=%2Fshop%2Fpersonalpay"
+              className="font-semibold text-foreground underline underline-offset-4 hover:text-primary"
+            >
+              로그인
+            </Link>
+          </p>
         </div>
       ) : error ? (
         <div className="rounded-lg border p-8 text-center text-sm text-muted-foreground">

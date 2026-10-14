@@ -46,7 +46,19 @@ export default function ClientPage() {
       <h1 className="mb-6 text-2xl font-bold">설문조사</h1>
       {notFound && <EmptyState icon={<Vote className="size-6" />} title="진행 중인 설문조사가 없습니다" />}
       {error && <ErrorState title="설문조사를 불러오지 못했습니다" description={error} actionHref="/polls" />}
-      {!poll && !error && !notFound && <p className="text-sm text-muted-foreground">로딩 중...</p>}
+      {!poll && !error && !notFound && (
+        <div role="status" aria-label="설문조사 로딩 중" className="space-y-4 rounded-lg border p-6">
+          <span className="sr-only">설문조사 로딩 중</span>
+          <div aria-hidden="true" className="space-y-4">
+            <div className="skeleton h-6 w-2/3 rounded" />
+            <div className="skeleton h-4 w-1/2 rounded" />
+            {[0, 1, 2, 3].map((item) => (
+              <div key={item} className="skeleton h-12 rounded-md" />
+            ))}
+            <div className="skeleton h-10 w-28 rounded-md" />
+          </div>
+        </div>
+      )}
       {poll && <PollClient initialPoll={poll} />}
     </div>
   );

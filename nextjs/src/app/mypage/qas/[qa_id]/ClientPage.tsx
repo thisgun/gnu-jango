@@ -124,7 +124,7 @@ export default function QaDetailPage({ qaId: fallbackQaId }: QaDetailPageProps) 
   }
 
   if (loading || !item) {
-    return <div className="h-72 animate-pulse rounded-lg bg-muted" />;
+    return <div className="skeleton h-72 rounded-lg" />;
   }
 
   return (
@@ -174,6 +174,12 @@ export default function QaDetailPage({ qaId: fallbackQaId }: QaDetailPageProps) 
             </span>
           </div>
           <CardTitle className="break-words">{item.qa_subject}</CardTitle>
+          {/* 그누보드 view.skin.php 처럼 작성자 · 연락처 — 답변을 어디로 알릴지 문의한 사람도 확인한다. */}
+          <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span>{item.qa_name || item.mb_id}</span>
+            {item.qa_email ? <span>{item.qa_email}</span> : null}
+            {item.qa_hp ? <span>{item.qa_hp}</span> : null}
+          </p>
         </CardHeader>
         <CardContent>
           {editing ? (

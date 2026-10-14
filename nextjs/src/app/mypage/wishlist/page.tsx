@@ -3,11 +3,14 @@
 import { useEffect, useState, useCallback } from "react";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import Image from "next/image";
+import { shouldBypassImageOptimization } from "@/lib/image";
 import { useRouter } from "@bprogress/next/app";
 import type { ShopWishItem } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
 import { formatPrice } from "@/lib/utils";
+import { isTelInquiry } from "@/lib/shop-product-state";
 import { Button } from "@/components/ui/button";
+import { ProductImageFallback } from "@/components/shop/ProductImageFallback";
 import { ToastAction } from "@/components/ui/toast";
 import { Heart, ShoppingCart, Trash2 } from "lucide-react";
 import { toastSuccess, toastError } from "@/lib/toast";
@@ -17,9 +20,10 @@ import { shopProductHref } from "@/lib/product-url";
 import { notifyCartChanged } from "@/lib/cart-events";
 import { getClientPublicSettings } from "@/services/settings";
 import { runtimeRouterPush } from "@/lib/runtime-router";
+import { MypagePanel } from "../MypagePanel";
 
 function wishlistCartBlockReason(item: ShopWishItem) {
-  const isTelInquiry = String(item.it_tel_inq ?? "0") === "1";
+  const telInquiry = isTelInquiry(item);
   const isSoldout = String(item.it_soldout ?? "0") === "1";
   const isUnavailable = String(item.it_use ?? "1") !== "1";
   const optionCount = Number(item.option_count ?? 0);
@@ -29,7 +33,7 @@ function wishlistCartBlockReason(item: ShopWishItem) {
       ? "판매중지"
       : isSoldout
         ? "품절"
-        : isTelInquiry
+        : telInquiry
           ? "전화문의"
           : optionCount > 0
             ? "옵션 선택 필요"
@@ -131,64 +135,61 @@ export default function MyWishlistPage() {
 
   if (loading) {
     return (
-      <div className="animate-pulse">
-        <div className="mb-6 h-8 w-40 rounded bg-muted" />
+      <MypagePanel title="위시리스트">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i}>
-              <div className="aspect-square rounded-lg bg-muted" />
-              <div className="mt-2 h-4 w-3/4 rounded bg-muted" />
+              <div className="skeleton aspect-square rounded-lg" />
+              <div className="skeleton mt-2 h-4 w-3/4 rounded" />
             </div>
           ))}
         </div>
-      </div>
+      </MypagePanel>
     );
   }
 
   if (items.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-lg border py-20">
-        <Heart className="mb-4 h-16 w-16 text-muted-foreground/50" />
-        <h2 className="text-xl font-bold">위시리스트가 비어있습니다</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          마음에 드는 상품을 추가해보세요
-        </p>
-        <Button className="mt-6" asChild>
-          <Link href="/shop/products">상품 둘러보기</Link>
-        </Button>
-      </div>
+      <MypagePanel title="위시리스트">
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <Heart className="mb-4 h-14 w-14 text-muted-foreground/50" />
+          <p className="text-lg font-medium">위시리스트가 비어있습니다</p>
+          <p className="mt-1 text-sm text-muted-foreground">마음에 드는 상품을 추가해보세요</p>
+          <Button className="mt-6" asChild>
+            <Link href="/shop/products">상품 둘러보기</Link>
+          </Button>
+        </div>
+      </MypagePanel>
     );
   }
 
   return (
-    <div>
-      <h2 className="mb-6 text-xl font-bold">위시리스트 ({items.length})</h2>
-
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+    <MypagePanel title={`위시리스트 (${items.length})`}>
+      {/* 레퍼런스 wishlist-* 손잡이 — 테마가 사진 80px 의 두 칸 줄 카드로 다시 앉힌다(solune-theme.mypage.css). */}
+      <div className="wishlist-grid grid grid-cols-2 gap-4 md:grid-cols-3">
         {items.map((item) => {
           const hasDiscount =
             item.it_cust_price > 0 && item.it_cust_price > item.it_basic_price;
           const cartBlockReason = wishlistCartBlockReason(item);
           const canAddCart = canAddWishlistItemToCart(item);
           return (
-            <div key={item.wi_id} className="group relative">
-              <a href={shopProductHref(item, productRewriteMode)}>
-                <div className="relative aspect-square overflow-hidden rounded-lg bg-muted">
+            <div key={item.wi_id} className="wishlist-card group relative">
+              <a className="wishlist-link" href={shopProductHref(item, productRewriteMode)}>
+                <div className="wishlist-thumb relative aspect-square overflow-hidden rounded-lg bg-muted">
                   {item.image_url ? (
                     <Image
                       src={item.image_url}
+                      unoptimized={shouldBypassImageOptimization(item.image_url)}
                       alt={item.it_name}
                       fill
                       className="object-cover transition-transform group-hover:scale-105"
                       sizes="(max-width: 640px) 50vw, 33vw"
                     />
                   ) : (
-                    <div className="flex h-full items-center justify-center text-muted-foreground">
-                      No Image
-                    </div>
+                    <ProductImageFallback compact />
                   )}
                 </div>
-                <div className="mt-2 space-y-1">
+                <div className="wishlist-info mt-2 space-y-1">
                   <h3 className="line-clamp-2 text-sm font-medium group-hover:text-primary">
                     {item.it_name}
                   </h3>
@@ -210,7 +211,7 @@ export default function MyWishlistPage() {
                 </div>
               </a>
 
-              <div className="mt-2 flex gap-2">
+              <div className="wishlist-actions mt-2 flex gap-2">
                 <Button
                   size="sm"
                   className="flex-1"
@@ -235,6 +236,6 @@ export default function MyWishlistPage() {
           );
         })}
       </div>
-    </div>
+    </MypagePanel>
   );
 }

@@ -1,0 +1,28 @@
+/* =====================================================================
+   Solune theme entry (the reference theme's theme.css).
+
+   Loaded from layout.tsx after globals.css, as the reference loads
+   @g5-theme/theme.css after its globals, so the theme's tokens (shadcn HSL
+   triples, daisyUI colours) and inner-page rules win over the app defaults.
+   Imported in the reference order.
+
+   Font: Pretendard 1.3.9 (OFL), the same package the reference imports. The
+   dynamic subset splits the glyphs into unicode-range chunks, so a page only
+   fetches the chunks for the characters it shows. --solune-font names it
+   first ("Pretendard Variable").
+   ===================================================================== */
+@import "pretendard/dist/web/variable/pretendardvariable-dynamic-subset.css";
+@import "./solune-theme.tokens.css";
+@import "./solune-theme.shell.css";
+@import "./solune-theme.home.css";
+@import "./solune-theme.widgets.css";
+@import "./solune-theme.internal.css";
+@import "./solune-theme.internal-pages.css";
+@import "./solune-theme.comments.css";
+@import "./solune-theme.board-gallery.css";
+@import "./solune-theme.mypage.css";
+@import "./solune-theme.app-mypage.css";
+@import "./solune-shop.css";
+@import "./solune-shop.app.css";
+@import "./solune-shop.app-purchase.css";
+@import "./solune-shop.app-browse.css";

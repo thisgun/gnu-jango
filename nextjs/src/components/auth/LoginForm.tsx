@@ -182,7 +182,9 @@ export function LoginForm({
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    // login-form--page · login-field · login-remember · login-submit · login-page-links: 레퍼런스와 같은 손잡이 —
+    // solune-theme.internal-pages.css 의 .auth-card 규칙이 칸 높이 · 단추 · 자동로그인 줄 모양을 정한다.
+    <form onSubmit={handleSubmit} className="login-form login-form--page">
       <div className="space-y-4">
         {certifyPending ? (
           <EmailCertifyNotice {...certifyPending} />
@@ -191,7 +193,7 @@ export function LoginForm({
             <AlertDescription className="whitespace-pre-line">{error}</AlertDescription>
           </Alert>
         ) : null}
-        <div className="space-y-2">
+        <div className="login-field space-y-2">
           <Label htmlFor={usernameId}>아이디</Label>
           <Input
             id={usernameId}
@@ -204,7 +206,7 @@ export function LoginForm({
             disabled={loading}
           />
         </div>
-        <div className="space-y-2">
+        <div className="login-field space-y-2">
           <Label htmlFor={passwordId}>비밀번호</Label>
           <Input
             id={passwordId}
@@ -220,7 +222,7 @@ export function LoginForm({
 
         <label
           htmlFor={autoLoginId}
-          className="flex cursor-pointer items-start gap-2 rounded-[4px] border border-border bg-base-200 p-3 text-sm"
+          className="login-remember flex cursor-pointer items-start gap-2 rounded-[4px] border border-border bg-base-200 p-3 text-sm"
         >
           <input
             id={autoLoginId}
@@ -239,13 +241,13 @@ export function LoginForm({
           </span>
         </label>
 
-        <Button type="submit" className="w-full" disabled={loading}>
+        <Button type="submit" className="login-submit w-full" disabled={loading}>
           {loading ? "로그인 중..." : "로그인"}
         </Button>
 
         <SocialLoginButtons redirectAfterLogin={redirectAfterLogin} />
 
-        <div className="space-y-2 text-center text-sm text-muted-foreground">
+        <div className="login-page-links space-y-2 text-center text-sm text-muted-foreground">
           <p>
             비밀번호를 잊으셨나요?{" "}
             <Link

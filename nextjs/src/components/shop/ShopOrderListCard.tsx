@@ -2,7 +2,9 @@
 
 import Image from "next/image";
 import { G5Link as Link } from "@/components/ui/g5-link";
+import { ProductImageFallback } from "@/components/shop/ProductImageFallback";
 import type { ShopOrder } from "@/lib/api";
+import { shouldBypassImageOptimization } from "@/lib/image";
 import { cn, formatDate, formatPrice } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
 
@@ -66,11 +68,13 @@ export function ShopOrderListCard({ order }: { order: ShopOrder }) {
   const misuPrice = orderMisuPrice(order);
 
   return (
+    // order-card · -thumb · -body · -amounts · -go: 레퍼런스와 같은 손잡이 — solune-theme.internal-pages.css 가
+    // 쇼핑몰 주문 목록과 마이페이지 주문 목록을 같은 격자 카드로 그린다.
     <Link
       href={`/shop/orders/${order.od_id}`}
-      className="flex gap-4 rounded-lg border p-4 transition-colors hover:bg-accent/50 sm:p-5"
+      className="order-card flex gap-4 rounded-lg border p-4 transition-colors hover:bg-accent/50 sm:p-5"
     >
-      <div className="relative hidden h-16 w-16 shrink-0 overflow-hidden rounded-md bg-muted sm:block">
+      <div className="order-card-thumb relative hidden h-16 w-16 shrink-0 overflow-hidden rounded-md bg-muted sm:block">
         {firstItem?.image_url ? (
           <Image
             src={firstItem.image_url}
@@ -78,15 +82,14 @@ export function ShopOrderListCard({ order }: { order: ShopOrder }) {
             fill
             className="object-cover"
             sizes="64px"
+            unoptimized={shouldBypassImageOptimization(firstItem.image_url)}
           />
         ) : (
-          <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">
-            No Image
-          </div>
+          <ProductImageFallback compact />
         )}
       </div>
 
-      <div className="min-w-0 flex-1 space-y-3">
+      <div className="order-card-body min-w-0 flex-1 space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm font-semibold">{order.od_id}</span>
           <StatusBadge status={order.od_status} />
@@ -102,7 +105,7 @@ export function ShopOrderListCard({ order }: { order: ShopOrder }) {
           </p>
         </div>
 
-        <div className="grid gap-2 text-xs sm:grid-cols-3">
+        <div className="order-card-amounts grid gap-2 text-xs sm:grid-cols-3">
           <div className="rounded-md bg-muted/35 p-2">
             <p className="text-muted-foreground">주문금액</p>
             <p className="mt-0.5 font-semibold">{formatPrice(listPrice)}</p>
@@ -127,7 +130,7 @@ export function ShopOrderListCard({ order }: { order: ShopOrder }) {
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center">
+      <div className="order-card-go flex shrink-0 items-center">
         <ChevronRight className="h-5 w-5 text-muted-foreground" />
       </div>
     </Link>

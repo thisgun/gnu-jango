@@ -25,8 +25,8 @@ export function OrderSummarySidebar({
   submitting,
 }: OrderSummarySidebarProps) {
   return (
-    <div className="min-w-0 lg:col-span-1">
-      <div className="sticky top-4 box-border w-full min-w-0 rounded-lg border p-4 sm:p-6">
+    <div className="min-w-0">
+      <div className="shop-order-summary sticky top-4 box-border w-full min-w-0 rounded-lg border p-4 sm:p-6">
         <h2 className="mb-4 text-lg font-bold">결제 금액</h2>
         <div className="space-y-3 text-sm">
           <div className="flex min-w-0 justify-between gap-3">
@@ -41,13 +41,13 @@ export function OrderSummarySidebar({
           )}
           {couponDiscount > 0 && (
             <div className="flex min-w-0 justify-between gap-3 text-green-700">
-              <span>쿠폰 할인</span>
+              <span>주문할인</span>
               <span>-{formatPrice(couponDiscount)}</span>
             </div>
           )}
           {sendCouponDiscount > 0 && (
             <div className="flex min-w-0 justify-between gap-3 text-green-700">
-              <span>배송비 쿠폰</span>
+              <span>배송비할인</span>
               <span>-{formatPrice(sendCouponDiscount)}</span>
             </div>
           )}
@@ -67,7 +67,7 @@ export function OrderSummarySidebar({
               )}
             </span>
           </div>
-          <div className="border-t pt-3">
+          <div className="shop-order-summary-total border-t pt-3">
             <div className="flex min-w-0 justify-between gap-3 text-lg font-bold">
               <span>총 결제금액</span>
               <span className="text-primary">{formatPrice(total)}</span>
@@ -76,7 +76,7 @@ export function OrderSummarySidebar({
         </div>
         <Button
           type="submit"
-          className="mt-6 w-full"
+          className="shop-order-submit mt-6 w-full"
           size="lg"
           disabled={submitting}
         >

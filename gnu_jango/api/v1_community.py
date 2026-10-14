@@ -7,7 +7,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import EmailMessage
-from django.db.models import Count, Q, Sum
+from django.db.models import Case, Count, IntegerField, Q, Sum, Value, When
 from django.db.models.functions import TruncDate
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
@@ -58,7 +58,7 @@ from .auth_common import (  # noqa: F401 - tests import NICKNAME_MARKUP_CHARACTE
     email_rule_error,
     nickname_rule_error,
 )
-from .v1_board import _datetime, _get_board, _pagination_meta, _post_payload
+from .v1_board import _datetime, _excerpt_post_ids, _get_board, _pagination_meta, _plain_post_text, _post_payload
 from .community_common import (  # noqa: F401 - urls, tests and models import these from v1_community
     GENERAL_QA_PRODUCT_ID,
     QA_META_CONFIG_PREFIX,
@@ -481,14 +481,81 @@ def _searchable_boards(request):
     return boards.filter(bo_list_level__lte=get_user_level(user) if user else 1)
 
 
+SEARCH_PREVIEW_LENGTH = 220
+SEARCH_PREVIEW_LEAD = 70
+SECRET_SEARCH_PREVIEW = "비밀글입니다."
+
+
+def _search_snippet(text, keyword, length=SEARCH_PREVIEW_LENGTH, lead=SEARCH_PREVIEW_LEAD):
+    """The part of a post's text around the keyword (reference api_search_snippet).
+
+    Cutting the first 200 characters would always show a long post's opening and never why it
+    matched, so the snippet starts a little before the keyword; with no match in the body (only the
+    title matched) it starts at the beginning. A cut side gets an ellipsis.
+    """
+    if not text:
+        return ""
+    position = text.lower().find(keyword.lower()) if keyword else -1
+    start = max(0, position - lead) if position >= 0 else 0
+    snippet = text[start : start + length]
+    if start > 0:
+        snippet = f"...{snippet}"
+    if start + length < len(text):
+        snippet = f"{snippet}..."
+    return snippet
+
+
+def _body_match(request, board, keyword):
+    """Body-text matches the viewer may search. On a board that charges read points only the viewer's own
+    posts and the posts they already paid for match by body (a super administrator reads everything):
+    otherwise hit / no hit would tell an unpaid reader what a post says. Titles stay searchable for everyone."""
+    body = Q(wr_content__icontains=keyword)
+    if board.bo_read_point >= 0 or not point_ledger.points_enabled():
+        return body
+    user = getattr(request, "user", None)
+    if user and gnu_is_admin(user):
+        return body
+    if not (user and user.is_authenticated):
+        return Q(pk__in=[])
+    paid = {
+        int(rel_id)
+        for rel_id in User_Point.objects.filter(
+            user=user, po_rel_table=board.bo_table, po_rel_action="읽기"
+        ).values_list("po_rel_id", flat=True)
+        if str(rel_id).isdigit()
+    }
+    # point_ledger.post_point_id: the imported wr_id when there is one, else the pk.
+    paid_posts = Q(legacy_wr_id__in=paid) | ((Q(legacy_wr_id__isnull=True) | Q(legacy_wr_id=0)) & Q(pk__in=paid))
+    return body & (Q(user=user) | paid_posts)
+
+
+def _search_post_payload(post, request, keyword, previewable_ids):
+    """A search hit: the list payload (no body) plus a short preview the viewer may already read."""
+    payload = _post_payload(post, request, list_view=True)
+    if post.pk not in previewable_ids:
+        preview = ""
+    elif payload["is_secret"]:
+        preview = SECRET_SEARCH_PREVIEW
+    else:
+        preview = _search_snippet(_plain_post_text(post.wr_content), keyword)
+    payload["wr_content_preview"] = preview
+    return payload
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
 def search_view(request):
+    """search.php: matches grouped by board. Hits carry no body — only a preview that follows the
+    board list excerpt rules (read level, secret, read points), as the reference API does — title
+    matches come first, and `page` walks one board's matches (with bo_table)."""
     keyword = (request.query_params.get("q") or request.query_params.get("stx") or "").strip()
     bo_table = (request.query_params.get("bo_table") or "").strip()
     sfl = (request.query_params.get("sfl") or "wr_subject||wr_content").strip()
     per_page = min(max(_safe_int(request.query_params.get("per_page"), _safe_int(request.query_params.get("limit"), 10)), 1), 50)
+    # 쪽은 한 게시판만 볼 때만 넘긴다 — 여러 게시판을 함께 보면 게시판마다 건수가 달라 쪽 번호가 맞지 않는다.
+    page = max(_safe_int(request.query_params.get("page"), 1), 1) if bo_table else 1
+    offset = (page - 1) * per_page
 
     groups = []
     total_count = 0
@@ -505,30 +572,36 @@ def search_view(request):
             if "wr_subject" in sfl:
                 search_q |= Q(wr_subject__icontains=keyword)
             if "wr_content" in sfl:
-                search_q |= Q(wr_content__icontains=keyword)
+                search_q |= _body_match(request, board, keyword)
             if "wr_name" in sfl:
                 search_q |= Q(wr_name__icontains=keyword)
             if "mb_id" in sfl:
                 search_q |= Q(user__username__icontains=keyword)
             if not search_q:
-                search_q = Q(wr_subject__icontains=keyword) | Q(wr_content__icontains=keyword)
+                search_q = Q(wr_subject__icontains=keyword) | _body_match(request, board, keyword)
             queryset = queryset.filter(search_q)
             count = queryset.count()
             if not count:
                 continue
             total_count += count
+            # 제목이 맞은 글을 먼저 — 본문에만 스친 최신 글이 위에 오면 찾는 사람이 끝까지 훑어야 한다.
+            ranked = queryset.annotate(
+                title_rank=Case(When(wr_subject__icontains=keyword, then=Value(0)), default=Value(1), output_field=IntegerField())
+            ).order_by("title_rank", "-wr_datetime", "-pk")
+            posts = list(ranked[offset : offset + per_page])
+            previewable_ids = _excerpt_post_ids(request, board, posts)
             groups.append(
                 {
                     "bo_table": board.bo_table,
                     "bo_subject": board.bo_subject,
                     "count": count,
-                    "posts": [_post_payload(post, request) for post in queryset[:per_page]],
+                    "posts": [_search_post_payload(post, request, keyword, previewable_ids) for post in posts],
                 }
             )
 
     return api_response(
         data={"keyword": keyword, "total_count": total_count, "results": groups},
-        meta=_pagination_meta(total_count, 1, per_page),
+        meta=_pagination_meta(total_count, page, per_page),
     )
 
 

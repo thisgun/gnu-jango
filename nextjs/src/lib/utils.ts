@@ -5,6 +5,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/** 목록 날짜(레퍼런스 formatListDate) — 오늘 쓴 글은 시각(HH:MM), 아니면 월-일(MM-DD). "YYYY-MM-DD HH:MM:SS" 를 받는다. */
+export function formatListDate(datetime?: string | null, now: Date = new Date()): string {
+  if (!datetime) return "";
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return datetime.slice(0, 10) === today ? datetime.slice(11, 16) : datetime.slice(5, 10);
+}
+
 export function formatDate(date?: string | null) {
   if (!date || /^0{4}-0{2}-0{2}/.test(date)) return "";
 

@@ -1,8 +1,4 @@
 @import "tailwindcss";
-@import "./solune-theme.tokens.css";
-@import "./solune-theme.shell.css";
-@import "./solune-theme.home.css";
-@import "./solune-theme.widgets.css";
 @plugin "@tailwindcss/typography";
 @custom-variant dark (&:where([data-theme="gnu-dark"], [data-theme="gnu-dark"] *));
 @plugin "daisyui" {
@@ -721,72 +717,6 @@
     text-transform: uppercase;
   }
 
-  .shop-home-page .shop-home-product-row {
-    padding-top: 2.75rem;
-  }
-
-  @media (min-width: 768px) {
-    .shop-home-page .shop-home-product-row {
-      padding-top: 3.75rem;
-    }
-  }
-
-  .shop-home-page .shop-home-product-row .home-product-head {
-    align-items: flex-start;
-    margin-bottom: 1.5rem;
-    border-bottom: 1px solid var(--solune-border);
-    padding-bottom: 1.5rem;
-  }
-
-  .shop-home-page .shop-home-product-row .home-product-head > div:last-child {
-    align-self: flex-start;
-    margin-top: 1.75rem;
-  }
-
-  .shop-home-page .shop-home-product-row .section-more {
-    order: -1;
-    white-space: nowrap;
-  }
-
-  .shop-home-page .shop-home-product-row .home-product-title {
-    padding-left: 0;
-  }
-
-  .shop-home-page .shop-home-product-row .home-product-title::before {
-    display: none;
-  }
-
-  .shop-home-page .shop-home-product-row .home-product-subtitle {
-    margin-top: 0.5rem;
-  }
-
-  .shop-home-page .shop-home-product-row .home-product-scroll-button {
-    width: 2.25rem;
-    height: 2.25rem;
-    border: 1px solid var(--solune-text);
-    border-radius: 0;
-    background: var(--solune-surface);
-    color: var(--solune-text);
-  }
-
-  .shop-home-page .home-product-section .product-card {
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    padding: 0;
-    box-shadow: none;
-  }
-
-  .shop-home-page .home-product-section .product-card:hover {
-    border-color: transparent;
-    box-shadow: none;
-    transform: none;
-  }
-
-  .shop-home-page .home-product-section .product-image-shell {
-    border-radius: 0;
-  }
-
   .page-hero {
     border: 1px solid var(--surface-border);
     border-radius: 12px;
@@ -987,6 +917,8 @@
   header,
   footer,
   nav,
+  /* 서비스 전환 줄은 <header> 밖에 있다(헤더 묶음이 display: contents 라 sticky 가 동작하도록). */
+  .solune-community-header-shell,
   .no-print,
   /* shadcn Toaster, BackToTop 등 floating UI 모두 hide */
   [role="status"],
@@ -1109,89 +1041,3 @@ body[data-g5-theme-source="default"] {
   .solune-panel-skeleton { animation: none; }
 }
 
-/* Shop home section controls. Unlayered on purpose: DaisyUI's btn-sm/btn-square utilities sit in a
-   higher layer than `components` and would otherwise override the square, bordered arrows. */
-.shop-home-page .shop-home-product-row .home-product-scroll-button {
-  width: 2.25rem;
-  height: 2.25rem;
-  min-height: 2.25rem;
-  border: 1px solid var(--solune-text);
-  border-radius: 0;
-  background: var(--solune-surface);
-  color: var(--solune-text);
-}
-
-.shop-home-page .shop-home-product-row .home-product-scroll-button:hover:not(:disabled) {
-  background: var(--solune-text);
-  color: var(--solune-surface);
-}
-
-.shop-home-page .shop-home-product-row .home-product-scroll-button:disabled {
-  border-color: var(--solune-border);
-  color: var(--solune-muted);
-  opacity: 0.6;
-}
-
-.shop-home-page .shop-home-product-row .home-product-eyebrow {
-  color: var(--brand-primary-text);
-}
-
-/* Shop home product cards: a hairline frame like the reference, image flush to the edge and the
-   text/controls inset. */
-.shop-home-page .home-product-section .product-card {
-  border: 1px solid var(--solune-border);
-  background: var(--solune-surface);
-  padding-bottom: 0.875rem;
-}
-
-.shop-home-page .home-product-section .product-card > a > :not(.product-image-shell),
-.shop-home-page .home-product-section .product-card > :not(a):not(button) {
-  margin-inline: 0.875rem;
-}
-
-.shop-home-page .home-product-section .product-card > a > :not(.product-image-shell):is(div, span, p, h3) {
-  margin-inline: 0.875rem;
-}
-
-/* Product option picker on the detail page: a framed field with the option name as a small label
-   above the value, like the reference. */
-.solune-option-field {
-  border: 1px solid var(--solune-border);
-  border-radius: 0.375rem;
-  background: var(--solune-surface);
-  padding: 0.5rem 0.75rem 0.25rem;
-}
-
-.solune-option-field:focus-within {
-  border-color: var(--solune-text);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--solune-text) 12%, transparent);
-}
-
-.solune-option-field[data-disabled] {
-  background: color-mix(in srgb, var(--solune-border) 35%, var(--solune-surface));
-}
-
-.solune-option-label {
-  display: block;
-  color: var(--solune-muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  line-height: 1.4;
-  text-transform: uppercase;
-}
-
-.solune-option-select {
-  width: 100%;
-  border: 0;
-  background: transparent;
-  padding: 0.125rem 0 0.375rem;
-  color: var(--solune-text);
-  font-size: 0.9375rem;
-  outline: none;
-}
-
-.solune-option-select:disabled {
-  color: var(--solune-muted);
-  opacity: 0.8;
-}

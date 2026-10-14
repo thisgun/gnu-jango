@@ -338,7 +338,9 @@ export function Header({
   }, [searchOpen]);
 
   return (
-    <header className="g5-default-header w-full">
+    // 바깥은 상자를 만들지 않는(display: contents) 묶음이다 — 안쪽 .solune-community-header-sticky 가 페이지 높이의
+    // 부모 아래에서 sticky 로 붙어 있도록(레퍼런스 layout-shell 과 같다). 쇼핑몰 토큰은 이 묶음에서 그대로 물려받는다.
+    <div className="g5-default-header">
       <div className="solune-community-header-shell">
         <div className="solune-community-service-switch">
           <div className="solune-shell solune-community-service-switch-inner">
@@ -362,7 +364,7 @@ export function Header({
         </div>
       </div>
       <div className="solune-community-header-sticky">
-        <div className={`solune-community-header${headerScrolled ? " is-scrolled" : ""}${headerCondensed ? " is-condensed" : ""}`}>
+        <header className={`solune-community-header${headerScrolled ? " is-scrolled" : ""}${headerCondensed ? " is-condensed" : ""}`}>
           <div className="solune-shell solune-community-mainbar">
             <Link
               href={isShop ? "/shop" : "/"}
@@ -386,7 +388,7 @@ export function Header({
               />
             </div>
           </div>
-        </div>
+        </header>
         {!isShop ? (
           <div id="solune-community-search-dock" className={`solune-community-search-dock${searchOpen ? " is-open" : ""}`} hidden={!searchOpen}>
             <div className="solune-shell">
@@ -399,7 +401,7 @@ export function Header({
           </div>
         ) : null}
       </div>
-    </header>
+    </div>
   );
 }
 

@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
 import { useRuntimeRouteParam } from "@/hooks/use-runtime-route-param";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { ProductImageFallback } from "@/components/shop/ProductImageFallback";
 import { formatPrice } from "@/lib/utils";
 import { shouldBypassImageOptimization } from "@/lib/image";
 import { sanitizeCommerceHtml } from "@/lib/sanitize";
@@ -15,6 +16,8 @@ import { shopProductHref } from "@/lib/product-url";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import { getClientPublicSettings } from "@/services/settings";
 import { Sparkles } from "lucide-react";
+import { g5PathForRuntime } from "@/lib/config";
+import { hasProductDiscount, formatProductPrice } from "@/lib/shop-product-state";
 
 interface EventProduct {
   it_id: string;
@@ -122,9 +125,9 @@ export default function EventDetailPage() {
 
   if (loading) {
     return (
-      <div className="animate-pulse space-y-4">
-        <div className="h-8 w-40 rounded bg-muted" />
-        <div className="h-32 rounded-lg bg-muted" />
+      <div className="space-y-4">
+        <div className="skeleton h-8 w-40 rounded" />
+        <div className="skeleton h-32 rounded-lg" />
       </div>
     );
   }
@@ -134,7 +137,7 @@ export default function EventDetailPage() {
       <div className="flex flex-col items-center py-16 text-muted-foreground">
         <Sparkles className="mb-4 h-16 w-16 text-muted-foreground/40" />
         <p>기획전을 찾을 수 없습니다.</p>
-        <a href="/shop/events" className="mt-4 text-sm text-primary hover:underline">
+        <a href={g5PathForRuntime("/shop/events")} className="mt-4 text-sm text-primary hover:underline">
           기획전 목록으로 →
         </a>
       </div>
@@ -212,8 +215,7 @@ export default function EventDetailPage() {
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {event.products.map((p) => {
-            const isTelInquiry = String(p.it_tel_inq ?? "0") === "1";
-            const hasDiscount = !isTelInquiry && p.it_cust_price > 0 && p.it_cust_price > p.it_price;
+            const hasDiscount = hasProductDiscount(p);
 
             return (
             <a
@@ -232,9 +234,7 @@ export default function EventDetailPage() {
                     unoptimized={shouldBypassImageOptimization(p.image_url)}
                   />
                 ) : (
-                  <div className="flex h-full items-center justify-center text-muted-foreground">
-                    No Image
-                  </div>
+                  <ProductImageFallback compact />
                 )}
                 {p.it_soldout === "1" && (
                   <span className="absolute right-2 top-2 rounded bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
@@ -245,7 +245,7 @@ export default function EventDetailPage() {
               <div className="mt-2">
                 <p className="line-clamp-2 text-sm font-medium">{p.it_name}</p>
                 <p className="mt-1 text-sm font-bold text-primary">
-                  {isTelInquiry ? "전화문의" : formatPrice(p.it_price)}
+                  {formatProductPrice(p)}
                 </p>
                 {hasDiscount && (
                   <p className="text-xs text-muted-foreground line-through">

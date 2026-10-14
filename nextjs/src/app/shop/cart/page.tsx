@@ -1,24 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { G5Link as Link } from "@/components/ui/g5-link";
-import Image from "next/image";
-import { api, type ShopCartItem, type ShopPolicy } from "@/lib/api";
-import type { ShopNaverPayConfig } from "@/lib/api";
+import type { ShopCartItem, ShopNaverPayConfig, ShopPolicy } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
 import { applyClientPageMetadata } from "@/lib/client-metadata";
-import { formatPrice, formatCartOption } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { CreditCard, Minus, Plus, Trash2, ShoppingBag, Ticket } from "lucide-react";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { toastError, toastSuccess } from "@/lib/toast";
-import { shouldBypassImageOptimization } from "@/lib/image";
-import { shopProductHref } from "@/lib/product-url";
 import {
-  getCart,
-  removeCartItem,
-  updateCartItemQuantity,
-} from "@/services/cart";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { CreditCard, ShoppingBag } from "lucide-react";
+import { Breadcrumb } from "@/components/ui/breadcrumb";
+import { toastError } from "@/lib/toast";
+import { notifyCartChanged } from "@/lib/cart-events";
+import { getCart, removeCartItem } from "@/services/cart";
 import {
   estimateShopShippingCost,
   getShopNaverPayConfig,
@@ -27,24 +29,17 @@ import {
   registerShopNaverPayOrder,
 } from "@/services/shop";
 import { getClientPublicSettings } from "@/services/settings";
-import { getShopCartShippingPaymentLabel } from "@/lib/shop-shipping-label";
+import { useAuthStore } from "@/store/auth";
+import { cartOrderHref, groupCartItems, selectedGroupCtIds, type CartGroup } from "./cartGroups";
+import { CartTable } from "./CartTable";
+import { CartTotals } from "./CartTotals";
+import { CartOptionDialog } from "./CartOptionDialog";
+import { CartCouponDialog } from "./CartCouponDialog";
 
-interface ApplicableCoupon {
-  cp_id: string;
-  cp_subject: string;
-  cp_method: number;     // 0 상품, 1 카테고리
-  cp_type: number;       // 0 정액, 1 정률
-  cp_price: number;
-  cp_minimum: number;
-  cp_maximum: number;
-  discount: number;      // 이 행에 적용 시 실제 할인액
-}
+const NOTHING_TO_ORDER = "주문하실 상품을 하나이상 선택해 주십시오.";
+const NOTHING_TO_DELETE = "삭제하실 상품을 하나이상 선택해 주십시오.";
 
-function cartItemLineTotal(item: ShopCartItem): number {
-  return typeof item.line_total === "number"
-    ? item.line_total
-    : item.ct_price * item.ct_qty;
-}
+type DeleteKind = "selected" | "all";
 
 function naverPayCartBlockReason(item: ShopCartItem): string {
   const itemName = item.it_name || "상품";
@@ -68,6 +63,11 @@ function naverPayCartBlockReason(item: ShopCartItem): string {
   return "";
 }
 
+/**
+ * 장바구니 — 레퍼런스(영카트 cart.php)의 짜임: 이동 경로 · 제목 · 상품별 표(선택 · 선택사항수정 · 쿠폰적용) ·
+ * 선택삭제 · 비우기 · 합계 막대 · 쇼핑 계속하기 / 주문하기. 빈 장바구니도 같은 표에 안내 줄 하나를 둔다.
+ * 고른 상품만 주문하거나(주문서가 ct_ids 로 받는다) 네이버페이로 보낸다.
+ */
 export default function CartPage() {
   const [items, setItems] = useState<ShopCartItem[]>([]);
   const [cartCoupon, setCartCoupon] = useState(0);
@@ -75,14 +75,18 @@ export default function CartPage() {
   const [cartShippingCost, setCartShippingCost] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
-  const [updatingIds, setUpdatingIds] = useState<Set<string>>(new Set());
   const [naverPayConfig, setNaverPayConfig] = useState<ShopNaverPayConfig | null>(null);
   const [naverPaySubmitting, setNaverPaySubmitting] = useState(false);
   const [productRewriteMode, setProductRewriteMode] = useState<BbsRewriteMode>(0);
-  const [pendingRemoveItem, setPendingRemoveItem] = useState<ShopCartItem | null>(null);
-  // 행별로 lazy-load 한 사용 가능 쿠폰 — 한번 펼치면 캐시.
-  const [applicableMap, setApplicableMap] = useState<Record<string, ApplicableCoupon[]>>({});
-  const applicableLoadingRef = useRef<Set<string>>(new Set());
+  // 영카트처럼 처음에는 모두 고른 상태 — 해제한 상품만 기억한다(다시 불러와 새로 생긴 상품도 골라진 채로 보인다).
+  const [deselected, setDeselected] = useState<ReadonlySet<string>>(() => new Set());
+  const [optionItId, setOptionItId] = useState("");
+  const [couponItId, setCouponItId] = useState("");
+  // 확인 창 — 닫히는 동안 글이 바뀌지 않게 열림과 종류를 따로 둔다.
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleteKind, setDeleteKind] = useState<DeleteKind>("selected");
+  const [deleting, setDeleting] = useState(false);
+  const isMember = Boolean(useAuthStore((state) => state.user));
 
   useEffect(() => {
     let alive = true;
@@ -131,7 +135,7 @@ export default function CartPage() {
         getShopPolicy().catch(() => null),
       ]);
       setItems(cart.items);
-      setCartCoupon((cart as { cart_coupon?: number }).cart_coupon ?? 0);
+      setCartCoupon(cart.cart_coupon ?? 0);
       setCartShippingCost(
         typeof cart.shipping_cost === "number"
           ? cart.shipping_cost
@@ -151,122 +155,80 @@ export default function CartPage() {
     }
   }, []);
 
-  const loadApplicable = useCallback(async (ct_id: string) => {
-    if (applicableMap[ct_id] || applicableLoadingRef.current.has(ct_id)) return;
-    applicableLoadingRef.current.add(ct_id);
-    try {
-      const res = await api.get<ApplicableCoupon[]>(
-        `/shop/coupons/applicable?ct_id=${encodeURIComponent(ct_id)}`
-      );
-      setApplicableMap((prev) => ({ ...prev, [ct_id]: (res.data as ApplicableCoupon[]) ?? [] }));
-    } catch {
-      setApplicableMap((prev) => ({ ...prev, [ct_id]: [] }));
-    } finally {
-      applicableLoadingRef.current.delete(ct_id);
-    }
-  }, [applicableMap]);
-
-  const applyCoupon = useCallback(async (ct_id: string, cp_id: string) => {
-    setUpdatingIds((prev) => new Set(prev).add(ct_id));
-    try {
-      await api.post("/shop/coupons/apply-to-cart", { ct_id: Number(ct_id), cp_id });
-      if (cp_id) toastSuccess("쿠폰이 적용되었습니다.");
-      else toastSuccess("쿠폰을 해제했습니다.");
-      await loadCart();
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "쿠폰 적용에 실패했습니다.";
-      toastError(message);
-    } finally {
-      setUpdatingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(ct_id);
-        return next;
-      });
-    }
-  }, [loadCart]);
-
   useEffect(() => {
     loadCart();
   }, [loadCart]);
 
-  const naverPayBlockReason = items.map(naverPayCartBlockReason).find(Boolean) || "";
+  // 담긴 것을 바꾼 뒤 — 머리의 장바구니 수(cart:changed 를 듣는다)도 다시 센다.
+  const reloadAfterChange = useCallback(async () => {
+    notifyCartChanged();
+    await loadCart();
+  }, [loadCart]);
+
+  const groups = useMemo(() => groupCartItems(items), [items]);
+  const selected = useMemo(
+    () => new Set(groups.filter((group) => !deselected.has(group.itId)).map((group) => group.itId)),
+    [groups, deselected]
+  );
+  const selectedCtIds = selectedGroupCtIds(groups, selected);
+  const orderHref = cartOrderHref(groups, selected);
+  const busyItIds = useMemo(
+    () => (deleting ? new Set(groups.map((group) => group.itId)) : new Set<string>()),
+    [deleting, groups]
+  );
+
+  // 네이버페이도 주문하기처럼 고른 상품만 보낸다.
+  const selectedItems = items.filter((item) => selectedCtIds.includes(item.ct_id));
+  const naverPayBlockReason = selectedItems.map(naverPayCartBlockReason).find(Boolean) || "";
   const canUseNaverPay =
-    !!naverPayConfig?.enabled && items.length > 0 && naverPayBlockReason === "";
+    !!naverPayConfig?.enabled && selectedItems.length > 0 && naverPayBlockReason === "";
 
-  const updateQuantity = useCallback(
-    async (ct_id: string, newQty: number) => {
-      if (newQty < 1) return;
-      setUpdatingIds((prev) => new Set(prev).add(ct_id));
-      try {
-        await updateCartItemQuantity(ct_id, newQty);
-        setItems((prev) =>
-          prev.map((item) =>
-            item.ct_id === ct_id
-              ? {
-                  ...item,
-                  ct_qty: newQty,
-                  // Optimistic estimate only; the server refreshes line_total
-                  // on the next loadCart(). Scale the existing line total
-                  // proportionally and round once — flooring the unit price
-                  // before multiplying drops up to (qty-1) won every update.
-                  line_total:
-                    item.ct_qty > 0
-                      ? Math.round((cartItemLineTotal(item) / item.ct_qty) * newQty)
-                      : item.ct_price * newQty,
-                }
-              : item
-          )
-        );
-      } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : "수량 변경에 실패했습니다.";
-        toastError(message);
-      } finally {
-        setUpdatingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(ct_id);
-          return next;
-        });
-      }
-    },
-    []
+  const toggleGroup = useCallback((itId: string, checked: boolean) => {
+    setDeselected((previous) => {
+      const next = new Set(previous);
+      if (checked) next.delete(itId);
+      else next.add(itId);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback(
+    (checked: boolean) => setDeselected(checked ? new Set() : new Set(groups.map((group) => group.itId))),
+    [groups]
   );
 
-  const removeItem = useCallback(
-    async (ct_id: string) => {
-      setUpdatingIds((prev) => new Set(prev).add(ct_id));
-      try {
-        await removeCartItem(ct_id);
-        setItems((prev) => prev.filter((item) => item.ct_id !== ct_id));
-        setPendingRemoveItem(null);
-      } catch {
-        toastError("삭제에 실패했습니다.");
-      } finally {
-        setUpdatingIds((prev) => {
-          const next = new Set(prev);
-          next.delete(ct_id);
-          return next;
-        });
-      }
-    },
-    []
-  );
+  const requestDelete = (kind: DeleteKind) => {
+    if (kind === "selected" && selectedCtIds.length === 0) {
+      toastError(NOTHING_TO_DELETE);
+      return;
+    }
+    setDeleteKind(kind);
+    setConfirmOpen(true);
+  };
 
-  const requestRemoveItem = useCallback(
-    (item: ShopCartItem) => {
-      if (typeof window === "undefined") {
-        setPendingRemoveItem(item);
-        return;
-      }
-      if (window.confirm(`${item.it_name} 상품을 장바구니에서 삭제하시겠습니까?`)) {
-        void removeItem(item.ct_id);
-      }
-    },
-    [removeItem]
-  );
+  const runDelete = async () => {
+    setConfirmOpen(false);
+    setDeleting(true);
+    const ctIds = deleteKind === "all" ? items.map((item) => item.ct_id) : selectedCtIds;
+    try {
+      // 한 줄씩 차례로 지운다 — 장바구니가 세션 한 덩어리라 동시에 보내면 서로의 삭제를 덮을 수 있다.
+      for (const ctId of ctIds) await removeCartItem(ctId);
+      // 영카트처럼 지운 뒤에는 남은 상품이 모두 골라진 채로 보인다.
+      setDeselected(new Set());
+    } catch (err: unknown) {
+      toastError(err instanceof Error && err.message ? err.message : "삭제에 실패했습니다.");
+    } finally {
+      await reloadAfterChange();
+      setDeleting(false);
+    }
+  };
 
   const handleNaverPayOrder = useCallback(async () => {
-    if (!naverPayConfig?.enabled || !items.length) return;
+    if (!naverPayConfig?.enabled) return;
+    if (!selectedItems.length) {
+      toastError(NOTHING_TO_ORDER);
+      return;
+    }
     if (naverPayBlockReason) {
       toastError(naverPayBlockReason);
       return;
@@ -276,7 +238,7 @@ export default function CartPage() {
     try {
       const response = await registerShopNaverPayOrder({
         source: "cart",
-        ct_ids: items.map((item) => item.ct_id),
+        ct_ids: selectedItems.map((item) => item.ct_id),
         back_url: window.location.href,
       });
       if (!response.redirect_url) {
@@ -290,27 +252,24 @@ export default function CartPage() {
     } finally {
       setNaverPaySubmitting(false);
     }
-  }, [items, naverPayBlockReason, naverPayConfig?.enabled]);
+  }, [naverPayBlockReason, naverPayConfig?.enabled, selectedItems]);
 
-  const subtotal = items.reduce(
-    (sum, item) => sum + cartItemLineTotal(item),
-    0
-  );
-  const estimatedShippingCost = estimateShopShippingCost(subtotal, shippingPolicy);
-  const shippingCost = cartShippingCost ?? estimatedShippingCost;
+  // 합계는 영카트처럼 장바구니 전체 — 배송비는 서버 계산값, 없으면 정책으로 어림한다.
+  const subtotal = groups.reduce((sum, group) => sum + group.subtotal, 0);
+  const shippingCost = cartShippingCost ?? estimateShopShippingCost(subtotal, shippingPolicy);
   const shippingFreeThreshold = getShopShippingFreeThreshold(shippingPolicy);
   // 카트행 쿠폰(상품/카테고리) — 서버 반환값(cartCoupon)이 정확. 클라 합산은 표시 fallback.
-  const cartCouponDisplay = cartCoupon > 0
-    ? cartCoupon
-    : items.reduce((s, it) => s + (it.cp_price ?? 0), 0);
-  const total = Math.max(0, subtotal - cartCouponDisplay + shippingCost);
+  const couponTotal = cartCoupon > 0 ? cartCoupon : groups.reduce((sum, group) => sum + group.couponDiscount, 0);
+  const total = Math.max(0, subtotal - couponTotal + shippingCost);
+  const optionGroup: CartGroup | undefined = groups.find((group) => group.itId === optionItId);
+  const couponGroup: CartGroup | undefined = groups.find((group) => group.itId === couponItId);
 
   if (loading) {
     return (
       <div className="animate-pulse space-y-4">
         <div className="h-8 w-40 rounded bg-muted" />
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="flex gap-4 rounded-lg border p-4">
+          <div key={i} className="flex gap-4 border-b py-6">
             <div className="h-20 w-20 rounded bg-muted" />
             <div className="flex-1 space-y-2">
               <div className="h-4 w-3/4 rounded bg-muted" />
@@ -335,277 +294,93 @@ export default function CartPage() {
     );
   }
 
-  if (items.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <ShoppingBag className="mb-4 h-16 w-16 text-muted-foreground/50" />
-        <h1 className="text-xl font-bold">장바구니가 비어있습니다</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          상품을 추가해보세요
-        </p>
-        <Button className="mt-6" asChild>
+  return (
+    <div className="cart-page">
+      <Breadcrumb items={[{ label: "쇼핑몰", href: "/shop" }, { label: "장바구니" }]} />
+      <h1 className="cart-title mb-6 text-2xl font-bold">장바구니</h1>
+
+      <CartTable
+        groups={groups}
+        selected={selected}
+        onToggle={toggleGroup}
+        onToggleAll={toggleAll}
+        productRewriteMode={productRewriteMode}
+        canUseCoupons={isMember}
+        busyItIds={busyItIds}
+        onEditOptions={setOptionItId}
+        onOpenCoupons={setCouponItId}
+      />
+
+      {groups.length > 0 && (
+        <>
+          <div className="cart-list-actions mt-4 flex gap-2">
+            <Button type="button" variant="outline" size="sm" className="cart-delete-selected" onClick={() => requestDelete("selected")} disabled={deleting}>
+              선택삭제
+            </Button>
+            <Button type="button" variant="outline" size="sm" className="cart-delete-all" onClick={() => requestDelete("all")} disabled={deleting}>
+              비우기
+            </Button>
+          </div>
+          <CartTotals shippingCost={shippingCost} coupon={couponTotal} total={total} freeThreshold={shippingFreeThreshold} />
+        </>
+      )}
+
+      <div className="cart-buttons mx-auto mt-8 flex max-w-sm gap-2">
+        <Button variant="outline" size="lg" className="cart-continue flex-1" asChild>
           <Link href="/shop/products">쇼핑 계속하기</Link>
         </Button>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <Breadcrumb items={[{ label: "쇼핑몰", href: "/shop" }, { label: "장바구니" }]} />
-      <h1 className="mb-6 text-2xl font-bold">
-        장바구니 ({items.length})
-      </h1>
-
-      <div className="grid gap-8 lg:grid-cols-3">
-        {/* Cart Items */}
-        <div className="space-y-4 lg:col-span-2">
-          {items.map((item) => (
-            <div
-              key={item.ct_id}
-              className="flex gap-4 rounded-lg border p-4"
-            >
-              <a
-                href={shopProductHref(item, productRewriteMode)}
-                className="relative h-20 w-20 flex-shrink-0 overflow-hidden rounded-md bg-muted sm:h-24 sm:w-24"
-              >
-                {item.image_url ? (
-                  <Image
-                    src={item.image_url}
-                    alt={item.it_name}
-                    fill
-                    className="object-cover"
-                    sizes="96px"
-                    unoptimized={shouldBypassImageOptimization(item.image_url)}
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                    No Image
-                  </div>
-                )}
-              </a>
-
-              <div className="flex flex-1 flex-col justify-between">
-                <div>
-                  <a
-                    href={shopProductHref(item, productRewriteMode)}
-                    className="font-medium hover:text-primary"
-                  >
-                    {item.it_name}
-                  </a>
-                  {item.ct_option && (
-                    <p className="mt-0.5 text-sm text-muted-foreground">
-                      옵션: {formatCartOption(item.ct_option)}
-                    </p>
-                  )}
-                  <p
-                    className="mt-0.5 text-xs text-muted-foreground"
-                    data-shop-cart-send-cost-label="1"
-                  >
-                    배송비: {getShopCartShippingPaymentLabel(item, items)}
-                  </p>
-                  {/* 상품/카테고리 쿠폰 드롭다운 — 행 단위 적용. 적용 결과는 cp_price 에. */}
-                  <div className="mt-2">
-                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Ticket className="h-3 w-3" />
-                      <span>상품 쿠폰</span>
-                    </label>
-                    <select
-                      aria-label={`${item.it_name} 상품 쿠폰 선택`}
-                      value={item.cp_id || ""}
-                      onFocus={() => loadApplicable(item.ct_id)}
-                      onChange={(e) => applyCoupon(item.ct_id, e.target.value)}
-                      disabled={updatingIds.has(item.ct_id)}
-                      className="mt-1 w-full max-w-md rounded-md border bg-background px-2 py-1 text-xs"
-                    >
-                      <option value="">— 사용 안 함 —</option>
-                      {(item.cp_id && !applicableMap[item.ct_id]?.some(c => c.cp_id === item.cp_id)) && (
-                        // 이미 묶인 쿠폰이 applicable 목록에 없으면 (예: 다른 행에 의해 사용 처리)
-                        // 묶인 상태만 유지해서 사용자가 보고 해제할 수 있게 한 옵션 표시.
-                        <option value={item.cp_id}>
-                          (적용됨: {formatPrice(item.cp_price ?? 0)} 할인)
-                        </option>
-                      )}
-                      {(applicableMap[item.ct_id] ?? []).map((c) => (
-                        <option key={c.cp_id} value={c.cp_id}>
-                          {c.cp_subject} (-{formatPrice(c.discount)})
-                        </option>
-                      ))}
-                    </select>
-                    {(item.cp_price ?? 0) > 0 && (
-                      <p className="mt-1 text-xs text-green-700">
-                        쿠폰 할인 -{formatPrice(item.cp_price ?? 0)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={
-                        item.ct_qty <= 1 || updatingIds.has(item.ct_id)
-                      }
-                      aria-label={`${item.it_name} 수량 줄이기`}
-                      onClick={() =>
-                        updateQuantity(item.ct_id, item.ct_qty - 1)
-                      }
-                    >
-                      <Minus className="h-3 w-3" />
-                    </Button>
-                    <span className="w-8 text-center text-sm font-medium">
-                      {item.ct_qty}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-8 w-8"
-                      disabled={updatingIds.has(item.ct_id)}
-                      aria-label={`${item.it_name} 수량 늘리기`}
-                      onClick={() =>
-                        updateQuantity(item.ct_id, item.ct_qty + 1)
-                      }
-                    >
-                      <Plus className="h-3 w-3" />
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <span className="font-bold">
-                      {formatPrice(cartItemLineTotal(item))}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      disabled={updatingIds.has(item.ct_id)}
-                      onClick={() => requestRemoveItem(item)}
-                      aria-label={`${item.it_name} 삭제`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
+        {groups.length > 0 &&
+          (orderHref ? (
+            <Button size="lg" className="cart-order flex-1" asChild>
+              <Link href={orderHref}>주문하기</Link>
+            </Button>
+          ) : (
+            <Button size="lg" className="cart-order flex-1" onClick={() => toastError(NOTHING_TO_ORDER)}>
+              주문하기
+            </Button>
           ))}
-        </div>
-
-        {/* Order Summary */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-4 rounded-lg border p-6">
-            <h2 className="mb-4 text-lg font-bold">주문 요약</h2>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">상품 금액</span>
-                <span>{formatPrice(subtotal)}</span>
-              </div>
-              {cartCouponDisplay > 0 && (
-                <div className="flex justify-between text-green-700">
-                  <span>상품 쿠폰 할인</span>
-                  <span>-{formatPrice(cartCouponDisplay)}</span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">배송비</span>
-                <span>
-                  {shippingCost === 0 ? (
-                    <span className="text-green-700">무료</span>
-                  ) : (
-                    formatPrice(shippingCost)
-                  )}
-                </span>
-              </div>
-              {shippingCost > 0 && shippingFreeThreshold > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {formatPrice(shippingFreeThreshold)} 이상 구매 시 무료배송
-                </p>
-              )}
-              <div className="border-t pt-3">
-                <div className="flex justify-between text-base font-bold">
-                  <span>총 결제금액</span>
-                  <span className="text-primary">{formatPrice(total)}</span>
-                </div>
-              </div>
-            </div>
-            <Button className="mt-6 w-full" size="lg" asChild>
-              <Link href="/shop/order">주문하기</Link>
-            </Button>
-            {naverPayConfig?.enabled && (
-              <>
-                <Button
-                  type="button"
-                  className="mt-2 w-full bg-[#0c8040] text-white hover:bg-[#08783a] disabled:bg-[#0c8040]/50 disabled:text-white"
-                  size="lg"
-                  onClick={handleNaverPayOrder}
-                  disabled={naverPaySubmitting || !canUseNaverPay}
-                >
-                  <CreditCard className="mr-2 h-4 w-4" />
-                  {naverPaySubmitting ? "네이버페이 등록 중..." : "N Pay 구매"}
-                </Button>
-                {naverPayBlockReason && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {naverPayBlockReason}
-                  </p>
-                )}
-              </>
-            )}
-            <Button
-              variant="outline"
-              className="mt-2 w-full"
-              asChild
-            >
-              <Link href="/shop/products">쇼핑 계속하기</Link>
-            </Button>
-          </div>
-        </div>
       </div>
-
-      {pendingRemoveItem && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-          role="presentation"
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="cart-remove-title"
-            aria-describedby="cart-remove-description"
-            className="w-full max-w-sm rounded-[8px] bg-background p-5 shadow-lg"
+      {groups.length > 0 && naverPayConfig?.enabled && (
+        <div className="cart-naverpay mx-auto mt-2 max-w-sm">
+          <Button
+            type="button"
+            className="cart-naverpay-button w-full bg-[#0c8040] text-white hover:bg-[#08783a] disabled:bg-[#0c8040]/50 disabled:text-white"
+            size="lg"
+            onClick={handleNaverPayOrder}
+            disabled={naverPaySubmitting || !canUseNaverPay}
           >
-            <h2 id="cart-remove-title" className="text-lg font-bold">
-              상품 삭제
-            </h2>
-            <p
-              id="cart-remove-description"
-              className="mt-2 text-sm text-muted-foreground"
-            >
-              {pendingRemoveItem.it_name} 상품을 장바구니에서 삭제하시겠습니까?
-            </p>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setPendingRemoveItem(null)}
-                disabled={updatingIds.has(pendingRemoveItem.ct_id)}
-              >
-                닫기
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => removeItem(pendingRemoveItem.ct_id)}
-                disabled={updatingIds.has(pendingRemoveItem.ct_id)}
-              >
-                {updatingIds.has(pendingRemoveItem.ct_id) ? "삭제 중..." : "삭제"}
-              </Button>
-            </div>
-          </div>
+            <CreditCard className="mr-2 h-4 w-4" />
+            {naverPaySubmitting ? "네이버페이 등록 중..." : "N Pay 구매"}
+          </Button>
+          {naverPayBlockReason && (
+            <p className="mt-2 text-xs text-muted-foreground">{naverPayBlockReason}</p>
+          )}
         </div>
       )}
+
+      {optionGroup && (
+        <CartOptionDialog group={optionGroup} onClose={() => setOptionItId("")} onChanged={reloadAfterChange} />
+      )}
+      {couponGroup && (
+        <CartCouponDialog group={couponGroup} onClose={() => setCouponItId("")} onChanged={reloadAfterChange} />
+      )}
+
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{deleteKind === "all" ? "장바구니 비우기" : "선택삭제"}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteKind === "all"
+                ? "장바구니의 상품을 모두 삭제하시겠습니까?"
+                : `선택한 상품 ${selected.size}개를 장바구니에서 삭제하시겠습니까?`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>취소</AlertDialogCancel>
+            <AlertDialogAction onClick={runDelete}>삭제</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

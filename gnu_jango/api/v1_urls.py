@@ -124,6 +124,11 @@ urlpatterns = [
     path("upload", v1_board.editor_upload_view, name="editor-upload"),
     path("boards", v1_board.board_list_view, name="boards"),
     path("boards/<str:bo_table>/posts", v1_board.board_posts_view, name="board-posts"),
+    path(
+        "boards/<str:bo_table>/category-counts",
+        v1_board.board_category_counts_view,
+        name="board-category-counts",
+    ),
     path("boards/<str:bo_table>/<int:wr_id>/files", v1_board.post_files_view, name="post-files"),
     path(
         "boards/<str:bo_table>/<int:wr_id>/files/<int:bf_no>/download",

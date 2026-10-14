@@ -176,7 +176,7 @@ export function ProductCard({
   );
 }
 
-function CompareToggleButton({ product }: { product: ShopProduct }) {
+export function CompareToggleButton({ product }: { product: ShopProduct }) {
   const { isCompared, add, remove } = useCompareStore();
   const active = isCompared(product.it_id);
 

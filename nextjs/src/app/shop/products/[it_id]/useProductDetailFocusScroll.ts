@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { qaFocusIdFromSearch, reviewFocusIdFromSearch } from "./productDetailHelpers";
+import { qaFocusIdFromSearch, reviewFocusIdFromSearch } from "@/components/shop/productDetailHelpers";
 
 const TABLIST_SELECTOR = '[role="tablist"][aria-label="상품 상세 정보"]';
 

@@ -489,10 +489,12 @@ export default function RegisterPage() {
   };
 
   return (
-    <Card>
-      <CardHeader className="text-center">
-        <CardTitle className="text-2xl">회원가입</CardTitle>
-        <CardDescription>새 계정을 만들어주세요</CardDescription>
+    <Card className="auth-card auth-card--register">
+      <CardHeader className="auth-card-head text-center">
+        {/* CardTitle 은 div 라 페이지 제목(h1)을 따로 둔다 — 로그인 화면과 같다. */}
+        <h1 className="sr-only">회원가입</h1>
+        <CardTitle className="auth-card-title text-2xl">회원가입</CardTitle>
+        <CardDescription className="auth-card-desc">새 계정을 만들어주세요</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">

@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import Image from "next/image";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -21,6 +22,8 @@ export interface MemberSideviewProps {
   /** 작성자 검색 메뉴를 현재 게시판으로 제한할 때 사용합니다. */
   boTable?: string | null;
   className?: string;
+  /** 단추 안에 그릴 내용. 아바타를 따로 그리는 목록 줄은 이름만 넘긴다(기본은 아이콘·이니셜 + 이름). */
+  children?: ReactNode;
 }
 
 const ICON_SIZE = 20;
@@ -33,6 +36,7 @@ export function MemberSideview({
   iconUrl,
   boTable,
   className,
+  children,
 }: MemberSideviewProps) {
   const currentUser = useAuthStore((s) => s.user);
   const isSuperAdmin = !!currentUser?.is_super_admin;
@@ -63,24 +67,28 @@ export function MemberSideview({
           )}
           aria-label={`${name} 회원 메뉴 열기`}
         >
-          {iconUrl ? (
-            <Image
-              src={iconUrl}
-              alt=""
-              width={ICON_SIZE}
-              height={ICON_SIZE}
-              className="rounded-full"
-              unoptimized={shouldBypassImageOptimization(iconUrl)}
-            />
-          ) : (
-            <span
-              aria-hidden="true"
-              className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary"
-            >
-              {Array.from(name.trim())[0]?.toLocaleUpperCase("ko-KR") || "?"}
-            </span>
+          {children ?? (
+            <>
+              {iconUrl ? (
+                <Image
+                  src={iconUrl}
+                  alt=""
+                  width={ICON_SIZE}
+                  height={ICON_SIZE}
+                  className="rounded-full"
+                  unoptimized={shouldBypassImageOptimization(iconUrl)}
+                />
+              ) : (
+                <span
+                  aria-hidden="true"
+                  className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[10px] font-semibold text-primary"
+                >
+                  {Array.from(name.trim())[0]?.toLocaleUpperCase("ko-KR") || "?"}
+                </span>
+              )}
+              <span>{name}</span>
+            </>
           )}
-          <span>{name}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-44 p-1" align="start">

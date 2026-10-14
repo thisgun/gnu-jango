@@ -41,7 +41,7 @@ export default function OrderPage() {
   }
 
   return (
-    <div>
+    <div className="shop-order-page">
       <Script
         src="//t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"
         strategy="afterInteractive"
@@ -50,7 +50,7 @@ export default function OrderPage() {
       />
 
       <Breadcrumb items={[{ label: "쇼핑몰", href: "/shop" }, { label: "장바구니", href: "/shop/cart" }, { label: "주문/결제" }]} />
-      <h1 className="mb-6 text-2xl font-bold">주문/결제</h1>
+      <h1 className="shop-order-title mb-6 text-2xl font-bold">주문/결제</h1>
       {postcodeLoadFailed && (
         <div
           className="mb-6 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
@@ -73,8 +73,8 @@ export default function OrderPage() {
       )}
 
       <form onSubmit={handleSubmit} className="min-w-0">
-        <div className="grid min-w-0 gap-6 lg:grid-cols-3 lg:gap-8">
-          <div className="min-w-0 space-y-6 lg:col-span-2 lg:space-y-8">
+        <div className="shop-order-grid grid min-w-0 gap-8 lg:grid-cols-3">
+          <div className="shop-order-main min-w-0 space-y-8 lg:col-span-2">
             <OrderItemsSummary items={items} />
 
             <OrdererInfoSection
@@ -86,20 +86,24 @@ export default function OrderPage() {
               inputClassName={inputClassName}
               {...recipientInfo}
             />
-            <OrderPaymentMethodSection
-              inputClassName={inputClassName}
-              {...paymentMethodSection}
-            />
+          </div>
+
+          {/* 쿠폰 / 포인트 · 결제수단 · 약관 동의 · 결제 금액은 오른쪽 한 덩어리 — 레퍼런스 주문서(shop/orderform.sub.php)도
+              결제정보(주문할인 · 배송비할인) · 총 주문금액 · #od_pay_sl · 포인트를 #sod_frm_pay 에 모은다. */}
+          <div className="shop-order-aside min-w-0 space-y-8 lg:col-span-1">
             {isMemberOrder && (
               <OrderCouponPointSection
                 inputClassName={inputClassName}
                 {...couponPointSection}
               />
             )}
+            <OrderPaymentMethodSection
+              inputClassName={inputClassName}
+              {...paymentMethodSection}
+            />
             <OrderAgreementsSection {...agreements} />
+            <OrderSummarySidebar {...summary} />
           </div>
-
-          <OrderSummarySidebar {...summary} />
         </div>
       </form>
 

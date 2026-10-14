@@ -1,44 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, type FormEvent } from "react";
-import dynamic from "next/dynamic";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useRouter } from "@bprogress/next/app";
-import { ApiError, api } from "@/lib/api";
+import { api } from "@/lib/api";
 import type { ShopPolicy, ShopProduct, ShopReview, ShopReviewSummary, ShopQA } from "@/lib/api";
-import type { ShopNaverPayConfig, ShopNaverPayOrderOption } from "@/lib/api";
-import { Breadcrumb } from "@/components/ui/breadcrumb";
-import { toastSuccess, toastError, toastInfo } from "@/lib/toast";
-import { ToastAction } from "@/components/ui/toast";
-import { sanitizeCommerceHtml } from "@/lib/sanitize";
-import {
-  applyClientJsonLd,
-  applyClientPageMetadata,
-  clientAbsoluteUrl,
-  plainTextSummary,
-} from "@/lib/client-metadata";
+import { toastSuccess, toastError } from "@/lib/toast";
 import {
   currentPathForRuntime,
   currentPathHasTrailingSlashForRuntime,
   g5PathForRuntime,
 } from "@/lib/config";
 import { runtimeRouterPush } from "@/lib/runtime-router";
-import { notifyCartChanged } from "@/lib/cart-events";
 import type { BbsRewriteMode } from "@/lib/board-url";
 import { isBbsSeoRewrite } from "@/lib/board-url";
-import { g5ShortHref } from "@/lib/g5-short-url";
-import { shopProductPath } from "@/lib/product-url";
+import { isTelInquiry } from "@/lib/shop-product-state";
 import { useRuntimeRouteParam } from "@/hooks/use-runtime-route-param";
 import { useRecentProductsStore } from "@/store/recent-products";
-import { useRestockAlertStore } from "@/store/restock-alerts";
-import { useAuthStore } from "@/store/auth";
-import {
-  addCartItem,
-  addCartItemDirect,
-  addCartItems,
-  addWishlistItem,
-} from "@/services/cart";
-import { gaViewItem, gaAddToCart } from "@/lib/analytics";
+import { addCartItemDirect, addCartItems, addWishlistItem } from "@/services/cart";
+import { gaViewItem } from "@/lib/analytics";
 import {
   getShopProductResult,
   getShopProductBySeoResult,
@@ -47,46 +27,37 @@ import {
   getShopProductReviewSummary,
   getShopProductQaPage,
   getShopProductReviewPage,
-  getShopNaverPayConfig,
-  registerShopNaverPayOrder,
-  registerShopNaverPayWish,
 } from "@/services/shop";
 import { getClientPublicSettings } from "@/services/settings";
+import { addProductToCart, toastAddedToCart } from "@/components/shop/addProductToCart";
 import {
   cartIdsFromAddResponse,
-  productPointLabel,
+  isProductDetailSoldOut,
   productShippingPayment,
   productDetailTabFromSearch,
   productDetailFormFromSearch,
   qaFocusIdFromSearch,
   reviewFocusIdFromSearch,
   isLegacyShortProductPath,
-} from "./productDetailHelpers";
+} from "@/components/shop/productDetailHelpers";
+import { useProductOptions } from "@/components/shop/useProductOptions";
 import {
   scrollToProductDetailTabs,
   useProductDetailFocusScroll,
 } from "./useProductDetailFocusScroll";
-import {
-  ProductDetailEmpty,
-  ProductDetailLoading,
-  ProductImageGallery,
-  RecentlyViewed,
-  RelatedProducts,
-} from "./ProductDetailSections";
-import { RecommendationDialog, RestockAlertDialog } from "./ProductDetailDialogs";
-import { ProductDetailTabs } from "./ProductDetailTabs";
-import { ProductPurchasePanel } from "./ProductPurchasePanel";
-import { useProductOptions } from "./useProductOptions";
-
-const Lightbox = dynamic(
-  () => import("@/components/ui/lightbox").then((mod) => ({ default: mod.Lightbox })),
-  { ssr: false }
-);
+import { useProductDetailMetadata } from "./useProductDetailMetadata";
+import { useProductMemberActions } from "./useProductMemberActions";
+import { useProductNaverPay } from "./useProductNaverPay";
+import { ProductDetailEmpty, ProductDetailLoading } from "./ProductDetailSections";
+import { ProductDetailView } from "./ProductDetailView";
+import type { ProductPurchaseControlsProps } from "./ProductPurchaseControls";
 
 interface ProductDetailClientProps {
   itId?: string;
   initialProduct?: ShopProduct | null;
 }
+
+type QaPageResult = Awaited<ReturnType<typeof getShopProductQaPage>>;
 
 export default function ProductDetailClient({
   itId,
@@ -118,63 +89,64 @@ export default function ProductDetailClient({
   const [qas, setQas] = useState<ShopQA[]>([]);
   const [shippingPolicy, setShippingPolicy] = useState<ShopPolicy | null>(null);
   const [reviewPage, setReviewPage] = useState(1);
+  // 사용후기 쪽 — 서버가 실제로 연 쪽(찾아간 후기가 있으면 그 쪽)과 마지막 쪽.
   const [reviewShownPage, setReviewShownPage] = useState(1);
   const [reviewLastPage, setReviewLastPage] = useState(1);
+  // 주소의 ?is_id= — 첫 불러오기에서만 서버에 넘겨 그 후기가 있는 쪽을 연다. 쪽을 옮기면 비운다.
   const [pendingFocusIsId, setPendingFocusIsId] = useState(0);
   const [qaPage, setQaPage] = useState(1);
   const [qaShownPage, setQaShownPage] = useState(1);
   const [qaLastPage, setQaLastPage] = useState(1);
-  const [qaTotal, setQaTotal] = useState(0);
+  // 상품문의 전체 건수 — 목록을 받기 전에는 null(탭 건수는 상품 정보의 qa_count 를 쓴다).
+  const [qaTotal, setQaTotal] = useState<number | null>(null);
   const [pendingFocusIqId, setPendingFocusIqId] = useState(0);
   const [addingToCart, setAddingToCart] = useState(false);
-  const [naverPayConfig, setNaverPayConfig] = useState<ShopNaverPayConfig | null>(null);
-  const [naverPaySubmitting, setNaverPaySubmitting] = useState(false);
-  const [naverPayWishSubmitting, setNaverPayWishSubmitting] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [productRewriteMode, setProductRewriteMode] = useState<BbsRewriteMode>(0);
-  const [restockDialogOpen, setRestockDialogOpen] = useState(false);
-  const [restockHp, setRestockHp] = useState("");
-  const [restockAgree, setRestockAgree] = useState(false);
-  const [restockSubmitting, setRestockSubmitting] = useState(false);
-  const [recommendDialogOpen, setRecommendDialogOpen] = useState(false);
-  const [recommendToEmail, setRecommendToEmail] = useState("");
-  const [recommendSubject, setRecommendSubject] = useState("");
-  const [recommendContent, setRecommendContent] = useState("");
-  const [recommendSubmitting, setRecommendSubmitting] = useState(false);
   const addRecentProduct = useRecentProductsStore((s) => s.addProduct);
-  const { isAlerted, addAlert, removeAlert } = useRestockAlertStore();
   const trackedViewItemIdRef = useRef<string | null>(null);
-  const user = useAuthStore((s) => s.user);
-  const isAuthInitialized = useAuthStore((s) => s.isInitialized);
   const {
     quantity,
     setQuantity,
     optionSelections,
-    setOptionSelections,
-    supplySelection,
-    setSupplySelection,
+    selectOptionValue,
+    selectSupplyOption,
+    supplyGroups,
     selectedCartOptions,
-    setSelectedCartOptions,
+    clearSelectedOptions,
     optionSubjects,
     minBuyQty,
+    maxBuyQty,
     quantityMinQty,
-    quantityMaxQty,
-    supplyOptions,
-    supplyLabel,
     getAvailableValues,
-    selectedOption,
-    handleAddSelectedOption,
-    handleAddSupplyOption,
     updateSelectedOptionQty,
     removeSelectedOption,
     buildSelectedCartOptions,
     validateBuyQtyBeforeSubmit,
     displayTotal,
   } = useProductOptions({ product, resetKey: it_id });
-  const isTelInquiry = String(product?.it_tel_inq ?? "0") === "1";
+  const memberActions = useProductMemberActions(product);
+  const {
+    user,
+    isAuthInitialized,
+    requireLogin,
+    handleMemberActionError,
+    openRecommendDialog,
+    openRestockDialog,
+  } = memberActions;
+  const telInquiry = isTelInquiry(product);
+  const hasOptionSubjects = optionSubjects.length > 0;
   const shippingFreeThreshold = getShopShippingFreeThreshold(shippingPolicy);
   const shippingPayment = productShippingPayment(product, ctSendCostSelection);
   const legacyProductForm = productDetailFormFromSearch(productQueryString);
+  const naverPay = useProductNaverPay({
+    product,
+    isTelInquiry: telInquiry,
+    quantity,
+    hasOptionSubjects,
+    buildSelectedCartOptions,
+    validateBuyQtyBeforeSubmit,
+  });
 
   useEffect(() => {
     let alive = true;
@@ -307,7 +279,7 @@ export default function ProductDetailClient({
     setQaPage(1);
     setQaShownPage(1);
     setQaLastPage(1);
-    setQaTotal(0);
+    setQaTotal(null);
     setPendingFocusIqId(qaFocusIdFromSearch(productQueryString));
     setActiveTab(productDetailTabFromSearch(productQueryString));
   }, [it_id, productQueryString]);
@@ -329,157 +301,13 @@ export default function ProductDetailClient({
   }, []);
 
   useEffect(() => {
-    let alive = true;
-
-    getShopNaverPayConfig()
-      .then((config) => {
-        if (alive) setNaverPayConfig(config);
-      })
-      .catch(() => {
-        if (alive) setNaverPayConfig(null);
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const redirectToLogin = useCallback(() => {
-    toastInfo("로그인 후 이용해주세요.");
-    runtimeRouterPush(router, `/login?redirect=${encodeURIComponent(pathname)}`);
-  }, [pathname, router]);
-
-  const requireLogin = useCallback(() => {
-    if (!isAuthInitialized) {
-      toastInfo("로그인 상태를 확인하고 있습니다. 잠시 후 다시 시도해주세요.");
-      return false;
-    }
-
-    if (!user) {
-      redirectToLogin();
-      return false;
-    }
-
-    return true;
-  }, [isAuthInitialized, redirectToLogin, user]);
-
-  const handleMemberActionError = useCallback(
-    (err: unknown, fallbackMessage: string) => {
-      if (err instanceof ApiError && err.status === 401) {
-        redirectToLogin();
-        return;
-      }
-
-      const message = err instanceof Error ? err.message : fallbackMessage;
-      toastError(message);
-    },
-    [redirectToLogin]
-  );
-
-  const openRestockDialog = useCallback(() => {
-    if (!requireLogin()) return;
-
-    const userHp = (user as { mb_hp?: string } | null)?.mb_hp ?? "";
-    setRestockHp(userHp);
-    setRestockAgree(false);
-    setRestockDialogOpen(true);
-  }, [requireLogin, user]);
-
-  const submitRestockAlert = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      if (!product) return;
-
-      const hp = restockHp.trim();
-      if (!hp) {
-        toastError("휴대폰 번호를 입력해주세요.");
-        return;
-      }
-
-      if (!restockAgree) {
-        toastError("개인정보처리방침 안내에 동의해 주세요.");
-        return;
-      }
-
-      setRestockSubmitting(true);
-      try {
-        await api.post(`/shop/products/${encodeURIComponent(product.it_id)}/stock-notify`, {
-          hp,
-          agree: true,
-        });
-        addAlert(product.it_id, product.it_name);
-        setRestockDialogOpen(false);
-        setRestockAgree(false);
-        toastSuccess("재입고 시 SMS로 알려드리겠습니다.");
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : "신청에 실패했습니다.";
-        toastError(message);
-      } finally {
-        setRestockSubmitting(false);
-      }
-    },
-    [addAlert, product, restockAgree, restockHp]
-  );
-
-  const openRecommendDialog = useCallback(() => {
-    if (!product || !requireLogin()) return;
-
-    setRecommendToEmail("");
-    setRecommendSubject(`${product.it_name} 추천`);
-    setRecommendContent("");
-    setRecommendDialogOpen(true);
-  }, [product, requireLogin]);
-
-  const submitRecommendation = useCallback(
-    async (event: FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      if (!product || !requireLogin()) return;
-
-      const toEmail = recommendToEmail.trim();
-      const subject = recommendSubject.trim();
-      const content = recommendContent.trim();
-      if (!toEmail || !subject || !content) {
-        toastError("받는 사람 이메일, 제목, 내용을 입력해주세요.");
-        return;
-      }
-
-      setRecommendSubmitting(true);
-      try {
-        const fromName = (user as { mb_nick?: string; mb_name?: string } | null)?.mb_nick
-          || (user as { mb_name?: string } | null)?.mb_name
-          || "";
-        await api.post(`/shop/products/${encodeURIComponent(product.it_id)}/recommend`, {
-          to_email: toEmail,
-          from_name: fromName,
-          subject,
-          content,
-        });
-        setRecommendDialogOpen(false);
-        toastSuccess("추천 메일을 발송했습니다.");
-      } catch (err: unknown) {
-        handleMemberActionError(err, "발송에 실패했습니다.");
-      } finally {
-        setRecommendSubmitting(false);
-      }
-    },
-    [
-      handleMemberActionError,
-      product,
-      recommendContent,
-      recommendSubject,
-      recommendToEmail,
-      requireLogin,
-      user,
-    ]
-  );
-
-  useEffect(() => {
     const nextTab = productDetailTabFromSearch(productQueryString);
     setActiveTab((current) => (current === nextTab ? current : nextTab));
   }, [productQueryString]);
 
   useProductDetailFocusScroll(product?.it_id, productQueryString);
 
+  // ?modal=recommend · ?modal=restock — 옛 주소(그누보드 itemrecommend · itemstocksms 팝업)는 그 창을 바로 연다.
   useEffect(() => {
     if (!product?.it_id) return;
 
@@ -502,85 +330,7 @@ export default function ProductDetailClient({
     productQueryString,
   ]);
 
-  useEffect(() => {
-    if (!product) return;
-    const productPath = shopProductPath(product, productRewriteMode);
-    const canonical = new URL(g5ShortHref(productPath), window.location.origin).toString();
-    const imageUrls = (product.images?.length ? product.images : [product.image_url])
-      .map((image) => (image ? clientAbsoluteUrl(image) : undefined))
-      .filter(Boolean) as string[];
-    const description = product.it_explan || product.it_basic || product.it_name;
-
-    applyClientPageMetadata({
-      title: product.it_name,
-      description,
-      path: productPath,
-      image: product.image_url || product.images?.[0],
-    });
-    applyClientJsonLd("article", null);
-    applyClientJsonLd("product", {
-      "@context": "https://schema.org/",
-      "@type": "Product",
-      name: product.it_name,
-      description: plainTextSummary(description, product.it_name),
-      sku: product.it_id,
-      ...(product.it_brand ? { brand: { "@type": "Brand", name: product.it_brand } } : {}),
-      ...(product.it_maker ? { manufacturer: product.it_maker } : {}),
-      ...(product.it_origin ? { countryOfOrigin: product.it_origin } : {}),
-      ...(imageUrls.length > 0 ? { image: imageUrls } : {}),
-      offers: {
-        "@type": "Offer",
-        url: canonical,
-        priceCurrency: "KRW",
-        price: product.it_price,
-        availability:
-          product.it_soldout !== "1" && product.it_stock_qty !== 0
-            ? "https://schema.org/InStock"
-            : "https://schema.org/OutOfStock",
-        itemCondition: "https://schema.org/NewCondition",
-      },
-      ...(product.review_count && product.review_avg
-        ? {
-            aggregateRating: {
-              "@type": "AggregateRating",
-              ratingValue: product.review_avg,
-              reviewCount: product.review_count,
-            },
-          }
-        : {}),
-    });
-    applyClientJsonLd("breadcrumb", {
-      "@context": "https://schema.org",
-      "@type": "BreadcrumbList",
-      itemListElement: [
-        {
-          "@type": "ListItem",
-          position: 1,
-          name: "쇼핑몰",
-          item: new URL(g5ShortHref("/shop"), window.location.origin).toString(),
-        },
-        ...(product.ca_id && product.ca_name
-          ? [
-              {
-                "@type": "ListItem",
-                position: 2,
-                name: product.ca_name,
-                item: new URL(
-                  g5ShortHref(`/shop/categories/${product.ca_id}`),
-                  window.location.origin
-                ).toString(),
-              },
-            ]
-          : []),
-        {
-          "@type": "ListItem",
-          position: product.ca_id && product.ca_name ? 3 : 2,
-          name: product.it_name,
-          item: canonical,
-        },
-      ],
-    });
-  }, [product, productRewriteMode]);
+  useProductDetailMetadata(product, productRewriteMode);
 
   useEffect(() => {
     if (!product) return;
@@ -593,7 +343,7 @@ export default function ProductDetailClient({
       image_url: product.image_url,
       viewed_at: Date.now(),
     });
-    // GA4 view_item — 상품 페이지 진입 시 1회 (mount).
+    // GA4 view_item · 조회수 — 상품 페이지 진입 시 상품마다 1회.
     if (trackedViewItemIdRef.current !== product.it_id) {
       trackedViewItemIdRef.current = product.it_id;
       void api
@@ -607,11 +357,7 @@ export default function ProductDetailClient({
         price: product.it_price,
       });
     }
-    if (product.it_soldout !== "1" && isAlerted(product.it_id)) {
-      toastInfo(`${product.it_name} 재입고되었습니다!`);
-      removeAlert(product.it_id);
-    }
-  }, [product, addRecentProduct, isAlerted, removeAlert]);
+  }, [product, addRecentProduct]);
 
   useEffect(() => {
     if (activeTab === "reviews" && it_id) {
@@ -627,13 +373,14 @@ export default function ProductDetailClient({
     }
   }, [activeTab, reviewPage, it_id, pendingFocusIsId]);
 
+  /** 사용후기 쪽 옮기기 — 찾아간 후기 표시는 그만두고, 탭 머리로 올라가 새 쪽을 처음부터 보게 한다. */
   const handleReviewPageChange = useCallback((nextPage: number) => {
     setPendingFocusIsId(0);
     setReviewPage(nextPage);
     scrollToProductDetailTabs();
   }, []);
 
-  const applyQaPage = useCallback((result: Awaited<ReturnType<typeof getShopProductQaPage>>) => {
+  const applyQaPage = useCallback((result: QaPageResult) => {
     setQas(result.items);
     setQaShownPage(result.meta?.current_page ?? 1);
     setQaLastPage(result.meta?.last_page ?? 1);
@@ -658,7 +405,7 @@ export default function ProductDetailClient({
           setQas([]);
           setQaShownPage(1);
           setQaLastPage(1);
-          setQaTotal(0);
+          setQaTotal(null);
         }
       });
     return () => {
@@ -666,6 +413,7 @@ export default function ProductDetailClient({
     };
   }, [activeTab, qaPage, it_id, pendingFocusIqId, applyQaPage]);
 
+  // 문의를 쓰거나 고치면 지금 보는 쪽을 다시 읽는다.
   const reloadQas = useCallback(() => {
     if (!it_id) return;
     getShopProductQaPage(it_id, qaShownPage)
@@ -673,73 +421,47 @@ export default function ProductDetailClient({
       .catch(() => setQas([]));
   }, [applyQaPage, it_id, qaShownPage]);
 
+  /** 상품문의 쪽 옮기기 — 사용후기와 같이 찾아간 문의 표시는 그만두고 탭 머리로 올라간다. */
   const handleQaPageChange = useCallback((nextPage: number) => {
     setPendingFocusIqId(0);
     setQaPage(nextPage);
     scrollToProductDetailTabs();
   }, []);
 
-  const handleAddToCart = useCallback(async () => {
-    if (!product) return;
-    if (isTelInquiry) {
+  /**
+   * 담기 · 바로구매 전 확인 — 전화문의 상품은 막고, 선택옵션 상품은 선택옵션 줄이 하나는 있어야 한다
+   * (추가옵션만으로는 담을 수 없다 — 영카트 fsubmit_check). 통과하면 담을 줄을 돌려준다.
+   */
+  const purchaseLinesOrNull = useCallback(() => {
+    if (!product) return null;
+    if (telInquiry) {
       toastError("전화문의 상품은 온라인 주문할 수 없습니다.");
-      return;
+      return null;
     }
-
     const cartOptions = buildSelectedCartOptions();
-    const hasBaseOption = cartOptions.some((option) => option.ioType === 0);
-    if (optionSubjects.length > 0 && !hasBaseOption) {
+    if (hasOptionSubjects && !cartOptions.some((option) => option.ioType === 0)) {
       toastError("옵션을 선택해주세요.");
-      return;
+      return null;
     }
-    if (!validateBuyQtyBeforeSubmit(cartOptions)) {
-      return;
-    }
+    return validateBuyQtyBeforeSubmit(cartOptions) ? cartOptions : null;
+  }, [buildSelectedCartOptions, hasOptionSubjects, product, telInquiry, validateBuyQtyBeforeSubmit]);
+
+  const handleAddToCart = useCallback(async () => {
+    const cartOptions = purchaseLinesOrNull();
+    if (!product || !cartOptions) return;
+
     setAddingToCart(true);
     try {
-      if (cartOptions.length > 0) {
-        if (optionSubjects.length === 0) {
-          await addCartItem(product.it_id, quantity, "", {
-            ctSendCost: shippingPayment.ctSendCost,
-          });
-        }
-        await addCartItems(
-          product.it_id,
-          cartOptions.map((option) => ({
-            io_id: option.io_id,
-            ct_qty: option.qty,
-            io_type: option.ioType,
-          })),
-          { ctSendCost: shippingPayment.ctSendCost }
-        );
-        setSelectedCartOptions([]);
-      } else {
-        await addCartItem(product.it_id, quantity, "", {
-          ctSendCost: shippingPayment.ctSendCost,
-        });
-      }
-      // GA4 add_to_cart — 옵션 합계 수량 + 단가 기준.
-      gaAddToCart({
-        item_id: product.it_id,
-        item_name: product.it_name,
-        item_category: product.ca_name,
-        item_brand: product.it_brand,
-        price: product.it_price,
-        quantity: cartOptions.length > 0
-          ? cartOptions.reduce((s, o) => s + o.qty, 0)
-          : quantity,
+      await addProductToCart({
+        product,
+        quantity,
+        cartOptions,
+        hasOptionSubjects,
+        ctSendCost: shippingPayment.ctSendCost,
       });
-      notifyCartChanged();
-      toastSuccess("장바구니에 추가되었습니다.", {
-        action: (
-          <ToastAction
-            altText="장바구니 페이지로 이동"
-            onClick={() => runtimeRouterPush(router, g5ShortHref("/shop/cart"))}
-          >
-            바로가기
-          </ToastAction>
-        ),
-      });
+      // 담은 뒤 처음 모습으로 — 고른 줄과 select 를 비운다(영카트도 담고 나면 목록을 비운다).
+      clearSelectedOptions();
+      toastAddedToCart(router);
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : "장바구니 추가에 실패했습니다.";
@@ -748,44 +470,31 @@ export default function ProductDetailClient({
       setAddingToCart(false);
     }
   }, [
+    purchaseLinesOrNull,
     product,
-    isTelInquiry,
     quantity,
-    buildSelectedCartOptions,
-    validateBuyQtyBeforeSubmit,
+    hasOptionSubjects,
     shippingPayment.ctSendCost,
-    optionSubjects.length,
-    setSelectedCartOptions,
+    clearSelectedOptions,
     router,
   ]);
 
+  /**
+   * 바로구매 — 바로구매 칸(direct)에 담고 그 줄만으로 주문서를 연다. 옵션 없는 상품은 본품(quantity) 한 줄이 먼저
+   * 바로구매 칸을 새로 채우고, 추가옵션 줄은 그 뒤에 붙인다(replace_direct: false). 선택옵션 상품은 고른 줄로 새로 채운다.
+   */
   const handleBuyNow = useCallback(async () => {
-    if (!product) return;
-    if (isTelInquiry) {
-      toastError("전화문의 상품은 온라인 주문할 수 없습니다.");
-      return;
-    }
+    const cartOptions = purchaseLinesOrNull();
+    if (!product || !cartOptions) return;
 
-    const cartOptions = buildSelectedCartOptions();
-    const hasBaseOption = cartOptions.some((option) => option.ioType === 0);
-    if (optionSubjects.length > 0 && !hasBaseOption) {
-      toastError("옵션을 선택해주세요.");
-      return;
-    }
-    if (!validateBuyQtyBeforeSubmit(cartOptions)) {
-      return;
-    }
+    const ctSendCost = shippingPayment.ctSendCost;
     try {
       const directCartIds: string[] = [];
+      if (!hasOptionSubjects) {
+        const response = await addCartItemDirect(product.it_id, quantity, "", { ctSendCost });
+        directCartIds.push(...cartIdsFromAddResponse(response));
+      }
       if (cartOptions.length > 0) {
-        let addedDirectBase = false;
-        if (optionSubjects.length === 0) {
-          const response = await addCartItemDirect(product.it_id, quantity, "", {
-            ctSendCost: shippingPayment.ctSendCost,
-          });
-          directCartIds.push(...cartIdsFromAddResponse(response));
-          addedDirectBase = true;
-        }
         const response = await addCartItems(
           product.it_id,
           cartOptions.map((option) => ({
@@ -793,20 +502,11 @@ export default function ProductDetailClient({
             ct_qty: option.qty,
             io_type: option.ioType,
           })),
-          {
-            direct: true,
-            replaceDirect: !addedDirectBase,
-            ctSendCost: shippingPayment.ctSendCost,
-          }
+          { direct: true, replaceDirect: hasOptionSubjects, ctSendCost }
         );
         directCartIds.push(...cartIdsFromAddResponse(response));
-        setSelectedCartOptions([]);
-      } else {
-        const response = await addCartItemDirect(product.it_id, quantity, "", {
-          ctSendCost: shippingPayment.ctSendCost,
-        });
-        directCartIds.push(...cartIdsFromAddResponse(response));
       }
+      clearSelectedOptions();
       const uniqueCartIds = Array.from(new Set(directCartIds));
       const orderHref = uniqueCartIds.length > 0
         ? `/shop/order?ct_ids=${encodeURIComponent(uniqueCartIds.join(","))}`
@@ -818,14 +518,12 @@ export default function ProductDetailClient({
       toastError(message);
     }
   }, [
+    purchaseLinesOrNull,
     product,
-    isTelInquiry,
     quantity,
-    buildSelectedCartOptions,
-    validateBuyQtyBeforeSubmit,
+    hasOptionSubjects,
     shippingPayment.ctSendCost,
-    optionSubjects.length,
-    setSelectedCartOptions,
+    clearSelectedOptions,
     router,
   ]);
 
@@ -841,115 +539,31 @@ export default function ProductDetailClient({
     }
   }, [product, requireLogin, handleMemberActionError]);
 
-  const buildNaverPayOptions = useCallback((): ShopNaverPayOrderOption[] => {
-    if (!product) return [];
+  const handleReviewSubmitted = useCallback(() => {
+    if (!product) return;
+    setPendingFocusIsId(0);
+    setReviewPage(1);
+    getShopProductReviewPage(product.it_id, 1)
+      .then((result) => {
+        setReviews(result.items);
+        setReviewShownPage(result.meta?.current_page ?? 1);
+        setReviewLastPage(result.meta?.last_page ?? 1);
+      })
+      .catch(() => undefined);
+    getShopProductReviewSummary(product.it_id)
+      .then(setReviewSummary)
+      .catch(() => undefined);
+  }, [product]);
 
-    const cartOptions = buildSelectedCartOptions();
-    if (cartOptions.length === 0) {
-      return [
-        {
-          io_id: "",
-          io_type: 0,
-          io_value: "",
-          ct_qty: quantity,
-        },
-      ];
-    }
-
-    return cartOptions.map((option) => ({
-      io_id: option.io_id,
-      io_type: option.ioType,
-      io_value: option.label,
-      ct_qty: option.qty,
-    }));
-  }, [buildSelectedCartOptions, product, quantity]);
-
-  const validateNaverPaySelection = useCallback(() => {
-    if (!product) return false;
-    if (isTelInquiry) {
-      toastError("전화문의 상품은 네이버페이로 주문할 수 없습니다.");
-      return false;
-    }
-    if (product.it_soldout === "1") {
-      toastError("품절 상품은 네이버페이로 주문할 수 없습니다.");
-      return false;
-    }
-
-    const cartOptions = buildSelectedCartOptions();
-    const hasBaseOption = cartOptions.some((option) => option.ioType === 0);
-    if (optionSubjects.length > 0 && !hasBaseOption) {
-      toastError("옵션을 선택해주세요.");
-      return false;
-    }
-
-    return validateBuyQtyBeforeSubmit(cartOptions);
-  }, [
-    buildSelectedCartOptions,
-    isTelInquiry,
-    optionSubjects.length,
-    product,
-    validateBuyQtyBeforeSubmit,
-  ]);
-
-  const handleNaverPayOrder = useCallback(async () => {
-    if (!product || !naverPayConfig?.enabled || !validateNaverPaySelection()) return;
-
-    setNaverPaySubmitting(true);
-    try {
-      const response = await registerShopNaverPayOrder({
-        source: "item",
-        it_id: product.it_id,
-        quantity,
-        options: buildNaverPayOptions(),
-        back_url: window.location.href,
-      });
-      if (!response.redirect_url) {
-        throw new Error("네이버페이 이동 URL이 없습니다.");
-      }
-      window.location.href = response.redirect_url;
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "네이버페이 주문 등록에 실패했습니다.";
-      toastError(message);
-    } finally {
-      setNaverPaySubmitting(false);
-    }
-  }, [
-    buildNaverPayOptions,
-    naverPayConfig?.enabled,
-    product,
-    quantity,
-    validateNaverPaySelection,
-  ]);
-
-  const handleNaverPayWish = useCallback(async () => {
-    if (!product || !naverPayConfig?.enabled) return;
-
-    const popup = window.open(
-      "about:blank",
-      "win_naverpay_wishlist",
-      "scrollbars=yes,width=400,height=267"
-    );
-    setNaverPayWishSubmitting(true);
-    try {
-      const response = await registerShopNaverPayWish({ it_id: product.it_id });
-      if (!response.redirect_url) {
-        throw new Error("네이버페이 찜 URL이 없습니다.");
-      }
-      if (popup) {
-        popup.location.href = response.redirect_url;
-      } else {
-        window.open(response.redirect_url, "_blank", "noopener,noreferrer");
-      }
-    } catch (err: unknown) {
-      if (popup) popup.close();
-      const message =
-        err instanceof Error ? err.message : "네이버페이 찜 등록에 실패했습니다.";
-      toastError(message);
-    } finally {
-      setNaverPayWishSubmitting(false);
-    }
-  }, [naverPayConfig?.enabled, product]);
+  const handleQaSubmitted = useCallback(() => {
+    if (!product) return;
+    // 새 문의는 맨 앞(1쪽)에 선다 — 쪽 정보까지 새로 받는다.
+    setPendingFocusIqId(0);
+    setQaPage(1);
+    getShopProductQaPage(product.it_id, 1)
+      .then(applyQaPage)
+      .catch(() => undefined);
+  }, [product, applyQaPage]);
 
   if (loading) {
     return <ProductDetailLoading />;
@@ -974,229 +588,86 @@ export default function ProductDetailClient({
     );
   }
 
-  const images = (product.images?.length ? product.images : [product.image_url]).filter(Boolean);
-  const pointLabel = productPointLabel(product);
-  const canPurchaseProduct = !isTelInquiry && product.it_soldout !== "1";
-  const hasDiscount =
-    !isTelInquiry &&
-    product.it_cust_price > 0 &&
-    product.it_cust_price > product.it_price;
-  const discountPercent = hasDiscount
-    ? Math.round(
-        ((product.it_cust_price - product.it_price) /
-          product.it_cust_price) *
-          100
-      )
-    : 0;
-
-  const reviewTotal = reviewSummary?.total ?? product.review_count ?? 0;
-  const reviewAverage = reviewSummary?.average ?? product.review_avg ?? 0;
-  const reviewScores =
+  // 품절 표시뿐 아니라 선택옵션이 모두 품절 · 옵션 없는 상품의 재고 0 도 품절이다(영카트 is_soldout — 서버도 담기를 거절).
+  const isSoldOut = isProductDetailSoldOut(product);
+  const reviewSummaryScores =
     reviewSummary?.scores ??
     Array.from({ length: 5 }, (_, index) => ({
       score: 5 - index,
       count: 0,
       percentage: 0,
     }));
-  const tabs = [
-    { id: "description", label: "상품설명" },
-    {
-      id: "reviews",
-      label: `상품후기 (${product.review_count ?? 0})`,
-    },
-    { id: "qa", label: `상품문의 (${product.qa_count ?? 0})` },
-    { id: "shipping", label: "배송정보" },
-  ];
-
-  const breadcrumbItems = [
-    { label: "쇼핑몰", href: "/shop" },
-    ...(product.ca_name
-      ? [{ label: product.ca_name, href: g5ShortHref(`/shop/categories/${product.ca_id}`) }]
-      : []),
-    { label: product.it_name },
-  ];
-  const productHeadHtml = sanitizeCommerceHtml(product.it_head_html);
-  const productTailHtml = sanitizeCommerceHtml(product.it_tail_html);
-  const productInfoItems = product.it_info_items ?? [];
-  const restockPrivacyText = product.stock_sms_privacy?.trim() ?? "";
-  const purchasePanelProps = {
+  const purchaseControls: ProductPurchaseControlsProps = {
     product,
-    productRewriteMode,
-    hasDiscount,
-    discountPercent,
-    isTelInquiry,
-    pointLabel,
-    shippingPayment,
-    ctSendCostSelection,
-    onCtSendCostSelectionChange: setCtSendCostSelection,
-    canPurchaseProduct,
+    canPurchaseProduct: !telInquiry && !isSoldOut,
+    isTelInquiry: telInquiry,
+    isSoldOut,
     optionSubjects,
     optionSelections,
-    onOptionSelectionsChange: setOptionSelections,
+    onSelectOptionValue: selectOptionValue,
     getAvailableValues,
-    supplyOptions,
-    supplyLabel,
-    supplySelection,
-    onSupplySelectionChange: setSupplySelection,
-    onAddSupplyOption: handleAddSupplyOption,
+    supplyGroups,
+    onSelectSupplyOption: selectSupplyOption,
     quantity,
     onQuantityChange: setQuantity,
     quantityMinQty,
-    quantityMaxQty,
     minBuyQty,
-    selectedOption,
+    maxBuyQty,
     selectedCartOptions,
-    onAddSelectedOption: handleAddSelectedOption,
     onUpdateSelectedOptionQty: updateSelectedOptionQty,
     onRemoveSelectedOption: removeSelectedOption,
     displayTotal,
-    restockAlerted: isAlerted(product.it_id),
-    onRemoveRestockAlert: () => {
-      removeAlert(product.it_id);
-      toastInfo("재입고 알림이 해제되었습니다.");
-    },
+    restockAlerted: memberActions.restockAlerted,
+    onRemoveRestockAlert: memberActions.handleRemoveRestockAlert,
     onOpenRestockDialog: openRestockDialog,
     addingToCart,
     onAddToCart: handleAddToCart,
     onBuyNow: handleBuyNow,
     onWishlist: handleWishlist,
-    onOpenRecommendDialog: openRecommendDialog,
-    naverPayConfig,
-    naverPaySubmitting,
-    onNaverPayOrder: handleNaverPayOrder,
-    naverPayWishSubmitting,
-    onNaverPayWish: handleNaverPayWish,
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1216px] md:px-2 lg:px-0">
-      <Breadcrumb items={breadcrumbItems} className="mb-[30px]" />
-
-      {productHeadHtml && (
-        <div
-          id="sit_hhtml"
-          className="mb-6 prose max-w-none text-sm"
-          dangerouslySetInnerHTML={{ __html: productHeadHtml }}
-        />
-      )}
-
-      {/* Product Main */}
-      <div className="grid gap-9 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)] md:gap-10 lg:grid-cols-[minmax(0,1.62fr)_minmax(0,1fr)] lg:gap-16">
-        <ProductImageGallery
-          product={product}
-          images={images}
-          selectedImage={selectedImage}
-          onSelectImage={setSelectedImage}
-          onOpenLightbox={() => setLightboxOpen(true)}
-        />
-
-        <ProductPurchasePanel {...purchasePanelProps} />
-      </div>
-
-      <div className="grid min-w-0 gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <ProductDetailTabs
-          activeTab={activeTab}
-          onActiveTabChange={setActiveTab}
-          tabs={tabs}
-          product={product}
-          productInfoItems={productInfoItems}
-          canWriteReview={Boolean(user)}
-          canWriteQa={Boolean(user)}
-          shippingPolicy={shippingPolicy}
-          legacyProductForm={legacyProductForm}
-          onReviewSubmitted={() => {
-            setPendingFocusIsId(0);
-            setReviewPage(1);
-            getShopProductReviewPage(product.it_id, 1)
-              .then((result) => {
-                setReviews(result.items);
-                setReviewShownPage(result.meta?.current_page ?? 1);
-                setReviewLastPage(result.meta?.last_page ?? 1);
-              })
-              .catch(() => undefined);
-            getShopProductReviewSummary(product.it_id)
-              .then(setReviewSummary)
-              .catch(() => undefined);
-          }}
-          onQaSubmitted={() => {
-            setPendingFocusIqId(0);
-            setQaPage(1);
-            getShopProductQaPage(product.it_id, 1)
-              .then(applyQaPage)
-              .catch(() => undefined);
-          }}
-          reviews={reviews}
-          reviewPage={reviewShownPage}
-          reviewLastPage={reviewLastPage}
-          focusReviewId={reviewFocusIdFromSearch(productQueryString)}
-          onReviewPageChange={handleReviewPageChange}
-          reviewSummary={reviewSummary}
-          reviewAverage={reviewAverage}
-          reviewTotal={reviewTotal}
-          reviewScores={reviewScores}
-          qas={qas}
-          qaPage={qaShownPage}
-          qaLastPage={qaLastPage}
-          qaTotal={qaTotal}
-          focusQaId={qaFocusIdFromSearch(productQueryString)}
-          onQaPageChange={handleQaPageChange}
-          onQaChanged={reloadQas}
-          shippingFreeThreshold={shippingFreeThreshold}
-        />
-        <aside className="mt-12 hidden min-w-0 xl:block" aria-label="고정 상품 구매 패널">
-          <div className="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto scrollbar-hide">
-            <ProductPurchasePanel {...purchasePanelProps} variant="compact" />
-          </div>
-        </aside>
-      </div>
-
-      <RelatedProducts items={product.related_items} productRewriteMode={productRewriteMode} />
-
-      <RecentlyViewed currentId={it_id} productRewriteMode={productRewriteMode} />
-
-      {productTailHtml && (
-        <div
-          className="mt-10 prose max-w-none text-sm"
-          dangerouslySetInnerHTML={{ __html: productTailHtml }}
-        />
-      )}
-
-      <RestockAlertDialog
-        open={restockDialogOpen}
-        onOpenChange={setRestockDialogOpen}
-        hp={restockHp}
-        onHpChange={setRestockHp}
-        agree={restockAgree}
-        onAgreeChange={setRestockAgree}
-        submitting={restockSubmitting}
-        privacyText={restockPrivacyText}
-        onSubmit={submitRestockAlert}
-      />
-
-      <RecommendationDialog
-        open={recommendDialogOpen}
-        onOpenChange={setRecommendDialogOpen}
-        toEmail={recommendToEmail}
-        onToEmailChange={setRecommendToEmail}
-        subject={recommendSubject}
-        onSubjectChange={setRecommendSubject}
-        content={recommendContent}
-        onContentChange={setRecommendContent}
-        submitting={recommendSubmitting}
-        onSubmit={submitRecommendation}
-      />
-
-      {/* Lightbox */}
-      {lightboxOpen && (
-        <Lightbox
-          images={images.filter(Boolean) as string[]}
-          currentIndex={selectedImage}
-          onClose={() => setLightboxOpen(false)}
-          onNavigate={(i) => {
-            setSelectedImage(i);
-          }}
-        />
-      )}
-    </div>
+    <ProductDetailView
+      product={product}
+      itId={it_id}
+      productRewriteMode={productRewriteMode}
+      selectedImage={selectedImage}
+      onSelectedImageChange={setSelectedImage}
+      lightboxOpen={lightboxOpen}
+      onLightboxOpenChange={setLightboxOpen}
+      purchaseControls={purchaseControls}
+      shippingPayment={shippingPayment}
+      ctSendCostSelection={ctSendCostSelection}
+      onCtSendCostSelectionChange={setCtSendCostSelection}
+      naverPay={naverPay}
+      qaTotal={qaTotal}
+      memberActions={memberActions}
+      tabsContent={{
+        activeTab,
+        onActiveTabChange: setActiveTab,
+        canWriteReview: Boolean(user),
+        canWriteQa: Boolean(user),
+        shippingPolicy,
+        legacyProductForm,
+        onReviewSubmitted: handleReviewSubmitted,
+        onQaSubmitted: handleQaSubmitted,
+        reviews,
+        reviewPage: reviewShownPage,
+        reviewLastPage,
+        focusReviewId: reviewFocusIdFromSearch(productQueryString),
+        onReviewPageChange: handleReviewPageChange,
+        reviewSummary,
+        reviewAverage: reviewSummary?.average ?? product.review_avg ?? 0,
+        reviewTotal: reviewSummary?.total ?? product.review_count ?? 0,
+        reviewScores: reviewSummaryScores,
+        qas,
+        qaPage: qaShownPage,
+        qaLastPage,
+        focusQaId: qaFocusIdFromSearch(productQueryString),
+        onQaPageChange: handleQaPageChange,
+        onQaChanged: reloadQas,
+        shippingFreeThreshold,
+      }}
+    />
   );
 }

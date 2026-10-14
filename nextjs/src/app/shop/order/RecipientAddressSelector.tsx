@@ -26,9 +26,9 @@ export function RecipientAddressSelector({
 
   return (
     <>
-      <div className="mb-4">
+      <div className="shop-order-section-head mb-4">
         <h2 className="text-lg font-bold">받으시는 분</h2>
-        <div className="flex flex-wrap gap-2">
+        <div className="shop-order-address-choice flex min-w-0 flex-wrap gap-2">
           <Button
             type="button"
             variant={addressSelection === "same" ? "default" : "outline"}

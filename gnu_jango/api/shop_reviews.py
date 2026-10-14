@@ -23,6 +23,7 @@ from gnu_jango.shop.shipping import current_shipping_policy
 
 from .response import api_error, api_response
 
+from .community_common import GENERAL_QA_PRODUCT_ID
 from .shop_common import (
     bool_int,
     current_user,
@@ -59,11 +60,55 @@ def review_payload(review):
     }
 
 
+HIDDEN_WRITER_NAME = "비공개"
+
+
+def product_questions():
+    """Product questions only. 1:1 inquiries are ShopQA rows on the "__general_qa__" pseudo product and are
+    served by the 1:1 API (community_qas) alone — the product Q&A endpoints must never list or open them."""
+    return ShopQA.objects.exclude(product_id=GENERAL_QA_PRODUCT_ID)
+
+# itemuselist.php / itemqalist.php search fields (sfl) -> (model field, how the keyword matches).
+# Names and member ids match exactly, item ids by prefix, the rest by substring — as the reference API.
+REVIEW_SEARCH_FIELDS = {
+    "i.it_name": ("product__it_name", "icontains"),
+    "r.it_id": ("product__it_id", "startswith"),
+    "r.is_subject": ("is_subject", "icontains"),
+    "r.is_content": ("is_content", "icontains"),
+    "r.is_name": ("is_name", "exact"),
+    "r.mb_id": ("mb_id", "exact"),
+}
+QNA_SEARCH_FIELDS = {
+    "i.it_name": ("product__it_name", "icontains"),
+    "q.it_id": ("product__it_id", "startswith"),
+    "q.iq_subject": ("iq_subject", "icontains"),
+    "q.iq_question": ("iq_question", "icontains"),
+    "q.iq_name": ("iq_name", "exact"),
+    "q.mb_id": ("mb_id", "exact"),
+}
+
+
+def _search_board_list(queryset, request, fields, default_fields):
+    """Filter a review/Q&A list by `q` (or `stx`) in the field `sfl` names, or in every default field."""
+    keyword = (request.query_params.get("q") or request.query_params.get("stx") or "").strip()
+    if not keyword:
+        return queryset
+    field = fields.get((request.query_params.get("sfl") or "").strip())
+    if field:
+        name, lookup = field
+        return queryset.filter(**{f"{name}__{lookup}": keyword})
+    condition = Q()
+    for name in default_fields:
+        condition |= Q(**{f"{name}__icontains": keyword})
+    return queryset.filter(condition)
+
+
 def qa_payload(qa, request=None):
     product = qa.product
     user = current_user(request) if request else None
     can_manage = bool(user and (user.is_staff or user.is_superuser or qa.user_id == user.id))
     can_view = qa.iq_secret == 0 or can_manage
+    # A secret question the viewer cannot read does not say who asked it either (reference API: "비공개").
     return {
         "iq_id": str(qa.pk),
         "it_id": product.it_id if product else "",
@@ -71,9 +116,9 @@ def qa_payload(qa, request=None):
         "it_seo_title": product.it_seo_title if product else "",
         "ca_id": (product.category_id or "") if product else "",
         "it_price": product.it_price if product else 0,
-        "mb_id": qa.mb_id,
-        "mb_nick": qa.mb_nick,
-        "iq_name": qa.iq_name,
+        "mb_id": qa.mb_id if can_view else "",
+        "mb_nick": qa.mb_nick if can_view else HIDDEN_WRITER_NAME,
+        "iq_name": qa.iq_name if can_view else HIDDEN_WRITER_NAME,
         "iq_subject": qa.iq_subject if can_view else "\ube44\ubc00\uae00\uc785\ub2c8\ub2e4.",
         "iq_question": qa.iq_question if can_view else "",
         "iq_answer": qa.iq_answer if can_view else "",
@@ -115,11 +160,11 @@ def reviews_view(request):
         if not (user and (user.is_staff or user.is_superuser)):
             queryset = queryset.filter(is_confirm="1")
         it_id = request.query_params.get("it_id")
-        q = request.query_params.get("q")
         if it_id:
             queryset = queryset.filter(product_id=it_id)
-        if q:
-            queryset = queryset.filter(Q(is_subject__icontains=q) | Q(is_content__icontains=q) | Q(product__it_name__icontains=q))
+        queryset = _search_board_list(
+            queryset, request, REVIEW_SEARCH_FIELDS, ("is_subject", "is_content", "product__it_name", "is_name", "product__it_id")
+        )
         focus_id = safe_int(request.query_params.get("focus_is_id"), 0)
         focus_review = (
             queryset.filter(pk=focus_id).first()
@@ -226,13 +271,13 @@ def review_detail_view(request, review_id):
 @authentication_classes([JWTAuthentication, BasicAuthentication])
 def qna_view(request):
     if request.method == "GET":
-        queryset = ShopQA.objects.select_related("product", "user")
+        queryset = product_questions().select_related("product", "user")
         it_id = request.query_params.get("it_id")
-        q = request.query_params.get("q")
         if it_id:
             queryset = queryset.filter(product_id=it_id)
-        if q:
-            queryset = queryset.filter(Q(iq_subject__icontains=q) | Q(iq_question__icontains=q) | Q(product__it_name__icontains=q))
+        queryset = _search_board_list(
+            queryset, request, QNA_SEARCH_FIELDS, ("iq_subject", "iq_question", "product__it_name", "iq_name", "product__it_id")
+        )
         focus_id = safe_int(request.query_params.get("focus_iq_id"), 0)
         focus_question = (
             queryset.filter(pk=focus_id).first()
@@ -283,7 +328,7 @@ def qna_view(request):
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
 def qna_detail_view(request, iq_id):
-    qa = ShopQA.objects.select_related("product", "user").filter(pk=iq_id).first()
+    qa = product_questions().select_related("product", "user").filter(pk=iq_id).first()
     if not qa:
         return api_error("Q&A not found.", status=drf_status.HTTP_404_NOT_FOUND, code="qa_not_found")
     user = current_user(request)
@@ -330,6 +375,6 @@ def my_qna_view(request):
     user, error = require_user(request)
     if error:
         return error
-    queryset = ShopQA.objects.filter(user=user).select_related("product")
+    queryset = product_questions().filter(user=user).select_related("product")
     page, meta = paginate_queryset(request, queryset, default_per_page=10)
     return api_response(data=[qa_payload(item, request) for item in page], meta=meta)
