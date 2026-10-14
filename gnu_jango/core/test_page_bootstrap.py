@@ -11,7 +11,7 @@ from rest_framework.test import APIClient
 
 from gnu_jango.api import page_bootstrap
 from gnu_jango.bbs.models import Board, Group, Post
-from gnu_jango.config import sample_data
+from gnu_jango.config import config as site_config, sample_data
 from gnu_jango.core.models import Poll, PollChoice, PollVote
 from gnu_jango.shop.models import ShopProduct
 
@@ -21,6 +21,8 @@ class PageBootstrapTests(TestCase):
     def setUp(self):
         cache.clear()
         self.addCleanup(cache.clear)
+        site_config.clear()
+        self.addCleanup(site_config.clear)
 
     def data(self, path, client=None, **headers):
         response = (client or self.client).get(path, **headers)
@@ -89,6 +91,8 @@ class PageBootstrapTests(TestCase):
         from gnu_jango.config.models import Config
 
         Config.objects.update_or_create(name="cf_home_boards", defaults={"value": private.bo_table})
+        # Direct ORM writes bypass the settings form's in-process cache reset.
+        site_config.clear()
         admin = get_user_model().objects.create_superuser(username="bootstrap-admin", email="admin@example.test", password="unused")
         admin_client = APIClient()
         admin_client.force_authenticate(admin)
