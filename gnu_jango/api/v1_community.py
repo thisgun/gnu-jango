@@ -376,6 +376,7 @@ def settings_response(request):
             "de_bank_account": data.get("de_bank_account", ""),
             "cf_home_boards": data.get("cf_home_boards", ""),
             "cf_home_gallery": data.get("cf_home_gallery", ""),
+            "cf_docs_group": data.get("cf_docs_group", ""),
             "cf_bbs_rewrite": _safe_int(data.get("cf_bbs_rewrite"), 0),
             "infinite_scroll": False,
             "comment_editor": False,

@@ -121,6 +121,7 @@ CONFIG_FIELDSETS = getattr(
         "11_home_layout": [
             "cf_home_boards",
             "cf_home_gallery",
+            "cf_docs_group",
         ],
         "12_shop_payment": [
             "de_card_use",
