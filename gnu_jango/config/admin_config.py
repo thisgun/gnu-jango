@@ -122,5 +122,12 @@ CONFIG_FIELDSETS = getattr(
             "cf_home_boards",
             "cf_home_gallery",
         ],
+        "12_shop_payment": [
+            "de_card_use",
+            "de_vbank_use",
+            "de_iche_use",
+            "de_hp_use",
+            "de_easy_pay_use",
+        ],
     },
 )

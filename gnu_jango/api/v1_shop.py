@@ -45,6 +45,7 @@ from gnu_jango.shop.models import (
 )
 from gnu_jango.shop.inventory import StockAdjustmentError, cancel_order_with_stock_restore, reserve_product_stock
 from gnu_jango.shop.images import upload_product_images
+from gnu_jango.shop.payment_options import online_payment_method_enabled
 from gnu_jango.shop.shipping import (
     allowed_point_use,
     current_shipping_policy,
@@ -137,6 +138,7 @@ from .shop_reviews import (
 )
 from .shop_payments import (
     cancel_pending_toss_vbank,
+    checkout_payment_methods,
     configured_payment_provider,
     confirm_adapter_payment,
     confirm_order_payment,
@@ -695,6 +697,11 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
     send_cost = shipping["base"]
     send_cost2 = shipping["extra"]
     settle_case = str(data.get("od_settle_case") or data.get("payment_method") or "bank")
+    if not online_payment_method_enabled(settle_case):
+        raise StockAdjustmentError(
+            "사용할 수 없는 결제수단입니다. 결제수단을 다시 선택해 주세요.",
+            code="payment_method_disabled",
+        )
     is_bank_settle = settle_case in {"bank", "무통장", "무통장입금"}
     if not is_bank_settle and not force_status:
         # an online payment is created through payment prepare and marked paid only after the
@@ -1555,22 +1562,14 @@ def payment_config_view(request):
     # not yet prepare the provider-specific client payload needed to start one.
     # Only advertise the native Toss flow while its client and server keys exist.
     pg_enabled = pg_service == "toss" and toss_config["enabled"]
-    vbank_enabled = pg_enabled and toss_config["vbank_enabled"]
     bank_accounts = configured_bank_accounts()
+    methods = checkout_payment_methods(toss_config=toss_config, pg_service=pg_service, bank_accounts=bank_accounts)
     return api_response(
         data={
             "pg_service": pg_service,
             "client": {"client_key": toss_config["client_key"] if pg_enabled else "", "mid": "", "script_url": ""},
-            "payment_methods": {
-                "bank": bool(bank_accounts),
-                "card": pg_enabled,
-                "vbank": vbank_enabled,
-                "iche": pg_enabled,
-                "hp": pg_enabled,
-                "easy_pay": pg_enabled,
-                "kakaopay": False,
-            },
-            "easy_pay_services": ["tosspay"] if pg_enabled else [],
+            "payment_methods": methods,
+            "easy_pay_services": ["tosspay"] if methods["easy_pay"] else [],
             "bank_accounts": bank_accounts,
             "is_test_mode": toss_config["is_test_mode"],
             "providers": {

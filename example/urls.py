@@ -21,12 +21,18 @@ from django.conf.urls.static import static
 from gnu_jango.api import v1_auth
 from gnu_jango.config import theme_admin
 from gnu_jango.config import sample_data_admin
+from gnu_jango.shop import admin_settings
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 # The site administration is the Django admin at /admin/; the former Next.js admin pages were removed
 # and their address /admin moves there (APPEND_SLASH is off for the Next.js routes).
 urlpatterns = [
     path("admin", RedirectView.as_view(pattern_name="admin:index", permanent=True, query_string=True)),
+    path(
+        "admin/shop-settings/",
+        admin.site.admin_view(admin_settings.shop_settings),
+        name="admin-shop-settings",
+    ),
     path(
         "admin/theme/",
         admin.site.admin_view(theme_admin.theme_settings),

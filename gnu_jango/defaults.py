@@ -79,6 +79,11 @@ CONFIGS = {
         _("무통장입금 계좌 안내"),
         _("은행, 계좌번호, 예금주를 한 줄에 하나씩 입력합니다. 쇼핑몰에 공개됩니다."),
     ),
+    "de_card_use": ("1", "checkbox", _("카드 결제 허용")),
+    "de_vbank_use": ("1", "checkbox", _("가상계좌 결제 허용")),
+    "de_iche_use": ("1", "checkbox", _("실시간계좌이체 허용")),
+    "de_hp_use": ("1", "checkbox", _("휴대폰 결제 허용")),
+    "de_easy_pay_use": ("1", "checkbox", _("간편결제 허용")),
     "cf_home_boards": (
         "",
         "str",

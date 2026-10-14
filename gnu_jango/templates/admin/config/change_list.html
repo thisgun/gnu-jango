@@ -34,7 +34,10 @@ tags every bound field with tab_id/tab_label/group/section_help/unit.
             <h1 class="cfgx-title">{% translate '기본환경설정' %}</h1>
             <p class="cfgx-lede">{% translate '사이트 이름과 관리자, 게시판·회원 정책 등 사이트 운영의 기본값을 관리합니다.' %}</p>
         </div>
-        <p class="cfgx-meta">{{ configs_form.fields|length }}{% translate '개 설정' %}</p>
+        <div>
+            <p class="cfgx-meta">{{ configs_form.fields|length }}{% translate '개 설정' %}</p>
+            {% if request.user.is_superuser %}<a href="{% url 'admin-shop-settings' %}">{% translate '쇼핑몰 결제·배송 설정' %} &rarr;</a>{% endif %}
+        </div>
     </div>
 
     {% if request.POST and configs_form.errors %}

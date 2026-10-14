@@ -21,6 +21,7 @@ from gnu_jango.shop.models import (
     ShopOrder,
     ShopOrderData,
 )
+from gnu_jango.shop.payment_options import online_payment_preferences
 
 from .response import api_error
 
@@ -29,6 +30,7 @@ from .shop_common import (
     CANCELLED_STATUSES,
     ORDER_STATUS_PAID,
     PAYMENT_ADAPTER_PROVIDERS,
+    configured_bank_accounts,
     first_value,
     safe_int,
     split_setting_list,
@@ -51,11 +53,9 @@ def payment_key(data):
 
 def configured_payment_provider():
     configured_provider = str(getattr(settings, "SHOP_PAYMENT_PROVIDER", "") or "").strip().lower()
-    toss_client_key = str(getattr(settings, "SHOP_TOSS_CLIENT_KEY", "") or "").strip()
-    toss_secret_key = str(getattr(settings, "SHOP_TOSS_SECRET_KEY", "") or "").strip()
     if configured_provider in PAYMENT_ADAPTER_PROVIDERS and payment_adapter_enabled(configured_provider):
         return configured_provider
-    if toss_client_key and toss_secret_key:
+    if toss_payment_config()["enabled"]:
         return "toss"
     return "bank"
 
@@ -63,14 +63,80 @@ def configured_payment_provider():
 def toss_payment_config():
     client_key = str(getattr(settings, "SHOP_TOSS_CLIENT_KEY", "") or "").strip()
     secret_key = str(getattr(settings, "SHOP_TOSS_SECRET_KEY", "") or "").strip()
+    client_mode = "test" if client_key.startswith("test_") else "live" if client_key.startswith("live_") else "unknown"
+    secret_mode = "test" if secret_key.startswith("test_") else "live" if secret_key.startswith("live_") else "unknown"
+    if not client_key and not secret_key:
+        key_status = "missing"
+    elif not client_key or not secret_key:
+        key_status = "incomplete"
+    elif "unknown" in {client_mode, secret_mode}:
+        key_status = "invalid_prefix"
+    elif client_mode != secret_mode:
+        key_status = "mode_mismatch"
+    else:
+        key_status = client_mode
+    keys_valid = key_status in {"test", "live"}
     return {
-        "enabled": bool(client_key and secret_key),
-        "vbank_enabled": bool(getattr(settings, "SHOP_TOSS_VBANK_ENABLED", False) and client_key and secret_key),
+        "enabled": keys_valid,
+        "key_status": key_status,
+        "client_mode": client_mode,
+        "secret_mode": secret_mode,
+        "vbank_enabled": bool(getattr(settings, "SHOP_TOSS_VBANK_ENABLED", False) and keys_valid),
         "client_key": client_key,
         "has_secret_key": bool(secret_key),
         "api_base_url": str(getattr(settings, "SHOP_TOSS_API_BASE_URL", "") or "https://api.tosspayments.com").rstrip("/"),
-        "is_test_mode": client_key.startswith("test_") or secret_key.startswith("test_"),
+        "is_test_mode": key_status == "test",
     }
+
+
+def check_toss_connection():
+    """Verify server credentials with a read-only Toss order lookup."""
+    config = toss_payment_config()
+    if not config["enabled"]:
+        return {"status": config["key_status"], "connected": False}
+
+    secret_key = str(getattr(settings, "SHOP_TOSS_SECRET_KEY", "") or "").strip()
+    credentials = base64.b64encode(f"{secret_key}:".encode("utf-8")).decode("ascii")
+    order_id = f"codex-health-{uuid.uuid4().hex}"
+    request = urllib_request.Request(
+        f"{config['api_base_url']}/v1/payments/orders/{quote(order_id, safe='')}",
+        method="GET",
+        headers={"Authorization": f"Basic {credentials}", "Accept": "application/json"},
+    )
+    try:
+        with urllib_request.urlopen(request, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8") or "{}")
+            if isinstance(payload, dict):
+                return {"status": "connected", "connected": True}
+            return {"status": "invalid_response", "connected": False}
+    except urllib_error.HTTPError as exc:
+        try:
+            payload = json.loads(exc.read().decode("utf-8") or "{}")
+        except (UnicodeDecodeError, ValueError):
+            payload = {}
+        provider_code = payload.get("code") if isinstance(payload, dict) else None
+        if exc.code == 404 and provider_code == "NOT_FOUND_PAYMENT":
+            # A not-found result for a fresh order ID proves the authenticated
+            # read endpoint accepted the key without creating or changing a payment.
+            return {"status": "connected", "connected": True}
+        if exc.code in {400, 401} and provider_code in {"INVALID_API_KEY", "UNAUTHORIZED_KEY"}:
+            return {"status": "invalid_credentials", "connected": False}
+        return {"status": "unavailable", "connected": False}
+    except (urllib_error.URLError, TimeoutError, socket.timeout):
+        return {"status": "unavailable", "connected": False}
+    except (UnicodeDecodeError, ValueError):
+        return {"status": "invalid_response", "connected": False}
+
+
+def checkout_payment_methods(*, toss_config=None, pg_service=None, bank_accounts=None):
+    toss_config = toss_config if toss_config is not None else toss_payment_config()
+    pg_service = pg_service if pg_service is not None else configured_payment_provider()
+    bank_accounts = bank_accounts if bank_accounts is not None else configured_bank_accounts()
+    preferences = online_payment_preferences()
+    pg_enabled = pg_service == "toss" and toss_config["enabled"]
+    methods = {name: pg_enabled and allowed for name, allowed in preferences.items()}
+    methods["vbank"] = methods["vbank"] and toss_config["vbank_enabled"]
+    return {"bank": bool(bank_accounts), **methods, "kakaopay": False}
 
 
 def payment_adapter_config():

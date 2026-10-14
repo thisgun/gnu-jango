@@ -202,6 +202,7 @@ CONFIG_GROUP_LABELS = {
     "9_sns": _("9. SNS 로그인"),
     "10_site_info": _("사이트 정보"),
     "11_home_layout": _("홈 화면 구성"),
+    "12_shop_payment": _("쇼핑몰 결제"),
     "etc": _("기타 설정"),
 }
 
@@ -225,6 +226,7 @@ CONFIG_TABS = {
     "9_sns": "sns",
     "10_site_info": "etc",
     "11_home_layout": "etc",
+    "12_shop_payment": "etc",
     "etc": "etc",
 }
 
@@ -252,6 +254,7 @@ SECTION_DESCRIPTIONS = {
     "9_sns": _("소셜 로그인 제공자별 연동 키입니다."),
     "10_site_info": _("푸터와 사이트 안내에 공개할 사업자 정보를 설정합니다."),
     "11_home_layout": _("홈의 게시판과 갤러리 영역에 표시할 게시판을 지정합니다."),
+    "12_shop_payment": _("PG 연결 후 사용할 결제수단입니다. 쇼핑몰 설정 메뉴에서 연결 상태와 입금계좌, 배송 정책을 함께 관리할 수 있습니다."),
     "etc": _("위 분류에 속하지 않는 나머지 설정입니다."),
 }
 

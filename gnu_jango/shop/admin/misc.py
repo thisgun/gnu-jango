@@ -16,6 +16,8 @@ from django.db.models.functions import Cast, Concat
 from gnu_jango.api.community_common import GENERAL_QA_PRODUCT_ID, QA_META_CONFIG_PREFIX
 from gnu_jango.config.models import Config
 from gnu_jango.shop.models import GeneralInquiry
+from gnu_jango.config import config as config_cache
+from gnu_jango.shop.settings_sync import sync_shop_phone_from_policy
 
 
 class ShopStockNotificationActionForm(ActionForm):
@@ -521,6 +523,8 @@ class ShopShippingPolicyAdmin(ModelAdmin):
     def save_model(self, request, obj, form, change):
         obj.pk = 1
         super().save_model(request, obj, form, change)
+        sync_shop_phone_from_policy(obj.de_admin_company_tel)
+        config_cache.clear()
 
 
 @admin.register(ShopShippingCost)

@@ -229,6 +229,12 @@ UNFOLD = {
                         "link": reverse_lazy("admin:shop_shoporder_changelist"),
                     },
                     {
+                        "title": _("쇼핑몰 설정"),
+                        "icon": "storefront",
+                        "link": reverse_lazy("admin-shop-settings"),
+                        "permission": lambda request: request.user.is_superuser,
+                    },
+                    {
                         "title": _("Settlement report"),
                         "icon": "monitoring",
                         "link": reverse_lazy("admin:shop_shoporder_reports"),

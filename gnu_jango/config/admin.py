@@ -8,6 +8,7 @@ from unfold.admin import ModelAdmin
 
 from gnu_jango.utils.admin import admin_url
 from gnu_jango.config import config
+from gnu_jango.shop.settings_sync import sync_shop_phone_from_config
 
 from .Configforms import ConfigsForm
 from .models import Config
@@ -52,6 +53,8 @@ class TestConfigAdmin(ModelAdmin):
         settings_form = ConfigsForm(request.POST or None)
         if settings_form.is_valid():
             settings_form.save()
+            if "de_admin_company_tel" in settings_form.cleaned_data:
+                sync_shop_phone_from_config(settings_form.cleaned_data["de_admin_company_tel"])
             config.clear()
             # info(request, _("Settings were successfully updated."))
             return self.changelist_redirect()

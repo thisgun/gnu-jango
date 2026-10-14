@@ -370,6 +370,17 @@ class PaymentPrepareTests(PaymentTestBase):
         self.assertEqual(self.stock(), 10)
 
     @override_settings(**FAKE_TOSS)
+    def test_prepare_refuses_a_payment_method_disabled_by_shop_settings(self):
+        Config.objects.update_or_create(name="de_card_use", defaults={"value": ""})
+
+        response = self.prepare()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["code"], "payment_method_disabled")
+        self.assertFalse(ShopOrder.objects.exists())
+        self.assertEqual(self.stock(), 10)
+
+    @override_settings(**FAKE_TOSS)
     def test_prepare_refuses_an_unknown_provider(self):
         response = self.prepare(pg_service="mystery-pay")
 
