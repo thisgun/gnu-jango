@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createElement, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import type { Board, PostFile } from "@/lib/types";
@@ -34,6 +34,7 @@ import { Separator } from "@/components/ui/separator";
 import { ShareButtons } from "@/components/ShareButtons";
 import { MemberAvatar } from "@/components/MemberAvatar";
 import { MemberSideview } from "@/components/MemberSideview";
+import { useThemeSlot } from "@/components/providers/ThemeSlotsProvider";
 import { ChevronDown, ChevronUp, FileQuestion, Link2, MessageCircle } from "lucide-react";
 import { CommentSection } from "./CommentSection";
 import { downloadAttachment, isCheckedDownloadUrl } from "./downloadAttachment";
@@ -98,6 +99,8 @@ function formatPostDate(value?: string | null): string {
 }
 
 export default function PostViewClient({ boTable, wrId }: ClientPageProps) {
+  // 테마가 글보기 머리를 바꾸면(문서 테마 등) 그 슬롯이, 없으면 아래 기본 머리가 그려진다.
+  const themeBoardViewHeader = useThemeSlot("BoardViewHeader");
   const routePatterns = ["/bbs/:bo_table/:wr_id", "/boards/:bo_table/:wr_id", "/:bo_table/:wr_id"];
   const bo_table = useRuntimeRouteParam("bo_table", routePatterns, boTable);
   const wr_id = useRuntimeRouteParam("wr_id", routePatterns, wrId);
@@ -405,49 +408,75 @@ export default function PostViewClient({ boTable, wrId }: ClientPageProps) {
       />
 
       <Card className="board-view-card">
-        {/* 레퍼런스 #bo_v 의 머리(테마 BoardViewHeader): 카드 위 줄의 게시판 이름 · 목록, 분류 칩 · 글 번호, 큰 제목,
-            작성자 바(아바타 · 이름 · 시각 | 조회 · 댓글 · 공유 · 글 동작). */}
-        <div className="solune-view-boardbar">
-          <a href={listHref} className="solune-view-boardname">{boardName}</a>
-          <a href={listHref} className="solune-view-listbtn">목록</a>
-        </div>
-        <header className="solune-view-head">
-          <div className="solune-view-kicker-row">
-            {post.ca_name ? <span className="solune-view-cate">{post.ca_name}</span> : null}
-            <span className="solune-view-kicker">#{actualWrId}</span>
-          </div>
-          <h1 className="solune-view-title">{post.wr_subject}</h1>
-        </header>
-        <div className="solune-view-info">
-          <div className="solune-view-author">
-            <MemberAvatar name={authorName} member={post} className="solune-avatar solune-view-avatar" size={40} />
-            <div className="solune-view-author-body">
-              <strong>
-                <MemberSideview
-                  mbId={post.mb_id}
-                  name={authorName}
-                  email={post.wr_email}
-                  homepage={post.wr_homepage}
-                  boTable={bo_table}
-                  className="font-medium text-foreground"
-                >
-                  <span>{authorName}</span>
-                </MemberSideview>
-              </strong>
-              <time dateTime={post.wr_datetime}>{formatPostDate(post.wr_datetime)}</time>
+        {themeBoardViewHeader ? (
+          createElement(themeBoardViewHeader, {
+            post,
+            boTable: bo_table,
+            boardName,
+            listHref,
+            author: (
+              <MemberSideview
+                mbId={post.mb_id}
+                name={authorName}
+                email={post.wr_email}
+                homepage={post.wr_homepage}
+                boTable={bo_table}
+                className="font-medium text-foreground"
+              >
+                <span>{authorName}</span>
+              </MemberSideview>
+            ),
+            actions: <PostActions boTable={bo_table} wrId={actualWrId} post={post} />,
+            share: <ShareButtons title={post.wr_subject} />,
+          })
+        ) : (
+          <>
+            {/* 레퍼런스 #bo_v 의 머리(테마 BoardViewHeader): 카드 위 줄의 게시판 이름 · 목록, 분류 칩 · 글 번호, 큰 제목,
+                작성자 바(아바타 · 이름 · 시각 | 조회 · 댓글 · 공유 · 글 동작). */}
+            <div className="solune-view-boardbar">
+              <a href={listHref} className="solune-view-boardname">{boardName}</a>
+              <a href={listHref} className="solune-view-listbtn">목록</a>
             </div>
-          </div>
-          <div className="solune-view-tools">
-            <span className="solune-view-stat">
-              조회 <b>{formatNumber(Number(post.wr_hit))}</b>
-            </span>
-            <span className="solune-view-stat">
-              댓글 <b>{formatNumber(Number(post.wr_comment ?? 0))}</b>
-            </span>
-            <ShareButtons title={post.wr_subject} />
-            <PostActions boTable={bo_table} wrId={actualWrId} post={post} />
-          </div>
-        </div>
+            <header className="solune-view-head">
+              <div className="solune-view-kicker-row">
+                {post.ca_name ? <span className="solune-view-cate">{post.ca_name}</span> : null}
+                <span className="solune-view-kicker">#{actualWrId}</span>
+              </div>
+              <h1 className="solune-view-title">{post.wr_subject}</h1>
+            </header>
+            <div className="solune-view-info">
+              <div className="solune-view-author">
+                <MemberAvatar name={authorName} member={post} className="solune-avatar solune-view-avatar" size={40} />
+                <div className="solune-view-author-body">
+                  <strong>
+                    <MemberSideview
+                      mbId={post.mb_id}
+                      name={authorName}
+                      email={post.wr_email}
+                      homepage={post.wr_homepage}
+                      boTable={bo_table}
+                      className="font-medium text-foreground"
+                    >
+                      <span>{authorName}</span>
+                    </MemberSideview>
+                  </strong>
+                  <time dateTime={post.wr_datetime}>{formatPostDate(post.wr_datetime)}</time>
+                </div>
+              </div>
+              <div className="solune-view-tools">
+                <span className="solune-view-stat">
+                  조회 <b>{formatNumber(Number(post.wr_hit))}</b>
+                </span>
+                <span className="solune-view-stat">
+                  댓글 <b>{formatNumber(Number(post.wr_comment ?? 0))}</b>
+                </span>
+                <ShareButtons title={post.wr_subject} />
+                <PostActions boTable={bo_table} wrId={actualWrId} post={post} />
+              </div>
+            </div>
+
+          </>
+        )}
 
         <Separator />
 

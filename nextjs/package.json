@@ -21,6 +21,8 @@
     "check:static-export-guards": "node scripts/check-static-export-guards.mjs",
     "check:file-size": "node scripts/check-source-file-size.mjs",
     "check:theme-sync": "node scripts/check-static-theme-sync.mjs",
+    "build:theme:handbook": "node scripts/with-theme.mjs handbook -- npm run build:theme",
+    "check:theme-sync:handbook": "node scripts/with-theme.mjs handbook -- npm run check:theme-sync",
     "check:local-runtime": "node scripts/check-local-runtime.mjs",
     "check:local-social-redirects": "node scripts/check-local-social-redirects.mjs",
     "check:local-youngcart-legacy-routes": "node scripts/check-local-youngcart-legacy-routes.mjs",

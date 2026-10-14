@@ -13,14 +13,17 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveThemeName } from './theme-pair.mjs';
+
+const THEME_NAME = resolveThemeName();
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const nextRoot = resolve(scriptDir, '..');
 const repoRoot = resolve(nextRoot, '..');
 const staticExportDir = 'out';
 const outDir = join(nextRoot, staticExportDir);
-const templateDir = join(repoRoot, 'gnu_jango', 'templates', 'theme', 'nextjs_default');
-const staticDir = join(repoRoot, 'gnu_jango', 'templates', 'theme_static', 'nextjs_default');
+const templateDir = join(repoRoot, 'gnu_jango', 'templates', 'theme', THEME_NAME);
+const staticDir = join(repoRoot, 'gnu_jango', 'templates', 'theme_static', THEME_NAME);
 const compatibilityManifestName = '.g5-static-compat.json';
 // Hashed assets of earlier builds are kept so pages opened before a deploy keep working, but only for the
 // last few builds; older ones are dropped so the theme does not grow forever.

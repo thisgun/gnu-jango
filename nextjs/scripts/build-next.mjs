@@ -18,8 +18,10 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveThemeSourceName } from './theme-pair.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const THEME_SOURCE = resolveThemeSourceName();
 const BUILD_LOCK_PATH = join(ROOT, '.g5-next-build.lock');
 const DYNAMIC_PARAMS_RE = /export const dynamicParams = (true|false);/g;
 const SERVER_RUNTIME_ONLY_RE = /@g5-server-runtime-only/;
@@ -52,7 +54,7 @@ const BUILD_ENV = {
   // The static build runs in a sibling workspace whose node_modules is a link back into ROOT.
   // Turbopack (the default builder since Next 16) refuses links that leave its root, so the root
   // is widened to the folder that holds both. Server builds run in place and keep the default.
-  ...(SERVER_RUNTIME ? {} : { G5_TURBOPACK_ROOT: dirname(ROOT) }),
+  ...(SERVER_RUNTIME ? {} : { G5_TURBOPACK_ROOT: process.env.G5_TURBOPACK_ROOT || dirname(ROOT) }),
 };
 const EXCLUDED_BUILD_ENTRIES = new Set([
   '.deploy',
@@ -126,11 +128,28 @@ function createStaticBuildWorkspace() {
 
       const pathParts = relativePath.split(sep);
       if (EXCLUDED_BUILD_ENTRIES.has(pathParts[0])) return false;
+      // Tailwind scans every file of the project, so another theme's classes would end up in this
+      // theme's CSS. Only the selected theme source goes into the build workspace.
+      if (pathParts[0] === 'themes' && pathParts.length > 1 && pathParts[1] !== THEME_SOURCE) return false;
       if (pathParts[0].startsWith('.next-local-smoke-')) return false;
       if (pathParts.length === 1 && pathParts[0].startsWith('.env')) return false;
       return true;
     },
   });
+
+  // tsconfig.json points "@g5-theme/*" at the default theme (for the editor and `tsc`); the build
+  // workspace only holds the selected theme, so the type check there has to look in that folder.
+  const workspaceTsconfig = join(projectRoot, 'tsconfig.json');
+  if (THEME_SOURCE !== 'default' && existsSync(workspaceTsconfig)) {
+    writeFileSync(
+      workspaceTsconfig,
+      readFileSync(workspaceTsconfig, 'utf8').replace('./themes/default/*', `./themes/${THEME_SOURCE}/*`)
+    );
+  }
+
+  // A theme's own public files (icons, og image, ...) replace the app's.
+  const themePublic = join(ROOT, 'themes', THEME_SOURCE, 'public');
+  if (existsSync(themePublic)) cpSync(themePublic, join(projectRoot, 'public'), { recursive: true });
 
   symlinkSync(
     join(ROOT, 'node_modules'),

@@ -7,6 +7,8 @@ import { NavigationProgressProvider } from "@/components/providers/NavigationPro
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
 import { CommunityInnerShell } from "@/components/layout/CommunityInnerShell";
+import { ThemeSlotsProvider } from "@/components/providers/ThemeSlotsProvider";
+import { themeComponents, themeConfig } from "@/lib/theme";
 import { Toaster } from "@/components/ui/toaster";
 import { BackToTop } from "@/components/layout/BackToTop";
 import { CompareTray } from "@/components/shop/CompareTray";
@@ -20,8 +22,8 @@ import { LegacyRouteBridge } from "@/components/legacy-route-bridge";
 import { RuntimeNavigationBridge } from "@/components/runtime-navigation-bridge";
 import type { ServerUser } from "@/lib/auth-server";
 
-const SITE_NAME = '그누보드5';
-const SITE_DESC = '그누보드5 + Next.js 커뮤니티 & 쇼핑몰';
+const SITE_NAME = themeConfig.site.name;
+const SITE_DESC = themeConfig.site.description;
 
 function safeJsonForInlineScript(value: unknown): string {
   return (JSON.stringify(value) ?? "null").replace(/[<>&\u2028\u2029]/g, (char) => {
@@ -114,6 +116,7 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const ThemeLayoutShell = themeComponents.LayoutShell;
   const [menus, initialUser] = await Promise.all([
     getMenuItems(),
     getInitialUserForLayout(),
@@ -121,7 +124,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="ko" suppressHydrationWarning>
-      <body data-g5-theme-source="default">
+      <body data-g5-theme-source={themeConfig.name}>
         <script dangerouslySetInnerHTML={{ __html: runtimeConfigScript() }} />
         {/* SEO — Organization + WebSite SearchAction JSON-LD. 모든 페이지에 한 번씩. */}
         <OrganizationJsonLd name={SITE_NAME} />
@@ -138,17 +141,26 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         >
           <NavigationProgressProvider>
             <AuthProvider initialUser={initialUser}>
-              <div className="min-h-screen flex flex-col">
-                <Header initialMenus={menus} initialUser={initialUser} />
-                {/* #wrapper.solune-wrapper: the reference layout's hook for inner-page styles (breadcrumb, mypage).
-                    Community inner pages get the right rail here, as in the reference layout shell. */}
-                <div id="wrapper" className="solune-wrapper flex flex-1 flex-col">
-                  <CommunityInnerShell>{children}</CommunityInnerShell>
-                </div>
-                <Footer />
-              </div>
+              {/* 테마의 클라이언트 프레젠테이션 슬롯만 골라 컨텍스트로 넘긴다. */}
+              <ThemeSlotsProvider slots={{ BoardViewHeader: themeComponents.BoardViewHeader }}>
+                {ThemeLayoutShell ? (
+                  <ThemeLayoutShell config={themeConfig} menus={menus}>
+                    {children}
+                  </ThemeLayoutShell>
+                ) : (
+                  <div className="min-h-screen flex flex-col">
+                    <Header initialMenus={menus} initialUser={initialUser} />
+                    {/* #wrapper.solune-wrapper: the reference layout's hook for inner-page styles (breadcrumb, mypage).
+                        Community inner pages get the right rail here, as in the reference layout shell. */}
+                    <div id="wrapper" className="solune-wrapper flex flex-1 flex-col">
+                      <CommunityInnerShell>{children}</CommunityInnerShell>
+                    </div>
+                    <Footer />
+                  </div>
+                )}
+              </ThemeSlotsProvider>
               <Toaster />
-              <BackToTop />
+              {!ThemeLayoutShell && <BackToTop />}
               <CompareTray />
               <PWAProvider />
               <WebVitals />

@@ -12,6 +12,9 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveThemeName } from './theme-pair.mjs';
+
+const THEME_NAME = resolveThemeName();
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const nextRoot = resolve(scriptDir, '..');
@@ -22,8 +25,8 @@ const packageRoot = join(deployRoot, packageName);
 const archiveName = `${packageName}.tar.gz`;
 const archivePath = join(deployRoot, archiveName);
 const archiveChecksumPath = `${archivePath}.sha256`;
-const templateSource = join(repoRoot, 'gnu_jango', 'templates', 'theme', 'nextjs_default');
-const assetSource = join(repoRoot, 'gnu_jango', 'templates', 'theme_static', 'nextjs_default');
+const templateSource = join(repoRoot, 'gnu_jango', 'templates', 'theme', THEME_NAME);
+const assetSource = join(repoRoot, 'gnu_jango', 'templates', 'theme_static', THEME_NAME);
 const deploymentGuideSource = join(repoRoot, 'docs', '04-deploy', 'nextjs-default-theme.md');
 const uploadRoot = join(packageRoot, 'upload');
 const manifestName = 'MANIFEST.json';
@@ -73,8 +76,8 @@ safePackageTarget();
 mkdirSync(deployRoot, { recursive: true });
 rmSync(packageRoot, { recursive: true, ...rmRetryOptions });
 
-const templateTarget = join(uploadRoot, 'theme', 'nextjs_default');
-const assetTarget = join(uploadRoot, 'theme_static', 'nextjs_default');
+const templateTarget = join(uploadRoot, 'theme', THEME_NAME);
+const assetTarget = join(uploadRoot, 'theme_static', THEME_NAME);
 mkdirSync(dirname(templateTarget), { recursive: true });
 mkdirSync(dirname(assetTarget), { recursive: true });
 cpSync(templateSource, templateTarget, { recursive: true, errorOnExist: true });
@@ -106,12 +109,12 @@ try {
 
 const manifest = {
   schemaVersion: 1,
-  theme: 'nextjs_default',
+  theme: THEME_NAME,
   generatedAt: new Date().toISOString(),
   sourceCommit,
   sourceDirty,
-  templateTarget: 'TEMPLATES_DIR/theme/nextjs_default',
-  staticAssetTarget: 'TEMPLATES_DIR/theme_static/nextjs_default',
+  templateTarget: `TEMPLATES_DIR/theme/${THEME_NAME}`,
+  staticAssetTarget: `TEMPLATES_DIR/theme_static/${THEME_NAME}`,
   fileCount: payloadFiles.length,
   files: payloadFiles,
 };
@@ -146,8 +149,8 @@ for (const requiredPath of [
   `${packageName}/DEPLOYMENT.md`,
   `${packageName}/MANIFEST.json`,
   `${packageName}/CHECKSUMS.sha256`,
-  `${packageName}/upload/theme/nextjs_default/index.html`,
-  `${packageName}/upload/theme_static/nextjs_default/_next/static`,
+  `${packageName}/upload/theme/${THEME_NAME}/index.html`,
+  `${packageName}/upload/theme_static/${THEME_NAME}/_next/static`,
 ]) {
   if (!archiveListing.split(/\r?\n/).some((entry) => entry === requiredPath || entry.startsWith(`${requiredPath}/`))) {
     fail(`Archive is missing required path: ${requiredPath}`);

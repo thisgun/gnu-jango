@@ -1,12 +1,30 @@
 import type { NextConfig } from 'next';
 import bundleAnalyzer from '@next/bundle-analyzer';
 import { withSentryConfig } from '@sentry/nextjs';
+import { assertThemeSource, resolveThemeSourceName, themeSourceDir } from './scripts/theme-pair.mjs';
 
 const withBundleAnalyzer = bundleAnalyzer({
   enabled: process.env.ANALYZE === 'true',
 });
 
 const STATIC_EXPORT = process.env.G5_NEXT_RUNTIME !== 'server';
+
+// 화면을 그리는 테마 소스(nextjs/themes/<이름>). "@g5-theme/*" 가 이 폴더로 이어진다 — src/lib/theme.ts.
+// tsconfig.json 의 paths 는 기본 테마를 가리키고(타입 검사용), 빌드는 아래 별칭이 고른 폴더를 쓴다.
+const THEME_SOURCE = assertThemeSource(resolveThemeSourceName());
+const THEME_SOURCE_DIR = themeSourceDir(THEME_SOURCE);
+const THEME_ALIASES: Record<string, string> = {
+  '@g5-theme/components': `${THEME_SOURCE_DIR}/components.tsx`,
+  '@g5-theme/theme.config': `${THEME_SOURCE_DIR}/theme.config.ts`,
+  '@g5-theme': THEME_SOURCE_DIR,
+};
+const THEME_TURBOPACK_SOURCE = `./themes/${THEME_SOURCE}`;
+const THEME_TURBOPACK_ALIASES: Record<string, string> = {
+  '@g5-theme/components': `${THEME_TURBOPACK_SOURCE}/components.tsx`,
+  '@g5-theme/theme.config': `${THEME_TURBOPACK_SOURCE}/theme.config.ts`,
+  '@g5-theme': THEME_TURBOPACK_SOURCE,
+};
+const DEFAULT_THEME = THEME_SOURCE === 'default';
 const shortBoardSegment =
   ':bo_table((?!__g5_static__$|admin/|admin$|api/|api$|baby/|baby$|bbs/|bbs$|boards/|boards$|content/|content$|faq/|faq$|login/|login$|members/|members$|mobile/|mobile$|mypage/|mypage$|offline/|offline$|polls/|polls$|recent/|recent$|register/|register$|rss/|rss$|search/|search$|shop/|shop$)[A-Za-z0-9_]+)';
 // Board pages are published under /bbs/<bo_table>[/<wr_id>|/write]; board names may be Korean, and
@@ -401,8 +419,19 @@ const serverRuntimeConfig: NextConfig = STATIC_EXPORT
     };
 
 const nextConfig: NextConfig = {
-  // Set by scripts/build-next.mjs for the isolated static build (see the note there).
-  ...(process.env.G5_TURBOPACK_ROOT ? { turbopack: { root: process.env.G5_TURBOPACK_ROOT } } : {}),
+  turbopack: {
+    // Set by scripts/build-next.mjs for the isolated static build (see the note there).
+    ...(process.env.G5_TURBOPACK_ROOT ? { root: process.env.G5_TURBOPACK_ROOT } : {}),
+    resolveAlias: THEME_TURBOPACK_ALIASES,
+  },
+  webpack(config) {
+    config.resolve.alias = { ...(config.resolve.alias ?? {}), ...THEME_ALIASES };
+    return config;
+  },
+  // 기본 테마의 클라이언트 번들은 그대로 두려고 기본이 아닌 테마에만 넣는다(문서 테마의 클라이언트 코드가 읽는다).
+  ...(DEFAULT_THEME
+    ? {}
+    : { env: { G5_NEXT_RUNTIME: STATIC_EXPORT ? 'static' : 'server', G5_THEME_SOURCE: THEME_SOURCE } }),
   // Static theme builds use this as their export folder; build-next isolates the
   // Next-internal `.next` directory in a temporary project copy.
   distDir: process.env.G5_NEXT_DIST_DIR?.trim() || '.next',
