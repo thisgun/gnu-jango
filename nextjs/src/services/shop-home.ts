@@ -14,6 +14,7 @@ const shopHomeSchema = z.object({
     type1: shopProductListSchema, type2: shopProductListSchema, type3: shopProductListSchema,
     type4: shopProductListSchema, type5: shopProductListSchema,
   }),
+  catalogPreview: shopProductListSchema.optional().default([]),
   reviews: shopReviewListSchema,
   noticeBoard: boardSchema.nullable(),
   noticePosts: writePostListSchema,

@@ -27,6 +27,12 @@ def sample_data_settings(request):
                     _("샘플 데이터를 추가했습니다. 게시글 %(posts)s개, 댓글 %(comments)s개, 상품 %(products)s개, FAQ %(faqs)s개를 만들었습니다.")
                     % counts,
                 )
+            elif action == "ensure_shop":
+                result = sample_data.ensure_shop_sample_data()
+                messages.success(
+                    request,
+                    _("쇼핑몰 샘플 상품 %(products)s개를 준비했습니다. 추가 %(created)s개, 노출 보정 %(updated)s개입니다.") % result,
+                )
             elif action == "repair_product_types":
                 repaired = sample_data.repair_sample_product_types()
                 if repaired:

@@ -12,6 +12,8 @@ export function ShopHomeHit() {
   const [productRewriteMode, setProductRewriteMode] = useState<BbsRewriteMode>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [catalogFallback, setCatalogFallback] = useState(false);
+  const [hasOtherSections, setHasOtherSections] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -19,7 +21,9 @@ export function ShopHomeHit() {
     getShopHomeData()
       .then((home) => {
         if (!alive) return;
-        setProducts(home.products.type1);
+        setProducts(home.products.type1.length ? home.products.type1 : home.catalogPreview);
+        setCatalogFallback(home.products.type1.length === 0 && home.catalogPreview.length > 0);
+        setHasOtherSections(Object.values(home.products).some(section => section.length > 0));
         setProductRewriteMode(home.settings.cf_bbs_rewrite);
         setError(false);
       })
@@ -43,6 +47,8 @@ export function ShopHomeHit() {
     );
   }
 
+  if (!error && products.length === 0 && hasOtherSections) return null;
+
   if (error || products.length === 0) {
     return (
       <EmptyState
@@ -59,11 +65,11 @@ export function ShopHomeHit() {
 
   return (
     <ShopProductRow
-      eyebrow="HIT"
-      title="히트상품"
-      subtitle="가장 많이 나간 상품입니다."
+      eyebrow={catalogFallback ? "COLLECTION" : "HIT"}
+      title={catalogFallback ? "전체 상품" : "히트상품"}
+      subtitle={catalogFallback ? "쇼핑몰에 등록된 상품을 둘러보세요." : "가장 많이 나간 상품입니다."}
       products={products}
-      viewAllHref="/shop/type-1"
+      viewAllHref={catalogFallback ? "/shop/search" : "/shop/type-1"}
       productRewriteMode={productRewriteMode}
       className="shop-home-hit-section"
     />

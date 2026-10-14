@@ -202,7 +202,25 @@ def get_status():
         "manifest": manifest,
         "counts": counts,
         "has_data": any(counts.values()),
+        "shop_status": shop_sample_status(manifest),
         "assets": sample_asset_summary(),
+    }
+
+
+def shop_sample_status(manifest):
+    products = list(ShopProduct.objects.filter(pk__in=_ids(manifest, "products")).select_related("category"))
+    visible = [product for product in products if product.it_use == "1" and (not product.category_id or product.category.ca_use)]
+    sections = [
+        {"name": name, "count": sum(getattr(product, f"it_type{number}") == "1" for product in visible)}
+        for number, name in enumerate(("히트상품", "추천상품", "신상품", "인기상품", "할인상품"), start=1)
+    ]
+    unassigned = sum(not any(getattr(product, f"it_type{number}") == "1" for number in range(1, 6)) for product in visible)
+    missing = max(0, len(PRODUCTS) - len(products))
+    hidden = len(products) - len(visible)
+    return {
+        "total": len(products), "visible": len(visible), "missing": missing, "hidden": hidden,
+        "unassigned": unassigned, "sections": sections,
+        "needs_repair": bool(missing or hidden or unassigned),
     }
 
 
@@ -346,6 +364,80 @@ def _create_comment(post, content, created_at, manifest):
     )
 
 
+def _ensure_shop_samples(manifest):
+    """Restore only tracked shop content; retain edited prices, stock, text and images."""
+    now, token = timezone.now(), uuid.uuid4().hex
+    result = {"created": 0, "updated": 0}
+    category = ShopCategory.objects.select_for_update().filter(
+        pk__in=_ids(manifest, "categories"), ca_parent="",
+    ).order_by("ca_id").first()
+    if category is None:
+        category = ShopCategory.objects.create(ca_id=_free_root_category_id(), ca_name="데모 스토어", ca_order=1, ca_use=True)
+        if category.pk not in manifest["categories"]:
+            manifest["categories"].append(category.pk)
+    elif not category.ca_use:
+        category.ca_use = True
+        category.save(update_fields=["ca_use"])
+
+    tracked = _ids(manifest, "products")
+    products = {product.pk: product for product in ShopProduct.objects.select_for_update().filter(pk__in=tracked)}
+    raw_slots = manifest.get("shop_product_slots")
+    slots = raw_slots if isinstance(raw_slots, dict) else {str(number): pk for number, pk in enumerate(tracked[:len(PRODUCTS)], 1)}
+    slots = {str(number): pk for number, pk in slots.items() if pk in tracked}
+    manifest["products"] = [pk for pk in tracked if pk in products]
+    for number, (name, price, description) in enumerate(PRODUCTS, start=1):
+        product = products.get(slots.get(str(number)))
+        if product is None:
+            image_url = f"/sample-data/{SAMPLE_IMAGES[number - 1]}"
+            product = ShopProduct.objects.create(
+                it_id=f"SAMPLE{token[:8]}{number:02d}", category=category,
+                it_name=name, it_seo_title=f"demo-product-{number:02d}-{token[:5]}", it_brand="SOLUNE",
+                it_price=price, it_basic_price=price, **_sample_product_fields(number, price),
+                it_hit=12 + number * 7, it_update_time=now - timedelta(hours=number), it_order=number,
+                it_stock_qty=20, it_use="1", it_basic=description, it_content=description,
+                image_url=image_url, images=[image_url],
+            )
+            manifest["products"].append(product.pk)
+            slots[str(number)] = product.pk
+            result["created"] += 1
+        else:
+            # Applying visibility is explicit. Do not reset inventory or overwrite real content.
+            fields = {**_sample_product_fields(number, product.it_price), "it_use": "1", "category_id": category.pk}
+            changed = [field for field, value in fields.items() if getattr(product, field) != value]
+            if changed:
+                for field in changed:
+                    setattr(product, field, fields[field])
+                product.save(update_fields=changed)
+                result["updated"] += 1
+    manifest["shop_product_slots"] = slots
+    if not ShopBanner.objects.filter(pk__in=_ids(manifest, "banners")).exists():
+        banner = ShopBanner.objects.create(
+            bn_alt="차분한 일상을 위한 데모 스토어", bn_url=f"/shop/list-{category.pk}",
+            bn_position="메인", bn_device="both", bn_order=1,
+            image_url=f"/sample-data/{SAMPLE_BANNER}", is_active=True,
+        )
+        manifest["banners"] = [banner.pk]
+    return result
+
+
+@batch_bootstrap_changes()
+def ensure_shop_sample_data():
+    """Idempotently add missing shop samples and apply their home visibility."""
+    sample_asset_summary()
+    with transaction.atomic():
+        row, _ = Config.objects.get_or_create(
+            name=MANIFEST_NAME, defaults={"value": json.dumps(empty_manifest(), ensure_ascii=False)},
+        )
+        row = Config.objects.select_for_update().get(pk=row.pk)
+        manifest = _decode_manifest(row)
+        result = _ensure_shop_samples(manifest)
+        value = json.dumps(manifest, ensure_ascii=False)
+        if row.value != value:
+            row.value = value
+            row.save(update_fields=["value"])
+        return {**result, "products": len(manifest["products"])}
+
+
 @batch_bootstrap_changes()
 def create_sample_data():
     """Create one public batch and record only rows created by this operation."""
@@ -382,47 +474,7 @@ def create_sample_data():
             board.bo_count_comment = board.comments.count()
             board.save(update_fields=["bo_count_write", "bo_count_comment"])
 
-        category = ShopCategory.objects.create(
-            ca_id=_free_root_category_id(),
-            ca_name="데모 스토어",
-            ca_order=1,
-            ca_use=True,
-        )
-        manifest["categories"].append(category.pk)
-
-        for index, (name, price, description) in enumerate(PRODUCTS, start=1):
-            image_url = f"/sample-data/{SAMPLE_IMAGES[index - 1]}"
-            product = ShopProduct.objects.create(
-                it_id=f"SAMPLE{token[:8]}{index:02d}",
-                category=category,
-                it_name=name,
-                it_seo_title=f"demo-product-{index:02d}-{token[:5]}",
-                it_brand="SOLUNE",
-                it_price=price,
-                it_basic_price=price,
-                **_sample_product_fields(index, price),
-                it_hit=12 + index * 7,
-                it_update_time=now - timedelta(hours=index),
-                it_order=index,
-                it_stock_qty=20,
-                it_use="1",
-                it_basic=description,
-                it_content=description,
-                image_url=image_url,
-                images=[image_url],
-            )
-            manifest["products"].append(product.pk)
-
-        banner = ShopBanner.objects.create(
-            bn_alt="차분한 일상을 위한 데모 스토어",
-            bn_url="/shop",
-            bn_position="메인",
-            bn_device="both",
-            bn_order=1,
-            image_url=f"/sample-data/{SAMPLE_BANNER}",
-            is_active=True,
-        )
-        manifest["banners"].append(banner.pk)
+        _ensure_shop_samples(manifest)
 
         faq_master = FAQMaster.objects.create(fm_subject="자주 묻는 질문", fm_order=1, fm_use=1)
         manifest["faq_masters"].append(faq_master.pk)

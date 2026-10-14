@@ -162,15 +162,19 @@ def _shop_data(request):
     boards = _data(v1_board.board_list_response, request, fallback=[])
     notice = next((board for board in boards if board["bo_table"] == "notice"), None)
     notice = notice or next((board for board in boards if "공지" in board.get("bo_subject", "")), None)
+    products = {
+        f"type{number}": _data(v1_shop.products_response, request, params={f"it_type{number}": 1}, limit=12, fallback=[])
+        for number in range(1, 6)
+    }
+    # Catalog items without merchandising flags still have a truthful place on the home page.
+    catalog_preview = [] if any(products.values()) else _data(v1_shop.products_response, request, limit=12, fallback=[])
     return {
         "settings": _data(v1_community.settings_response, request, fallback={}),
         "categories": _data(v1_shop.categories_response, request, fallback=[]),
         "banners": _data(v1_shop.banners_response, request, params={"position": "메인", "device": "all"}, fallback=[]),
         "popups": _data(v1_shop.popups_response, request, params={"device": "all", "limit": 5}, fallback=[]),
-        "products": {
-            f"type{number}": _data(v1_shop.products_response, request, params={f"it_type{number}": 1}, limit=12, fallback=[])
-            for number in range(1, 6)
-        },
+        "products": products,
+        "catalogPreview": catalog_preview,
         "reviews": _data(reviews_response, request, params={"per_page": 12}, fallback=[]),
         "noticeBoard": notice,
         "noticePosts": _data(v1_board.board_posts_response, request, params={"per_page": 3}, bo_table=notice["bo_table"], fallback=[])[:3] if notice else [],
