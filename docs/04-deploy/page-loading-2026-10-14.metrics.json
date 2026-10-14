@@ -1,0 +1,1225 @@
+{
+  "date": "2026-10-14",
+  "production_url": "https://gnu-jango-demo.vercel.app",
+  "deployment_id": "dpl_EWgoFf84HRRCLfy96hEGFv376VM1",
+  "implementation_commit": "33e90c4c96ab57863c0b3fdd85980970e1d665d3",
+  "notes": [
+    "Three fresh browser contexts per route; same production data; simulated mobile network and CPU.",
+    "The first deployment shop double request was corrected in the final deployment.",
+    "Production shop product sections are empty before and after this deployment; contentReadyMs is therefore null on shop.",
+    "Home LCP target changes from the logo to body text; report both the measured LCP increase and the faster first-post rendering.",
+    "The first-home-post API 403 is insufficient_points on a board configured with a -1 read point; expected existing access policy."
+  ],
+  "before": {
+    "baseUrl": "https://gnu-jango-demo.vercel.app",
+    "condition": "390px; 1.6Mbps; 150ms added latency; 4x CPU; anonymous; fresh browser cache; warm backend",
+    "results": [
+      {
+        "pathname": "/",
+        "run": 1,
+        "status": 200,
+        "ttfbMs": 39,
+        "fcpMs": 2984,
+        "lcp": {
+          "ms": 2984,
+          "tag": "IMG",
+          "url": "https://gnu-jango-demo.vercel.app/img/logo.png"
+        },
+        "contentReadyMs": 7207,
+        "resourceCount": 61,
+        "transferKB": 858,
+        "jsCount": 27,
+        "jsTransferKB": 340,
+        "fontCount": 13,
+        "fontTransferKB": 339,
+        "cssTransferKB": 90,
+        "apiCount": 11,
+        "apiCompleteMs": 7120,
+        "api": [
+          {
+            "path": "/api/v1/settings",
+            "startMs": 3668,
+            "durationMs": 297,
+            "bytes": 823
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 3862,
+            "durationMs": 193,
+            "bytes": 828
+          },
+          {
+            "path": "/api/v1/boards",
+            "startMs": 3867,
+            "durationMs": 2853,
+            "bytes": 1037
+          },
+          {
+            "path": "/api/v1/faqs",
+            "startMs": 3869,
+            "durationMs": 171,
+            "bytes": 1084
+          },
+          {
+            "path": "/api/v1/recent",
+            "startMs": 3872,
+            "durationMs": 167,
+            "bytes": 495
+          },
+          {
+            "path": "/api/v1/polls/current",
+            "startMs": 3874,
+            "durationMs": 176,
+            "bytes": 979
+          },
+          {
+            "path": "/api/v1/search/popular",
+            "startMs": 3877,
+            "durationMs": 2869,
+            "bytes": 397
+          },
+          {
+            "path": "/api/v1/boards/%EC%9E%90%EC%9C%A0%EA%B2%8C%EC%8B%9C%ED%8C%90/posts",
+            "startMs": 6750,
+            "durationMs": 177,
+            "bytes": 1151
+          },
+          {
+            "path": "/api/v1/boards/%EC%A7%88%EB%AC%B8%EB%8B%B5%EB%B3%80/posts",
+            "startMs": 6751,
+            "durationMs": 175,
+            "bytes": 1112
+          },
+          {
+            "path": "/api/v1/boards/%EA%B3%B5%EC%A7%80%EC%82%AC%ED%95%AD/posts",
+            "startMs": 6751,
+            "durationMs": 175,
+            "bytes": 1003
+          },
+          {
+            "path": "/api/v1/boards/%EA%B0%A4%EB%9F%AC%EB%A6%AC/posts",
+            "startMs": 6937,
+            "durationMs": 183,
+            "bytes": 1238
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/",
+        "run": 2,
+        "status": 200,
+        "ttfbMs": 31,
+        "fcpMs": 3084,
+        "lcp": {
+          "ms": 3084,
+          "tag": "IMG",
+          "url": "https://gnu-jango-demo.vercel.app/img/logo.png"
+        },
+        "contentReadyMs": 4451,
+        "resourceCount": 61,
+        "transferKB": 858,
+        "jsCount": 27,
+        "jsTransferKB": 340,
+        "fontCount": 13,
+        "fontTransferKB": 339,
+        "cssTransferKB": 90,
+        "apiCount": 11,
+        "apiCompleteMs": 4354,
+        "api": [
+          {
+            "path": "/api/v1/settings",
+            "startMs": 3540,
+            "durationMs": 211,
+            "bytes": 823
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 3656,
+            "durationMs": 276,
+            "bytes": 828
+          },
+          {
+            "path": "/api/v1/boards",
+            "startMs": 3661,
+            "durationMs": 210,
+            "bytes": 1037
+          },
+          {
+            "path": "/api/v1/faqs",
+            "startMs": 3663,
+            "durationMs": 223,
+            "bytes": 1084
+          },
+          {
+            "path": "/api/v1/recent",
+            "startMs": 3665,
+            "durationMs": 221,
+            "bytes": 495
+          },
+          {
+            "path": "/api/v1/polls/current",
+            "startMs": 3667,
+            "durationMs": 309,
+            "bytes": 979
+          },
+          {
+            "path": "/api/v1/search/popular",
+            "startMs": 3670,
+            "durationMs": 197,
+            "bytes": 397
+          },
+          {
+            "path": "/api/v1/boards/%EC%9E%90%EC%9C%A0%EA%B2%8C%EC%8B%9C%ED%8C%90/posts",
+            "startMs": 3990,
+            "durationMs": 170,
+            "bytes": 1151
+          },
+          {
+            "path": "/api/v1/boards/%EC%A7%88%EB%AC%B8%EB%8B%B5%EB%B3%80/posts",
+            "startMs": 3990,
+            "durationMs": 170,
+            "bytes": 1112
+          },
+          {
+            "path": "/api/v1/boards/%EA%B3%B5%EC%A7%80%EC%82%AC%ED%95%AD/posts",
+            "startMs": 3991,
+            "durationMs": 184,
+            "bytes": 1003
+          },
+          {
+            "path": "/api/v1/boards/%EA%B0%A4%EB%9F%AC%EB%A6%AC/posts",
+            "startMs": 4178,
+            "durationMs": 176,
+            "bytes": 1238
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/",
+        "run": 3,
+        "status": 200,
+        "ttfbMs": 39,
+        "fcpMs": 2944,
+        "lcp": {
+          "ms": 2944,
+          "tag": "IMG",
+          "url": "https://gnu-jango-demo.vercel.app/img/logo.png"
+        },
+        "contentReadyMs": 4495,
+        "resourceCount": 61,
+        "transferKB": 858,
+        "jsCount": 27,
+        "jsTransferKB": 340,
+        "fontCount": 13,
+        "fontTransferKB": 339,
+        "cssTransferKB": 90,
+        "apiCount": 11,
+        "apiCompleteMs": 4408,
+        "api": [
+          {
+            "path": "/api/v1/settings",
+            "startMs": 3617,
+            "durationMs": 187,
+            "bytes": 823
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 3738,
+            "durationMs": 171,
+            "bytes": 828
+          },
+          {
+            "path": "/api/v1/boards",
+            "startMs": 3743,
+            "durationMs": 182,
+            "bytes": 1037
+          },
+          {
+            "path": "/api/v1/faqs",
+            "startMs": 3745,
+            "durationMs": 180,
+            "bytes": 1084
+          },
+          {
+            "path": "/api/v1/recent",
+            "startMs": 3747,
+            "durationMs": 193,
+            "bytes": 495
+          },
+          {
+            "path": "/api/v1/polls/current",
+            "startMs": 3750,
+            "durationMs": 191,
+            "bytes": 979
+          },
+          {
+            "path": "/api/v1/search/popular",
+            "startMs": 3752,
+            "durationMs": 279,
+            "bytes": 397
+          },
+          {
+            "path": "/api/v1/boards/%EC%9E%90%EC%9C%A0%EA%B2%8C%EC%8B%9C%ED%8C%90/posts",
+            "startMs": 4037,
+            "durationMs": 190,
+            "bytes": 1151
+          },
+          {
+            "path": "/api/v1/boards/%EC%A7%88%EB%AC%B8%EB%8B%B5%EB%B3%80/posts",
+            "startMs": 4038,
+            "durationMs": 174,
+            "bytes": 1112
+          },
+          {
+            "path": "/api/v1/boards/%EA%B3%B5%EC%A7%80%EC%82%AC%ED%95%AD/posts",
+            "startMs": 4038,
+            "durationMs": 174,
+            "bytes": 1003
+          },
+          {
+            "path": "/api/v1/boards/%EA%B0%A4%EB%9F%AC%EB%A6%AC/posts",
+            "startMs": 4233,
+            "durationMs": 175,
+            "bytes": 1238
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 1,
+        "status": 200,
+        "ttfbMs": 25,
+        "fcpMs": 3164,
+        "lcp": {
+          "ms": 5800,
+          "tag": "IMG",
+          "url": "https://gnu-jango-demo.vercel.app/sample-data/banner.webp"
+        },
+        "contentReadyMs": null,
+        "resourceCount": 60,
+        "transferKB": 716,
+        "jsCount": 32,
+        "jsTransferKB": 362,
+        "fontCount": 9,
+        "fontTransferKB": 232,
+        "cssTransferKB": 90,
+        "apiCount": 14,
+        "apiCompleteMs": 5901,
+        "api": [
+          {
+            "path": "/api/v1/shop/categories",
+            "startMs": 4677,
+            "durationMs": 168,
+            "bytes": 484
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 4681,
+            "durationMs": 178,
+            "bytes": 474
+          },
+          {
+            "path": "/api/v1/settings",
+            "startMs": 4684,
+            "durationMs": 175,
+            "bytes": 823
+          },
+          {
+            "path": "/api/v1/shop/banners",
+            "startMs": 5291,
+            "durationMs": 171,
+            "bytes": 617
+          },
+          {
+            "path": "/api/v1/shop/categories",
+            "startMs": 5294,
+            "durationMs": 168,
+            "bytes": 484
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5298,
+            "durationMs": 195,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5301,
+            "durationMs": 176,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5304,
+            "durationMs": 174,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5306,
+            "durationMs": 201,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5309,
+            "durationMs": 184,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/reviews",
+            "startMs": 5312,
+            "durationMs": 211,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/boards",
+            "startMs": 5316,
+            "durationMs": 207,
+            "bytes": 1037
+          },
+          {
+            "path": "/api/v1/shop/popups",
+            "startMs": 5319,
+            "durationMs": 189,
+            "bytes": 371
+          },
+          {
+            "path": "/api/v1/boards/%EA%B3%B5%EC%A7%80%EC%82%AC%ED%95%AD/posts",
+            "startMs": 5733,
+            "durationMs": 168,
+            "bytes": 1003
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 2,
+        "status": 200,
+        "ttfbMs": 26,
+        "fcpMs": 3176,
+        "lcp": {
+          "ms": 5928,
+          "tag": "IMG",
+          "url": "https://gnu-jango-demo.vercel.app/sample-data/banner.webp"
+        },
+        "contentReadyMs": null,
+        "resourceCount": 60,
+        "transferKB": 716,
+        "jsCount": 32,
+        "jsTransferKB": 362,
+        "fontCount": 9,
+        "fontTransferKB": 232,
+        "cssTransferKB": 90,
+        "apiCount": 14,
+        "apiCompleteMs": 5965,
+        "api": [
+          {
+            "path": "/api/v1/shop/categories",
+            "startMs": 4835,
+            "durationMs": 193,
+            "bytes": 484
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 4836,
+            "durationMs": 191,
+            "bytes": 474
+          },
+          {
+            "path": "/api/v1/settings",
+            "startMs": 4837,
+            "durationMs": 205,
+            "bytes": 823
+          },
+          {
+            "path": "/api/v1/shop/banners",
+            "startMs": 5413,
+            "durationMs": 175,
+            "bytes": 617
+          },
+          {
+            "path": "/api/v1/shop/categories",
+            "startMs": 5417,
+            "durationMs": 186,
+            "bytes": 484
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5420,
+            "durationMs": 168,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5423,
+            "durationMs": 210,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5425,
+            "durationMs": 193,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5428,
+            "durationMs": 175,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5431,
+            "durationMs": 187,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/reviews",
+            "startMs": 5434,
+            "durationMs": 199,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/boards",
+            "startMs": 5438,
+            "durationMs": 210,
+            "bytes": 1037
+          },
+          {
+            "path": "/api/v1/shop/popups",
+            "startMs": 5440,
+            "durationMs": 208,
+            "bytes": 371
+          },
+          {
+            "path": "/api/v1/boards/%EA%B3%B5%EC%A7%80%EC%82%AC%ED%95%AD/posts",
+            "startMs": 5797,
+            "durationMs": 168,
+            "bytes": 1003
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 3,
+        "status": 200,
+        "ttfbMs": 26,
+        "fcpMs": 3380,
+        "lcp": {
+          "ms": 5644,
+          "tag": "IMG",
+          "url": "https://gnu-jango-demo.vercel.app/sample-data/banner.webp"
+        },
+        "contentReadyMs": null,
+        "resourceCount": 60,
+        "transferKB": 716,
+        "jsCount": 32,
+        "jsTransferKB": 362,
+        "fontCount": 9,
+        "fontTransferKB": 232,
+        "cssTransferKB": 90,
+        "apiCount": 14,
+        "apiCompleteMs": 5714,
+        "api": [
+          {
+            "path": "/api/v1/shop/categories",
+            "startMs": 4323,
+            "durationMs": 198,
+            "bytes": 484
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 4327,
+            "durationMs": 208,
+            "bytes": 474
+          },
+          {
+            "path": "/api/v1/settings",
+            "startMs": 4329,
+            "durationMs": 221,
+            "bytes": 823
+          },
+          {
+            "path": "/api/v1/shop/banners",
+            "startMs": 5121,
+            "durationMs": 171,
+            "bytes": 617
+          },
+          {
+            "path": "/api/v1/shop/categories",
+            "startMs": 5125,
+            "durationMs": 167,
+            "bytes": 484
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5129,
+            "durationMs": 209,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5132,
+            "durationMs": 191,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5134,
+            "durationMs": 174,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5136,
+            "durationMs": 171,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/products",
+            "startMs": 5139,
+            "durationMs": 183,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/shop/reviews",
+            "startMs": 5143,
+            "durationMs": 209,
+            "bytes": 447
+          },
+          {
+            "path": "/api/v1/boards",
+            "startMs": 5149,
+            "durationMs": 204,
+            "bytes": 1037
+          },
+          {
+            "path": "/api/v1/shop/popups",
+            "startMs": 5152,
+            "durationMs": 186,
+            "bytes": 371
+          },
+          {
+            "path": "/api/v1/boards/%EA%B3%B5%EC%A7%80%EC%82%AC%ED%95%AD/posts",
+            "startMs": 5542,
+            "durationMs": 172,
+            "bytes": 1003
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      }
+    ]
+  },
+  "first_deployment": {
+    "baseUrl": "https://gnu-jango-demo.vercel.app",
+    "condition": "390px; 1.6Mbps; 150ms added latency; 4x CPU; anonymous; fresh browser cache; warm backend",
+    "results": [
+      {
+        "pathname": "/",
+        "run": 1,
+        "status": 200,
+        "ttfbMs": 35,
+        "fcpMs": 1780,
+        "lcp": {
+          "ms": 1780,
+          "tag": "IMG",
+          "url": "https://gnu-jango-demo.vercel.app/img/logo.png"
+        },
+        "contentReadyMs": 4612,
+        "resourceCount": 44,
+        "transferKB": 755,
+        "jsCount": 29,
+        "jsTransferKB": 343,
+        "fontCount": 3,
+        "fontTransferKB": 255,
+        "cssTransferKB": 74,
+        "apiCount": 2,
+        "apiCompleteMs": 4644,
+        "api": [
+          {
+            "path": "/api/v1/home",
+            "startMs": 4321,
+            "durationMs": 189,
+            "bytes": 3650
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 4463,
+            "durationMs": 181,
+            "bytes": 828
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/",
+        "run": 2,
+        "status": 200,
+        "ttfbMs": 31,
+        "fcpMs": 2584,
+        "lcp": {
+          "ms": 3756,
+          "tag": "SPAN",
+          "url": ""
+        },
+        "contentReadyMs": 3568,
+        "resourceCount": 44,
+        "transferKB": 755,
+        "jsCount": 29,
+        "jsTransferKB": 343,
+        "fontCount": 3,
+        "fontTransferKB": 255,
+        "cssTransferKB": 74,
+        "apiCount": 2,
+        "apiCompleteMs": 3557,
+        "api": [
+          {
+            "path": "/api/v1/home",
+            "startMs": 3256,
+            "durationMs": 202,
+            "bytes": 3650
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 3387,
+            "durationMs": 170,
+            "bytes": 828
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/",
+        "run": 3,
+        "status": 200,
+        "ttfbMs": 31,
+        "fcpMs": 2568,
+        "lcp": {
+          "ms": 3748,
+          "tag": "SPAN",
+          "url": ""
+        },
+        "contentReadyMs": 3561,
+        "resourceCount": 44,
+        "transferKB": 755,
+        "jsCount": 29,
+        "jsTransferKB": 343,
+        "fontCount": 3,
+        "fontTransferKB": 255,
+        "cssTransferKB": 74,
+        "apiCount": 2,
+        "apiCompleteMs": 3562,
+        "api": [
+          {
+            "path": "/api/v1/home",
+            "startMs": 3253,
+            "durationMs": 199,
+            "bytes": 3650
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 3390,
+            "durationMs": 172,
+            "bytes": 828
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 1,
+        "status": 200,
+        "ttfbMs": 28,
+        "fcpMs": 2884,
+        "lcp": {
+          "ms": 5360,
+          "tag": "IMG",
+          "url": "https://gnu-jango-demo.vercel.app/sample-data/banner.webp"
+        },
+        "contentReadyMs": null,
+        "resourceCount": 42,
+        "transferKB": 616,
+        "jsCount": 31,
+        "jsTransferKB": 295,
+        "fontCount": 1,
+        "fontTransferKB": 201,
+        "cssTransferKB": 92,
+        "apiCount": 3,
+        "apiCompleteMs": 5018,
+        "api": [
+          {
+            "path": "/api/v1/shop/home",
+            "startMs": 4115,
+            "durationMs": 296,
+            "bytes": 1856
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 4119,
+            "durationMs": 171,
+            "bytes": 474
+          },
+          {
+            "path": "/api/v1/shop/home",
+            "startMs": 4846,
+            "durationMs": 172,
+            "bytes": 1856
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 2,
+        "status": 200,
+        "ttfbMs": 32,
+        "fcpMs": 3096,
+        "lcp": {
+          "ms": 5112,
+          "tag": "IMG",
+          "url": "https://gnu-jango-demo.vercel.app/sample-data/banner.webp"
+        },
+        "contentReadyMs": null,
+        "resourceCount": 42,
+        "transferKB": 616,
+        "jsCount": 31,
+        "jsTransferKB": 295,
+        "fontCount": 1,
+        "fontTransferKB": 201,
+        "cssTransferKB": 92,
+        "apiCount": 3,
+        "apiCompleteMs": 4769,
+        "api": [
+          {
+            "path": "/api/v1/shop/home",
+            "startMs": 3968,
+            "durationMs": 184,
+            "bytes": 1856
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 3972,
+            "durationMs": 180,
+            "bytes": 474
+          },
+          {
+            "path": "/api/v1/shop/home",
+            "startMs": 4602,
+            "durationMs": 167,
+            "bytes": 1856
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 3,
+        "status": 200,
+        "ttfbMs": 32,
+        "fcpMs": 3272,
+        "lcp": {
+          "ms": 5576,
+          "tag": "IMG",
+          "url": "https://gnu-jango-demo.vercel.app/sample-data/banner.webp"
+        },
+        "contentReadyMs": null,
+        "resourceCount": 42,
+        "transferKB": 616,
+        "jsCount": 31,
+        "jsTransferKB": 295,
+        "fontCount": 1,
+        "fontTransferKB": 201,
+        "cssTransferKB": 92,
+        "apiCount": 3,
+        "apiCompleteMs": 5204,
+        "api": [
+          {
+            "path": "/api/v1/shop/home",
+            "startMs": 4349,
+            "durationMs": 195,
+            "bytes": 1856
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 4353,
+            "durationMs": 177,
+            "bytes": 474
+          },
+          {
+            "path": "/api/v1/shop/home",
+            "startMs": 5037,
+            "durationMs": 167,
+            "bytes": 1856
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      }
+    ]
+  },
+  "after": {
+    "baseUrl": "https://gnu-jango-demo.vercel.app",
+    "condition": "390px; 1.6Mbps; 150ms added latency; 4x CPU; anonymous; fresh browser cache; warm backend",
+    "results": [
+      {
+        "pathname": "/",
+        "run": 1,
+        "status": 200,
+        "ttfbMs": 51,
+        "fcpMs": 3796,
+        "lcp": {
+          "ms": 4512,
+          "tag": "SPAN",
+          "url": ""
+        },
+        "contentReadyMs": 4294,
+        "resourceCount": 44,
+        "transferKB": 755,
+        "jsCount": 29,
+        "jsTransferKB": 343,
+        "fontCount": 3,
+        "fontTransferKB": 255,
+        "cssTransferKB": 74,
+        "apiCount": 2,
+        "apiCompleteMs": 4355,
+        "api": [
+          {
+            "path": "/api/v1/home",
+            "startMs": 3942,
+            "durationMs": 232,
+            "bytes": 3650
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 4072,
+            "durationMs": 283,
+            "bytes": 828
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/",
+        "run": 2,
+        "status": 200,
+        "ttfbMs": 25,
+        "fcpMs": 2596,
+        "lcp": {
+          "ms": 3720,
+          "tag": "SPAN",
+          "url": ""
+        },
+        "contentReadyMs": 3537,
+        "resourceCount": 44,
+        "transferKB": 755,
+        "jsCount": 29,
+        "jsTransferKB": 343,
+        "fontCount": 3,
+        "fontTransferKB": 255,
+        "cssTransferKB": 74,
+        "apiCount": 2,
+        "apiCompleteMs": 3573,
+        "api": [
+          {
+            "path": "/api/v1/home",
+            "startMs": 3234,
+            "durationMs": 204,
+            "bytes": 3650
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 3366,
+            "durationMs": 207,
+            "bytes": 828
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/",
+        "run": 3,
+        "status": 200,
+        "ttfbMs": 23,
+        "fcpMs": 2680,
+        "lcp": {
+          "ms": 3636,
+          "tag": "SPAN",
+          "url": ""
+        },
+        "contentReadyMs": 3414,
+        "resourceCount": 44,
+        "transferKB": 755,
+        "jsCount": 29,
+        "jsTransferKB": 343,
+        "fontCount": 3,
+        "fontTransferKB": 255,
+        "cssTransferKB": 74,
+        "apiCount": 2,
+        "apiCompleteMs": 3411,
+        "api": [
+          {
+            "path": "/api/v1/home",
+            "startMs": 3104,
+            "durationMs": 197,
+            "bytes": 3650
+          },
+          {
+            "path": "/api/v1/auth/social/providers",
+            "startMs": 3215,
+            "durationMs": 196,
+            "bytes": 828
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 1,
+        "status": 200,
+        "ttfbMs": 25,
+        "fcpMs": 2904,
+        "lcp": {
+          "ms": 5068,
+          "tag": "IMG",
+          "url": "https://gnu-jango-demo.vercel.app/sample-data/banner.webp"
+        },
+        "contentReadyMs": null,
+        "resourceCount": 41,
+        "transferKB": 615,
+        "jsCount": 31,
+        "jsTransferKB": 295,
+        "fontCount": 1,
+        "fontTransferKB": 201,
+        "cssTransferKB": 92,
+        "apiCount": 2,
+        "apiCompleteMs": 4236,
+        "api": [
+          {
+            "path": "/api/v1/shop/home",
+            "startMs": 4047,
+            "durationMs": 189,
+            "bytes": 1856
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 4053,
+            "durationMs": 168,
+            "bytes": 474
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 2,
+        "status": 200,
+        "ttfbMs": 22,
+        "fcpMs": 3148,
+        "lcp": {
+          "ms": 5256,
+          "tag": "IMG",
+          "url": "https://gnu-jango-demo.vercel.app/sample-data/banner.webp"
+        },
+        "contentReadyMs": null,
+        "resourceCount": 41,
+        "transferKB": 615,
+        "jsCount": 31,
+        "jsTransferKB": 295,
+        "fontCount": 1,
+        "fontTransferKB": 201,
+        "cssTransferKB": 92,
+        "apiCount": 2,
+        "apiCompleteMs": 4212,
+        "api": [
+          {
+            "path": "/api/v1/shop/home",
+            "startMs": 4019,
+            "durationMs": 193,
+            "bytes": 1856
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 4022,
+            "durationMs": 175,
+            "bytes": 474
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      },
+      {
+        "pathname": "/shop",
+        "run": 3,
+        "status": 200,
+        "ttfbMs": 30,
+        "fcpMs": 3072,
+        "lcp": {
+          "ms": 5016,
+          "tag": "IMG",
+          "url": "https://gnu-jango-demo.vercel.app/sample-data/banner.webp"
+        },
+        "contentReadyMs": null,
+        "resourceCount": 41,
+        "transferKB": 615,
+        "jsCount": 31,
+        "jsTransferKB": 295,
+        "fontCount": 1,
+        "fontTransferKB": 201,
+        "cssTransferKB": 92,
+        "apiCount": 2,
+        "apiCompleteMs": 4193,
+        "api": [
+          {
+            "path": "/api/v1/shop/home",
+            "startMs": 4005,
+            "durationMs": 188,
+            "bytes": 1856
+          },
+          {
+            "path": "/api/v1/shop/cart",
+            "startMs": 4008,
+            "durationMs": 169,
+            "bytes": 474
+          }
+        ],
+        "horizontalOverflow": false,
+        "errors": []
+      }
+    ]
+  },
+  "http_checks": [
+    {
+      "path": "/api/v1/status",
+      "status": 200,
+      "redirected": false,
+      "success": true,
+      "cache": "public, max-age=0, must-revalidate",
+      "region": "icn1::icn1"
+    },
+    {
+      "path": "/api/v1/home",
+      "status": 200,
+      "redirected": false,
+      "success": true,
+      "cache": "no-store, private",
+      "region": "icn1::icn1"
+    },
+    {
+      "path": "/api/v1/shop/home",
+      "status": 200,
+      "redirected": false,
+      "success": true,
+      "cache": "no-store, private",
+      "region": "icn1::icn1"
+    },
+    {
+      "path": "/admin/login/?next=/admin/",
+      "status": 200,
+      "redirected": false,
+      "cache": "no-store, private",
+      "region": "icn1::icn1"
+    },
+    {
+      "path": "/admin/sample-data/",
+      "status": 200,
+      "redirected": true,
+      "cache": "no-store, private",
+      "region": "icn1::icn1"
+    },
+    {
+      "path": "/sample-data/banner.webp",
+      "status": 200,
+      "cache": "public, max-age=3600",
+      "vercelCache": "HIT"
+    },
+    {
+      "path": "/sample-data/banner.webp",
+      "status": 200,
+      "cache": "public, max-age=3600",
+      "vercelCache": "HIT"
+    }
+  ],
+  "browser_checks": [
+    {
+      "width": 1440,
+      "path": "/",
+      "status": 200,
+      "bootstrapCalls": 1,
+      "overflow": false,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "width": 1440,
+      "path": "/shop",
+      "status": 200,
+      "bootstrapCalls": 1,
+      "overflow": false,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "width": 1440,
+      "path": "first-home-post",
+      "status": 200,
+      "errors": [],
+      "failed": [
+        {
+          "path": "/api/v1/posts/%EC%9E%90%EC%9C%A0%EA%B2%8C%EC%8B%9C%ED%8C%90/8",
+          "status": 403
+        }
+      ]
+    },
+    {
+      "width": 390,
+      "path": "/",
+      "status": 200,
+      "bootstrapCalls": 1,
+      "overflow": false,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "width": 390,
+      "path": "/shop",
+      "status": 200,
+      "bootstrapCalls": 1,
+      "overflow": false,
+      "errors": [],
+      "failed": []
+    },
+    {
+      "width": 390,
+      "path": "first-home-post",
+      "status": 200,
+      "errors": [],
+      "failed": [
+        {
+          "path": "/api/v1/posts/%EC%9E%90%EC%9C%A0%EA%B2%8C%EC%8B%9C%ED%8C%90/8",
+          "status": 403
+        }
+      ]
+    }
+  ]
+}
