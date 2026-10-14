@@ -44,3 +44,12 @@ python manage.py ensure_shop_samples --apply
 - 운영 상품 조회와 실제 브라우저 화면에서 6개 상품의 메인 진열 및 첫 상품 상세를 확인했다.
 
 운영 반영 후 `/admin/sample-data/`의 새 버튼으로 같은 보정을 반복할 수 있다.
+
+## 운영 배포
+
+- 구현 커밋: `5cf136206`
+- 배포 ID: `dpl_5ZxXfeQnu2bWpRRNDyyQXY2tVhAF` (`Ready`, 서울 `icn1`)
+- 운영 주소: https://gnu-jango-demo.vercel.app/shop
+- 데스크톱·모바일 모두 상품 카드 26개(고유 상품 6개), 통합 API 1회, 상품 상세 HTTP 200, 자산 HTTP 오류와 가로 넘침 없음.
+- 비로그인 `/admin/sample-data/`는 관리자 로그인으로 302 이동한다.
+- 첫 데스크톱 확인에서 React hydration 경고 #418이 한 번 발생했다. 이후 새 브라우저 세션 3회에서는 재현되지 않았다. 상품 표시와 상세 진입은 정상이며 이 간헐 경고는 추적 사항으로 남긴다.
