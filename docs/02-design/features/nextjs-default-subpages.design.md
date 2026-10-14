@@ -113,3 +113,11 @@ Django 관리자 URL은 `/admin/shop/shopbanner/`다. 이미지를 파일로 업
 - 768px 이상에서 게시판 목록의 `tbody` 행 높이를 52px로 둔다. 기준 768px·1440px 본문 행 약 53px와 1px 차이다. 첫 일반 글 시작점은 768px y414, 1440px y422로 맞췄다.
 - 390px 규칙은 적용하지 않는다. 모바일 공지 행 높이는 79px로 유지된다.
 - 세 폭 캡처, 빌드, 테마 동기화 결과는 `docs/03-analysis/nextjs-default-subpages.audit.md` 29절에 기록했다.
+
+## 12. 2026-10-14 전체 서브페이지 구조
+
+- CSS: 레퍼런스 CSS는 그대로 복사하고(`solune-theme.*.css`, `solune-shop.*.css`), 앱 전용 보정은 `solune-shop.app{,-purchase,-browse}.css`, `solune-theme.app-mypage.css`로 분리해 `solune-theme.css`에서 불러온다. 쇼핑 규칙은 `.solune-shop-page`로 범위를 좁히므로 쇼핑 레이아웃은 `main#main-content.shop-content`를 그린다.
+- 헤더: 바깥 `.g5-default-header { display: contents }`로 안쪽 막대의 sticky가 동작한다. 쇼핑 헤더 아이콘은 레퍼런스처럼 가방·사람 모양이다.
+- 부품: `components/shop/`에 `SoluneProductCard`, `ShopListHeader`, `ShopProductRow`, `ProductQuickAdd`, `ProductOptionPicker`, `ProductImageFallback`을 두고 상품 상세는 `ProductDetailView`·`ProductPurchaseControls`·`ProductReviewList`와 훅으로 나눈다.
+- 슬라이더: Swiper 없이 레퍼런스의 pre-init CSS(`--pre-spv`/`--pre-gap`)와 scroll-snap을 쓴다.
+- API: 검색은 220자 미리보기만 주고, 비밀글은 미리보기를 주지 않는다. 상품 문의 API는 `__general_qa__`(1:1 문의)를 제외하고 비밀 문의 작성자를 "비공개"로 가린다.
