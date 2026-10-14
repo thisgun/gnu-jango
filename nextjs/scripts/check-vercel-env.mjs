@@ -84,8 +84,13 @@ function unquoteEnvValue(value) {
 }
 
 function mergedEnv() {
+  if (args.has('--template')) {
+    // Validate the committed template as-is. CI may define runtime URLs for
+    // its localhost smoke build, and local .env files must not alter this check.
+    return parseEnvFile(envTemplatePath);
+  }
   return {
-    ...parseEnvFile(args.has('--template') ? envTemplatePath : envProductionPath),
+    ...parseEnvFile(envProductionPath),
     ...parseEnvFile(envLocalPath),
     ...process.env,
   };
