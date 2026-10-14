@@ -11,6 +11,10 @@ export interface G5NextRuntimeConfig {
   assetBaseUrl?: string;
   themeUrl?: string;
   currentPath?: string;
+  /** 테마가 쓰는 설정(문서 테마의 매뉴얼 그룹 등). Django 가 요청 때 런타임 설정에 싣는다. */
+  themeSettings?: unknown;
+  /** 서버가 HTML 글자를 themeSettings 로 이미 바꿨는가. */
+  themeSettingsApplied?: boolean;
 }
 
 declare global {
@@ -170,6 +174,19 @@ export function isPublicBoardPath(pathname: string): boolean {
   if (!match) return false;
   // Board names are slugs: a dot means a file (skin.css, board.php), never a board.
   return !match[1].includes(".") && !/\.php$/i.test(match[2] || "");
+}
+
+export function clientThemeSettings(): unknown {
+  return typeof window === "undefined" ? undefined : window.__G5_NEXTJS25_CONFIG__?.themeSettings;
+}
+
+export function clientThemeSettingsApplied(): boolean {
+  return typeof window !== "undefined" && window.__G5_NEXTJS25_CONFIG__?.themeSettingsApplied === true;
+}
+
+/** 앱이 직접 가진 첫 경로 조각(shop · mypage · login …)인가 — 아니면 짧은 게시판 주소(/free)다. */
+export function isG5AppRouteRoot(root: string): boolean {
+  return G5_APP_ROUTE_ROOTS.has(root) || G5_NON_ROUTE_ROOTS.has(root);
 }
 
 export function shouldRouteThroughG5(pathname: string): boolean {

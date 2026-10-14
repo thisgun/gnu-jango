@@ -10,11 +10,20 @@ export const G5_THEME_API_VERSION = 1;
 
 export type G5ThemeApiVersion = typeof G5_THEME_API_VERSION;
 
+export type G5ThemeFeatures = {
+  /** 글 보기 아래에 그 게시판의 목록(분류 칩 · 글 줄 · 쪽 · 검색)을 붙인다 — 그누보드 기본 화면. */
+  listUnderPostView: boolean;
+};
+
+export const G5_THEME_FEATURE_DEFAULTS: G5ThemeFeatures = { listUnderPostView: true };
+
 export type G5ThemeConfig = {
   apiVersion: G5ThemeApiVersion;
   /** themes/ 아래 폴더 이름과 같다. <body data-g5-theme-source> 로 나간다. */
   name: string;
   label: string;
+  /** 테마가 켜고 끄는 앱 동작. 적지 않은 것은 기본값(아래 G5_THEME_FEATURE_DEFAULTS)을 쓴다. */
+  features?: Partial<G5ThemeFeatures>;
   site: {
     name: string;
     description: string;

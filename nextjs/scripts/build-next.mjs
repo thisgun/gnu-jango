@@ -22,6 +22,9 @@ import { resolveThemeSourceName } from './theme-pair.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const THEME_SOURCE = resolveThemeSourceName();
+const OTHER_THEME_SOURCES = existsSync(join(ROOT, 'themes'))
+  ? readdirSync(join(ROOT, 'themes')).filter((name) => name !== THEME_SOURCE && name !== 'default')
+  : [];
 const BUILD_LOCK_PATH = join(ROOT, '.g5-next-build.lock');
 const DYNAMIC_PARAMS_RE = /export const dynamicParams = (true|false);/g;
 const SERVER_RUNTIME_ONLY_RE = /@g5-server-runtime-only/;
@@ -131,6 +134,8 @@ function createStaticBuildWorkspace() {
       // Tailwind scans every file of the project, so another theme's classes would end up in this
       // theme's CSS. Only the selected theme source goes into the build workspace.
       if (pathParts[0] === 'themes' && pathParts.length > 1 && pathParts[1] !== THEME_SOURCE) return false;
+      // Specs named tests/<theme>-*.spec.ts import that theme's source, which is not in this workspace.
+      if (pathParts[0] === 'tests' && pathParts.length > 1 && OTHER_THEME_SOURCES.some((name) => pathParts[1].startsWith(`${name}-`))) return false;
       if (pathParts[0].startsWith('.next-local-smoke-')) return false;
       if (pathParts.length === 1 && pathParts[0].startsWith('.env')) return false;
       return true;

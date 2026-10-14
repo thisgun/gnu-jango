@@ -4,6 +4,8 @@ export const themeConfig = {
   apiVersion: 1,
   name: "handbook",
   label: "Handbook",
+  // 글 아래에 게시판 목록을 붙이지 않는다 — 문서는 이전/다음 장으로 넘긴다(chapter-pager).
+  features: { listUnderPostView: false },
   // 설치마다 바꿀 기본 문구 — 특정 사이트의 이름이나 연락처를 두지 않는다.
   site: {
     name: "매뉴얼",

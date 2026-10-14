@@ -1,0 +1,83 @@
+/* =====================================================================
+   게시판 목록의 글 줄 — 매뉴얼의 "책 목차" 화면.
+   앱의 글 줄(src/app/boards/[bo_table]/PostListRow.tsx)은 .solune-blr-* 마크업이고, 그 스타일은 기본 테마
+   (body[data-g5-theme-source="default"]) 범위에만 있다. 문서 테마는 같은 마크업을 자기 토큰으로 그린다 —
+   분류(부)는 제목 아래 작은 글씨, 번호는 흐리게, 글쓴이 그림은 없이.
+   ===================================================================== */
+
+.doc-root .solune-blr > td {
+  padding: 0.85rem 0.75rem;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--doc-border);
+}
+
+.doc-root .solune-blr:last-child > td {
+  border-bottom: 0;
+}
+
+.doc-root .solune-blr {
+  transition: background-color 0.16s ease;
+}
+
+.doc-root .solune-blr:hover {
+  background: var(--doc-surface-muted);
+}
+
+.doc-root .solune-blr.is-current {
+  background: var(--doc-accent-soft);
+}
+
+.doc-root .solune-blr-rail {
+  width: 4.5rem;
+  color: var(--doc-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.doc-root .solune-blr-no.is-current {
+  color: var(--doc-accent-strong);
+  font-weight: 700;
+}
+
+/* 제목 줄: 분류가 마크업에서는 제목 앞에 오지만 화면에서는 제목 아래 작은 글씨로 둔다. */
+.doc-root .solune-blr-title-line {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.doc-root .solune-blr-title {
+  color: var(--doc-ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.doc-root .solune-blr-title:hover {
+  color: var(--doc-accent-strong);
+}
+
+.doc-root .solune-blr-cat {
+  color: var(--doc-muted);
+  font-size: 0.72rem;
+  text-decoration: none;
+}
+
+.doc-root .solune-blr-author {
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-root .solune-blr-avatar {
+  display: none;
+}
+
+.doc-root .solune-blr-hit,
+.doc-root .solune-blr-date {
+  color: var(--doc-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

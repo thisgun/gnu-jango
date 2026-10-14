@@ -34,7 +34,7 @@ import { Separator } from "@/components/ui/separator";
 import { ShareButtons } from "@/components/ShareButtons";
 import { MemberAvatar } from "@/components/MemberAvatar";
 import { MemberSideview } from "@/components/MemberSideview";
-import { useThemeSlot } from "@/components/providers/ThemeSlotsProvider";
+import { useThemeFeature, useThemeSlot } from "@/components/providers/ThemeSlotsProvider";
 import { ChevronDown, ChevronUp, FileQuestion, Link2, MessageCircle } from "lucide-react";
 import { CommentSection } from "./CommentSection";
 import { downloadAttachment, isCheckedDownloadUrl } from "./downloadAttachment";
@@ -101,6 +101,7 @@ function formatPostDate(value?: string | null): string {
 export default function PostViewClient({ boTable, wrId }: ClientPageProps) {
   // 테마가 글보기 머리를 바꾸면(문서 테마 등) 그 슬롯이, 없으면 아래 기본 머리가 그려진다.
   const themeBoardViewHeader = useThemeSlot("BoardViewHeader");
+  const listUnderPostView = useThemeFeature("listUnderPostView");
   const routePatterns = ["/bbs/:bo_table/:wr_id", "/boards/:bo_table/:wr_id", "/:bo_table/:wr_id"];
   const bo_table = useRuntimeRouteParam("bo_table", routePatterns, boTable);
   const wr_id = useRuntimeRouteParam("wr_id", routePatterns, wrId);
@@ -683,7 +684,7 @@ export default function PostViewClient({ boTable, wrId }: ClientPageProps) {
         </div>
       )}
 
-      {canViewBoardList ? (
+      {canViewBoardList && listUnderPostView ? (
         <BoardPostListClient boTable={bo_table} embedded currentWrId={post.wr_id} />
       ) : null}
     </div>

@@ -29,7 +29,11 @@ class ThemeFixture(TestCase):
         self.root = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.root, ignore_errors=True)
         for name in ("nextjs_default", "handbook"):
-            write(self.root / "theme" / name / "index.html", f"<html>{name.upper()} HOME</html>")
+            write(
+                self.root / "theme" / name / "index.html",
+                f"<html>{name.upper()} HOME<script>window.__G5_NEXTJS25_CONFIG__ = Object.assign("
+                '{"apiBaseUrl":"/api/v1"},window.__G5_NEXTJS25_CONFIG__ || {});</script></html>',
+            )
             write(self.root / "theme" / name / "shop.html", f"<html>{name.upper()} SHOP</html>")
             write(self.root / "theme" / name / "sw.js", f"// {name} worker")
             write(self.root / "theme" / name / "manifest.json", json.dumps({"name": name, "icons": []}))
@@ -149,3 +153,48 @@ class ThemeChooserTests(ThemeFixture):
 
         self.assertEqual(Config.objects.get(name="cf_theme").value, "handbook")
         self.assertContains(self.client.get("/"), "HANDBOOK HOME")
+
+
+class ThemeSettingsTests(ThemeFixture):
+    """The handbook theme reads its manual group at run time: from the page's runtime config on a
+    static export and from /api/v1/settings on a server runtime. The default theme gets neither."""
+
+    def set_group(self, group):
+        Config.objects.update_or_create(name="cf_docs_group", defaults={"value": group})
+        site_config.clear()
+
+    def runtime_settings(self, html):
+        """The theme settings from the first runtime-config script (window.__G5_NEXTJS25_CONFIG__ = {...};)."""
+        import re
+
+        match = re.search(r"window\.__G5_NEXTJS25_CONFIG__ = (\{.*?\});</script>", html)
+        return json.loads(match.group(1)).get("themeSettings") if match else None
+
+    def test_the_page_carries_the_manual_group_for_the_handbook_theme(self):
+        self.activate("handbook")
+        self.set_group("manual")
+
+        html = self.client.get("/").content.decode()
+
+        self.assertIn('"themeSettings"', html)
+        settings_value = self.runtime_settings(html)
+        self.assertEqual(settings_value["theme"], "handbook")
+        self.assertEqual(settings_value["docs"]["group"], "manual")
+        self.assertGreater(settings_value["revision"], 0)
+
+    def test_the_default_theme_page_is_left_as_it_was(self):
+        self.activate("nextjs_default")
+        self.set_group("manual")
+
+        self.assertNotIn("themeSettings", self.client.get("/").content.decode())
+
+    def test_the_settings_api_returns_them_only_for_the_active_handbook_theme(self):
+        from rest_framework.test import APIClient
+
+        self.set_group("manual")
+        self.activate("handbook")
+        value = APIClient().get("/api/v1/settings").json()["data"]["theme_settings"]
+        self.assertEqual((value["theme"], value["docs"]["group"]), ("handbook", "manual"))
+
+        self.activate("nextjs_default")
+        self.assertIsNone(APIClient().get("/api/v1/settings").json()["data"]["theme_settings"])

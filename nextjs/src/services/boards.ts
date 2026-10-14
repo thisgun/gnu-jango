@@ -77,6 +77,7 @@ export async function getBoardPosts({
   stx,
   sca,
   withExcerpt = false,
+  fields,
   revalidate = 30,
 }: {
   boTable: string;
@@ -87,6 +88,8 @@ export async function getBoardPosts({
   sca?: string;
   /** Gallery cards show a two-line excerpt (API ?with=excerpt); other lists leave it off. */
   withExcerpt?: boolean;
+  /** API ?fields= (예: "toc" — 목차에 쓸 칸만). 서버가 모르면 무시한다. */
+  fields?: string;
   revalidate?: number;
 }): Promise<{
   list: WritePost[];
@@ -100,6 +103,7 @@ export async function getBoardPosts({
   if (page) params.set("page", String(page));
   if (perPage) params.set("per_page", String(perPage));
   if (sfl) params.set("sfl", sfl);
+  if (fields) params.set("fields", fields);
   if (stx) params.set("stx", stx);
   if (sca) params.set("sca", sca);
   if (withExcerpt) params.set("with", "excerpt");

@@ -1,7 +1,11 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import type { G5ThemeClientSlots } from "@/lib/theme-types";
+import {
+  G5_THEME_FEATURE_DEFAULTS,
+  type G5ThemeClientSlots,
+  type G5ThemeFeatures,
+} from "@/lib/theme-types";
 
 /**
  * 테마의 클라이언트 프레젠테이션 슬롯(글보기 헤더 …)을 클라이언트 컴포넌트에 전달하는 컨텍스트.
@@ -11,9 +15,28 @@ import type { G5ThemeClientSlots } from "@/lib/theme-types";
  * 소비자는 useThemeSlot() 으로 꺼낸다. 슬롯이 없으면 undefined 가 오고, 호출한 쪽이 기본 UI 를 그린다.
  */
 const ThemeSlotsContext = createContext<G5ThemeClientSlots>({});
+const ThemeFeaturesContext = createContext<G5ThemeFeatures>(G5_THEME_FEATURE_DEFAULTS);
 
-export function ThemeSlotsProvider({ slots, children }: { slots: G5ThemeClientSlots; children: ReactNode }) {
-  return <ThemeSlotsContext.Provider value={slots}>{children}</ThemeSlotsContext.Provider>;
+export function ThemeSlotsProvider({
+  slots,
+  features,
+  children,
+}: {
+  slots: G5ThemeClientSlots;
+  /** 테마가 바꾼 앱 동작(theme.config.ts 의 features). 적지 않은 것은 기본값. */
+  features?: Partial<G5ThemeFeatures>;
+  children: ReactNode;
+}) {
+  const value = { ...G5_THEME_FEATURE_DEFAULTS, ...features };
+  return (
+    <ThemeFeaturesContext.Provider value={value}>
+      <ThemeSlotsContext.Provider value={slots}>{children}</ThemeSlotsContext.Provider>
+    </ThemeFeaturesContext.Provider>
+  );
+}
+
+export function useThemeFeature<K extends keyof G5ThemeFeatures>(name: K): G5ThemeFeatures[K] {
+  return useContext(ThemeFeaturesContext)[name];
 }
 
 export function useThemeSlot<K extends keyof G5ThemeClientSlots>(name: K): G5ThemeClientSlots[K] {

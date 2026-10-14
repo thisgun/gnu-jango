@@ -142,7 +142,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <NavigationProgressProvider>
             <AuthProvider initialUser={initialUser}>
               {/* 테마의 클라이언트 프레젠테이션 슬롯만 골라 컨텍스트로 넘긴다. */}
-              <ThemeSlotsProvider slots={{ BoardViewHeader: themeComponents.BoardViewHeader }}>
+              <ThemeSlotsProvider
+                slots={{ BoardViewHeader: themeComponents.BoardViewHeader }}
+                features={themeConfig.features}
+              >
                 {ThemeLayoutShell ? (
                   <ThemeLayoutShell config={themeConfig} menus={menus}>
                     {children}

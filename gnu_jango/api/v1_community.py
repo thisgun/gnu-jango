@@ -30,6 +30,7 @@ from gnu_jango.bbs.models import Board, Comment, Post, Post_scrap, validate_uplo
 from gnu_jango.bbs.utils import get_pretty_url
 from gnu_jango.config import config
 from gnu_jango.config.models import Config
+from gnu_jango.config.theme_settings import theme_settings_for
 from gnu_jango.core.models import (
     ContentPage,
     FAQItem,
@@ -377,6 +378,7 @@ def settings_response(request):
             "cf_home_boards": data.get("cf_home_boards", ""),
             "cf_home_gallery": data.get("cf_home_gallery", ""),
             "cf_docs_group": data.get("cf_docs_group", ""),
+            "theme_settings": theme_settings_for(str(data.get("cf_theme") or ""), data),
             "cf_bbs_rewrite": _safe_int(data.get("cf_bbs_rewrite"), 0),
             "infinite_scroll": False,
             "comment_editor": False,

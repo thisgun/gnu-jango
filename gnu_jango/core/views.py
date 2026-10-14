@@ -20,6 +20,7 @@ from django.views.static import serve
 from gnu_jango.bbs.models import Group, Board, Post
 from gnu_jango.shop.models import ShopCategory
 from gnu_jango.config import config
+from gnu_jango.config.theme_settings import theme_settings_for
 from gnu_jango.config.sample_data import SAMPLE_ASSET_SIZES
 from gnu_jango.core.legacy_assets import legacy_area_roots
 
@@ -274,6 +275,11 @@ def _rewrite_nextjs25_runtime_config(content, request):
         "g5BaseUrl": origin,
         "appBaseUrl": origin,
     }
+    # What differs per installation but cannot be baked into the shared export (the handbook theme's
+    # manual group). The default theme needs none, so its pages stay as they were.
+    theme_settings = theme_settings_for(_nextjs_theme_name(), config.get_all())
+    if theme_settings is not None:
+        runtime_config["themeSettings"] = theme_settings
     replacements = {
         "https://your-django-api.example.com/api/v1": api_base_url,
         "https://your-django-api.example.com": origin,
