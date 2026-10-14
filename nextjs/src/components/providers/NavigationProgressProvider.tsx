@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import { ProgressProvider } from "@bprogress/next/app";
 import { useProgress } from "@bprogress/react";
 import { DOCUMENT_NAVIGATION_EVENT } from "@/lib/navigation-progress";
+import { clearPageBootstrap } from "@/services/page-bootstrap";
 
 // Transitions that finish within this time never show the bar, so cached pages do not flash it.
 const PROGRESS_DELAY_MS = 120;
@@ -94,6 +96,10 @@ interface NavigationProgressProviderProps {
  * take `useRouter` from "@bprogress/next/app" and render inside this provider.
  */
 export function NavigationProgressProvider({ children }: NavigationProgressProviderProps) {
+  const pathname = usePathname();
+  // Clear before the next page's passive effects ask for its current data.
+  useLayoutEffect(() => { clearPageBootstrap(); }, [pathname]);
+
   return (
     <ProgressProvider
       color="hsl(var(--primary))"

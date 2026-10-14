@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/store/auth";
+import { clearPageBootstrap } from "@/services/page-bootstrap";
 import type { ServerUser } from "@/lib/auth-server";
 
 interface Props {
@@ -28,6 +29,10 @@ export function AuthProvider({ children, initialUser = null }: Props) {
   const isInitialized = useAuthStore((s) => s.isInitialized);
   const initialize = useAuthStore((s) => s.initialize);
   const expireSession = useAuthStore((s) => s.expireSession);
+
+  useEffect(() => useAuthStore.subscribe((state, previous) => {
+    if (state.user !== previous.user) clearPageBootstrap();
+  }), []);
 
   useEffect(() => {
     if (hydrationAttempted.current) return;
