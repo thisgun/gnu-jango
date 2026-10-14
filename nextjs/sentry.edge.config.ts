@@ -1,5 +1,5 @@
 /**
- * Sentry — Edge runtime (middleware.ts) 설정.
+ * Sentry — Edge runtime 설정.
  * DSN 미설정이면 noop.
  */
 import * as Sentry from '@sentry/nextjs';

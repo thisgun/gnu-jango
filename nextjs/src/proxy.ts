@@ -61,7 +61,8 @@ async function fetchProductStatus(url: string): Promise<number | null> {
   }
 }
 
-export async function middleware(request: NextRequest) {
+// Next 16 renamed middleware.ts to proxy.ts (it always runs on the Node.js runtime).
+export async function proxy(request: NextRequest) {
   const productId = productIdFromPath(request.nextUrl.pathname);
   const baseUrl = apiBaseUrl();
   if (!productId || !baseUrl) return NextResponse.next();
@@ -92,5 +93,4 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: ["/shop/:productId"],
-  runtime: "nodejs",
 };

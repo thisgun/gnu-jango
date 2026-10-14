@@ -71,6 +71,8 @@ export default function LoginSessionsPage() {
       setSessions((prev) => prev.filter((session) => session.token_id !== tokenId));
       if (result.current) {
         expireSession();
+        // 현재 세션을 폐기했으니 전체 새로고침으로 모든 화면 상태를 비우고 로그인으로 보낸다.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.assign("/login");
         return;
       }

@@ -401,6 +401,8 @@ const serverRuntimeConfig: NextConfig = STATIC_EXPORT
     };
 
 const nextConfig: NextConfig = {
+  // Set by scripts/build-next.mjs for the isolated static build (see the note there).
+  ...(process.env.G5_TURBOPACK_ROOT ? { turbopack: { root: process.env.G5_TURBOPACK_ROOT } } : {}),
   // Static theme builds use this as their export folder; build-next isolates the
   // Next-internal `.next` directory in a temporary project copy.
   distDir: process.env.G5_NEXT_DIST_DIR?.trim() || '.next',

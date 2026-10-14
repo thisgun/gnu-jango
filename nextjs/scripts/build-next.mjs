@@ -49,6 +49,10 @@ const BUILD_ENV = {
   ...process.env,
   G5_NEXT_DIST_DIR: NEXT_DIST_DIR,
   G5_NEXT_RUNTIME: SERVER_RUNTIME ? 'server' : 'static',
+  // The static build runs in a sibling workspace whose node_modules is a link back into ROOT.
+  // Turbopack (the default builder since Next 16) refuses links that leave its root, so the root
+  // is widened to the folder that holds both. Server builds run in place and keep the default.
+  ...(SERVER_RUNTIME ? {} : { G5_TURBOPACK_ROOT: dirname(ROOT) }),
 };
 const EXCLUDED_BUILD_ENTRIES = new Set([
   '.deploy',
@@ -95,7 +99,7 @@ function collectServerRuntimeOnlyFiles(dir) {
       continue;
     }
 
-    if (!['middleware.ts', 'route.ts', 'route.tsx'].includes(entry.name)) continue;
+    if (!['middleware.ts', 'proxy.ts', 'route.ts', 'route.tsx'].includes(entry.name)) continue;
 
     const content = readFileSync(fullPath, 'utf8');
     if (SERVER_RUNTIME_ONLY_RE.test(content)) {
