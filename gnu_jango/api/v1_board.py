@@ -9,7 +9,8 @@ from django.core.cache import cache
 from django.core.exceptions import SuspiciousFileOperation, ValidationError as DjangoValidationError
 from django.core.files.storage import default_storage
 from django.db import transaction
-from django.db.models import Case, Count, F, IntegerField, Q, When
+from django.db.models import Case, Count, F, IntegerField, OuterRef, Q, Subquery, When
+from django.db.models.functions import Coalesce
 from django.http import FileResponse
 from django.utils import timezone
 from django.utils.html import strip_tags
@@ -839,13 +840,24 @@ def _update_post_comment_count(post):
     return count
 
 
+def _related_count(rows):
+    """Number of `rows` (already filtered to OuterRef("pk")) as an annotation; 0 when there are none."""
+    counted = rows.order_by().values("board").annotate(total=Count("pk")).values("total")
+    return Coalesce(Subquery(counted, output_field=IntegerField()), 0)
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
 def board_list_view(request):
+    # One counting subquery per table (_related_count). Counting both relations in one join multiplied every board's
+    # posts by its comments before DISTINCT (2.2 s for 5,600 posts) and stalled the other home requests.
     queryset = (
         Board.objects.select_related("group")
-        .annotate(post_count=Count("posts", distinct=True), comment_count=Count("comments", distinct=True))
+        .annotate(
+            post_count=_related_count(Post.objects.filter(board=OuterRef("pk"))),
+            comment_count=_related_count(Comment.objects.filter(board=OuterRef("pk"))),
+        )
         .order_by("bo_order", "pk")
     )
     group = (request.query_params.get("group") or "").strip()

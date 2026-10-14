@@ -868,6 +868,26 @@ class NextStaticFileTests(TestCase):
         second = self.client.get(f"/_next/static/{self.relative}", HTTP_IF_MODIFIED_SINCE=first["Last-Modified"])
         self.assertEqual(second.status_code, 304)
 
+    def test_content_hashed_assets_are_cached_for_a_year_by_browsers_and_the_cdn(self):
+        response = self.client.get(f"/_next/static/{self.relative}")
+
+        self.assertEqual(response["Cache-Control"], "public, max-age=31536000, s-maxage=31536000, immutable")
+
+    def test_the_build_manifest_folder_is_revalidated_because_its_name_does_not_change(self):
+        root = Path(settings.TEMPLATES_DIR) / "theme_static" / "nextjs_default" / "_next" / "static"
+        manifest = next(path for path in root.glob("*/_buildManifest.js"))
+
+        response = self.client.get(f"/_next/static/{manifest.relative_to(root).as_posix()}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("immutable", response.get("Cache-Control", ""))
+
+    def test_a_missing_asset_is_not_cached(self):
+        response = self.client.get("/_next/static/chunks/none-0123456789abcdef.js")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn("immutable", response.get("Cache-Control", ""))
+
 
 class RobotsTests(TestCase):
     def test_robots_lists_private_areas_and_both_sitemaps_for_the_current_host(self):

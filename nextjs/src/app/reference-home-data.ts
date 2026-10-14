@@ -6,7 +6,7 @@ import { getFaqs } from "@/services/faqs";
 import { getCurrentPoll } from "@/services/polls";
 import { getRecentItems } from "@/services/recent";
 import { getPopularKeywords } from "@/services/search";
-import { getPublicSettings } from "@/services/settings";
+import { getClientPublicSettings, getPublicSettings } from "@/services/settings";
 
 export type ReferenceBoardPanel = { board: Board; posts: WritePost[] };
 export type ReferenceGallery = { board: Board; posts: WritePost[] };
@@ -57,7 +57,8 @@ function boardsWithPostsFirst(boards: Board[]): Board[] {
 export async function loadReferenceHomeData(): Promise<ReferenceHomeData> {
   const [boards, settings, faqResult, recentComments, pollResult, popularKeywords] = await Promise.all([
     getBoards(),
-    getPublicSettings(),
+    // In the browser the header, footer and rail read the same settings: share their one request.
+    typeof window === "undefined" ? getPublicSettings() : getClientPublicSettings(),
     getFaqs({ perPage: FAQ_LIMIT }),
     getRecentItems({ view: "c", limit: COMMENT_LIMIT }),
     getCurrentPoll(),

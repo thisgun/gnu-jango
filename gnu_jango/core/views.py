@@ -742,9 +742,20 @@ def nextjs25_short_board_redirect(request, bo_table, board_path=""):
     return _legacy_local_redirect(request, target, status_code=308)
 
 
+# Next names every file under these folders after its content, so a new build never reuses a name.
+# The build-id folder (_buildManifest.js) keeps one name across builds and must be revalidated.
+NEXT_HASHED_STATIC_DIRS = ("chunks/", "css/", "media/")
+IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, s-maxage=31536000, immutable"
+
+
 def nextjs25_static(request, path):
     document_root = settings.TEMPLATES_DIR / "theme_static" / "nextjs_default" / "_next" / "static"
-    return serve(request, path, document_root=document_root)
+    response = serve(request, path, document_root=document_root)
+    # Without this every page load re-requested ~30 chunks; on Vercel each one ran the Django function
+    # because the CDN only caches responses that say it may (s-maxage).
+    if response.status_code in (200, 304) and path.startswith(NEXT_HASHED_STATIC_DIRS):
+        response["Cache-Control"] = IMMUTABLE_CACHE_CONTROL
+    return response
 
 
 def nextjs25_public_asset(request, path):
