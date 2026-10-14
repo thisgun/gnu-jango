@@ -15,14 +15,23 @@ type ProductCardItem = Pick<ShopProduct, "it_id" | "it_name" | "it_price"> &
   Partial<Pick<ShopProduct, "it_cust_price" | "it_tel_inq" | "it_seo_title" | "image_url">>;
 
 export function ProductDetailLoading() {
+  // 실제 화면(ProductDetailView)과 같은 틀 — 경로 표시줄과 같은 <nav>(CSS가 같은 여백을 입힌다)와 같은 열 · 간격을 잡아, 상품이 오면
+  // 내용이 아래로 밀리거나 열 폭이 바뀌지 않게 한다.
   return (
-    <div className="animate-pulse">
-      <div className="grid gap-8 md:grid-cols-2">
-        <div className="aspect-square rounded-lg bg-muted" />
+    <div className="product-detail-page animate-pulse" aria-busy="true" aria-label="상품 정보를 불러오는 중">
+      <nav aria-hidden="true" className="flex min-w-0 items-center py-3">
+        <div className="h-5 w-56 max-w-full rounded bg-muted" />
+      </nav>
+      <div className="product-detail-grid grid gap-8 md:grid-cols-2">
+        <div>
+          <div className="product-gallery-main aspect-square w-full" />
+        </div>
         <div className="space-y-4">
+          <div className="h-4 w-20 rounded bg-muted" />
           <div className="h-8 w-3/4 rounded bg-muted" />
-          <div className="h-6 w-1/2 rounded bg-muted" />
+          <div className="h-5 w-1/2 rounded bg-muted" />
           <div className="h-10 w-1/3 rounded bg-muted" />
+          <div className="h-12 w-full rounded bg-muted" />
         </div>
       </div>
     </div>
