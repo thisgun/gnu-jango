@@ -41,7 +41,8 @@ from .shop_common import (
     list_values,
     paginate_queryset,
     parse_ct_ids,
-    product_image_url,
+    product_thumbnail_url,
+    PRODUCT_LINE_IMAGE_WIDTH,
     request_data,
     request_values,
     require_user,
@@ -145,7 +146,7 @@ def cart_item_payload(item):
     option_price = safe_int(item.get("io_price"), 0)
     option_type = safe_int(item.get("io_type"), 0)
     line_unit_price = option_price if option_type == 1 else price + option_price
-    image_url = product_image_url(product) if product else "/icon-192.png"
+    image_url = product_thumbnail_url(product, PRODUCT_LINE_IMAGE_WIDTH) if product else "/icon-192.png"
     name = product.it_name if product else str(item.get("it_name") or item.get("it_id") or "Product")
     return {
         "ct_id": str(item.get("ct_id") or ""),
@@ -277,7 +278,7 @@ def wishlist_payload(entry):
         "option_count": len(product.options or []) if product else 0,
         "can_add_cart": bool(product and product.it_use == "1" and product.it_soldout != "1"),
         "cart_block_reason": "" if product else "Product not found.",
-        "image_url": product_image_url(product) if product else "/icon-192.png",
+        "image_url": product_thumbnail_url(product) if product else "/icon-192.png",
         "wi_time": datetime_value(entry.wi_time),
     }
 

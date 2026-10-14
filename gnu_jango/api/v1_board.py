@@ -26,6 +26,7 @@ from .authentication import SessionJWTAuthentication as JWTAuthentication
 from gnu_jango.bbs.delete_posts import Delete_all_posts
 from gnu_jango.bbs.models import Board, Comment, Post, Post_file, Post_good, Post_scrap
 from gnu_jango.core.legacy_assets import legacy_area_roots
+from gnu_jango.core.thumbnails import thumbnail_url
 from gnu_jango.bbs.utils import get_next_num
 from gnu_jango.utils.lib import check_password, get_client_ip, get_encrypt_string
 from gnu_jango.utils.users import get_user_level, is_admin as gnu_is_admin
@@ -412,12 +413,33 @@ def _comment_payload(comment, request):
     }
 
 
-def _thumbnail_from_files(files, request):
+LIST_THUMBNAIL_WIDTH = 400
+GUEST_LEVEL = 1
+
+
+def _public_copy_allowed(board, is_secret):
+    """Whether a post's pictures may get a list-size copy URL.
+
+    A copy URL never expires and is cached publicly for a year, so it is only handed out for
+    pictures any visitor may already see: not on a secret post, not on a members-only board and not
+    on a board that charges points to read. Elsewhere the original (on S3, a short-lived signed URL)
+    is kept.
+    """
+    if is_secret or board is None:
+        return False
+    return (board.bo_read_level or 0) <= GUEST_LEVEL and (board.bo_read_point or 0) >= 0
+
+
+def _thumbnail_from_files(files, request, *, list_copy=True):
     for post_file in files:
         if post_file.bf_type > 0:
             if post_file.bf_storage == "sample_static":
                 return post_file.bf_thumburl or post_file.bf_fileurl
-            return _field_file_url(request, post_file.bf_file)
+            url = _field_file_url(request, post_file.bf_file)
+            if not url or not list_copy:
+                return url
+            # Gallery cards and the home gallery are ~200-300px wide: send a 400px copy, not the upload.
+            return thumbnail_url(url, LIST_THUMBNAIL_WIDTH, storage_path=post_file.bf_file.name)
     return ""
 
 
@@ -511,7 +533,9 @@ def _post_payload(post, request, *, detail=False, list_view=False):
         "mb_nick": member["mb_nick"],
         "mb_icon_path": member["mb_icon_path"],
         "member": member,
-        "thumbnail": "" if redact_secret_list_content else _thumbnail_from_files(files, request),
+        "thumbnail": "" if redact_secret_list_content else _thumbnail_from_files(
+            files, request, list_copy=_public_copy_allowed(board, is_secret)
+        ),
         "is_notice": bool(post.is_notice),
         "is_new": False,
         "is_hot": bool(post.wr_hit >= board.bo_hot > 0),

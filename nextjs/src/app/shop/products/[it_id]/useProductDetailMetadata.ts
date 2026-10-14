@@ -34,7 +34,8 @@ export function useProductDetailMetadata(
       title: product.it_name,
       description,
       path: productPath,
-      image: product.image_url || product.images?.[0],
+      // 공유 미리보기에는 원본 — image_url 은 목록용 400px 사본이다.
+      image: product.images?.[0] || product.image_url,
     });
     applyClientJsonLd("article", null);
     applyClientJsonLd("product", {

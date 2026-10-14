@@ -1,6 +1,7 @@
 from urllib.parse import unquote, urlparse
 
 from django.conf import settings
+from django.contrib.sessions.middleware import SessionMiddleware
 from django.core.exceptions import DisallowedHost
 from django.db import OperationalError, ProgrammingError
 from django.db.models import F
@@ -86,6 +87,45 @@ PRIVATE_API_PREFIXES = (
 )
 
 
+PUBLIC_API_ASSET_PREFIXES = ("/api/v1/thumbs/",)
+
+# Files that are the same for every visitor: build chunks, uploads, Gnuboard data, picture copies.
+ASSET_PATH_PREFIXES = (
+    "/_next/",
+    # Gnuboard data folders only — a board may itself be called "data" (/data/<wr_id>).
+    "/data/item/",
+    "/data/banner/",
+    "/data/event/",
+    "/data/file/",
+    "/data/coupon/",
+    "/sample-data/",
+    "/api/v1/thumbs/",
+    "/sw.js",
+    "/favicon.ico",
+)
+
+
+def is_asset_path(path):
+    static_url = getattr(settings, "STATIC_URL", "/static/") or "/static/"
+    media_url = getattr(settings, "MEDIA_URL", "/media/") or "/media/"
+    return path.startswith((static_url, media_url, *ASSET_PATH_PREFIXES))
+
+
+class AssetAwareSessionMiddleware(SessionMiddleware):
+    """Django sessions, except that an asset request never saves or refreshes the session.
+
+    SESSION_SAVE_EVERY_REQUEST keeps Gnuboard's sliding three-hour session, but it also saved the
+    session and re-sent its cookie on every chunk and picture request (~30 per page). That cost a
+    database write each, and the Set-Cookie / "Vary: Cookie" kept browsers and the CDN from
+    caching the files. Page and API requests still refresh the session as before.
+    """
+
+    def process_response(self, request, response):
+        if is_asset_path(unquote(getattr(request, "path", "") or "/")):
+            return response
+        return super().process_response(request, response)
+
+
 class G5SecurityHeadersMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
@@ -104,7 +144,11 @@ class G5SecurityHeadersMiddleware:
         response.setdefault("Content-Security-Policy", policy)
         response.setdefault("X-Permitted-Cross-Domain-Policies", "none")
 
-        if path.startswith("/api/"):
+        if path.startswith(PUBLIC_API_ASSET_PREFIXES):
+            # Signed picture copies are the same for everyone: keep the view's year-long cache even
+            # when the browser sends cookies, and never vary on them (a CDN would not store it).
+            response["Referrer-Policy"] = "no-referrer"
+        elif path.startswith("/api/"):
             response["Referrer-Policy"] = "no-referrer"
             patch_vary_headers(response, ("Authorization", "Cookie"))
             if (
@@ -177,17 +221,8 @@ class VisitTrackingMiddleware:
         return response
 
     def _should_skip(self, path):
-        static_url = getattr(settings, "STATIC_URL", "/static/") or "/static/"
-        media_url = getattr(settings, "MEDIA_URL", "/media/") or "/media/"
-        skipped_prefixes = (
-            static_url,
-            media_url,
-            "/favicon.ico",
-            "/robots.txt",
-            "/admin/jsi18n/",
-            "/__debug__/",
-        )
-        return any(path.startswith(prefix) for prefix in skipped_prefixes)
+        # Asset requests are not visits: logging them wrote ~30 rows per page (one per Next chunk).
+        return is_asset_path(path) or path.startswith(("/robots.txt", "/admin/jsi18n/", "/__debug__/"))
 
     def _record_visit(self, request, response, path):
         from .models import VisitLog

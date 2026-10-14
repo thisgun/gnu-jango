@@ -13,6 +13,7 @@ from rest_framework import status as drf_status
 from rest_framework.permissions import BasePermission
 
 from gnu_jango.config.models import Config
+from gnu_jango.core.thumbnails import thumbnail_url
 from gnu_jango.shop.models import (
     ShopProduct,
     ShopCouponLog,
@@ -404,3 +405,24 @@ def legacy_shop_asset_url(url):
 
 def product_image_url(product):
     return legacy_shop_asset_url(product.image_url)
+
+
+# Product cards are ~200-300px wide (400 covers 2x screens); cart, order and mini-cart rows ~100px.
+PRODUCT_LIST_IMAGE_WIDTH = 400
+PRODUCT_LINE_IMAGE_WIDTH = 240
+
+
+def _product_image_storage_path(product):
+    """Storage name of the main picture when it was uploaded here (its stored URL may be signed)."""
+    primary = str(product.image_url or "").strip()
+    for image in product.images if isinstance(product.images, list) else []:
+        if isinstance(image, dict) and image.get("storage_path") and image.get("url") == primary:
+            return str(image["storage_path"])
+    return ""
+
+
+def product_thumbnail_url(product, width=PRODUCT_LIST_IMAGE_WIDTH):
+    """A list-size copy of the main picture (the original when Django cannot read it)."""
+    return thumbnail_url(
+        product_image_url(product), width, storage_path=_product_image_storage_path(product)
+    )

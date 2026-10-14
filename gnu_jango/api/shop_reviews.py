@@ -31,7 +31,7 @@ from .shop_common import (
     member_display_name,
     pagination_meta,
     paginate_queryset,
-    product_image_url,
+    product_thumbnail_url,
     request_data,
     require_user,
     safe_int,
@@ -56,7 +56,7 @@ def review_payload(review):
         "is_content": review.is_content,
         "is_confirm": review.is_confirm,
         "is_time": datetime_value(review.is_time),
-        "product_image_url": product_image_url(product) if product else "/icon-192.png",
+        "product_image_url": product_thumbnail_url(product) if product else "/icon-192.png",
     }
 
 
@@ -130,7 +130,7 @@ def qa_payload(qa, request=None):
         "can_edit": can_manage,
         "can_delete": can_manage,
         "iq_time": datetime_value(qa.iq_time),
-        "product_image_url": product_image_url(product) if product else "",
+        "product_image_url": product_thumbnail_url(product) if product else "",
     }
 
 

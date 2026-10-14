@@ -1,11 +1,18 @@
 from django.urls import path
 
+from gnu_jango.core import thumbnails
+
 from . import member_lifecycle, v1_auth, v1_board, v1_community, v1_shop, v1_views
 
 app_name = "api_v1"
 
 urlpatterns = [
     path("status", v1_views.status_view, name="status"),
+    path(
+        "thumbs/<str:signature>/<int:width>/<str:kind>/<path:path>",
+        thumbnails.thumbnail_view,
+        name="thumbnail",
+    ),
     path("captcha/audio", v1_auth.captcha_audio_view, name="captcha-audio"),
     path("captcha", v1_auth.captcha_view, name="captcha"),
     path("auth/csrf", v1_auth.csrf_token_view, name="auth-csrf"),

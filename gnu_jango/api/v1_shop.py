@@ -27,6 +27,7 @@ from .authentication import SessionJWTAuthentication as JWTAuthentication
 
 from gnu_jango.config.models import Config
 from gnu_jango.core.legacy_assets import first_existing_legacy_path
+from gnu_jango.core.thumbnails import thumbnail_url
 from gnu_jango.shop.models import (
     ShopAddress,
     ShopBanner,
@@ -61,6 +62,8 @@ from .shop_common import (
     on_sale_products,
     legacy_shop_asset_url,
     product_image_url,
+    product_thumbnail_url,
+    PRODUCT_LINE_IMAGE_WIDTH,
     CANCELLED_STATUSES,
     ORDERED_STATUSES,  # noqa: F401 - re-exported for existing importers
     ORDER_STATUS_CANCELLED,
@@ -323,8 +326,9 @@ def product_payload(product, request=None, *, detail=False):
     review_stats = getattr(product, "review_stats", None)
     review_count = getattr(product, "review_count", None)
     qa_count = getattr(product, "qa_count", None)
-    image_url = product_image_url(product)
-    images = product_image_urls(product, image_url)
+    # Cards and rows show `image_url` (a 400px copy); the detail gallery shows the original `images`.
+    images = product_image_urls(product, product_image_url(product))
+    image_url = product_thumbnail_url(product)
     option_subject = product.it_option_subject.strip()
     raw_options = product.options if isinstance(product.options, list) else []
     product_options = [
@@ -528,7 +532,7 @@ def order_item_payload(item):
         "io_price": item.io_price,
         "ct_notax": item.ct_notax,
         "ct_send_cost": item.ct_send_cost,
-        "image_url": item.image_url,
+        "image_url": thumbnail_url(item.image_url, PRODUCT_LINE_IMAGE_WIDTH),
     }
 
 
@@ -858,7 +862,8 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
                 ct_notax=item.get("ct_notax") or 0,
                 ct_send_cost=item.get("ct_send_cost") or 0,
                 stock_adjusted=True,
-                image_url=item.get("image_url") or "",
+                # Keep the original picture: the cart line carries a signed list-size copy URL.
+                image_url=(product_image_url(product) if product else "") or item.get("image_url") or "",
             )
 
         if should_save_address:
@@ -1083,7 +1088,7 @@ def product_suggest_view(request):
                 "it_seo_title": product.it_seo_title,
                 "it_price": product.it_price,
                 "it_tel_inq": product.it_tel_inq,
-                "image_url": product_image_url(product),
+                "image_url": product_thumbnail_url(product),
                 "ca_id": product.category_id or "",
             }
             for product in queryset
@@ -1172,6 +1177,10 @@ def product_recommend_view(request, it_id):
     return api_response(data={"sent": True, "it_id": it_id})
 
 
+# The main banner spans the content width (1440px at most), so a 1440px copy is sharp enough.
+BANNER_IMAGE_WIDTH = 1440
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def banners_view(request):
@@ -1195,7 +1204,10 @@ def banners_view(request):
 
     data = []
     for banner in banners:
-        image_url = banner.image_file.url if banner.image_file else legacy_shop_asset_url(banner.image_url)
+        if banner.image_file:
+            image_url = thumbnail_url(banner.image_file.url, BANNER_IMAGE_WIDTH, storage_path=banner.image_file.name)
+        else:
+            image_url = thumbnail_url(legacy_shop_asset_url(banner.image_url), BANNER_IMAGE_WIDTH)
         if image_url.startswith("/sample-data/"):
             # These bundled demo assets are served by the Next.js frontend. Keep them relative so
             # they resolve on that host even when Django's API runs as a separate Vercel project.

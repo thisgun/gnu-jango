@@ -753,7 +753,8 @@ def nextjs25_static(request, path):
     response = serve(request, path, document_root=document_root)
     # Without this every page load re-requested ~30 chunks; on Vercel each one ran the Django function
     # because the CDN only caches responses that say it may (s-maxage).
-    if response.status_code in (200, 304) and path.startswith(NEXT_HASHED_STATIC_DIRS):
+    hashed = path.startswith(NEXT_HASHED_STATIC_DIRS) and ".." not in path.replace("\\", "/").split("/")
+    if response.status_code in (200, 304) and hashed:
         response["Cache-Control"] = IMMUTABLE_CACHE_CONTROL
     return response
 

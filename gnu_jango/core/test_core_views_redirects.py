@@ -882,6 +882,27 @@ class NextStaticFileTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("immutable", response.get("Cache-Control", ""))
 
+    def test_assets_are_not_logged_as_visits_and_do_not_vary_on_cookies(self):
+        from gnu_jango.core.models import VisitLog
+
+        self.client.cookies["sessionid"] = "a" * 32  # a well-formed key, as a signed-in browser sends
+        response = self.client.get(f"/_next/static/{self.relative}", HTTP_USER_AGENT="Mozilla/5.0 Chrome/120")
+
+        self.assertEqual(VisitLog.objects.count(), 0)
+        # Vercel's CDN refuses to store any response that varies on Cookie.
+        self.assertNotIn("cookie", response.get("Vary", "").lower())
+
+    def test_a_path_that_steps_out_of_the_hashed_folders_is_not_marked_immutable(self):
+        response = self.client.get(f"/_next/static/chunks/../{self.relative}")
+
+        self.assertNotIn("immutable", response.get("Cache-Control", ""))
+
+    def test_a_board_called_data_is_still_a_page_not_an_asset(self):
+        from gnu_jango.core.middleware import is_asset_path
+
+        self.assertFalse(is_asset_path("/data/12"))
+        self.assertTrue(is_asset_path("/data/item/1446772772/image-01.png"))
+
     def test_a_missing_asset_is_not_cached(self):
         response = self.client.get("/_next/static/chunks/none-0123456789abcdef.js")
 

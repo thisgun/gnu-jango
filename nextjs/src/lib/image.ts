@@ -34,6 +34,8 @@ export function shouldBypassImageOptimization(src: string | null | undefined): b
   if (!src) return true;
   // data: / blob: / svg → next/image 가 어차피 최적화 불가능.
   if (/^(data|blob):/i.test(src) || /\.svg(?:[?#].*)?$/i.test(src)) return true;
+  // Django 가 이미 줄여 보낸 사본(목록 썸네일) — 다시 최적화할 필요가 없다.
+  if (/^(?:https?:\/\/[^/]+)?\/api\/v1\/thumbs\//i.test(src)) return true;
 
   // 상대 경로 / 프로토콜 상대 경로는 우리 도메인 — 최적화 통과.
   if (src.startsWith('/') && !src.startsWith('//')) return false;
