@@ -1,0 +1,19 @@
+User-Agent: *
+Allow: /
+Disallow: /login
+Disallow: /register
+Disallow: /forgot-password
+Disallow: /mypage
+Disallow: /admin
+Disallow: /api
+Disallow: /shop/cart
+Disallow: /shop/order
+Disallow: /shop/orders
+Disallow: /shop/payment
+Disallow: /shop/personalpay
+Disallow: /shop/search
+Disallow: /shop/wishlist
+
+Host: http://localhost:3000
+Sitemap: http://localhost:3000/sitemap.xml
+Sitemap: http://localhost:3000/sitemap-posts.xml

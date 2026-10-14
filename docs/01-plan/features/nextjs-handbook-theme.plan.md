@@ -39,3 +39,20 @@
 ## 미확인
 
 빌드가 지금 결정적인지, Vercel 번들 크기, 기준 CSS의 클래스 불일치 정도, 개발 서버(Turbopack)에서의 별칭 동작.
+
+## 구현 중 계획에서 바뀐 것 (2026-10-14)
+
+- **Next.js를 15.5 → 16.3.8로 먼저 올렸다**(기준과 같은 버전). 별칭 방식과 Turbopack 빌드를 기준과 맞추기 위해서다.
+  정적 빌드의 임시 작업공간이 `node_modules` 를 링크로 잇는 방식은 Turbopack 의 루트 규칙에 걸려 `turbopack.root` 를
+  `G5_TURBOPACK_ROOT` 로 넓혔다.
+- **에셋 접두사(`/_themes/<이름>/`)는 쓰지 않는다.** 접두사를 주면 이 설정에서 빌드가 `Missing parameter name` 으로 실패했다.
+  대신 `_next/static` 의 파일 이름이 내용 해시이고 테마별 빌드 ID 폴더(`g5-handbook-static`)만 다르다는 점을 이용해, Django 가
+  `/_next/static/…` 를 활성 테마 폴더 → 설치된 다른 테마 폴더 순으로 찾는다. 새 URL 경로와 `ASSET_PATH_PREFIXES` 변경이 필요 없다.
+- **결정적 빌드는 아니다.** 임시 작업공간 경로가 해시에 섞여 JS 파일 이름이 빌드마다 달라진다(CSS 내용은 같다). "기본 테마가
+  바뀌지 않았다"는 검증은 CSS 내용 지문(5개 파일)과 주요 화면 렌더로 한다. Tailwind 가 스크립트의 영어 단어(lowercase)까지
+  클래스 후보로 줍기 때문에, 새 스크립트의 문구도 지문에 영향을 준다.
+- **설정은 `cf_docs_group` 하나.** 기준의 PHP 관리자 편집기 대신 Django 환경설정 키 하나를 페이지 런타임 설정(`themeSettings`)과
+  `/api/v1/settings`(`theme_settings`)로 내려 준다. `fields=toc` 가벼운 글 목록 모드는 만들지 않았다(장 수십 개 규모에서는 필요 없었다).
+- **기능 스위치** `features.listUnderPostView`(ThemeSlotsProvider)를 추가했다. 기본 테마는 켜짐, handbook 은 꺼짐.
+- 위험 3(별칭이 tsconfig paths 보다 우선하는가)은 확인했다 — handbook 빌드가 `data-g5-theme-source="handbook"` 로 나온다.
+
