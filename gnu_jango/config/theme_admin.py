@@ -28,6 +28,10 @@ THEME_PRESENTATION = {
         "title": "Next.js Default",
         "description": "커뮤니티와 쇼핑 화면을 제공하는 Next.js 기본 테마입니다.",
     },
+    "handbook": {
+        "title": "Handbook (매뉴얼)",
+        "description": "게시판 그룹을 책으로, 글을 장으로 보여 주는 문서·매뉴얼 사이트용 Next.js 테마입니다.",
+    },
 }
 THEME_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 THEME_PREVIEW_FILES = (

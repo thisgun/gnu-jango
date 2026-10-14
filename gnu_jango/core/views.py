@@ -1,4 +1,4 @@
-from pathlib import PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import json
 import mimetypes
@@ -69,6 +69,8 @@ LEGACY_DATA_DENIED_NAME_RE = re.compile(
     r"\.(htaccess|htpasswd|php|pht|s?p?html?|inc|cgi|pl|phar|svgz?)", re.IGNORECASE
 )
 NEXTJS25_THEME_TEMPLATE_DIR = "theme/nextjs_default"
+NEXTJS_DEFAULT_THEME = "nextjs_default"
+NEXTJS_THEME_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{1,31}$")
 # RFC 3986 path-segment characters other than unreserved letters/digits (sitemap <loc>).
 URI_SEGMENT_SAFE = "!$&'()*+,;=:@-._~"
 CONTROL_CHARACTERS_RE = re.compile(r"[\x00-\x1f\x7f]")
@@ -163,6 +165,30 @@ def _safe_relative_path(value):
     return normalized
 
 
+def _is_nextjs_export(name):
+    """Whether theme/<name> is a complete Next.js export: its pages and its theme_static/<name>/_next/static."""
+    if not NEXTJS_THEME_NAME_RE.fullmatch(str(name or "")):
+        return False
+    root = Path(settings.TEMPLATES_DIR)
+    return (root / "theme" / name / "index.html").is_file() and (root / "theme_static" / name / "_next" / "static").is_dir()
+
+
+def _nextjs_theme_name():
+    """Folder name under theme/ of the Next.js export that serves the site.
+
+    The active theme (cf_theme) when it is an installed export. nextjs25, the classic themes and a
+    folder that is not a complete export keep being served from nextjs_default, as before.
+    """
+    name = str(getattr(config, "cf_theme", "") or "")
+    if name not in {"", "nextjs25", NEXTJS_DEFAULT_THEME} and _is_nextjs_export(name):
+        return name
+    return NEXTJS_DEFAULT_THEME
+
+
+def _theme_template_dir():
+    return f"theme/{_nextjs_theme_name()}"
+
+
 def _clean_nextjs25_template_path(template_path):
     raw_path = str(template_path or "").replace("\\", "/").strip("/")
     if not raw_path or raw_path == ".":
@@ -171,8 +197,9 @@ def _clean_nextjs25_template_path(template_path):
     if clean_path is None:
         raise Http404("Template not found")
     # The static export must stay inside the theme directory.
-    resolved = posixpath.normpath(f"{NEXTJS25_THEME_TEMPLATE_DIR}/{clean_path}")
-    if not resolved.startswith(f"{NEXTJS25_THEME_TEMPLATE_DIR}/"):
+    template_dir = _theme_template_dir()
+    resolved = posixpath.normpath(f"{template_dir}/{clean_path}")
+    if not resolved.startswith(f"{template_dir}/"):
         raise Http404("Template not found")
     return clean_path
 
@@ -305,8 +332,8 @@ def _render_nextjs25_template(request, template_path):
     clean_path = _clean_nextjs25_template_path(template_path)
     template_name = _nextjs25_find_template(
         [
-            f"{NEXTJS25_THEME_TEMPLATE_DIR}/{clean_path}.html",
-            f"{NEXTJS25_THEME_TEMPLATE_DIR}/{clean_path}/index.html",
+            f"{_theme_template_dir()}/{clean_path}.html",
+            f"{_theme_template_dir()}/{clean_path}/index.html",
         ]
     )
     if template_name is None:
@@ -327,8 +354,8 @@ def _render_nextjs25_text_payload(request, template_path):
     clean_path = _clean_nextjs25_template_path(template_path)
     template_name = _nextjs25_find_template(
         [
-            f"{NEXTJS25_THEME_TEMPLATE_DIR}/{clean_path}.txt",
-            f"{NEXTJS25_THEME_TEMPLATE_DIR}/{clean_path}/index.txt",
+            f"{_theme_template_dir()}/{clean_path}.txt",
+            f"{_theme_template_dir()}/{clean_path}/index.txt",
         ]
     )
     if template_name is None:
@@ -350,7 +377,7 @@ def _nextjs25_public_path(request, path):
 
 
 def _nextjs25_manifest_response(request, path):
-    manifest_path = settings.TEMPLATES_DIR / "theme" / "nextjs_default" / path
+    manifest_path = settings.TEMPLATES_DIR / "theme" / _nextjs_theme_name() / path
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError, UnicodeDecodeError):
@@ -576,7 +603,7 @@ def index(request):
     )
 
     theme_name = getattr(config, "cf_theme", "basic")
-    if theme_name in {"nextjs25", "nextjs_default"}:
+    if theme_name in {"nextjs25", NEXTJS_DEFAULT_THEME} or _is_nextjs_export(theme_name):
         return _render_nextjs25_template(request, "index")
 
     return render(
@@ -748,9 +775,34 @@ NEXT_HASHED_STATIC_DIRS = ("chunks/", "css/", "media/")
 IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, s-maxage=31536000, immutable"
 
 
+def _next_static_roots():
+    """_next/static folders of the installed Next.js exports, the active theme's first.
+
+    A theme's files are named after their content (and its build-id folder after the theme), so
+    one theme never shadows another's; looking in every export lets a theme that is not active be
+    previewed and keeps already-open pages of the previous theme working after a switch.
+    """
+    theme_static = Path(settings.TEMPLATES_DIR) / "theme_static"
+    active = _nextjs_theme_name()
+    roots = [theme_static / active / "_next" / "static"]
+    try:
+        others = sorted(p.name for p in theme_static.iterdir() if p.is_dir() and p.name != active)
+    except OSError:
+        others = []
+    roots.extend(theme_static / name / "_next" / "static" for name in others if _is_nextjs_export(name))
+    return roots
+
+
 def nextjs25_static(request, path):
-    document_root = settings.TEMPLATES_DIR / "theme_static" / "nextjs_default" / "_next" / "static"
-    response = serve(request, path, document_root=document_root)
+    response = None
+    for document_root in _next_static_roots():
+        try:
+            response = serve(request, path, document_root=document_root)
+        except Http404:
+            continue
+        break
+    if response is None:
+        raise Http404("Asset not found")
     # Without this every page load re-requested ~30 chunks; on Vercel each one ran the Django function
     # because the CDN only caches responses that say it may (s-maxage).
     hashed = path.startswith(NEXT_HASHED_STATIC_DIRS) and ".." not in path.replace("\\", "/").split("/")
@@ -785,7 +837,7 @@ def nextjs25_public_asset(request, path):
         return _nextjs25_sitemap_response(request)
     if path == "sitemap-posts.xml":
         return _nextjs25_posts_sitemap_response(request)
-    document_root = settings.TEMPLATES_DIR / "theme" / "nextjs_default"
+    document_root = settings.TEMPLATES_DIR / "theme" / _nextjs_theme_name()
     response = serve(request, path, document_root=document_root)
     if path == "sw.js":
         response["Service-Worker-Allowed"] = _nextjs25_public_scope(request)
@@ -818,7 +870,7 @@ def legacy_data_asset(request, area, path):
 
     # A missing (or unsafe) image name gets the default image; it never reveals a real file.
     if PurePosixPath(str(path or "").replace("\\", "/")).suffix.lower() in NEXTJS25_FALLBACK_IMAGE_EXTENSIONS:
-        fallback_root = settings.TEMPLATES_DIR / "theme" / "nextjs_default"
+        fallback_root = settings.TEMPLATES_DIR / "theme" / _nextjs_theme_name()
         return serve(request, "og-default.png", document_root=fallback_root)
 
     raise Http404("Asset not found")
