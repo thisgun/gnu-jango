@@ -15,10 +15,14 @@ export const metadata = buildPageMetadata({
 });
 
 export default async function ShopHomePage() {
+  // 정적 내보내기는 한 번 만들어 모든 Django(로컬 · Vercel)가 같이 쓴다. 만드는 쪽 DB 의 배너 ·
+  // 팝업 · 분류를 HTML 에 구우면 다른 서버에서 남의 그림 주소(http://127.0.0.1:8081/…)를 불러
+  // 혼합 콘텐츠 오류가 났다. 서버 모드에서만 미리 읽고, 정적 화면은 브라우저가 불러온다(홈과 같은 규칙).
+  const bakeData = process.env.G5_NEXT_RUNTIME === "server";
   const [banners, popups, categories] = await Promise.all([
-    getShopBanners({ position: "메인", device: "all" }),
-    getShopPopups({ device: "all", limit: 5 }),
-    getShopCategories(),
+    bakeData ? getShopBanners({ position: "메인", device: "all" }) : Promise.resolve([]),
+    bakeData ? getShopPopups({ device: "all", limit: 5 }) : Promise.resolve([]),
+    bakeData ? getShopCategories() : Promise.resolve([]),
   ]);
 
   return (

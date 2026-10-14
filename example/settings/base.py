@@ -182,8 +182,8 @@ MIDDLEWARE = [
     "gnu_jango.core.middleware.G5SecurityHeadersMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "corsheaders.middleware.CorsMiddleware",
-    # SessionMiddleware that leaves asset requests alone (see the class docstring).
-    "gnu_jango.core.middleware.AssetAwareSessionMiddleware",
+    # SessionMiddleware without a database write per request (see the class docstring).
+    "gnu_jango.core.middleware.ThrottledSessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",

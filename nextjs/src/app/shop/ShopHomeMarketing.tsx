@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import type { ShopBanner, ShopPopup } from "@/lib/api";
 import { sanitizeCommerceHtml } from "@/lib/sanitize";
 import { cn } from "@/lib/utils";
-import { getShopBannersResult } from "@/services/shop";
+import { getShopBannersResult, getShopPopupsResult } from "@/services/shop";
 import { ArrowRight, ChevronLeft, ChevronRight, Pause, Play, X } from "lucide-react";
 
 function isExternalUrl(url: string): boolean {
@@ -308,12 +308,22 @@ function hidePopupForHours(id: number, hours: number) {
   }
 }
 
-export function ShopHomePopups({ popups }: { popups: ShopPopup[] }) {
+export function ShopHomePopups({ popups: initialPopups }: { popups: ShopPopup[] }) {
   const [closedIds, setClosedIds] = useState<number[]>([]);
   const [ready, setReady] = useState(false);
+  // 정적 화면에는 팝업이 구워져 있지 않다 — 배너처럼 이 서버의 API 에서 받아 온다.
+  const [runtimePopups, setRuntimePopups] = useState<ShopPopup[] | null>(null);
+  const popups = runtimePopups ?? initialPopups;
 
   useEffect(() => {
     setReady(true);
+    let active = true;
+    getShopPopupsResult({ device: "all", limit: 5 }, { cache: "no-store" }).then((result) => {
+      if (active && result.ok) setRuntimePopups(result.data);
+    });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const visiblePopups = useMemo(() => {

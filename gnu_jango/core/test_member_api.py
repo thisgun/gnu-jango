@@ -1247,6 +1247,7 @@ class SettingsEndpointTests(MemberApiTestBase):
         self.assertNotIn("recaptcha-secret", body)
 
     def test_visit_counts_cover_today_yesterday_and_the_busiest_day(self):
+        cache.clear()  # past days' counts are cached (api.v1_community.visit_stats)
         now = timezone.now()
         yesterday = now - timedelta(days=1)
 

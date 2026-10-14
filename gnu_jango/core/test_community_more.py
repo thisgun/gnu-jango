@@ -1058,6 +1058,10 @@ class PopularSearchMoreTests(CommunityMoreBase):
 
 
 class VisitorCountMoreTests(CommunityMoreBase):
+    def setUp(self):
+        super().setUp()
+        cache.clear()  # past days' counts are cached (api.v1_community.visit_stats)
+
     def visit(self, when=None, **kwargs):
         values = {"method": "GET", "path": "/boards/free", "status_code": 200}
         values.update(kwargs)

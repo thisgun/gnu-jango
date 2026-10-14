@@ -1,3 +1,4 @@
+import time
 from urllib.parse import unquote, urlparse
 
 from django.conf import settings
@@ -102,6 +103,14 @@ ASSET_PATH_PREFIXES = (
     "/api/v1/thumbs/",
     "/sw.js",
     "/favicon.ico",
+    # The theme's public files (core.views.nextjs25_public_asset), named exactly.
+    "/img/logo.png",
+    "/img/shop-logo.png",
+    "/icon-192.png",
+    "/icon-512.png",
+    "/og-default.png",
+    "/manifest.json",
+    "/manifest.webmanifest",
 )
 
 
@@ -111,18 +120,39 @@ def is_asset_path(path):
     return path.startswith((static_url, media_url, *ASSET_PATH_PREFIXES))
 
 
-class AssetAwareSessionMiddleware(SessionMiddleware):
-    """Django sessions, except that an asset request never saves or refreshes the session.
+# SESSION_SAVE_EVERY_REQUEST keeps Gnuboard's sliding three-hour session. Refreshing it at most this
+# often still keeps a member signed in while they use the site (it may end up to five minutes early).
+SESSION_REFRESH_SECONDS = 300
+SESSION_REFRESHED_KEY = "_g5_refreshed_at"
 
-    SESSION_SAVE_EVERY_REQUEST keeps Gnuboard's sliding three-hour session, but it also saved the
-    session and re-sent its cookie on every chunk and picture request (~30 per page). That cost a
-    database write each, and the Set-Cookie / "Vary: Cookie" kept browsers and the CDN from
-    caching the files. Page and API requests still refresh the session as before.
+
+class ThrottledSessionMiddleware(SessionMiddleware):
+    """Django sessions without the per-request database write.
+
+    With SESSION_SAVE_EVERY_REQUEST Django saved a non-empty session on every request: each of the
+    ~30 chunk and picture requests of a page and each of its 11-19 API calls was an UPDATE plus a
+    Set-Cookie (which also kept browsers and the CDN from caching assets). Now asset requests never
+    touch the session, and an unchanged session is refreshed at most every SESSION_REFRESH_SECONDS.
+    A changed session (sign-in, sign-out, cart) is saved at once as before.
     """
 
     def process_response(self, request, response):
         if is_asset_path(unquote(getattr(request, "path", "") or "/")):
             return response
+        session = getattr(request, "session", None)
+        try:
+            modified = session.modified
+            empty = session.is_empty()
+        except AttributeError:
+            return super().process_response(request, response)
+        if settings.SESSION_SAVE_EVERY_REQUEST and not empty:
+            now = int(time.time())
+            refreshed_at = session.get(SESSION_REFRESHED_KEY)
+            recent = isinstance(refreshed_at, int) and 0 <= now - refreshed_at < SESSION_REFRESH_SECONDS
+            if recent and not modified:
+                patch_vary_headers(response, ("Cookie",))  # the session was read
+                return response
+            session[SESSION_REFRESHED_KEY] = now
         return super().process_response(request, response)
 
 
@@ -208,6 +238,10 @@ class VisitTrackingMiddleware:
         if any("\x00" in value for value in logged_values):
             return response
         if self._should_skip(path):
+            return response
+        # API calls are not page views either (the visit counters already leave them out) and a page
+        # makes 11-19 of them. A search call with a word stays: it feeds the popular words.
+        if path.startswith("/api/") and not self._search_keyword(request.GET, path):
             return response
         user_agent = request.headers.get("User-Agent") or ""
         if should_skip_user_agent(user_agent):

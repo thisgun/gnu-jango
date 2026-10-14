@@ -1,10 +1,11 @@
 import logging
-from datetime import timedelta
+from datetime import datetime, time as day_time, timedelta
 
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import EmailMessage
 from django.db.models import Case, Count, IntegerField, Q, Sum, Value, When
@@ -289,28 +290,29 @@ def _user_from_password_reset_token(reset_token, uid=None, token=None):
     return user
 
 
-@api_view(["GET"])
-@permission_classes([AllowAny])
-@authentication_classes([JWTAuthentication, BasicAuthentication])
-def settings_view(request):
-    data = config.get_all()
-    visits = (
-        VisitLog.objects.filter(
-            method="GET",
-            status_code__gte=200,
-            status_code__lt=400,
-            is_staff_area=False,
-        )
-        .exclude(
-            Q(path__startswith="/api/")
-            | Q(path__startswith="/_next/")
-            | Q(path__startswith="/static/")
-            | Q(path__startswith="/media/")
-        )
+# Days that have ended do not change, so their counts are kept for this long (old visits can still be
+# deleted by the privacy clean-up, hence not until midnight). Today is always counted live.
+VISIT_HISTORY_CACHE_SECONDS = 600
+
+
+def _page_visits():
+    return VisitLog.objects.filter(
+        method="GET",
+        status_code__gte=200,
+        status_code__lt=400,
+        is_staff_area=False,
+    ).exclude(
+        Q(path__startswith="/api/")
+        | Q(path__startswith="/_next/")
+        | Q(path__startswith="/static/")
+        | Q(path__startswith="/media/")
     )
+
+
+def _visits_by_date(visits):
     # visit.lib.php counts one visit per address and day (g5_visit is unique on vi_ip, vi_date); a
     # row logged without an address cannot be matched to others and counts on its own.
-    daily_visits = list(
+    daily_visits = (
         visits.annotate(visit_date=TruncDate("created_at"))
         .values("visit_date")
         .annotate(
@@ -318,15 +320,42 @@ def settings_view(request):
             unaddressed=Count("pk", filter=Q(ip_address__isnull=True)),
         )
     )
-    visits_by_date = {row["visit_date"]: row["addresses"] + row["unaddressed"] for row in daily_visits}
+    return {row["visit_date"]: row["addresses"] + row["unaddressed"] for row in daily_visits}
+
+
+def visit_stats():
+    """Today / yesterday / busiest day / total, as the home "접속자집계" box shows them.
+
+    The settings call that carries these runs on every page, and counting the whole visit history
+    each time grew with every visit. Past days come from the cache; only today's rows are counted.
+    """
     today = timezone.localdate()
-    yesterday = today - timedelta(days=1)
-    visit_stats = {
-        "today": visits_by_date.get(today, 0),
-        "yesterday": visits_by_date.get(yesterday, 0),
-        "max": max(visits_by_date.values(), default=0),
-        "total": sum(visits_by_date.values()),
+    today_start = timezone.make_aware(datetime.combine(today, day_time.min))
+    history_key = f"visit-stats:history:{today.isoformat()}"
+    history = cache.get(history_key)
+    if history is None:
+        past = _visits_by_date(_page_visits().filter(created_at__lt=today_start))
+        history = {
+            "yesterday": past.get(today - timedelta(days=1), 0),
+            "max": max(past.values(), default=0),
+            "total": sum(past.values()),
+        }
+        cache.set(history_key, history, VISIT_HISTORY_CACHE_SECONDS)
+    today_count = _visits_by_date(_page_visits().filter(created_at__gte=today_start)).get(today, 0)
+    return {
+        "today": today_count,
+        "yesterday": history["yesterday"],
+        "max": max(history["max"], today_count),
+        "total": history["total"] + today_count,
     }
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+@authentication_classes([JWTAuthentication, BasicAuthentication])
+def settings_view(request):
+    data = config.get_all()
+    visit_stats_payload = visit_stats()
     return api_response(
         data={
             "cf_title": data.get("cf_title", "GNU Jango"),
@@ -347,7 +376,7 @@ def settings_view(request):
             "infinite_scroll": False,
             "comment_editor": False,
             "pwa_enabled": False,
-            "visit": visit_stats,
+            "visit": visit_stats_payload,
         }
     )
 

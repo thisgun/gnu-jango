@@ -101,6 +101,17 @@ export function getShopPopups(
   });
 }
 
+export function getShopPopupsResult(
+  params: { device?: "pc" | "mobile" | "all"; limit?: number } = {},
+  init?: RequestInit
+): Promise<ApiResult<ShopPopup[]>> {
+  const query = new URLSearchParams();
+  query.set("device", params.device || "all");
+  query.set("limit", String(params.limit || 5));
+
+  return fetchApiResult(apiUrl(`/shop/popups?${query.toString()}`), shopPopupListSchema, init);
+}
+
 export function getShopProducts(
   params: Record<string, string | number | undefined>,
   revalidate = 30
