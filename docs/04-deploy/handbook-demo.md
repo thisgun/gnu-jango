@@ -40,12 +40,13 @@ export DB_DISABLE_SERVER_SIDE_CURSORS=True
 python manage.py migrate
 python manage.py createcachetable
 python manage.py createsuperuser
-python manage.py ensure_handbook_samples      # 샘플 매뉴얼: 책 4권 · 장 21개 (--remove 로 되돌림)
+python manage.py ensure_handbook_samples      # 샘플 매뉴얼: 책 7권 · 장 37개 (--remove 로 되돌림)
 python manage.py check_deploy_profile --profile vercel
 ```
 
 실제 매뉴얼은 관리자에서 게시판 그룹 `manual`(또는 `G5_DEFAULT_DOCS_GROUP` 에 적은 그룹)에 만들면 됩니다.
 게시판 하나가 책, 게시판 분류가 부, 글이 장입니다. 샘플은 그룹 `manual` · 게시판 `hb_*` 만 건드립니다.
+배포 후 빠진 샘플 책과 장을 추가하려면 관리자 › 샘플 데이터에서 **매뉴얼 콘텐츠 추가·보강**을 누릅니다.
 
 ## 4. 확인
 

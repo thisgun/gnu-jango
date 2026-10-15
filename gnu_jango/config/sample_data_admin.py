@@ -5,7 +5,7 @@ from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils.translation import gettext as _
 
-from . import sample_data
+from . import handbook_samples, sample_data
 
 
 def _require_superuser(request):
@@ -33,6 +33,17 @@ def sample_data_settings(request):
                     request,
                     _("쇼핑몰 샘플 상품 %(products)s개를 준비했습니다. 추가 %(created)s개, 노출 보정 %(updated)s개입니다.") % result,
                 )
+            elif action == "ensure_handbook":
+                handbook_samples.ensure_samples()
+                status = handbook_samples.sample_status()
+                messages.success(
+                    request,
+                    _(
+                        "매뉴얼 콘텐츠를 준비했습니다. 현재 책 %(books)s권, 장 %(chapters)s개입니다. "
+                        "누락된 샘플 책과 장만 추가했습니다."
+                    )
+                    % status,
+                )
             elif action == "repair_product_types":
                 repaired = sample_data.repair_sample_product_types()
                 if repaired:
@@ -58,7 +69,7 @@ def sample_data_settings(request):
                         messages.success(request, _("관리 페이지에서 생성한 샘플 데이터를 정리했습니다."))
             else:
                 messages.error(request, _("요청한 작업을 확인할 수 없습니다."))
-        except sample_data.SampleDataError as exc:
+        except (handbook_samples.HandbookSampleError, sample_data.SampleDataError) as exc:
             messages.error(request, str(exc))
         return HttpResponseRedirect(reverse("admin-sample-data"))
 
@@ -66,6 +77,7 @@ def sample_data_settings(request):
     context = {
         **admin.site.each_context(request),
         "title": _("샘플 데이터"),
+        "handbook_status": handbook_samples.sample_status(),
         **status,
     }
     request.current_app = admin.site.name

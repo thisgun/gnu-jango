@@ -1,4 +1,4 @@
-"""A small sample manual for the handbook theme: one board group, four books, ~20 chapters.
+"""A small sample manual for the handbook theme: one board group, seven books, 37 chapters.
 
 The handbook theme maps gnuboard data onto a manual — a board group is the manual, each board in it
 a book (its subject "hint · name" gives a small hint and the book name), each board category a part
@@ -49,6 +49,33 @@ BOOKS = (
         ),
     ),
     Book(
+        "hb_board",
+        "커뮤니티 운영 · 게시판 관리",
+        (
+            ("시작", ("게시판과 그룹 이해", "게시판 만들기")),
+            ("글 관리", ("분류와 메뉴 구성", "글과 댓글 관리")),
+            ("안전 운영", ("비밀글과 첨부파일 관리",)),
+        ),
+    ),
+    Book(
+        "hb_member",
+        "커뮤니티 운영 · 회원과 권한",
+        (
+            ("계정", ("회원가입과 로그인", "회원 등급과 접근 권한")),
+            ("방문자 참여", ("비회원 글쓰기와 댓글",)),
+            ("스팸과 보안", ("스팸과 자동등록방지", "계정과 개인정보 보호")),
+        ),
+    ),
+    Book(
+        "hb_shop",
+        "쇼핑몰 운영 · 상품과 주문",
+        (
+            ("상품", ("쇼핑몰 설정 시작하기", "상품과 분류 등록하기")),
+            ("주문", ("장바구니와 주문 흐름", "배송과 주문 상태 관리")),
+            ("결제", ("결제 설정과 테스트", "가상계좌 운영 점검")),
+        ),
+    ),
+    Book(
         "hb_dev",
         "개발과 배포 · 개발자 안내서",
         (
@@ -80,6 +107,18 @@ def _chapter_body(title):
 
 def _book_table_names():
     return [book.table for book in BOOKS]
+
+
+def sample_status():
+    """Return the stored and expected size of the generated handbook sample."""
+    group = Group.objects.filter(gr_id=GROUP_ID).first()
+    boards = Board.objects.filter(group=group, bo_table__in=_book_table_names()) if group else Board.objects.none()
+    return {
+        "books": boards.count(),
+        "chapters": Post.objects.filter(board__in=boards).count(),
+        "expected_books": len(BOOKS),
+        "expected_chapters": sum(len(titles) for book in BOOKS for _part, titles in book.parts),
+    }
 
 
 def _group():
@@ -120,23 +159,33 @@ def _board(group, order, book):
 
 def _chapters(board, book, created_at):
     existing_posts = list(Post.objects.filter(board=board))
-    if existing_posts:
-        # Refresh only the previous repeated placeholder. Preserve administrator-authored text.
-        updated = 0
-        for post in existing_posts:
-            if LEGACY_SAMPLE_MARKER in (post.wr_content or ""):
-                post.wr_content = _chapter_body(post.wr_subject)
-                post.save(update_fields=("wr_content",))
-                updated += 1
-        return 0, updated
     chapters = [(part, title) for part, titles in book.parts for title in titles]
+    existing_titles = {post.wr_subject for post in existing_posts}
+    missing = [(part, title) for part, title in chapters if title not in existing_titles]
+    updated = 0
+    for post in existing_posts:
+        # Refresh only the previous repeated placeholder. Preserve administrator-authored text.
+        if LEGACY_SAMPLE_MARKER in (post.wr_content or ""):
+            post.wr_content = _chapter_body(post.wr_subject)
+            post.save(update_fields=("wr_content",))
+            updated += 1
+
     # A new post gets the smallest wr_num so that the newest comes first on a board list. A book is
     # read from its first chapter, so the chapters are written last to first.
-    for index, (part, title) in enumerate(reversed(chapters)):
+    if not existing_posts:
+        to_create = [(part, title, None) for part, title in reversed(missing)]
+    else:
+        # Append missing sample chapters after existing content without reordering edited chapters.
+        last_num = max(post.wr_num for post in existing_posts)
+        to_create = [(part, title, last_num + index + 1) for index, (part, title) in enumerate(missing)]
+
+    for index, (part, title, wr_num) in enumerate(to_create):
         stamp = created_at - timedelta(minutes=index)
+        if wr_num is None:
+            wr_num = get_next_num(board_id=board.pk)
         post = Post.objects.create(
             board=board,
-            wr_num=get_next_num(board_id=board.pk),
+            wr_num=wr_num,
             wr_parent=0,
             wr_subject=title,
             wr_content=_chapter_body(title),
@@ -147,7 +196,7 @@ def _chapters(board, book, created_at):
             wr_last=stamp,
         )
         Post.objects.filter(pk=post.pk).update(wr_parent=post.pk)
-    return len(chapters), 0
+    return len(missing), updated
 
 
 def _clear_config_cache():

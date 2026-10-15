@@ -8,11 +8,11 @@ import { currentPathForRuntime } from "@/lib/config";
 import { g5ShortHref } from "@/lib/g5-short-url";
 import { useRuntimeMenus } from "@/hooks/useRuntimeMenus";
 import { useAuthStore } from "@/store/auth";
-import { DOCS_GROUP, docsIndexPath, docsSourceFrom, type DocsBook } from "./docs-nav";
+import { DOCS_GROUP, docsSourceFrom, type DocsBook } from "./docs-nav";
 import { useDocsBooks } from "./use-docs-chapters";
 import { useNavScrollMemory } from "./use-nav-scroll";
 import { HandbookPageToc } from "./page-toc";
-import { HandbookMainNav, siteMenuItems } from "./main-nav";
+import { HandbookMainNav, siteMenuItems, type SiteMenuItem } from "./main-nav";
 import { DrawerSiteMenu } from "./drawer-menu";
 import { DocsSearch } from "./doc-search";
 import { HandbookThemeSwap, handbookThemeBootScript } from "./theme-swap";
@@ -55,7 +55,7 @@ function useHighlightPath(pathname: string): string {
  * (theme/handbook/bridge/settings-html.php). 화면도 하이드레이션 때 같은 설정으로 그려 글자가 맞는다 — 기본 문구가 잠깐
  * 보였다 바뀌지 않게. 요소 안에는 그 글자만 둔다.
  */
-function ShellFooter({ config, indexPath }: { config: G5ThemeConfig; indexPath: string }) {
+function ShellFooter({ config }: { config: G5ThemeConfig }) {
   return (
     <footer className="doc-footer">
       <div className="doc-footer-inner doc-edit-anchor">
@@ -87,7 +87,7 @@ function ShellFooter({ config, indexPath }: { config: G5ThemeConfig; indexPath: 
                 <Link href="/">홈</Link>
               </li>
               <li>
-                <Link href={g5ShortHref(indexPath)}>전체 목차</Link>
+                <Link href="/">모든 매뉴얼</Link>
               </li>
               <li>
                 <Link href="/search">통합 검색</Link>
@@ -173,8 +173,20 @@ export function HandbookLayoutShell({
   const [open, setOpen] = useState(false);
   const currentBook = bookForPath(docsBooks, highlightPath);
   const docsContext = useMemo(() => ({ books: docsBooks, settled: docsSettled }), [docsBooks, docsSettled]);
-  const indexPath = docsIndexPath(docsBooks);
   const menuItems = siteMenuItems(runtimeMenus);
+  const headerMenuItems = useMemo<SiteMenuItem[]>(() => {
+    if (docsBooks.length === 0) return menuItems;
+    const manuals: SiteMenuItem = {
+      label: "매뉴얼 둘러보기",
+      href: "/",
+      children: docsBooks.map((book) => ({
+        label: book.label,
+        href: g5ShortHref(`/boards/${book.table}`),
+        children: [],
+      })),
+    };
+    return [manuals, ...menuItems.filter((item) => item.label !== manuals.label)];
+  }, [docsBooks, menuItems]);
   const bookGroups = bookGroupsFromMenu(docsBooks, menuItems);
   // 사이드바는 화면에 따라 셋 중 하나 — 매뉴얼 화면은 선택기와 목차, 관리자 메뉴 묶음에 든 화면(커뮤니티 ·
   // 고객센터 …)은 그 묶음의 메뉴, 첫 화면과 나머지는 매뉴얼 목록. 정적 빌드는 하이드레이션 동안 주소가 비어
@@ -256,18 +268,17 @@ export function HandbookLayoutShell({
           <span className="doc-brand-badge">docs</span>
         </Link>
 
-        {/* 관리자 > 메뉴설정의 메뉴 — 기본 테마 메인메뉴와 같은 내용 · 동작. 1280px 이상에서만 보이고,
-            그보다 좁으면 왼쪽 사이드바(서랍)의 "메뉴" 묶음이 같은 메뉴를 보여 준다. */}
-        <HandbookMainNav items={menuItems} />
+        {/* 자동 매뉴얼 링크와 관리자 메뉴. 1280px 이상에서 보이고, 작은 화면은 매뉴얼 선택기와 서랍을 사용한다. */}
+        <HandbookMainNav items={headerMenuItems} />
 
         {/* 문서 검색 — 누르거나 Ctrl+K 로 검색 창을 연다. 본문 검색은 창 안의 통합 검색 링크로. */}
         <DocsSearch books={docsBooks} current={currentBook} />
 
         <nav className="doc-topnav sm:ml-2" aria-label="주요 메뉴">
-          <Link href={g5ShortHref(indexPath)} className="doc-topnav-link">
+          <Link href="/" className="doc-topnav-link">
             <span className="inline-flex items-center gap-1.5">
               <List size={15} aria-hidden />
-              전체 목차
+              모든 매뉴얼
             </span>
           </Link>
           <AccountArea />
@@ -316,7 +327,7 @@ export function HandbookLayoutShell({
           {/* 푸터도 서랍(drawer) 안에 둔다. 밖에 두면 사이드바의 sticky 범위가 본문
               끝에서 잘려, 페이지 맨 아래에서 사이드바가 위로 밀리며 항목이 반쯤
               잘린 채 푸터에 가린다. */}
-          <ShellFooter config={config} indexPath={indexPath} />
+          <ShellFooter config={config} />
         </div>
 
         <div className="drawer-side doc-drawer-side">

@@ -109,6 +109,25 @@
     </div>
   </section>
 
+  <section class="card card-border g5-sample-panel mb-6" aria-labelledby="sample-handbook-title">
+    <div class="card-body">
+      <h2 id="sample-handbook-title">{% translate "초보자용 매뉴얼 콘텐츠" %}</h2>
+      <p>{% translate "핸드북에서 설치, 게시판·회원 운영, 쇼핑몰 관리와 배포 방법을 안내합니다." %}</p>
+      <p>
+        {% translate "현재 매뉴얼" %}
+        {{ handbook_status.books }}/{{ handbook_status.expected_books }}{% translate "권" %} ·
+        {{ handbook_status.chapters }}/{{ handbook_status.expected_chapters }}{% translate "장" %}
+      </p>
+      <p>{% translate "아래 작업은 빠진 샘플 책과 장을 추가합니다. 기존에 직접 작성한 매뉴얼 본문은 덮어쓰지 않습니다." %}</p>
+      <form method="post" action="{% url 'admin-sample-data' %}">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="ensure_handbook">
+        <button class="btn btn-primary button g5-sample-action" type="submit">{% translate "매뉴얼 콘텐츠 추가·보강" %}</button>
+      </form>
+      <a class="button g5-admin-button-secondary" href="/" target="_blank" rel="noopener">{% translate "핸드북 확인" %}</a>
+    </div>
+  </section>
+
   <section class="g5-sample-content-grid">
     <article class="card card-border g5-sample-panel">
       <div class="card-body">

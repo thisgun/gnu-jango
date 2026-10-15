@@ -5,11 +5,35 @@ import { G5Link as Link } from "@/components/ui/g5-link";
 import { g5ShortHref } from "@/lib/g5-short-url";
 import { formatDate } from "@/lib/utils";
 import { useHandbookDocs, useHandbookHomeTexts } from "./docs-context";
-import { docsIndexPath, type DocsBook, type DocsChapter } from "./docs-nav";
+import type { DocsBook, DocsChapter } from "./docs-nav";
 
 const RECENT_COUNT = 5;
 
 type RecentChapter = { book: DocsBook; part: string; chapter: DocsChapter };
+type ReadingPath = { label: string; description: string; tables: string[] };
+
+const READING_PATHS: ReadingPath[] = [
+  {
+    label: "처음 설치하기",
+    description: "도구 준비부터 로컬 사이트 실행까지 순서대로 익힙니다.",
+    tables: ["hb_start"],
+  },
+  {
+    label: "게시판과 회원 운영",
+    description: "게시판 구성, 권한, 방문자 글과 스팸 대응을 살펴봅니다.",
+    tables: ["hb_board", "hb_member"],
+  },
+  {
+    label: "쇼핑몰 운영",
+    description: "상품 등록부터 주문·배송, 테스트 결제 점검까지 이어집니다.",
+    tables: ["hb_shop"],
+  },
+  {
+    label: "개발과 배포",
+    description: "화면·데이터 구조를 읽고 서버에 올리는 과정을 확인합니다.",
+    tables: ["hb_dev", "hb_deploy"],
+  },
+];
 
 /**
  * 최근에 추가한 장 — 모든 매뉴얼에서 작성 시각이 늦은 순. 목록 API 는 수정 시각(wr_last)을 주지 않아
@@ -29,13 +53,11 @@ function Hero({
   name,
   description,
   first,
-  indexPath,
 }: {
   name: string;
   description: string;
   /** 첫 매뉴얼 목차의 첫 장 — 글 순서가 아니라 목차(분류) 순서의 첫 장. */
   first?: DocsChapter;
-  indexPath: string;
 }) {
   return (
     <section className="doc-hero" aria-labelledby="hero-heading">
@@ -57,14 +79,60 @@ function Hero({
             {first.label}부터 읽기
           </Link>
         ) : null}
-        <Link href={g5ShortHref(indexPath)} className="btn btn-outline gap-1.5 rounded-lg">
-          전체 목차
+        <Link href="/" className="btn btn-outline gap-1.5 rounded-lg">
+          모든 매뉴얼
           <ChevronRight size={15} aria-hidden />
         </Link>
         <Link href="/search" className="btn btn-ghost gap-1.5 rounded-lg">
           <Search size={15} aria-hidden />
           문서 검색
         </Link>
+      </div>
+    </section>
+  );
+}
+
+function ReadingPathSection({ books }: { books: DocsBook[] }) {
+  const paths = READING_PATHS.map((path) => ({
+    ...path,
+    books: path.tables
+      .map((table) => books.find((book) => book.table === table))
+      .filter((book): book is DocsBook => Boolean(book)),
+  })).filter((path) => path.books.length > 0);
+
+  if (paths.length === 0) return null;
+
+  return (
+    <section className="doc-section" aria-labelledby="reading-paths-heading">
+      <div className="doc-section-head">
+        <span className="doc-section-eyebrow">START HERE</span>
+        <h2 id="reading-paths-heading" className="doc-section-title">
+          원하는 목적부터 시작하세요
+        </h2>
+        <p className="doc-section-desc">상황에 맞는 안내서를 골라 첫 장으로 바로 이동할 수 있습니다.</p>
+      </div>
+
+      <div className="doc-feature-grid">
+        {paths.map((path) => (
+          <article className="doc-feature-card" key={path.label}>
+            <span className="doc-eyebrow">{path.books.reduce((sum, book) => sum + book.count, 0)}장 안내</span>
+            <h3 className="doc-feature-title">{path.label}</h3>
+            <p className="doc-feature-desc">{path.description}</p>
+            <ul className="doc-guide-list mt-auto">
+              {path.books.map((book) => {
+                const firstChapter = book.groups.flatMap((group) => group.items)[0];
+                return firstChapter ? (
+                  <li className="doc-guide-row" key={book.table}>
+                    <Link href={firstChapter.href} className="doc-guide-title">
+                      {book.label}부터 읽기
+                    </Link>
+                    <span className="doc-guide-meta">{book.count}장</span>
+                  </li>
+                ) : null;
+              })}
+            </ul>
+          </article>
+        ))}
       </div>
     </section>
   );
@@ -186,12 +254,12 @@ export function HandbookHomeContent({ name, description }: { name: string; descr
         name={homeTexts?.title ?? name}
         description={homeTexts?.description ?? description}
         first={books[0]?.groups[0]?.items[0]}
-        indexPath={docsIndexPath(books)}
       />
       {books.length === 0 ? (
         settled ? <p className="doc-empty">아직 등록된 문서가 없습니다.</p> : <BooksPlaceholder />
       ) : (
         <>
+          <ReadingPathSection books={books} />
           <BookSection books={books} />
           <RecentSection books={books} />
         </>

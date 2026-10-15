@@ -1,7 +1,6 @@
-:HL["/_next/static/chunks/1y2q-rx3kj-jk.css","style"]
-:HL["/_next/static/chunks/0c2_300mu1915.css","style"]
-:HL["/_next/static/chunks/3c8sjzh4fsqai.css","style"]
-:HL["/_next/static/chunks/2txxdh_rk4-cb.css","style"]
-:HL["/_next/static/chunks/0x9t66kbq980l.css","style"]
-:HC["/",""]
+:HL["/_next/static/css/47fb39f069ee530c.css","style"]
+:HL["/_next/static/css/e8f176d25d05b889.css","style"]
+:HL["/_next/static/css/d59b0de183856083.css","style"]
+:HL["/_next/static/css/483897e029143e70.css","style"]
+:HL["/_next/static/css/3715e6cacc502ed4.css","style"]
 0:{"tree":{"name":"","param":null,"prefetchHints":4124,"slots":{"children":{"name":"shop","param":null,"prefetchHints":4164,"slots":{"children":{"name":"reviews","param":null,"prefetchHints":4192,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":4256,"slots":null}}}}}}},"staleTime":300,"buildId":"g5-handbook-static"}
