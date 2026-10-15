@@ -836,7 +836,8 @@ class PublicAssetTests(TestCase):
 class NextStaticFileTests(TestCase):
     def setUp(self):
         root = Path(settings.TEMPLATES_DIR) / "theme_static" / "nextjs_default" / "_next" / "static"
-        self.css = next(root.glob("css/*.css"))
+        # Next 15 wrote stylesheets to css/, Next 16 (Turbopack) writes them to chunks/.
+        self.css = next(root.rglob("*.css"))
         self.relative = self.css.relative_to(root).as_posix()
 
     def test_exported_assets_are_served(self):
