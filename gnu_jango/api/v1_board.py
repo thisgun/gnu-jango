@@ -808,8 +808,8 @@ def _validate_guest_identity(data):
     return {"wr_name": name, "wr_password": get_encrypt_string(password)}, None
 
 
-def _validate_guest_captcha(request, board, user, data):
-    if user or not board.bo_use_captcha:
+def _validate_guest_captcha(request, board, user, data, *, force=False):
+    if user or not (force or board.bo_use_captcha):
         return None
     if _captcha_matches(request, data.get("captcha_key")):
         return None
@@ -1577,7 +1577,7 @@ def comment_view(request, bo_table, item_id):
         guest_identity, error = _validate_guest_identity(data)
         if error:
             return error
-    error = _validate_guest_captcha(request, board, user, data)
+    error = _validate_guest_captcha(request, board, user, data, force=True)
     if error:
         return error
 
@@ -1602,7 +1602,7 @@ def comment_view(request, bo_table, item_id):
         comment = _create_comment_with_points(board, post, user, parent, reply_marker, content, guest_identity, request)
     _update_post_comment_count(post)
     _update_board_counts(board)
-    if not user and board.bo_use_captcha:
+    if not user:
         _consume_captcha(request)
     return api_response(data=_comment_payload(comment, request), status=drf_status.HTTP_201_CREATED)
 

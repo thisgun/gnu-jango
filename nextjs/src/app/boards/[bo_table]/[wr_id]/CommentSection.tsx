@@ -27,7 +27,7 @@ import { toastError } from "@/lib/toast";
 import { MemberAvatar } from "@/components/MemberAvatar";
 import { MemberSideview } from "@/components/MemberSideview";
 import { htmlToPlainText, sanitizeUserHtml } from "@/lib/sanitize";
-import { MoreVertical, RefreshCw } from "lucide-react";
+import { MoreVertical, RefreshCw, Volume2 } from "lucide-react";
 
 const CommentEditor = dynamic(
   () => import("@/components/editor/CommentEditor").then((mod) => ({ default: mod.CommentEditor })),
@@ -297,11 +297,15 @@ const CommentItem = memo(function CommentItem({
 export function CommentSection({ boTable, wrId, initialComments, board, useEditor }: CommentSectionProps) {
   const router = useRouter();
   const { user } = useAuthStore();
-  const boardUsesCaptcha = board?.bo_use_captcha === 1;
   const [guestName, setGuestName] = useState("");
   const [guestPassword, setGuestPassword] = useState("");
   const [captchaKey, setCaptchaKey] = useState("");
-  const [captchaVersion, setCaptchaVersion] = useState(() => Date.now());
+  const [captchaVersion, setCaptchaVersion] = useState<number | null>(null);
+  const [captchaLoaded, setCaptchaLoaded] = useState(false);
+  const [captchaImageError, setCaptchaImageError] = useState(false);
+  const [captchaAudioLoading, setCaptchaAudioLoading] = useState(false);
+  const captchaAudioRef = useRef<HTMLAudioElement | null>(null);
+  const captchaFieldRef = useRef<HTMLDivElement | null>(null);
   const canDeleteAsAdmin = Boolean(
     user && board && (
       user.is_super_admin ||
@@ -312,6 +316,7 @@ export function CommentSection({ boTable, wrId, initialComments, board, useEdito
   const canComment = Boolean(
     board && (canDeleteAsAdmin || (user?.mb_level ?? 1) >= board.bo_comment_level)
   );
+  const guestCommentCaptchaRequired = !user && canComment;
   const [comments, setComments] = useState<Comment[]>(initialComments);
   const [submitting, setSubmitting] = useState(false);
   const [replyTo, setReplyTo] = useState<number | null>(null);
@@ -324,6 +329,37 @@ export function CommentSection({ boTable, wrId, initialComments, board, useEdito
 
   // textarea용 상태 (useEditor가 false일 때만 사용)
   const [textareaValue, setTextareaValue] = useState("");
+
+  useEffect(() => {
+    setCaptchaVersion(Date.now());
+    return () => captchaAudioRef.current?.pause();
+  }, []);
+
+  const captchaImageUrl = captchaVersion === null ? null : apiUrl(`/captcha?t=${captchaVersion}`);
+  const captchaAudioUrl = captchaVersion === null ? null : apiUrl(`/captcha/audio?t=${captchaVersion}`);
+  const reloadCaptcha = useCallback(() => {
+    setCaptchaKey("");
+    setCaptchaLoaded(false);
+    setCaptchaImageError(false);
+    setCaptchaVersion(Date.now());
+  }, []);
+  const playCaptchaAudio = useCallback(async () => {
+    if (!captchaAudioUrl) return;
+    setCaptchaAudioLoading(true);
+    try {
+      captchaAudioRef.current?.pause();
+      const audio = new Audio();
+      audio.crossOrigin = "use-credentials";
+      audio.preload = "auto";
+      audio.src = captchaAudioUrl;
+      captchaAudioRef.current = audio;
+      await audio.play();
+    } catch {
+      toastError("자동등록방지 음성을 재생하지 못했습니다. 새로고침 후 다시 시도해 주세요.");
+    } finally {
+      setCaptchaAudioLoading(false);
+    }
+  }, [captchaAudioUrl]);
 
   const handleEditorChange = useCallback((html: string) => {
     newCommentRef.current = html;
@@ -355,8 +391,14 @@ export function CommentSection({ boTable, wrId, initialComments, board, useEdito
   const handleSubmitComment = useCallback(async (content: string, parentId?: number) => {
     if (!user && !guestName.trim()) throw new Error("이름을 입력해주세요.");
     if (!user && !guestPassword) throw new Error("비밀번호를 입력해주세요.");
-    if (!user && boardUsesCaptcha && !captchaKey.trim()) {
-      throw new Error("자동등록방지 문자를 입력해주세요.");
+    if (guestCommentCaptchaRequired && (!captchaLoaded || !captchaKey.trim())) {
+      captchaFieldRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      window.setTimeout(() => document.getElementById("comment_captcha")?.focus(), 180);
+      throw new Error(
+        !captchaLoaded
+          ? "자동등록방지 그림이 준비되지 않았습니다. 그림이 보일 때까지 기다리거나 새로고침해 주세요."
+          : "댓글과 답글을 등록하려면 자동등록방지 숫자를 입력해 주세요."
+      );
     }
     try {
       await apiClient.post(`/comments/${boTable}/${wrId}`, {
@@ -369,15 +411,13 @@ export function CommentSection({ boTable, wrId, initialComments, board, useEdito
         } : {}),
       });
     } catch (err) {
-      if (!user && boardUsesCaptcha) {
-        setCaptchaKey("");
-        setCaptchaVersion(Date.now());
+      if (guestCommentCaptchaRequired) {
+        reloadCaptcha();
       }
       throw err;
     }
-    if (!user && boardUsesCaptcha) {
-      setCaptchaKey("");
-      setCaptchaVersion(Date.now());
+    if (guestCommentCaptchaRequired) {
+      reloadCaptcha();
     }
     if (!user) setGuestPassword("");
     if (!(await fetchComments())) {
@@ -385,7 +425,19 @@ export function CommentSection({ boTable, wrId, initialComments, board, useEdito
     }
     // post 상세의 wr_comment 카운트 / 게시판 listing 의 댓글 수 동기화.
     router.refresh();
-  }, [boTable, wrId, fetchComments, router, user, guestName, guestPassword, captchaKey, boardUsesCaptcha]);
+  }, [
+    boTable,
+    wrId,
+    fetchComments,
+    router,
+    user,
+    guestName,
+    guestPassword,
+    captchaKey,
+    captchaLoaded,
+    guestCommentCaptchaRequired,
+    reloadCaptcha,
+  ]);
 
   // 에디터 리셋용 key
   const [editorKey, setEditorKey] = useState(0);
@@ -478,7 +530,7 @@ export function CommentSection({ boTable, wrId, initialComments, board, useEdito
           </div>
         )}
 
-        {/* New Comment Form — 게시판 댓글 권한이 비회원을 받으면(그누보드 bo_comment_level 1) 이름 · 비밀번호(· 자동등록방지)를 함께 받는다. */}
+        {/* New Comment Form — 비회원 댓글을 허용하면 이름 · 비밀번호 · 자동등록방지 문자를 받는다. */}
         {canComment ? (
           <div className="board-comment-form space-y-3">
             {!user && (
@@ -504,39 +556,76 @@ export function CommentSection({ boTable, wrId, initialComments, board, useEdito
                     maxLength={128}
                   />
                 </div>
-                {boardUsesCaptcha && (
-                  <div className="space-y-2 sm:col-span-2">
+                {guestCommentCaptchaRequired && (
+                  <div ref={captchaFieldRef} className="space-y-2 sm:col-span-2">
                     <Label htmlFor="comment_captcha">자동등록방지</Label>
                     <div className="flex items-center gap-2">
-                      <img
-                        src={apiUrl(`/captcha?t=${captchaVersion}`)}
-                        alt="자동등록방지 문자"
-                        width={160}
-                        height={60}
-                        crossOrigin="use-credentials"
-                        className="rounded border border-border bg-base-100"
-                      />
+                      {captchaImageUrl ? (
+                        <img
+                          key={captchaImageUrl}
+                          src={captchaImageUrl}
+                          alt="자동등록방지 문자"
+                          width={160}
+                          height={60}
+                          crossOrigin="use-credentials"
+                          onLoad={() => {
+                            setCaptchaLoaded(true);
+                            setCaptchaImageError(false);
+                          }}
+                          onError={() => {
+                            setCaptchaLoaded(false);
+                            setCaptchaImageError(true);
+                          }}
+                          className="rounded border border-border bg-base-100"
+                        />
+                      ) : (
+                        <span role="status" className="text-sm text-muted-foreground">
+                          자동등록방지 그림을 불러오는 중입니다.
+                        </span>
+                      )}
                       <Button
                         type="button"
                         variant="outline"
                         size="icon"
-                        onClick={() => {
-                          setCaptchaKey("");
-                          setCaptchaVersion(Date.now());
-                        }}
+                        onClick={playCaptchaAudio}
+                        disabled={submitting || captchaAudioLoading || !captchaLoaded}
+                        aria-label="숫자 음성 듣기"
+                        title="숫자 음성 듣기"
+                      >
+                        <Volume2 className="size-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={reloadCaptcha}
+                        disabled={submitting}
                         aria-label="새 자동등록방지 문자"
+                        title="새 자동등록방지 문자"
                       >
                         <RefreshCw className="size-4" />
                       </Button>
                     </div>
                     <Input
                       id="comment_captcha"
+                      type="text"
                       value={captchaKey}
                       onChange={(event) => setCaptchaKey(event.target.value)}
                       inputMode="numeric"
                       autoComplete="off"
                       maxLength={6}
+                      placeholder="그림의 숫자 6자리를 입력하세요"
+                      aria-describedby="comment_captcha_help"
+                      disabled={submitting}
                     />
+                    <p id="comment_captcha_help" className="text-xs text-muted-foreground">
+                      댓글이나 답글을 등록할 때 필요합니다. 그림이 잘 보이지 않으면 새로고침하거나 음성으로 들을 수 있습니다.
+                    </p>
+                    {captchaImageError && (
+                      <p role="alert" className="text-sm text-destructive">
+                        그림을 불러오지 못했습니다. 새 자동등록방지 문자를 눌러 다시 시도해 주세요.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>

@@ -1020,9 +1020,23 @@ class CommentWriteTests(BoardApiTestCase):
         self.assertEqual(self.comment(None, wr_name="G", wr_password="p").status_code, 403)
 
     def test_a_visitors_comment_needs_a_name_and_password_and_stores_them_safely(self):
-        no_name = self.comment(None, wr_password="pw")
-        no_password = self.comment(None, wr_name="Guest")
-        ok = self.comment(None, wr_name="Guest", wr_password="guest-pass", wr_content="  hi there  ")
+        client = self.api()
+        session = client.session
+        session[CAPTCHA_SESSION_KEY] = "345678"
+        session.save()
+        url = self.comment_url(self.post)
+        no_name = client.post(url, {"wr_content": "Nice", "wr_password": "pw"}, format="json")
+        no_password = client.post(url, {"wr_content": "Nice", "wr_name": "Guest"}, format="json")
+        ok = client.post(
+            url,
+            {
+                "wr_name": "Guest",
+                "wr_password": "guest-pass",
+                "wr_content": "  hi there  ",
+                "captcha_key": "345678",
+            },
+            format="json",
+        )
 
         self.assertEqual(no_name.status_code, 422)
         self.assertEqual(no_password.status_code, 422)
@@ -1032,8 +1046,8 @@ class CommentWriteTests(BoardApiTestCase):
         self.assertNotIn("guest-pass", comment.wr_password)
         self.assertNotIn(comment.wr_password, ok.content.decode())
 
-    def test_a_visitors_comment_needs_the_anti_spam_code_where_the_board_asks_for_it(self):
-        board = self.make_board("more-comment-captcha", bo_use_captcha=True)
+    def test_a_visitors_comment_always_needs_the_anti_spam_code(self):
+        board = self.make_board("more-comment-captcha", bo_use_captcha=False)
         post = self.make_post(board, self.owner)
         client = self.api()
         session = client.session
