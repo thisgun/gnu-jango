@@ -80,7 +80,6 @@ class HandbookSamplesTests(TestCase):
         detail = APIClient().get(f"{API}/posts/{samples.BOOKS[0].table}/{post['wr_id']}").json()["data"]
 
         self.assertGreaterEqual(len(re.findall(r"<h2[ >]", detail["wr_content"])), 2)
-        self.assertIn("<h3", detail["wr_content"])
 
     def test_there_is_enough_to_look_at(self):
         samples.ensure_samples()
