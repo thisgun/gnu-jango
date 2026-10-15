@@ -15,7 +15,7 @@
 
 ## 화면
 
-- 상단 바: 브랜드, 문서 검색(Ctrl K, 장·부·책 제목을 브라우저에서 찾음), 전체 목차, 로그인, 다크 모드
+- 상단 바: 브랜드, 문서 검색(Ctrl K, 장·부·책 제목 검색과 질문형 문단 검색), 전체 목차, 로그인, 다크 모드
 - 왼쪽: 지금 읽는 책의 부·장 목차(책 선택기), 모바일에서는 서랍
 - 첫 화면: 책 카드, 최근 추가한 장
 - 글 보기: `04 / 24장`, 이전/다음 장, 오른쪽 "이 문서의 목차"(본문의 h2·h3)
@@ -27,6 +27,7 @@
 # 격리 DB 에서 샘플 매뉴얼(책 4권, 장 21개)을 만들고 그룹을 지정
 python manage.py ensure_handbook_samples
 python manage.py ensure_handbook_samples --remove     # 샘플만 지운다
+python manage.py evaluate_handbook_search             # 샘플 질문 18개 hit@1/hit@3 와 검색 시간 확인
 
 # 빌드 → templates/theme/handbook, theme_static/handbook 로 동기화
 cd nextjs && npm run build:theme:handbook && npm run check:theme-sync:handbook
@@ -34,6 +35,19 @@ cd nextjs && npm run build:theme:handbook && npm run check:theme-sync:handbook
 
 관리자 › 테마 설정에서 **Handbook (매뉴얼)** 을 고르면 바뀝니다(`cf_theme=handbook`). 실제 매뉴얼은 관리자에서
 게시판 그룹을 만들고 `cf_docs_group` 에 그 그룹 ID 를 적습니다.
+
+## 질문으로 찾기
+
+문서 검색 창에 두 글자 이상 질문을 입력하면 매뉴얼 본문을 문단 단위로 찾습니다. 결과에는 책·부·장·절, 질문 단어를
+강조한 문단, 해당 절로 가는 링크가 표시됩니다. 기본 검색은 Django 안에서만 처리하며 외부 검색 API나 유료 API를 쓰지 않습니다.
+
+Vercel 같은 서버리스 배포에서는 Python 기본 2-gram 토크나이저와 BM25를 사용합니다. 형태소 분석을 더 선호하고 서버 용량이
+충분한 VPS에서는 `pip install -r requirements.txt -r requirements-docs-morphology.txt`로 Kiwi를 추가할 수 있습니다.
+Kiwi가 설치되어 있지 않거나 로드에 실패하면 검색은 자동으로 2-gram 방식으로 바뀝니다.
+
+선택 사항으로 로컬 Ollama(OpenAI 호환 API)를 연결하면, 먼저 찾은 문단만 근거로 한국어 문장 답변을 덧붙입니다.
+`G5_DOCS_LLM_BASE_URL`, `G5_DOCS_LLM_MODEL`, `G5_DOCS_LLM_TIMEOUT`을 Django 서버의 환경 변수로 설정해야 켜집니다.
+주소는 브라우저 요청에서 전달받지 않으며 기본값은 꺼짐입니다. Vercel 데모에는 이 설정을 넣지 않습니다.
 
 ## 값이 화면에 오는 길
 

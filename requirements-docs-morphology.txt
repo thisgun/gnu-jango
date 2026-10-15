@@ -1,0 +1,4 @@
+# Optional morphology support for deployments where a ~213 MB installed model and ~3 s first load are acceptable.
+# Vercel should use the built-in 2-gram fallback and must not install this file.
+kiwipiepy==0.24.0
+kiwipiepy-model==0.24.0

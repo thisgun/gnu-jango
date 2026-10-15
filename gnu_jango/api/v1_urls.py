@@ -2,7 +2,7 @@ from django.urls import path
 
 from gnu_jango.core import thumbnails
 
-from . import member_lifecycle, page_bootstrap, v1_auth, v1_board, v1_community, v1_shop, v1_views
+from . import member_lifecycle, page_bootstrap, v1_auth, v1_board, v1_community, v1_docs, v1_shop, v1_views
 
 app_name = "api_v1"
 
@@ -44,6 +44,7 @@ urlpatterns = [
     path("recent", v1_community.recent_view, name="recent"),
     path("search/popular", v1_community.popular_search_view, name="search-popular"),
     path("search", v1_community.search_view, name="search"),
+    path("docs/ask", v1_docs.docs_ask_view, name="docs-ask"),
     path("members/me/icon", v1_community.member_icon_view, name="member-me-icon"),
     path("members/me/posts", v1_community.member_posts_view, name="member-me-posts"),
     path("members/me/comments", v1_community.member_comments_view, name="member-me-comments"),

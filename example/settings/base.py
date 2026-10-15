@@ -106,6 +106,7 @@ INSTALLED_APPS = [
     "gnu_jango.utils",
     "gnu_jango.config",
     "gnu_jango.bbs",
+    "gnu_jango.docs_search.apps.DocsSearchConfig",
     "gnu_jango.shop",
     "gnu_jango.api",
     "gnu_jango.editor.apps.EditorConfig",
@@ -570,6 +571,7 @@ REST_FRAMEWORK = {
         "stock-notify": "10/min",
         "order-lookup": "10/min",
         "guest-password": "10/min",
+        "docs-ask": "30/min",
     },
     # 'DEFAULT_FILTER_BACKENDS': (
     #     'django_filters.rest_framework.DjangoFilterBackend',
@@ -709,6 +711,12 @@ G5_ICODE_PORT = de_config("G5_ICODE_PORT", default=7295, cast=int)
 # on its own theme from an empty database.
 G5_DEFAULT_THEME = de_config("G5_DEFAULT_THEME", default="nextjs_default").strip() or "nextjs_default"
 G5_DEFAULT_DOCS_GROUP = de_config("G5_DEFAULT_DOCS_GROUP", default="").strip()
+
+# Optional, operator-configured OpenAI-compatible local model for evidence-grounded handbook answers.
+# Leave the base URL empty to keep the endpoint on local search only (including Vercel).
+G5_DOCS_LLM_BASE_URL = de_config("G5_DOCS_LLM_BASE_URL", default="").strip()
+G5_DOCS_LLM_MODEL = de_config("G5_DOCS_LLM_MODEL", default="").strip()
+G5_DOCS_LLM_TIMEOUT = de_config("G5_DOCS_LLM_TIMEOUT", default=20, cast=int)
 
 # Optional OAuth provider credentials for the Django social-login bridge.
 # Values in the imported Gnuboard config table are still used as fallback.

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
+import { slugifyHeading } from "./anchors";
 
 type TocItem = { slug: string; text: string; level: 2 | 3 };
 
@@ -25,16 +26,6 @@ function decodeHash(hash: string): string {
   } catch {
     return hash;
   }
-}
-
-function slugify(text: string, index: number): string {
-  const base = text
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s-]/gu, "")
-    .replace(/\s+/g, "-")
-    .slice(0, 60);
-  return base ? `${base}-${index}` : `section-${index}`;
 }
 
 function sameList(a: TocItem[], b: TocItem[]): boolean {
@@ -114,7 +105,7 @@ export function HandbookPageToc() {
       const enough = headings.length >= MIN_ITEMS;
       const next: TocItem[] = enough
         ? headings.map((el, index) => ({
-            slug: slugify(el.textContent || "", index),
+            slug: slugifyHeading(el.textContent || "", index),
             text: (el.textContent || "").trim(),
             level: el.tagName === "H3" ? 3 : 2,
           }))

@@ -1,14 +1,70 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { Search } from "lucide-react";
+import { readApiResponse } from "@/lib/api-response";
 import { G5Link as Link } from "@/components/ui/g5-link";
-import { g5PathForRuntime } from "@/lib/config";
+import { apiUrl, g5PathForRuntime } from "@/lib/config";
 import type { DocsBook } from "./docs-nav";
 import { chapterNumberLabel, searchChapters } from "./book-nav";
+import { z } from "zod";
 
 /** 검색어가 있을 때 보여 줄 결과 수. 넘치면 넘친다고 알린다. */
 const SEARCH_LIMIT = 50;
+const QUESTION_DEBOUNCE_MS = 400;
+
+const docsAskResponseSchema = z.object({
+  query: z.string(),
+  results: z.array(z.object({
+    bo_table: z.string(),
+    wr_id: z.number(),
+    book: z.string(),
+    part: z.string(),
+    chapter: z.string(),
+    section: z.string(),
+    anchor: z.string(),
+    url: z.string(),
+    snippet: z.string(),
+    highlights: z.array(z.tuple([z.number(), z.number()])),
+    score: z.number(),
+  })),
+  answer: z.object({ text: z.string(), citations: z.array(z.number()) }).nullable(),
+  answer_enabled: z.boolean(),
+  answer_reason: z.string().optional(),
+});
+
+type DocsAskResponse = z.infer<typeof docsAskResponseSchema>;
+type QuestionState = "idle" | "loading" | "ready" | "error";
+type AnswerState = "idle" | "loading" | "ready" | "unavailable";
+
+function highlightedSnippet(snippet: string, highlights: Array<[number, number]>): ReactNode {
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  for (const [rawStart, rawEnd] of highlights) {
+    const start = Math.max(cursor, Math.min(snippet.length, rawStart));
+    const end = Math.max(start, Math.min(snippet.length, rawEnd));
+    if (start > cursor) nodes.push(<span key={`text-${cursor}`}>{snippet.slice(cursor, start)}</span>);
+    if (end > start) nodes.push(<mark key={`match-${start}`}>{snippet.slice(start, end)}</mark>);
+    cursor = Math.max(cursor, end);
+  }
+  if (cursor < snippet.length) nodes.push(<span key={`text-${cursor}`}>{snippet.slice(cursor)}</span>);
+  return nodes.length > 0 ? nodes : snippet;
+}
+
+async function fetchQuestionSearch(query: string, signal: AbortSignal, answer = false) {
+  const params = new URLSearchParams({ q: query, limit: "5" });
+  if (answer) params.set("answer", "1");
+  const response = await fetch(`${apiUrl("/docs/ask")}?${params}`, {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  const parsed = await readApiResponse(response, docsAskResponseSchema);
+  if (!response.ok || !parsed.success || !parsed.data) {
+    throw new Error(parsed.message || "question_search_failed");
+  }
+  return parsed.data;
+}
 
 /**
  * Ctrl+K(맥은 ⌘K)만 받는다. Shift · Alt 가 함께면(한글 윈도의 AltGr = Ctrl+Alt 포함) 아니다. 다른 곳이 이미
@@ -51,6 +107,11 @@ export function DocsSearch({ books, current }: { books: DocsBook[]; current?: Do
   // 결과 링크는 창이 열려 있을 때만 만든다 — 닫힌 채로 셸이 다시 그려질 때마다 수십 개를 만들지 않게.
   const [open, setOpen] = useState(false);
   const [shortcutLabel, setShortcutLabel] = useState("Ctrl K");
+  const [questionResults, setQuestionResults] = useState<DocsAskResponse["results"]>([]);
+  const [questionState, setQuestionState] = useState<QuestionState>("idle");
+  const [questionError, setQuestionError] = useState("");
+  const [answer, setAnswer] = useState<DocsAskResponse["answer"]>(null);
+  const [answerState, setAnswerState] = useState<AnswerState>("idle");
   const titleId = useId();
   const listId = useId();
 
@@ -74,13 +135,60 @@ export function DocsSearch({ books, current }: { books: DocsBook[]; current?: Do
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!open || trimmed.length < 2) {
+      setQuestionResults([]);
+      setQuestionState("idle");
+      setQuestionError("");
+      setAnswer(null);
+      setAnswerState("idle");
+      return;
+    }
+
+    const controller = new AbortController();
+    setQuestionResults([]);
+    setQuestionError("");
+    setAnswer(null);
+    setQuestionState("loading");
+    setAnswerState("idle");
+    const timer = window.setTimeout(async () => {
+      let response: DocsAskResponse;
+      try {
+        response = await fetchQuestionSearch(trimmed, controller.signal);
+      } catch {
+        if (controller.signal.aborted) return;
+        setQuestionError("질문 검색을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        setQuestionState("error");
+        return;
+      }
+      if (controller.signal.aborted) return;
+      setQuestionResults(response.results);
+      setQuestionState("ready");
+      if (!response.answer_enabled || response.results.length === 0) return;
+
+      setAnswerState("loading");
+      try {
+        const answerResponse = await fetchQuestionSearch(trimmed, controller.signal, true);
+        if (controller.signal.aborted) return;
+        setAnswer(answerResponse.answer);
+        setAnswerState(answerResponse.answer ? "ready" : "unavailable");
+      } catch {
+        if (!controller.signal.aborted) setAnswerState("unavailable");
+      }
+    }, QUESTION_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [open, query]);
+
   /** 위 · 아래 화살표로 검색칸과 결과 사이를 오간다. */
   const moveFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    const stops = [
-      inputRef.current,
-      ...Array.from(listRef.current?.querySelectorAll<HTMLAnchorElement>("a") ?? []),
-    ].filter((element): element is HTMLInputElement | HTMLAnchorElement => element !== null);
+    const stops = [inputRef.current, ...Array.from(dialogRef.current?.querySelectorAll<HTMLAnchorElement>("a") ?? [])]
+      .filter((element): element is HTMLInputElement | HTMLAnchorElement => element !== null);
     const index = stops.findIndex((element) => element === document.activeElement);
     if (index < 0) return;
     event.preventDefault();
@@ -143,7 +251,8 @@ export function DocsSearch({ books, current }: { books: DocsBook[]; current?: Do
             role="search"
             onSubmit={(event) => {
               event.preventDefault();
-              listRef.current?.querySelector<HTMLAnchorElement>("a")?.click();
+              (dialogRef.current?.querySelector<HTMLAnchorElement>(".doc-ask-results a") ??
+                listRef.current?.querySelector<HTMLAnchorElement>("a"))?.click();
             }}
           >
             <Search size={17} aria-hidden />
@@ -155,6 +264,7 @@ export function DocsSearch({ books, current }: { books: DocsBook[]; current?: Do
               placeholder="장 제목 · 매뉴얼 · 분류로 찾기"
               aria-label="문서 검색"
               aria-controls={hits.length > 0 ? listId : undefined}
+              maxLength={200}
               autoComplete="off"
             />
             <button type="button" className="doc-kbd doc-search-esc" onClick={closeDialog}>
@@ -187,6 +297,68 @@ export function DocsSearch({ books, current }: { books: DocsBook[]; current?: Do
           ) : hasQuery ? (
             <p className="doc-search-empty">제목이 맞는 장이 없습니다. 본문까지 찾아보세요.</p>
           ) : null}
+
+          <section className="doc-search-ask" aria-labelledby={`${titleId}-ask`}>
+            <h3 id={`${titleId}-ask`} className="doc-search-ask-title">질문으로 찾기</h3>
+            {!hasQuery || query.trim().length < 2 ? (
+              <p className="doc-search-ask-status">두 글자 이상 질문하면 매뉴얼 문단을 찾아 드립니다.</p>
+            ) : questionState === "loading" ? (
+              <p className="doc-search-ask-status alert alert-info" role="status">
+                <span className="loading loading-spinner loading-sm" aria-hidden="true" />
+                매뉴얼 문단을 찾고 있습니다…
+              </p>
+            ) : questionState === "error" ? (
+              <p className="doc-search-ask-status alert alert-error" role="alert">{questionError}</p>
+            ) : questionState === "ready" && questionResults.length === 0 ? (
+              <p className="doc-search-ask-status alert alert-info" role="status">관련 문단을 찾지 못했습니다. 다른 표현으로 질문해 보세요.</p>
+            ) : questionResults.length > 0 ? (
+              <>
+                {answerState === "loading" ? (
+                  <p className="doc-search-ask-status" role="status">근거 문단을 찾았습니다. 답변을 정리하고 있습니다…</p>
+                ) : null}
+                {answerState === "ready" && answer ? (
+                  <div className="doc-search-answer card card-border" aria-live="polite">
+                    <div className="card-body">
+                      <h4 className="card-title">매뉴얼 답변</h4>
+                      <p>{answer.text}</p>
+                      <p className="doc-search-answer-citations">
+                        근거: {answer.citations.map((citation, index) => {
+                          const cited = questionResults[citation - 1];
+                          if (!cited) return null;
+                          return (
+                            <span key={`${citation}-${index}`}>
+                              {index > 0 ? " · " : ""}
+                              <Link href={g5PathForRuntime(cited.url)} onClick={closeDialog}>
+                                {cited.chapter}{cited.section ? ` · ${cited.section}` : ""}
+                              </Link>
+                            </span>
+                          );
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                ) : answerState === "unavailable" ? (
+                  <p className="doc-search-ask-status">문장 답변을 만들지 못했습니다. 아래 검색 문단을 확인해 주세요.</p>
+                ) : null}
+                <ul className="doc-ask-results list" aria-label="질문 검색 결과">
+                  {questionResults.map((result, index) => (
+                    <li key={`${result.bo_table}:${result.wr_id}:${result.anchor}:${index}`} className="doc-ask-result list-row">
+                      <Link href={g5PathForRuntime(result.url)} className="doc-ask-result-link" onClick={closeDialog}>
+                        <span className="doc-ask-result-path">
+                          {result.book}{result.part ? ` · ${result.part}` : ""} · {result.chapter}
+                          {result.section ? ` · ${result.section}` : ""}
+                        </span>
+                        <span className="doc-ask-result-snippet">
+                          {highlightedSnippet(result.snippet, result.highlights)}
+                        </span>
+                        <span className="doc-ask-result-open">장 열기 <span aria-hidden="true">↗</span></span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
+          </section>
 
           <div className="doc-search-foot">
             <span>장 제목 · 매뉴얼 · 분류에서 찾습니다.</span>

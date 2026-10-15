@@ -53,6 +53,30 @@ python manage.py check_deploy_profile --profile vercel
 - `/api/v1/settings` 의 `theme_settings.docs.group` 이 `manual` 이어야 합니다.
 - 응답 헤더 `X-Vercel-Id` 의 두 번째 값이 `icn1` 이어야 합니다.
 
+## 5. 매뉴얼 질문 검색
+
+핸드북 검색 창은 `/api/v1/docs/ask?q=질문`으로 문단을 찾습니다. 검색은 서버 안에서 실행되므로 Vercel 사이트에서도 외부 API 키나
+추가 데이터베이스가 필요하지 않습니다. 첫 요청은 매뉴얼 문단 색인을 만들 수 있고, 따뜻한 인스턴스는 메모리 색인을 재사용합니다.
+매뉴얼 글을 저장하거나 삭제하면 다음 검색부터 색인을 갱신합니다.
+
+Vercel은 파일 쓰기와 함수 번들 크기를 아끼기 위해 기본 2-gram 토크나이저를 씁니다. 로컬에서 한국어 형태소 검색이 꼭 필요하고
+서버 용량이 충분한 경우에만 `requirements-docs-morphology.txt`의 Kiwi를 추가하세요. Python 3.11에서 측정한 설치는 Python 패키지와
+모델을 합쳐 약 213 MB였고 첫 분석기 로드에 약 2.7초가 걸렸습니다. 이 선택 패키지는 Vercel에 설치하지 않습니다.
+
+로컬 Ollama 답변은 선택 기능입니다. Django 서버에 `G5_DOCS_LLM_BASE_URL`, `G5_DOCS_LLM_MODEL`을 설정하고 필요하면
+`G5_DOCS_LLM_TIMEOUT`(초, 기본 20)을 지정하면 켜집니다. 브라우저가 모델 주소를 바꿀 수 없고, 답변 요청에는 요청자가 읽을 수
+있는 검색 문단만 포함됩니다. 주소가 비어 있으면 문장 답변 기능은 꺼지고 문단 검색만 동작합니다. 이 데모 프로젝트에는 해당 값을
+등록하지 마세요.
+
+질문 검색 품질과 따뜻한 요청 시간을 샘플 매뉴얼로 확인할 때는 격리 DB에 샘플을 준비한 뒤 다음을 실행합니다.
+
+```bash
+python manage.py ensure_handbook_samples
+python manage.py evaluate_handbook_search
+```
+
+평가 명령은 18개 한국어 질문의 hit@1/hit@3을 표로 출력하고 hit@3 80% 미만이면 실패합니다.
+
 ## 주의
 
 - 두 프로젝트가 같은 `main` 을 보므로 push 한 번에 **둘 다** 배포됩니다. 한쪽만 배포하려면 프로젝트의 Ignored Build Step 을 쓰세요.
