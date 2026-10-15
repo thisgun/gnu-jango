@@ -19,6 +19,8 @@
 설정 해석 코드는 `example/settings/deploy.py`(순수 함수), 점검은 `gnu_jango/core/deploy_profile.py`,
 예약 작업은 `gnu_jango/core/scheduled_jobs.py`에 있습니다.
 
+같은 저장소로 테마만 다른 두 번째 데모(handbook)를 따로 두려면 [handbook-demo.md](handbook-demo.md) 를 보세요.
+
 ## 1. 환경 변수 스위치
 
 ### 데이터베이스

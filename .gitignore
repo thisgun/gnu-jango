@@ -198,6 +198,14 @@ staticfiles/
 !gnu_jango/templates/theme_static/nextjs_default/_next/static/**
 !gnu_jango/templates/theme_static/nextjs_default/assets/
 !gnu_jango/templates/theme_static/nextjs_default/assets/**
+# Every Next.js theme export keeps its hashed assets (a theme added later, such as handbook, needs no
+# line of its own; without these the "static/" rule above silently leaves its CSS and JS out of git).
+!gnu_jango/templates/theme_static/*/
+!gnu_jango/templates/theme_static/*/_next/
+!gnu_jango/templates/theme_static/*/_next/static/
+!gnu_jango/templates/theme_static/*/_next/static/**
+!gnu_jango/templates/theme_static/*/assets/
+!gnu_jango/templates/theme_static/*/assets/**
 
 settings.json
 .prettierignore
