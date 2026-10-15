@@ -82,7 +82,7 @@ path-style 주소(`S3_ADDRESSING_STYLE`로 변경 가능), SigV4. boto3 1.36 이
 
 Django 전체가 하나의 Vercel Python 함수(Fluid compute)로 실행됩니다. Vercel은 `manage.py`를 찾아
 `DJANGO_SETTINGS_MODULE`(`example.settings`)과 `WSGI_APPLICATION`(`example.wsgi.application`)으로 진입점을
-결정하므로 별도 진입 파일은 필요 없습니다. Python 버전은 `.python-version`(3.13)을 따릅니다.
+결정하므로 별도 진입 파일은 필요 없습니다. Python 버전은 `.python-version`(3.12)을 따릅니다.
 
 ### 2-1. Supabase
 
@@ -132,7 +132,7 @@ Django 전체가 하나의 Vercel Python 함수(Fluid compute)로 실행됩니�
    python manage.py check_deploy_profile --profile vercel
    ```
 
-Vercel Python 함수는 `requirements.txt`에서 런타임 패키지를 설치합니다. 루트 `pyproject.toml`은 개발 도구 설정만 담고 있어 `.vercelignore`에서 제외하며, Python 버전은 `.python-version`의 3.13을 따릅니다. `django-heroku`는 `psycopg2`를 소스 빌드하려 하므로 공통 의존성에서 뺐습니다. 구형 Heroku dyno에서만 필요하면 `pip install django-heroku==0.3.1`로 추가하세요. `DYNO`가 설정됐는데 패키지가 없으면 설정 시작 시 설치 안내 오류가 발생합니다.
+Vercel Python 함수는 `requirements.txt`에서 런타임 패키지를 설치합니다. 루트 `pyproject.toml`은 개발 도구 설정만 담고 있어 `.vercelignore`에서 제외하며, Python 버전은 `.python-version`의 3.12를 따릅니다. `django-heroku`는 `psycopg2`를 소스 빌드하려 하므로 공통 의존성에서 뺐습니다. 구형 Heroku dyno에서만 필요하면 `pip install django-heroku==0.3.1`로 추가하세요. `DYNO`가 설정됐는데 패키지가 없으면 설정 시작 시 설치 안내 오류가 발생합니다.
 
 ### 2-3. 읽기 전용 파일시스템 점검 결과
 

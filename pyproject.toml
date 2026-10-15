@@ -67,6 +67,6 @@ concurrency = ["multiprocessing"]
 
 [tool.coverage.report]
 skip_empty = true
-# Floor just under the measured 51% (2026-10-10) so coverage cannot silently drop; raise it as tests grow.
+# CI enforces this minimum for the measured application source; raise it as coverage improves.
 fail_under = 65
 show_missing = false

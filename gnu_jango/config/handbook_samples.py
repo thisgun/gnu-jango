@@ -10,7 +10,7 @@ refuses to reuse a table name that already belongs to something else.
 """
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as datetime_timezone
 
 from django.db import transaction
 from django.utils import timezone
@@ -19,6 +19,7 @@ from gnu_jango.bbs.models import Board, Group, Post
 from gnu_jango.bbs.utils import get_next_num
 
 from .models import Config
+from .handbook_content import LEGACY_SAMPLE_MARKER, chapter_body
 
 GROUP_ID = "manual"
 GROUP_SUBJECT = "매뉴얼"
@@ -74,24 +75,7 @@ BOOKS = (
 
 
 def _chapter_body(title):
-    """A chapter with the shapes the reading screen styles: intro, headings, list, code, table."""
-    return (
-        f"<p><strong>{title}</strong>에서 다루는 내용을 먼저 짧게 정리합니다. 아래 순서대로 읽으면 됩니다.</p>"
-        "<h2>먼저 알아 둘 것</h2>"
-        "<p>이 장은 예시를 위한 샘플 글입니다. 실제 매뉴얼은 관리자에서 게시판에 글을 써서 채웁니다.</p>"
-        "<ul><li>한 번에 한 가지씩 따라 하세요.</li><li>막히면 <code>막혔을 때</code> 부를 확인하세요.</li></ul>"
-        "<h2>따라 해 보기</h2>"
-        "<h3>1단계</h3>"
-        "<p>명령을 실행합니다.</p>"
-        "<pre><code>npm run build:theme:handbook\n</code></pre>"
-        "<h3>2단계</h3>"
-        "<p>결과를 확인합니다.</p>"
-        "<table><thead><tr><th>확인할 것</th><th>기대하는 모습</th></tr></thead>"
-        "<tbody><tr><td>왼쪽 목차</td><td>현재 장이 강조됩니다</td></tr>"
-        "<tr><td>오른쪽 목차</td><td>이 장의 제목이 나열됩니다</td></tr></tbody></table>"
-        "<h2>정리</h2>"
-        "<p>다음 장으로 넘어가기 전에 위 내용을 한 번 더 확인하세요.</p>"
-    )
+    return chapter_body(title)
 
 
 def _book_table_names():
@@ -135,8 +119,16 @@ def _board(group, order, book):
 
 
 def _chapters(board, book, created_at):
-    if Post.objects.filter(board=board).exists():
-        return 0
+    existing_posts = list(Post.objects.filter(board=board))
+    if existing_posts:
+        # Refresh only the previous repeated placeholder. Preserve administrator-authored text.
+        updated = 0
+        for post in existing_posts:
+            if LEGACY_SAMPLE_MARKER in (post.wr_content or ""):
+                post.wr_content = _chapter_body(post.wr_subject)
+                post.save(update_fields=("wr_content",))
+                updated += 1
+        return 0, updated
     chapters = [(part, title) for part, titles in book.parts for title in titles]
     # A new post gets the smallest wr_num so that the newest comes first on a board list. A book is
     # read from its first chapter, so the chapters are written last to first.
@@ -155,7 +147,7 @@ def _chapters(board, book, created_at):
             wr_last=stamp,
         )
         Post.objects.filter(pk=post.pk).update(wr_parent=post.pk)
-    return len(chapters)
+    return len(chapters), 0
 
 
 def _clear_config_cache():
@@ -165,18 +157,30 @@ def _clear_config_cache():
 
 
 @transaction.atomic
-def ensure_samples():
+def ensure_samples(*, stable_dates=False):
     """Create the sample manual (or complete it) and point the theme at it. Safe to run again."""
     group = _group()
     _check_tables_are_free(group)
-    now = timezone.now()
+    now = (
+        datetime(2026, 10, 1, 12, 0, tzinfo=datetime_timezone.utc)
+        if stable_dates
+        else timezone.now()
+    )
     created = 0
+    updated = 0
     for order, book in enumerate(BOOKS, start=1):
         board = _board(group, order, book)
-        created += _chapters(board, book, now)
+        created_count, updated_count = _chapters(board, book, now)
+        created += created_count
+        updated += updated_count
     Config.objects.update_or_create(name=DOCS_GROUP_KEY, defaults={"value": GROUP_ID})
     _clear_config_cache()
-    return {"group": GROUP_ID, "books": len(BOOKS), "chapters_created": created}
+    return {
+        "group": GROUP_ID,
+        "books": len(BOOKS),
+        "chapters_created": created,
+        "chapters_updated": updated,
+    }
 
 
 @transaction.atomic

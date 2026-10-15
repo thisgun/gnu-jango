@@ -1,5 +1,5 @@
 # Build stage: compilers are needed only if a dependency has no wheel; they stay out of the final image.
-FROM python:3.14-slim AS builder
+FROM python:3.12-slim AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
@@ -14,7 +14,7 @@ RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install -r /tmp/requirements.txt
 
 
-FROM python:3.14-slim
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \

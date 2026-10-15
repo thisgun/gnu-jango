@@ -10,13 +10,18 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument("--remove", action="store_true", help="Delete the sample manual and clear cf_docs_group.")
+        parser.add_argument(
+            "--stable-dates",
+            action="store_true",
+            help="Use a fixed post timestamp so generated exports are reproducible.",
+        )
 
     def handle(self, *args, **options):
         try:
             if options["remove"]:
                 result = {"removed": handbook_samples.remove_samples()}
             else:
-                result = handbook_samples.ensure_samples()
+                result = handbook_samples.ensure_samples(stable_dates=options["stable_dates"])
         except handbook_samples.HandbookSampleError as exc:
             raise CommandError(str(exc)) from exc
         self.stdout.write(json.dumps(result, ensure_ascii=False))

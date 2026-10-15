@@ -6,7 +6,7 @@ import {
   closeSync,
   existsSync,
   lstatSync,
-  mkdtempSync,
+  mkdirSync,
   openSync,
   readdirSync,
   readFileSync,
@@ -26,6 +26,7 @@ const OTHER_THEME_SOURCES = existsSync(join(ROOT, 'themes'))
   ? readdirSync(join(ROOT, 'themes')).filter((name) => name !== THEME_SOURCE && name !== 'default')
   : [];
 const BUILD_LOCK_PATH = join(ROOT, '.g5-next-build.lock');
+const STATIC_BUILD_WORKSPACE_NAME = '.g5-next-theme-build-workspace';
 const DYNAMIC_PARAMS_RE = /export const dynamicParams = (true|false);/g;
 const SERVER_RUNTIME_ONLY_RE = /@g5-server-runtime-only/;
 const require = createRequire(import.meta.url);
@@ -120,7 +121,9 @@ function nextBin(projectRoot) {
 }
 
 function createStaticBuildWorkspace() {
-  const workspace = mkdtempSync(join(dirname(ROOT), '.g5-next-theme-build-'));
+  const workspace = join(dirname(ROOT), STATIC_BUILD_WORKSPACE_NAME);
+  removeGeneratedPath(workspace, STATIC_BUILD_WORKSPACE_NAME, dirname(ROOT));
+  mkdirSync(workspace);
   const projectRoot = join(workspace, 'nextjs');
 
   cpSync(ROOT, projectRoot, {
@@ -165,9 +168,9 @@ function createStaticBuildWorkspace() {
   return { projectRoot, workspace };
 }
 
-function removeGeneratedPath(path, expectedPrefix) {
+function removeGeneratedPath(path, expectedPrefix, expectedParent = ROOT) {
   const absolutePath = resolve(path);
-  if (dirname(absolutePath) !== ROOT || !basename(absolutePath).startsWith(expectedPrefix)) {
+  if (dirname(absolutePath) !== resolve(expectedParent) || !basename(absolutePath).startsWith(expectedPrefix)) {
     throw new Error(`Refusing to remove a path outside the generated output area: ${absolutePath}`);
   }
 
@@ -371,7 +374,7 @@ try {
     } finally {
       if (buildWorkspace) {
         const absoluteWorkspace = resolve(buildWorkspace);
-        if (dirname(absoluteWorkspace) !== resolve(dirname(ROOT)) || !basename(absoluteWorkspace).startsWith('.g5-next-theme-build-')) {
+        if (dirname(absoluteWorkspace) !== resolve(dirname(ROOT)) || basename(absoluteWorkspace) !== STATIC_BUILD_WORKSPACE_NAME) {
           throw new Error(`Refusing to remove a build workspace outside the repository workspace: ${absoluteWorkspace}`);
         }
         rmSync(absoluteWorkspace, { recursive: true, force: true });

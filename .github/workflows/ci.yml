@@ -95,6 +95,9 @@ jobs:
       - name: Prepare local API database
         working-directory: ${{ github.workspace }}
         run: python manage.py migrate --noinput
+      - name: Prepare deterministic handbook sample data
+        working-directory: ${{ github.workspace }}
+        run: python manage.py ensure_handbook_samples --stable-dates
       - name: Start local API for the static theme build
         working-directory: ${{ github.workspace }}
         run: |
@@ -120,8 +123,14 @@ jobs:
         run: npm run lint
       - name: Payment return tests
         run: npm run test:payment:return
-      - name: Build and synchronize the Django static theme
-        run: npm run build:theme
+      - name: Build and verify the Django default theme bundle
+        run: |
+          npm run build -- --runtime=static
+          npm run check:theme-sync
+      - name: Build and verify the Django handbook theme bundle
+        run: |
+          node scripts/with-theme.mjs handbook -- npm run build -- --runtime=static
+          npm run check:theme-sync:handbook
 
   docker:
     # Builds the image the CD workflow publishes (without pushing) and smoke-tests it, so a broken
