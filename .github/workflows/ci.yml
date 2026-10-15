@@ -151,11 +151,13 @@ jobs:
       - name: Build and verify the Django default theme bundle
         working-directory: nextjs
         run: |
+          npm run build:theme
           npm run build -- --runtime=static
           npm run check:theme-sync
       - name: Build and verify the Django handbook theme bundle
         working-directory: nextjs
         run: |
+          npm run build:theme:handbook
           node scripts/with-theme.mjs handbook -- npm run build -- --runtime=static
           npm run check:theme-sync:handbook
 
