@@ -46,7 +46,7 @@ CONFIGS = {
         _("홈페이지제목"),
     ),
     "cf_theme": (
-        "nextjs_default",
+        getattr(settings, "G5_DEFAULT_THEME", "nextjs_default"),
         "hidden",
         _("홈페이지테마"),
     ),
@@ -97,7 +97,7 @@ CONFIGS = {
         _("메인 갤러리 영역에 표시할 bo_table을 입력합니다. 비우면 갤러리 스킨 게시판을 찾습니다."),
     ),
     "cf_docs_group": (
-        "",
+        getattr(settings, "G5_DEFAULT_DOCS_GROUP", ""),
         "str",
         _("매뉴얼 게시판 그룹"),
         _("매뉴얼(handbook) 테마가 책으로 보여 줄 게시판 그룹 ID를 입력합니다. 그룹의 게시판 하나가 책 한 권, 게시판 분류가 부, 글이 장입니다."),

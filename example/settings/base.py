@@ -704,6 +704,12 @@ G5_ICODE_PASSWORD = de_config("G5_ICODE_PASSWORD", default="")
 G5_ICODE_SERVER = de_config("G5_ICODE_SERVER", default="").strip()
 G5_ICODE_PORT = de_config("G5_ICODE_PORT", default=7295, cast=int)
 
+# Starting theme and manual board group of a deployment. They are only the defaults of cf_theme and
+# cf_docs_group, so a value saved in admin still wins; a second site (the handbook demo) can start
+# on its own theme from an empty database.
+G5_DEFAULT_THEME = de_config("G5_DEFAULT_THEME", default="nextjs_default").strip() or "nextjs_default"
+G5_DEFAULT_DOCS_GROUP = de_config("G5_DEFAULT_DOCS_GROUP", default="").strip()
+
 # Optional OAuth provider credentials for the Django social-login bridge.
 # Values in the imported Gnuboard config table are still used as fallback.
 SOCIAL_NAVER_CLIENT_ID = de_config("SOCIAL_NAVER_CLIENT_ID", default="")
