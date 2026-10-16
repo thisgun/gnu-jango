@@ -10,6 +10,7 @@ from django.db import transaction
 from django.utils.text import get_valid_filename
 
 from gnu_jango.bbs.models import validate_upload_file_content
+from gnu_jango.core.image_privacy import strip_image_metadata
 from gnu_jango.shop.models import ShopProduct
 
 
@@ -63,7 +64,7 @@ def upload_product_images(it_id, uploaded_files):
                     safe_product_id,
                     f"{uuid.uuid4().hex}_{safe_name}",
                 )
-                storage_path = default_storage.save(requested_path, uploaded_file)
+                storage_path = default_storage.save(requested_path, strip_image_metadata(uploaded_file))
                 stored_paths.append(storage_path)
                 new_images.append({"url": default_storage.url(storage_path), "storage_path": storage_path})
 

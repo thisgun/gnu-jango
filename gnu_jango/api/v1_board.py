@@ -24,7 +24,8 @@ from rest_framework.permissions import AllowAny
 from .authentication import SessionJWTAuthentication as JWTAuthentication
 
 from gnu_jango.bbs.delete_posts import Delete_all_posts
-from gnu_jango.bbs.models import Board, Comment, Post, Post_file, Post_good, Post_scrap
+from gnu_jango.bbs.models import Board, Comment, Post, Post_file, Post_good, Post_scrap, validate_upload_file_content
+from gnu_jango.core.image_privacy import strip_image_metadata
 from gnu_jango.core.legacy_assets import legacy_area_roots
 from gnu_jango.core.thumbnails import thumbnail_url
 from gnu_jango.bbs.utils import get_next_num
@@ -1719,7 +1720,7 @@ def _save_post_file(board, post, uploaded_file, bf_no):
         bf_source=uploaded_file.name,
         bf_datetime=timezone.now(),
     )
-    post_file.bf_file = uploaded_file
+    post_file.bf_file = strip_image_metadata(uploaded_file)
     post_file.full_clean(exclude=["board", "post"])
     post_file.save()
     return post_file
@@ -1878,7 +1879,19 @@ def editor_upload_view(request):
             details={"file": "Unsupported upload file extension."},
         )
 
+    # Same content check as board attachments: a page or script renamed to .jpg is not an image.
+    try:
+        validate_upload_file_content(uploaded_file)
+    except DjangoValidationError as exc:
+        message = "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
+        return api_error(
+            "Upload file validation failed.",
+            status=drf_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            details={"file": message},
+        )
+
     safe_name = get_valid_filename(os.path.basename(uploaded_file.name))
+    uploaded_file = strip_image_metadata(uploaded_file)
     unique_name = "%s%s" % (uuid.uuid4().hex, extension)
     path = default_storage.save(os.path.join("uploads", "editor", unique_name), uploaded_file)
     url = _absolute_url(request, default_storage.url(path))
