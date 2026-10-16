@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generation": 29,
+  "generation": 30,
   "keepBuilds": 2,
   "files": [
     {
@@ -367,6 +367,11 @@
       "path": "_next/static/chunks/2s4rk8gc0ilmg.js",
       "sha256": "032df10183adfa7fbc74c05bc73e60eba51f1f173e7520b3013a6da086cd892e",
       "retiredAt": 29
+    },
+    {
+      "path": "_next/static/chunks/2tteyd1nqywr-.js",
+      "sha256": "61514e6faf82b16b2378693cba51b69bb31cc4e88bbd7afd00670e5f0f78c8e0",
+      "retiredAt": 30
     },
     {
       "path": "_next/static/chunks/2yaveau-68pg9.js",
