@@ -1443,7 +1443,8 @@ class EditorUploadTests(BoardApiTestCase):
         self.assertTrue(response.json()["data"]["url"].endswith(".png"))
 
     def test_a_path_in_the_file_name_is_reduced_to_the_base_name(self):
-        upload = SimpleUploadedFile("..\\..\\evil.zip", b"PK", content_type="application/zip")
+        # A real ZIP signature: editor uploads now get the same content check as board attachments.
+        upload = SimpleUploadedFile("..\\..\\evil.zip", b"PK\x03\x04" + b"\x00" * 26, content_type="application/zip")
 
         response = self.send(self.owner, upload)
 

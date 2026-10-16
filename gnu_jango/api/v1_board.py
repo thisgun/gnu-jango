@@ -1885,7 +1885,7 @@ def editor_upload_view(request):
     except DjangoValidationError as exc:
         message = "; ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
         return api_error(
-            "Upload file validation failed.",
+            "File validation failed.",
             status=drf_status.HTTP_422_UNPROCESSABLE_ENTITY,
             details={"file": message},
         )
