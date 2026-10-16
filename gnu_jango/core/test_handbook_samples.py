@@ -131,3 +131,45 @@ class HandbookSamplesTests(TestCase):
 
         call_command("ensure_handbook_samples", "--remove", stdout=out)
         self.assertFalse(Group.objects.filter(gr_id=samples.GROUP_ID).exists())
+
+    def test_running_it_again_keeps_board_settings_an_admin_changed(self):
+        # The admin "sample data" page runs this on live sites, so it must not undo admin choices.
+        samples.ensure_samples()
+        board = Board.objects.get(bo_table=samples.BOOKS[0].table)
+        board.bo_subject = "우리 회사 시작 안내"
+        board.bo_read_level = 3
+        board.save(update_fields=("bo_subject", "bo_read_level"))
+
+        samples.ensure_samples()
+
+        board.refresh_from_db()
+        self.assertEqual((board.bo_subject, board.bo_read_level), ("우리 회사 시작 안내", 3))
+
+    def test_running_it_again_keeps_a_docs_group_an_admin_chose(self):
+        samples.ensure_samples()
+        Config.objects.update_or_create(name="cf_docs_group", defaults={"value": "company-docs"})
+
+        samples.ensure_samples()
+
+        self.assertEqual(Config.objects.get(name="cf_docs_group").value, "company-docs")
+
+    def test_refresh_rewrites_sample_chapters_but_not_admin_chapters(self):
+        samples.ensure_samples()
+        board = Board.objects.get(bo_table=samples.BOOKS[0].table)
+        stale = Post.objects.filter(board=board).exclude(wr_subject="").first()
+        stale.wr_content = "<p>py -3.13 -m venv .venv (예전 샘플)</p>"
+        stale.save(update_fields=("wr_content",))
+        own = Post.objects.create(
+            board=board, wr_num=0, wr_parent=0, wr_subject="관리자가 쓴 장",
+            wr_content="<p>admin-sentinel-301</p>", wr_name="관리자", wr_datetime=stale.wr_datetime,
+        )
+
+        call_command("ensure_handbook_samples", stdout=io.StringIO())
+        stale.refresh_from_db()
+        self.assertIn("3.13", stale.wr_content)  # a plain run never touches existing bodies
+
+        call_command("ensure_handbook_samples", "--refresh", stdout=io.StringIO())
+        stale.refresh_from_db()
+        own.refresh_from_db()
+        self.assertEqual(stale.wr_content, samples.chapter_body(stale.wr_subject))
+        self.assertEqual(own.wr_content, "<p>admin-sentinel-301</p>")

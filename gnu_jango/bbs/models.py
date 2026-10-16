@@ -511,11 +511,13 @@ def validate_file_extension(value):
         raise ValidationError("Unsupported file extension.")
 
 
+# Pillow reports a JPEG that carries an MPF segment (phone portrait/depth shots) as "MPO"; it is
+# still a JPEG to browsers, so it is accepted wherever JPEG is.
 IMAGE_UPLOAD_FORMATS = {
     ".gif": {"GIF"},
-    ".jfif": {"JPEG"},
-    ".jpg": {"JPEG"},
-    ".jpeg": {"JPEG"},
+    ".jfif": {"JPEG", "MPO"},
+    ".jpg": {"JPEG", "MPO"},
+    ".jpeg": {"JPEG", "MPO"},
     ".png": {"PNG"},
 }
 FILE_SIGNATURES = {

@@ -27,6 +27,7 @@ from rest_framework.permissions import AllowAny
 from .authentication import SessionJWTAuthentication as JWTAuthentication
 
 from gnu_jango.bbs.models import Board, Comment, Post, Post_scrap, validate_upload_file_content
+from gnu_jango.core.image_privacy import strip_image_metadata
 from gnu_jango.bbs.utils import get_pretty_url
 from gnu_jango.config import config
 from gnu_jango.config.models import Config
@@ -859,7 +860,7 @@ def member_icon_view(request):
         )
 
     profile, _ = Profile.objects.get_or_create(user=user)
-    profile.icon = uploaded_file
+    profile.icon = strip_image_metadata(uploaded_file)
     profile.save(update_fields=["icon"])
     return api_response(data={"member": member_payload(user, request)})
 

@@ -112,6 +112,8 @@ export function DocsSearch({ books, current }: { books: DocsBook[]; current?: Do
   const [questionError, setQuestionError] = useState("");
   const [answer, setAnswer] = useState<DocsAskResponse["answer"]>(null);
   const [answerState, setAnswerState] = useState<AnswerState>("idle");
+  const [answerEnabled, setAnswerEnabled] = useState(false);
+  const answerControllerRef = useRef<AbortController | null>(null);
   const titleId = useId();
   const listId = useId();
 
@@ -143,6 +145,7 @@ export function DocsSearch({ books, current }: { books: DocsBook[]; current?: Do
       setQuestionError("");
       setAnswer(null);
       setAnswerState("idle");
+      setAnswerEnabled(false);
       return;
     }
 
@@ -164,25 +167,39 @@ export function DocsSearch({ books, current }: { books: DocsBook[]; current?: Do
       }
       if (controller.signal.aborted) return;
       setQuestionResults(response.results);
+      setAnswerEnabled(response.answer_enabled);
       setQuestionState("ready");
-      if (!response.answer_enabled || response.results.length === 0) return;
-
-      setAnswerState("loading");
-      try {
-        const answerResponse = await fetchQuestionSearch(trimmed, controller.signal, true);
-        if (controller.signal.aborted) return;
-        setAnswer(answerResponse.answer);
-        setAnswerState(answerResponse.answer ? "ready" : "unavailable");
-      } catch {
-        if (!controller.signal.aborted) setAnswerState("unavailable");
-      }
     }, QUESTION_DEBOUNCE_MS);
 
     return () => {
       window.clearTimeout(timer);
       controller.abort();
+      // A new question makes a pending answer for the old one meaningless.
+      answerControllerRef.current?.abort();
     };
   }, [open, query]);
+
+  /**
+   * 문장 답변은 사용자가 버튼을 눌렀을 때만 받는다. 답변 한 번이 서버에서 모델 응답을 오래 기다리므로
+   * (G5_DOCS_LLM_TIMEOUT), 질문을 고칠 때마다 자동으로 부르면 브라우저가 취소해도 서버 쪽 호출이 쌓인다.
+   */
+  const requestAnswer = async () => {
+    const trimmed = query.trim();
+    if (!answerEnabled || questionResults.length === 0 || trimmed.length < 2) return;
+    answerControllerRef.current?.abort();
+    const controller = new AbortController();
+    answerControllerRef.current = controller;
+    setAnswer(null);
+    setAnswerState("loading");
+    try {
+      const answerResponse = await fetchQuestionSearch(trimmed, controller.signal, true);
+      if (controller.signal.aborted) return;
+      setAnswer(answerResponse.answer);
+      setAnswerState(answerResponse.answer ? "ready" : "unavailable");
+    } catch {
+      if (!controller.signal.aborted) setAnswerState("unavailable");
+    }
+  };
 
   /** 위 · 아래 화살표로 검색칸과 결과 사이를 오간다. */
   const moveFocus = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -251,8 +268,13 @@ export function DocsSearch({ books, current }: { books: DocsBook[]; current?: Do
             role="search"
             onSubmit={(event) => {
               event.preventDefault();
-              (dialogRef.current?.querySelector<HTMLAnchorElement>(".doc-ask-results a") ??
-                listRef.current?.querySelector<HTMLAnchorElement>("a"))?.click();
+              // 장 제목을 그대로 친 경우는 그 장으로 간다. 그 밖에는 질문 검색 1위(있으면)를 연다.
+              const typed = query.trim().toLocaleLowerCase();
+              const exactIndex = hits.findIndex((hit) => hit.chapter.label.trim().toLocaleLowerCase() === typed);
+              const titleLinks = listRef.current?.querySelectorAll<HTMLAnchorElement>(":scope > li > a");
+              const exactLink = exactIndex >= 0 ? titleLinks?.[exactIndex] : undefined;
+              const questionLink = dialogRef.current?.querySelector<HTMLAnchorElement>(".doc-ask-results a");
+              (exactLink ?? questionLink ?? titleLinks?.[0])?.click();
             }}
           >
             <Search size={17} aria-hidden />
@@ -313,6 +335,11 @@ export function DocsSearch({ books, current }: { books: DocsBook[]; current?: Do
               <p className="doc-search-ask-status alert alert-info" role="status">관련 문단을 찾지 못했습니다. 다른 표현으로 질문해 보세요.</p>
             ) : questionResults.length > 0 ? (
               <>
+                {answerEnabled && (answerState === "idle" || answerState === "unavailable") ? (
+                  <button type="button" className="btn btn-sm btn-outline doc-search-answer-button" onClick={requestAnswer}>
+                    이 문단들로 문장 답변 받기
+                  </button>
+                ) : null}
                 {answerState === "loading" ? (
                   <p className="doc-search-ask-status" role="status">근거 문단을 찾았습니다. 답변을 정리하고 있습니다…</p>
                 ) : null}

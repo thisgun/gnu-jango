@@ -220,6 +220,10 @@ test/
 
 # Local Vercel project linkage can contain account and project metadata.
 /.vercel/
+# Serena's per-worktree onboarding memory is local development state.
+/.serena/
+# Temporary git worktrees created inside the checkout (e.g. .wt-docs-ask); `git add -A` must not pick them up.
+/.wt-*/
 # `vercel env pull` / `vercel link` write tokens (VERCEL_OIDC_TOKEN) and env values here.
 .env*.local
 /nextjs/.env.production

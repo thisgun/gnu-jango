@@ -1,3 +1,8 @@
+# Installed as-is by Vercel and Docker, whose installers do not follow `-r` includes, so this
+# file repeats requirements-base.txt (keep them in step; core/test_requirements_files.py checks
+# it) and adds S3 support for Supabase Storage and other S3-compatible deployments.
+# PythonAnywhere uses MEDIA_STORAGE=local and installs requirements-pythonanywhere.txt instead.
+
 # Versions are pinned to the set this project is tested against. Upgrading
 # Django to 6.1 broke on an unpinned djangorestframework 3.17, which imports a
 # name Django 6.1 removed -- an install months later would otherwise not
@@ -46,11 +51,6 @@ dj-database-url==3.1.2
 # Python build image); same `psycopg2` module and version as the source package it replaces.
 psycopg2-binary==2.9.13
 PyMySQL==1.2.0
-# MEDIA_STORAGE=s3 (Supabase Storage or any S3-compatible bucket, docs/04-deploy/deployment-profiles.md).
-# Imported only when MEDIA_STORAGE=s3. Pinned to the current releases (2026-10-12); not yet exercised
-# against a real bucket - try one upload on the target storage before relying on it. Dependabot bumps them.
-django-storages[s3]==1.14.6
-boto3==1.43.111
 
 # Background work
 celery==5.6.3
@@ -70,3 +70,7 @@ django-recaptcha==4.1.0
 
 # Seeding helpers used by seed-posts and seed-users; Django loads django_seed from INSTALLED_APPS.
 django-seed==0.3.1
+
+# S3-compatible media storage (not needed with MEDIA_STORAGE=local)
+django-storages[s3]==1.14.6
+boto3==1.43.111

@@ -92,16 +92,22 @@ python manage.py runserver 127.0.0.1:8000
 
 기본 개발 설정은 SQLite와 `DEBUG=True`를 사용합니다. 실제 운영 환경에는 적용하지 마세요.
 
+린트·테스트 도구(ruff, selenium, tox 등)가 필요하면 개발 의존성도 설치합니다. 운영 서버에는 설치하지 않아도 됩니다.
+
+```bash
+python -m pip install -r requirements-dev.txt
+```
+
 ## 기존 그누보드 데이터 가져오기
 
 `migrate_gnuboard5`는 원본 그누보드의 `data/dbconfig.php`를 읽어 MySQL 데이터를 Django 데이터베이스로 가져옵니다. 기본 실행은 가져올 항목과 건수를 확인하는 점검 모드이며, 실제 쓰기는 `--apply`를 지정해야 합니다.
 
 ```powershell
-python manage.py migrate_gnuboard5 --source-root "C:\xampp824\www\gnuboard5_3"
-python manage.py migrate_gnuboard5 --source-root "C:\xampp824\www\gnuboard5_3" --apply
+python manage.py migrate_gnuboard5 --source-root "<그누보드5 설치 경로>"
+python manage.py migrate_gnuboard5 --source-root "<그누보드5 설치 경로>" --apply
 ```
 
-다른 원본 경로를 사용하면 `--source-root` 값을 바꾸세요. 실제 DB에 적용하기 전에 대상 DB를 백업하고, 점검 모드 출력으로 가져올 테이블과 행 수를 확인하세요.
+`<그누보드5 설치 경로>`는 `data/dbconfig.php`가 들어 있는 그누보드 폴더입니다(예: Windows XAMPP는 `C:\xampp\htdocs\gnuboard5`, Linux는 `/var/www/gnuboard5`). 실제 DB에 적용하기 전에 대상 DB를 백업하고, 점검 모드 출력으로 가져올 테이블과 행 수를 확인하세요.
 
 ## Next.js 프런트엔드 실행
 
@@ -164,10 +170,10 @@ cd ~/gnu-jango
 mkvirtualenv --python=python3.12 gnu-jango
 workon gnu-jango
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-pythonanywhere.txt
 ```
 
-패키지 설치가 디스크 한도나 빌드 오류로 실패하면 무작정 패키지를 빼지 말고 Bash 콘솔의 오류와 사용량을 확인하세요. 현재 무료 계정 용량으로 설치가 끝나지 않는다면 더 큰 용량을 제공하는 실행 환경이 필요합니다.
+PythonAnywhere는 `MEDIA_STORAGE=local`을 사용하므로 S3 전용 `boto3`와 `django-storages`를 설치하지 않습니다. Vercel은 자동 빌드 호환성을 위해 루트의 `requirements.txt`를 계속 사용합니다. 패키지 설치가 디스크 한도나 빌드 오류로 실패하면 무작정 패키지를 빼지 말고 Bash 콘솔의 오류와 사용량을 확인하세요. 현재 무료 계정 용량으로 설치가 끝나지 않는다면 더 큰 용량을 제공하는 실행 환경이 필요합니다.
 
 #### 2. 운영 설정 파일 만들기
 
@@ -190,7 +196,10 @@ DB_ENGINE=django.db.backends.sqlite3
 DB_NAME=/home/<username>/gnu-jango/db.sqlite3
 MEDIA_STORAGE=local
 MEDIA_ROOT=/home/<username>/gnu-jango/media
+EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
 ```
+
+`EMAIL_BACKEND` 줄을 빼면 운영 설정이 SMTP 메일 서버(`EMAIL_HOST`)를 요구해 Django가 시작하지 않습니다. 위 값은 메일을 보내지 않고 로그(Web 탭의 **Server log**)에만 남깁니다. 실제로 메일을 보내려면 이 줄 대신 `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`을 설정하세요. 무료 계정은 바깥 연결이 제한되므로 외부 SMTP가 막힐 수 있습니다.
 
 `SECRET_KEY`를 저장소의 예시 값 그대로 두지 마세요. 데이터베이스와 업로드 파일은 PythonAnywhere 계정의 디스크에 저장되므로, 중요한 데이터의 백업과 외부 미디어 저장소가 필요한 운영 서비스에는 적합하지 않습니다.
 
@@ -242,9 +251,15 @@ Web 탭의 **Static files**에 다음 매핑을 추가합니다. `<username>`은
 
 `MEDIA_STORAGE=local`로 설정한 데모에서만 `/media/` 매핑을 추가하세요. `https://<username>.pythonanywhere.com/`과 `/admin/`을 열어 확인합니다. CSS가 빠지면 `collectstatic` 실행 여부와 Web 탭의 `/static/` 경로를 확인하세요. 오류 원인은 Web 탭의 **Error log**에서 확인할 수 있습니다. Django의 WSGI·가상환경·정적 파일 설정은 [기존 Django 프로젝트 배포 안내](https://help.pythonanywhere.com/pages/DeployExistingDjangoProject/), [가상환경 안내](https://help.pythonanywhere.com/pages/VirtualEnvForWebsites/), [정적 파일 안내](https://help.pythonanywhere.com/pages/DjangoStaticFiles/)를 참고하세요.
 
+Next.js 테마의 `/_next/static/` 파일은 Django가 저장소의 빌드 디렉터리에서 직접 제공합니다. `collectstatic`은 관리자 화면과 일반 Django 정적 파일만 모으도록 구성되어 있어 테마 파일을 다시 복제하지 않습니다. 이전 버전에서 정적 파일 용량이 커졌다면 저장소를 갱신한 뒤 한 번만 다음 명령으로 전용 `staticfiles` 폴더를 정리하세요. 이 명령은 `STATIC_ROOT`의 기존 파일을 지우고 다시 모으므로, 해당 폴더에 수동 파일을 따로 저장하지 않았는지 먼저 확인하세요. `media/` 파일에는 영향을 주지 않습니다.
+
+```bash
+python manage.py collectstatic --clear --noinput
+```
+
 #### 코드 업데이트하기
 
-새 버전을 배포할 때는 Bash 콘솔에서 저장소를 갱신하고, 마이그레이션과 정적 파일을 적용한 뒤 Web 탭에서 Reload를 누릅니다. `requirements.txt`가 바뀐 경우에만 `python -m pip install -r requirements.txt`를 별도로 실행합니다.
+새 버전을 배포할 때는 Bash 콘솔에서 저장소를 갱신하고, 마이그레이션과 정적 파일을 적용한 뒤 Web 탭에서 Reload를 누릅니다. `requirements-pythonanywhere.txt` 또는 `requirements-base.txt`가 바뀐 경우에만 `python -m pip install -r requirements-pythonanywhere.txt`를 실행합니다. 루트 `requirements.txt`의 S3 패키지만 바뀌었다면 PythonAnywhere 가상환경은 갱신할 필요가 없습니다.
 
 ```bash
 workon gnu-jango
@@ -254,9 +269,13 @@ python manage.py migrate
 python manage.py collectstatic --noinput
 ```
 
-샘플 매뉴얼의 새 장을 반영하려면 `python manage.py ensure_handbook_samples`도 실행합니다. 테마 소스를 바꾼 경우에는 로컬에서 테마를 빌드하고 생성 결과 두 폴더를 함께 Git에 올려야 합니다. PythonAnywhere에서는 Next.js `npm run dev`가 아니라 Django Web 앱을 실행합니다.
+샘플 매뉴얼의 새 장을 반영하려면 `python manage.py ensure_handbook_samples`도 실행합니다. 이미 있는 샘플 장의 고쳐진 문구까지 반영하려면 `--refresh`를 붙이세요(샘플 장 제목을 가진 글의 본문을 다시 씁니다). 테마 소스를 바꾼 경우에는 로컬에서 테마를 빌드하고 생성 결과 두 폴더를 함께 Git에 올려야 합니다. PythonAnywhere에서는 Next.js `npm run dev`가 아니라 Django Web 앱을 실행합니다.
+
+무료 계정의 웹 앱은 한 달 뒤 멈춥니다. 만료 전에 Web 탭의 연장 버튼을 눌러야 하며, 사이트를 주기적으로 호출하는 것만으로는 연장되지 않습니다.
 
 화면을 보며 따라 하고 싶다면 [GNU Jango 핸드북](https://gnu-jango-handbook.vercel.app/)의 **개발과 배포 → 서버에 올리기 → PythonAnywhere에 올리기** 장을 참고하세요.
+
+### Docker Compose
 
 Docker Compose는 `.env`의 `SECRET_KEY`를 요구하고, 웹 컨테이너 시작 때 마이그레이션을 적용합니다. 로컬 컨테이너를 실행하려면 비밀값을 설정한 뒤 다음 명령을 사용합니다.
 
@@ -264,9 +283,13 @@ Docker Compose는 `.env`의 `SECRET_KEY`를 요구하고, 웹 컨테이너 시�
 docker compose up --build
 ```
 
+### Vercel 참고 사항
+
 Vercel 프로젝트는 저장소 루트를 기준으로 설정합니다. 테마 빌드 결과를 바꿨다면 두 테마 디렉터리의 산출물을 함께 커밋해야 합니다. 별도 handbook 데모처럼 같은 브랜치에 연결된 Vercel 프로젝트가 여러 개면 `main` 푸시가 모두 배포를 시작합니다. handbook 프로젝트의 테마 기본값과 DB 준비는 [handbook 데모 안내](docs/04-deploy/handbook-demo.md)를 참고하세요.
 
-운영 배포 전에 환경 변수 예시의 자리표시자를 실제 설정으로 바꾸고, 프로필 점검을 실행합니다.
+### 공통 운영 점검
+
+어느 배포 방식이든 운영 배포 전에 환경 변수 예시의 자리표시자를 실제 설정으로 바꾸고, 프로필 점검을 실행합니다.
 
 ```bash
 python manage.py check_deploy_profile --profile vps
@@ -315,10 +338,18 @@ celery -A example worker --loglevel=INFO
 
 ## 개발 점검
 
+GitHub의 `main` 브랜치는 관리자도 직접 푸시할 수 없도록 보호됩니다. 변경사항은 PR로 올리고 `django`, `nextjs`, `theme-bundles`, `docker` 점검이 모두 통과한 뒤 병합하세요. PR의 기준 브랜치가 최신 상태여야 합니다.
+
 백엔드 테스트:
 
 ```bash
 python manage.py test gnu_jango --parallel auto
+```
+
+병렬 실행 중 테스트가 실패하면 실패한 테스트 대신 `cannot pickle 'traceback' object`만 보일 수 있습니다. 그럴 때는 `--parallel` 없이 다시 실행해 실패 내용을 확인하세요(시간은 더 걸립니다).
+
+```bash
+python manage.py test gnu_jango
 ```
 
 프런트엔드 점검:
