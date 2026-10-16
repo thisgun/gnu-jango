@@ -8,7 +8,6 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Count, Max
 
-from gnu_jango.api.access import readable_post_queryset
 from gnu_jango.api.v1_board import _excerpt_post_ids
 from gnu_jango.api.v1_community import _searchable_boards
 from gnu_jango.bbs.models import Board, Post
@@ -23,6 +22,9 @@ logger = logging.getLogger(__name__)
 _REVISION_PREFIX = "docs-ask:revision:v1:"
 _MEMORY_INDEX = {}
 _MAX_SNIPPET_LENGTH = 360
+# handbook/page-toc.tsx (MIN_ITEMS) names headings only when a chapter has at least this many,
+# so an anchor into a chapter with fewer would lead nowhere.
+_MIN_ANCHORED_HEADINGS = 2
 
 
 @dataclass(frozen=True)
@@ -152,11 +154,13 @@ def get_search_index(group_id=None):
     documents = []
     for post in posts:
         posts_by_board.setdefault(post.board_id, []).append(post)
-        for paragraph in parse_manual_html(post.wr_content):
+        paragraphs = parse_manual_html(post.wr_content)
+        anchored = sum(1 for paragraph in paragraphs if paragraph.is_heading) >= _MIN_ANCHORED_HEADINGS
+        for paragraph in paragraphs:
             terms = _weighted_terms(post, paragraph)
             if not terms:
                 continue
-            anchor = paragraph.anchor
+            anchor = paragraph.anchor if anchored else ""
             url = get_pretty_url(post.board.bo_table, post.legacy_wr_id or post.pk)
             if anchor:
                 url = f"{url}#{quote(anchor, safe='-')}"

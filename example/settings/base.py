@@ -572,6 +572,7 @@ REST_FRAMEWORK = {
         "order-lookup": "10/min",
         "guest-password": "10/min",
         "docs-ask": "30/min",
+        "docs-ask-answer": "5/min",
     },
     # 'DEFAULT_FILTER_BACKENDS': (
     #     'django_filters.rest_framework.DjangoFilterBackend',

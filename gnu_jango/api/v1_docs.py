@@ -7,12 +7,26 @@ from rest_framework.decorators import (
     throttle_classes,
 )
 from rest_framework.permissions import AllowAny
-from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.throttling import ScopedRateThrottle, SimpleRateThrottle
 
 from .authentication import SessionJWTAuthentication as JWTAuthentication
 from .response import api_error, api_response
 from gnu_jango.docs_search.llm import generate_answer, llm_is_enabled
 from gnu_jango.docs_search.service import docs_group_id, search_documents
+
+
+class DocsAnswerRateThrottle(SimpleRateThrottle):
+    """A second, tighter budget for answer=1 requests: each one may hold a worker until the
+    configured model answers (up to G5_DOCS_LLM_TIMEOUT), while plain search returns at once."""
+
+    scope = "docs-ask-answer"
+
+    def get_cache_key(self, request, view):
+        if request.query_params.get("answer") != "1":
+            return None
+        user = getattr(request, "user", None)
+        ident = user.pk if getattr(user, "is_authenticated", False) else self.get_ident(request)
+        return self.cache_format % {"scope": self.scope, "ident": ident}
 
 
 def _query_error(query):
@@ -26,7 +40,7 @@ def _query_error(query):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
-@throttle_classes([ScopedRateThrottle])
+@throttle_classes([ScopedRateThrottle, DocsAnswerRateThrottle])
 def docs_ask_view(request):
     query = str(request.query_params.get("q") or "").strip()
     error = _query_error(query)
