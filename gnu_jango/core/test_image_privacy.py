@@ -95,6 +95,54 @@ class StripImageMetadataTests(SimpleTestCase):
         self.assertIs(strip_image_metadata(gif), gif)
         self.assertIs(strip_image_metadata(pdf), pdf)
 
+    def test_png_transparency_survives_when_metadata_is_removed(self):
+        from PIL.PngImagePlugin import PngInfo
+
+        image = Image.new("P", (4, 4), 0)
+        image.putpalette([0, 0, 0, 255, 255, 255] + [0] * 762)
+        info = PngInfo()
+        info.add_text("Comment", "png-secret-location")
+        buffer = io.BytesIO()
+        image.save(buffer, "PNG", transparency=0, pnginfo=info)
+        upload = SimpleUploadedFile("logo.png", buffer.getvalue(), content_type="image/png")
+
+        cleaned = strip_image_metadata(upload)
+
+        data = cleaned.read()
+        self.assertNotIn(b"png-secret-location", data)
+        self.assertEqual(_opened(data).info.get("transparency"), 0)
+
+    def test_animated_images_are_left_alone_rather_than_cut_to_one_frame(self):
+        from PIL.PngImagePlugin import PngInfo
+
+        frames = [Image.new("RGB", (6, 6), color) for color in ((255, 0, 0), (0, 255, 0), (0, 0, 255))]
+        info = PngInfo()
+        info.add_text("Comment", "apng-text")
+        buffer = io.BytesIO()
+        frames[0].save(buffer, "PNG", save_all=True, append_images=frames[1:], pnginfo=info)
+        upload = SimpleUploadedFile("anim.png", buffer.getvalue(), content_type="image/png")
+
+        self.assertIs(strip_image_metadata(upload), upload)
+
+    def test_phone_photos_stored_as_mpo_are_accepted_and_cleaned_as_jpeg(self):
+        from gnu_jango.bbs.models import validate_upload_file_content
+
+        primary = Image.new("RGB", (40, 20), (200, 30, 30))
+        exif = primary.getexif()
+        exif[MAKE] = "PrivacyTestCam"
+        exif.get_ifd(GPS_IFD).update({1: "N", 2: (37.0, 33.0, 0.0)})
+        buffer = io.BytesIO()
+        primary.save(buffer, "MPO", save_all=True, append_images=[Image.new("RGB", (40, 20))], exif=exif)
+        self.assertEqual(_opened(buffer.getvalue()).format, "MPO")
+        upload = SimpleUploadedFile("portrait.jpg", buffer.getvalue(), content_type="image/jpeg")
+
+        validate_upload_file_content(upload)  # many phones write MPO into a .jpg
+        cleaned = strip_image_metadata(upload)
+
+        data = cleaned.read()
+        self.assertNotIn(b"PrivacyTestCam", data)
+        self.assertEqual(_opened(data).format, "JPEG")
+
     def test_a_broken_image_is_returned_as_is_for_the_validators_to_reject(self):
         upload = SimpleUploadedFile("broken.jpg", b"not an image", content_type="image/jpeg")
 
