@@ -1,7 +1,76 @@
--r requirements-base.txt
+# Installed as-is by Vercel and Docker, whose installers do not follow `-r` includes, so this
+# file repeats requirements-base.txt (keep them in step; core/test_requirements_files.py checks
+# it) and adds S3 support for Supabase Storage and other S3-compatible deployments.
+# PythonAnywhere uses MEDIA_STORAGE=local and installs requirements-pythonanywhere.txt instead.
 
-# Vercel auto-installs this root requirements file. Keep S3 support here for
-# Supabase Storage and other S3-compatible production deployments.
-# PythonAnywhere uses MEDIA_STORAGE=local; install requirements-pythonanywhere.txt there.
+# Versions are pinned to the set this project is tested against. Upgrading
+# Django to 6.1 broke on an unpinned djangorestframework 3.17, which imports a
+# name Django 6.1 removed -- an install months later would otherwise not
+# reproduce. Bump deliberately, run the test suite, then edit the pin here.
+Django==6.1.2
+
+# Admin / UI
+django-unfold==0.105.0
+django-js-asset==3.1.2
+django-debug-toolbar==8.0.0
+django-sekizai==4.1.0
+django-render-block==0.11
+django-mathfilters==1.0.0
+django_extensions==4.1
+
+# Content
+django-taggit==6.1.0
+# bleach[css] brings the CSS sanitizer that gnu_jango/utils/sanitize.py uses.
+# django-html_sanitizer was dropped: nothing imported it and its INSTALLED_APPS
+# entry was commented out, while sanitising already goes through bleach.
+bleach[css]==6.4.0
+cmarkgfm==2025.10.22
+pillow==12.3.0
+sorl-thumbnail==13.1.0
+
+# Requests / sessions
+django_user_agents==0.4.0
+django-cors-headers==4.9.0
+
+# API
+djangorestframework==3.18.1
+djangorestframework-simplejwt==5.5.1
+drf-spectacular==0.30.0
+django-rest-multiple-models==2.1.3
+PyJWT>=2.15.1,<3
+
+# Data / serialisation
+django-jsonify==0.3.0
+jsonpickle==4.1.3
+var_dump==1.2
+six==1.17.0
+
+# Storage / database
+dj-database-url==3.1.2
+# The binary wheel ships libpq, so it installs where no compiler or pg_config exists (the Vercel
+# Python build image); same `psycopg2` module and version as the source package it replaces.
+psycopg2-binary==2.9.13
+PyMySQL==1.2.0
+
+# Background work
+celery==5.6.3
+# Also the client for CACHE_URL=redis://... (django.core.cache.backends.redis.RedisCache).
+redis==5.3.1
+
+# Serving / deployment
+gunicorn==26.2.0
+whitenoise==6.12.0
+# Optional for legacy Heroku dynos only: `pip install django-heroku==0.3.1`.
+# Keep it out of shared requirements: it pulls source-built psycopg2, which needs pg_config on Vercel.
+python-decouple==3.8
+sentry-sdk[django]==2.63.0
+
+# Security
+django-recaptcha==4.1.0
+
+# Seeding helpers used by seed-posts and seed-users; Django loads django_seed from INSTALLED_APPS.
+django-seed==0.3.1
+
+# S3-compatible media storage (not needed with MEDIA_STORAGE=local)
 django-storages[s3]==1.14.6
 boto3==1.43.111
