@@ -13,6 +13,7 @@ from .authentication import SessionJWTAuthentication as JWTAuthentication
 from .response import api_error, api_response
 from gnu_jango.docs_search.llm import generate_answer, llm_is_enabled
 from gnu_jango.docs_search.service import docs_group_id, search_documents
+from gnu_jango.utils.lib import get_client_ip
 
 
 class DocsAnswerRateThrottle(SimpleRateThrottle):
@@ -25,7 +26,9 @@ class DocsAnswerRateThrottle(SimpleRateThrottle):
         if request.query_params.get("answer") != "1":
             return None
         user = getattr(request, "user", None)
-        ident = user.pk if getattr(user, "is_authenticated", False) else self.get_ident(request)
+        # DRF's get_ident trusts the whole X-Forwarded-For header unless NUM_PROXIES is set, so a
+        # client could send a new value per request; get_client_ip honours TRUSTED_PROXY_COUNT.
+        ident = user.pk if getattr(user, "is_authenticated", False) else get_client_ip(request)
         return self.cache_format % {"scope": self.scope, "ident": ident}
 
 

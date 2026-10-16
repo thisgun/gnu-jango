@@ -261,6 +261,14 @@ class HandbookAskTests(TestCase):
             # Plain question search keeps its own budget.
             self.assertEqual(self.search("환경 변수").status_code, 200)
 
+    @override_settings(TRUSTED_PROXY_COUNT=0)
+    def test_a_forged_forwarded_for_header_does_not_buy_a_fresh_answer_budget(self):
+        with patch.dict(DocsAnswerRateThrottle.THROTTLE_RATES, {"docs-ask-answer": "1/min"}):
+            first = self.client.get(API, {"q": "환경 변수", "answer": 1}, HTTP_X_FORWARDED_FOR="203.0.113.1")
+            second = self.client.get(API, {"q": "환경 변수", "answer": 1}, HTTP_X_FORWARDED_FOR="203.0.113.2")
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 429)
+
 
 class HandbookHtmlParserTests(TestCase):
     def test_python_anchors_match_shared_page_toc_fixtures(self):

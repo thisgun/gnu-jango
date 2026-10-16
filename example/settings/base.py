@@ -1014,6 +1014,9 @@ APPEND_SLASH = False
 # Number of reverse proxies in front of Django whose X-Forwarded-For entries are trusted for the
 # visitor IP (utils.lib.get_client_ip). 0 = use REMOTE_ADDR and ignore the client-supplied header.
 TRUSTED_PROXY_COUNT = de_config("TRUSTED_PROXY_COUNT", default=0, cast=int)
+# DRF throttles identify anonymous clients with the same rule. Without NUM_PROXIES DRF uses the whole
+# client-supplied X-Forwarded-For header, so a new value per request would reset every rate limit.
+REST_FRAMEWORK = {**REST_FRAMEWORK, "NUM_PROXIES": TRUSTED_PROXY_COUNT}
 
 CORS_ALLOW_ALL_ORIGINS = bool_config("CORS_ALLOW_ALL_ORIGINS", default=False)
 CORS_ORIGIN_ALLOW_ALL = CORS_ALLOW_ALL_ORIGINS

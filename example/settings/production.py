@@ -26,6 +26,7 @@ RECAPTCHA_PRIVATE_KEY = de_config("RECAPTCHA_PRIVATE_KEY", default="")
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 # Production runs behind one reverse proxy; raise it if there are more (e.g. a CDN plus nginx).
 TRUSTED_PROXY_COUNT = de_config("TRUSTED_PROXY_COUNT", default=1, cast=int)
+REST_FRAMEWORK = {**REST_FRAMEWORK, "NUM_PROXIES": TRUSTED_PROXY_COUNT}  # keep DRF throttles in step
 SECURE_SSL_REDIRECT = bool_config("SECURE_SSL_REDIRECT", default=True)
 SESSION_COOKIE_SECURE = bool_config("SESSION_COOKIE_SECURE", default=True)
 CSRF_COOKIE_SECURE = bool_config("CSRF_COOKIE_SECURE", default=True)
