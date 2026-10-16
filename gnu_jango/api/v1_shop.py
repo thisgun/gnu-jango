@@ -7,6 +7,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.storage import default_storage
+from django.core.validators import validate_email
 from django.db import transaction
 from django.db.models import Avg, Count, Exists, F, IntegerField, OuterRef, Q, Subquery, Value
 from django.db.models.functions import Coalesce
@@ -45,7 +46,11 @@ from gnu_jango.shop.models import (
 )
 from gnu_jango.shop.inventory import StockAdjustmentError, cancel_order_with_stock_restore, reserve_product_stock
 from gnu_jango.shop.images import upload_product_images
-from gnu_jango.shop.payment_options import online_payment_method_enabled
+from gnu_jango.shop.payment_options import (
+    cash_receipt_method_enabled,
+    cash_receipt_preferences,
+    online_payment_method_enabled,
+)
 from gnu_jango.shop.shipping import (
     allowed_point_use,
     current_shipping_policy,
@@ -566,7 +571,7 @@ def order_payload(order, *, detail=False):
     delivery_inquiry_url = ""
     if order.od_invoice:
         delivery_inquiry_url = f"https://trace.cjlogistics.com/next/tracking.html?wblNo={order.od_invoice}"
-    cash_receipt_url = order.od_cash_res if order.od_cash_no else ""
+    cash_receipt_url = order.od_cash_res or ""
     bank_account = str(order.od_bank_account or "").strip()
     if not bank_account and settle_case_is_bank(order.od_settle_case):
         # Older orders did not persist the selected account. Keep their prior
@@ -624,6 +629,7 @@ def order_payload(order, *, detail=False):
         "od_send_coupon": order.od_send_coupon,
         "od_point": order.od_point,
         "od_cash_request": order.od_cash_request,
+        "od_cash_type": order.od_cash_type,
         "od_cash": 1 if order.od_cash_no else 0,
         "od_cash_no": order.od_cash_no,
         "od_cash_res": order.od_cash_res,
@@ -709,6 +715,13 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
         raise StockAdjustmentError("결제수단을 다시 선택해 주세요.", code="payment_requires_gateway")
     tax_invoice_request = bool_int(data.get("od_tax_invoice_request")) == 1
     cash_receipt_request = bool_int(data.get("od_cash_request")) == 1
+    cash_receipt_type = str(data.get("od_cash_type") or "income").strip()
+    cash_receipt_identity_number = re.sub(
+        r"\D+", "", str(data.get("cash_receipt_registration_number") or "")
+    )
+    tax_invoice_company = str(data.get("od_tax_company") or "").strip()
+    tax_invoice_business_no = re.sub(r"\D+", "", str(data.get("od_tax_business_no") or ""))
+    tax_invoice_email = str(data.get("od_tax_email") or "").strip()
     if (tax_invoice_request or cash_receipt_request) and not (
         user and user.is_authenticated
     ):
@@ -716,11 +729,64 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
             "Receipt requests require a member account.",
             code="receipt_request_requires_member",
         )
-    if cash_receipt_request and not settle_case_supports_cash_receipt(settle_case):
-        raise StockAdjustmentError(
-            "Cash receipt requests are available only for bank transfer, virtual account, or account transfer.",
-            code="cash_receipt_payment_method_invalid",
-        )
+    if cash_receipt_request:
+        if cash_receipt_type not in {"income", "expense"}:
+            raise StockAdjustmentError(
+                "Select a valid cash receipt type.",
+                code="cash_receipt_type_invalid",
+            )
+        if not settle_case_supports_cash_receipt(settle_case):
+            raise StockAdjustmentError(
+                "Cash receipt requests are available only for bank transfer, virtual account, or account transfer.",
+                code="cash_receipt_payment_method_invalid",
+            )
+        if not cash_receipt_method_enabled(settle_case):
+            raise StockAdjustmentError(
+                "Cash receipt requests are not enabled for this payment method.",
+                code="cash_receipt_method_disabled",
+            )
+        if not settle_case_is_bank(settle_case):
+            identity_length = len(cash_receipt_identity_number)
+            identity_is_valid = (
+                identity_length == 10
+                if cash_receipt_type == "expense"
+                else 8 <= identity_length <= 30
+            )
+            if not identity_is_valid:
+                raise StockAdjustmentError(
+                    "Enter a valid cash receipt identification number.",
+                    code="cash_receipt_identity_invalid",
+                )
+    else:
+        cash_receipt_type = ""
+        cash_receipt_identity_number = ""
+    if tax_invoice_request:
+        if not tax_invoice_company or len(tax_invoice_company) > 100:
+            raise StockAdjustmentError(
+                "Enter the company name for the tax invoice.",
+                code="tax_invoice_company_required",
+            )
+        if len(tax_invoice_business_no) != 10:
+            raise StockAdjustmentError(
+                "Enter a 10-digit business registration number.",
+                code="tax_invoice_business_number_invalid",
+            )
+        if len(tax_invoice_email) > 254:
+            raise StockAdjustmentError(
+                "The tax invoice email address is too long.",
+                code="tax_invoice_email_invalid",
+            )
+        try:
+            validate_email(tax_invoice_email)
+        except ValidationError as exc:
+            raise StockAdjustmentError(
+                "Enter a valid email address for the tax invoice.",
+                code="tax_invoice_email_invalid",
+            ) from exc
+    else:
+        tax_invoice_company = ""
+        tax_invoice_business_no = ""
+        tax_invoice_email = ""
     bank_accounts = configured_bank_accounts()
     selected_bank_account = str(data.get("od_bank_account") or "").strip()
     deposit_name = str(data.get("od_deposit_name") or "").strip()
@@ -845,10 +911,14 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
             od_send_coupon=send_coupon,
             od_tax_flag=tax_amounts["od_tax_flag"],
             od_tax_invoice_request=tax_invoice_request,
+            od_tax_company=tax_invoice_company,
+            od_tax_business_no=tax_invoice_business_no,
+            od_tax_email=tax_invoice_email,
             od_tax_mny=tax_amounts["od_tax_mny"],
             od_vat_mny=tax_amounts["od_vat_mny"],
             od_free_mny=tax_amounts["od_free_mny"],
             od_cash_request=cash_receipt_request,
+            od_cash_type=cash_receipt_type,
             od_receipt_time=now_label,
             od_ip=get_client_ip(request),
         )))
@@ -1564,11 +1634,13 @@ def payment_config_view(request):
     pg_enabled = pg_service == "toss" and toss_config["enabled"]
     bank_accounts = configured_bank_accounts()
     methods = checkout_payment_methods(toss_config=toss_config, pg_service=pg_service, bank_accounts=bank_accounts)
+    cash_receipt = cash_receipt_preferences()
     return api_response(
         data={
             "pg_service": pg_service,
             "client": {"client_key": toss_config["client_key"] if pg_enabled else "", "mid": "", "script_url": ""},
             "payment_methods": methods,
+            "cash_receipt": cash_receipt,
             "easy_pay_services": ["tosspay"] if methods["easy_pay"] else [],
             "bank_accounts": bank_accounts,
             "is_test_mode": toss_config["is_test_mode"],
@@ -1646,6 +1718,19 @@ def payment_prepare_view(request):
             "buyer_name": order.od_name,
             "buyer_email": order.od_email or "noemail@example.com",
             "buyer_tel": order.od_hp or order.od_tel,
+            "cash_receipt_request": bool(order.od_cash_request),
+            "cash_receipt_type": order.od_cash_type,
+            # The identifier is validated for this request and returned only to the checkout
+            # browser for the PG call. It is deliberately not saved on ShopOrder.
+            "cash_receipt_registration_number": (
+                re.sub(r"\D+", "", str(data.get("cash_receipt_registration_number") or ""))
+                if (
+                    pg_service == "toss"
+                    and order.od_cash_request
+                    and not settle_case_is_bank(order.od_settle_case)
+                )
+                else ""
+            ),
             "pg_service": pg_service,
             "pg_extra": {},
         }

@@ -20,6 +20,8 @@ type RecipientInfoSectionProps = {
   updateRecipient: AddressFieldUpdater;
   openPostcode: (target: PostcodeTarget) => void;
   isMemberOrder: boolean;
+  paymentMethod: string;
+  cashReceiptEnabled: boolean;
   canRequestCashReceipt: boolean;
   saveAsNewAddress: boolean;
   setSaveAsNewAddress: (checked: boolean) => void;
@@ -33,8 +35,18 @@ type RecipientInfoSectionProps = {
   setHopeDate: (value: string) => void;
   taxRequest: boolean;
   setTaxRequest: (checked: boolean) => void;
+  taxCompany: string;
+  setTaxCompany: (value: string) => void;
+  taxBusinessNo: string;
+  setTaxBusinessNo: (value: string) => void;
+  taxInvoiceEmail: string;
+  setTaxInvoiceEmail: (value: string) => void;
   cashRequest: boolean;
   setCashRequest: (checked: boolean) => void;
+  cashReceiptType: "income" | "expense";
+  setCashReceiptType: (value: "income" | "expense") => void;
+  cashReceiptIdentityNumber: string;
+  setCashReceiptIdentityNumber: (value: string) => void;
 };
 
 export function RecipientInfoSection({
@@ -47,6 +59,8 @@ export function RecipientInfoSection({
   updateRecipient,
   openPostcode,
   isMemberOrder,
+  paymentMethod,
+  cashReceiptEnabled,
   canRequestCashReceipt,
   saveAsNewAddress,
   setSaveAsNewAddress,
@@ -60,8 +74,18 @@ export function RecipientInfoSection({
   setHopeDate,
   taxRequest,
   setTaxRequest,
+  taxCompany,
+  setTaxCompany,
+  taxBusinessNo,
+  setTaxBusinessNo,
+  taxInvoiceEmail,
+  setTaxInvoiceEmail,
   cashRequest,
   setCashRequest,
+  cashReceiptType,
+  setCashReceiptType,
+  cashReceiptIdentityNumber,
+  setCashReceiptIdentityNumber,
 }: RecipientInfoSectionProps) {
   return (
     <section className="shop-order-section shop-order-section--recipient box-border w-full min-w-0 rounded-lg border p-4 sm:p-6">
@@ -92,11 +116,23 @@ export function RecipientInfoSection({
         hopeDate={hopeDate}
         setHopeDate={setHopeDate}
         isMemberOrder={isMemberOrder}
+        paymentMethod={paymentMethod}
+        cashReceiptEnabled={cashReceiptEnabled}
         canRequestCashReceipt={canRequestCashReceipt}
         taxRequest={taxRequest}
         setTaxRequest={setTaxRequest}
+        taxCompany={taxCompany}
+        setTaxCompany={setTaxCompany}
+        taxBusinessNo={taxBusinessNo}
+        setTaxBusinessNo={setTaxBusinessNo}
+        taxInvoiceEmail={taxInvoiceEmail}
+        setTaxInvoiceEmail={setTaxInvoiceEmail}
         cashRequest={cashRequest}
         setCashRequest={setCashRequest}
+        cashReceiptType={cashReceiptType}
+        setCashReceiptType={setCashReceiptType}
+        cashReceiptIdentityNumber={cashReceiptIdentityNumber}
+        setCashReceiptIdentityNumber={setCashReceiptIdentityNumber}
       />
     </section>
   );

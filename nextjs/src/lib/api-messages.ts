@@ -85,6 +85,8 @@ const API_MESSAGES: Record<string, string> = {
   "Receipt requests require a member account.": "세금계산서·현금영수증은 회원만 신청할 수 있습니다.",
   "Cash receipt requests are available only for bank transfer, virtual account, or account transfer.":
     "현금영수증은 무통장입금, 가상계좌, 계좌이체에서만 신청할 수 있습니다.",
+  "Cash receipt requests are not enabled for this payment method.":
+    "관리자 설정에서 이 결제수단의 현금영수증 신청이 허용되지 않았습니다.",
   "Payment callback signature is required.": "결제 확인 서명이 없습니다.",
   "Invalid payment callback signature.": "결제 확인 서명이 올바르지 않습니다.",
   "Toss payment does not match this virtual account order.": "토스 결제 정보가 이 가상계좌 주문과 일치하지 않습니다.",

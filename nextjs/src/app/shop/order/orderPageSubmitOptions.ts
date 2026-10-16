@@ -33,7 +33,13 @@ export function buildOrderSubmitOptions({
     memo: formState.deliveryRequest.memo,
     hopeDate: formState.deliveryRequest.hopeDate,
     taxRequest: formState.deliveryRequest.taxRequest,
+    taxCompany: formState.deliveryRequest.taxCompany,
+    taxBusinessNo: formState.deliveryRequest.taxBusinessNo,
+    taxInvoiceEmail: formState.deliveryRequest.taxInvoiceEmail,
     cashRequest: formState.deliveryRequest.cashRequest,
+    cashReceiptType: formState.deliveryRequest.cashReceiptType,
+    cashReceiptIdentityNumber:
+      formState.deliveryRequest.cashReceiptIdentityNumber,
     guestPassword: formState.guestPassword,
     isMemberOrder: orderData.isMemberOrder,
     paymentMethod: orderData.paymentMethod,

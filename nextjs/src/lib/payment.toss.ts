@@ -54,6 +54,16 @@ export function createTossCommonPaymentRequest(req: PaymentRequest) {
   };
 }
 
+function createCashReceiptRequest(req: PaymentRequest) {
+  return {
+    type:
+      req.order.cash_receipt_type === "expense"
+        ? ("지출증빙" as const)
+        : ("소득공제" as const),
+    registrationNumber: req.order.cash_receipt_registration_number || "",
+  };
+}
+
 /**
  * Toss Payments v2 SDK
  */
@@ -82,7 +92,9 @@ export async function requestTossPayment(req: PaymentRequest): Promise<void> {
           virtualAccount: {
             useEscrow: false,
             validHours: 24,
-            cashReceipt: { type: "소득공제" },
+            ...(req.order.cash_receipt_request
+              ? { cashReceipt: createCashReceiptRequest(req) }
+              : {}),
           },
         });
         break;
@@ -90,7 +102,9 @@ export async function requestTossPayment(req: PaymentRequest): Promise<void> {
         await payment.requestPayment({
           method: "TRANSFER",
           ...common,
-          transfer: { cashReceipt: { type: "소득공제" } },
+          transfer: req.order.cash_receipt_request
+            ? { cashReceipt: createCashReceiptRequest(req) }
+            : {},
         });
         break;
       case "hp":

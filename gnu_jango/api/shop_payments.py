@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 import socket
 from urllib import error as urllib_error
 from urllib import request as urllib_request
@@ -233,14 +234,16 @@ def settle_case_is_bank(value):
 
 
 def settle_case_supports_cash_receipt(value):
-    normalized = str(value or "").strip().lower().replace(" ", "")
+    normalized = str(value or "").strip().lower().replace(" ", "").replace("_", "").replace("-", "")
     return normalized in {
         "bank",
         "무통장",
         "무통장입금",
         "vbank",
+        "virtualaccount",
         "가상계좌",
         "iche",
+        "transfer",
         "계좌이체",
         "실시간계좌이체",
     }
@@ -424,8 +427,33 @@ def redact_payment_data(data):
     if isinstance(data, dict):
         redacted = {}
         for key, value in data.items():
-            normalized = str(key).lower().replace("-", "_")
-            if "secret" in normalized or "signature" in normalized or "authorization" in normalized or "access_token" in normalized:
+            normalized = re.sub(r"(?<!^)(?=[A-Z])", "_", str(key)).lower().replace("-", "_")
+            sensitive_fragments = (
+                "secret",
+                "signature",
+                "authorization",
+                "access_token",
+                "identity_number",
+                "registration_number",
+                "business_no",
+                "business_number",
+                "email",
+                "phone",
+                "mobile",
+                "telephone",
+                "customer_name",
+                "buyer_name",
+                "company",
+            )
+            if any(fragment in normalized for fragment in sensitive_fragments) or normalized in {
+                "od_name",
+                "od_hp",
+                "od_tel",
+                "name",
+                "od_b_name",
+                "od_b_hp",
+                "od_b_tel",
+            }:
                 redacted[key] = "***redacted***"
             else:
                 redacted[key] = redact_payment_data(value)
@@ -435,6 +463,24 @@ def redact_payment_data(data):
     if isinstance(data, tuple):
         return [redact_payment_data(value) for value in data]
     return data
+
+
+def toss_cash_receipt_from_payment(payment):
+    if not isinstance(payment, dict):
+        return None
+    receipts = payment.get("cashReceipts")
+    candidates = list(receipts) if isinstance(receipts, list) else []
+    singular_receipt = payment.get("cashReceipt")
+    if isinstance(singular_receipt, dict):
+        candidates.append(singular_receipt)
+    for receipt in reversed(candidates):
+        if not isinstance(receipt, dict):
+            continue
+        if str(receipt.get("transactionType") or "").upper() == "CANCEL":
+            continue
+        if receipt.get("issueNumber") or receipt.get("receiptUrl"):
+            return receipt
+    return None
 
 
 def record_payment_raw_log(order, order_id, pg_service, transaction_id, data, *, prefix="pay"):
@@ -855,6 +901,17 @@ def confirm_order_payment(order_id, amount, pg_service, transaction_id, raw_data
         order.od_pg = pg_service
         order.od_receipt_time = timezone.localtime().strftime("%Y-%m-%d %H:%M:%S")
         update_fields = ["od_status", "od_misu", "od_pg", "od_tno", "od_receipt_time"]
+        toss_payment = raw_data.get("toss_payment") if isinstance(raw_data, dict) else None
+        cash_receipt = toss_cash_receipt_from_payment(toss_payment)
+        if order.od_cash_request and cash_receipt:
+            receipt_number = str(cash_receipt.get("issueNumber") or "").strip()
+            receipt_url = str(cash_receipt.get("receiptUrl") or "").strip()
+            if receipt_number:
+                order.od_cash_no = receipt_number[:255]
+                update_fields.append("od_cash_no")
+            if receipt_url and len(receipt_url) <= 255:
+                order.od_cash_res = receipt_url
+                update_fields.append("od_cash_res")
         if settle_case_is_vbank(order.od_settle_case):
             order.od_vbank_status = "DONE"
             update_fields.append("od_vbank_status")

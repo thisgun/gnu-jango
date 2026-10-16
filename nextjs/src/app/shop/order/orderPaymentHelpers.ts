@@ -17,6 +17,14 @@ export interface PaymentConfig {
     easy_pay: boolean;
     kakaopay?: boolean;
   };
+  cash_receipt?: {
+    enabled: boolean;
+    methods: {
+      bank: boolean;
+      vbank: boolean;
+      iche: boolean;
+    };
+  };
   easy_pay_services?: string[];
   bank_accounts?: string[];
   is_test_mode: boolean;

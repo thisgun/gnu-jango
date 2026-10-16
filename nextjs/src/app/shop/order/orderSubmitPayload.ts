@@ -20,7 +20,12 @@ type BuildOrderBodyInput = {
   memo: string;
   hopeDate: string;
   taxRequest: boolean;
+  taxCompany: string;
+  taxBusinessNo: string;
+  taxInvoiceEmail: string;
   cashRequest: boolean;
+  cashReceiptType: "income" | "expense";
+  cashReceiptIdentityNumber: string;
   guestPassword: string;
   isMemberOrder: boolean;
   methodDef: PayMethodDef;
@@ -63,7 +68,12 @@ export function buildOrderBody({
   memo,
   hopeDate,
   taxRequest,
+  taxCompany,
+  taxBusinessNo,
+  taxInvoiceEmail,
   cashRequest,
+  cashReceiptType,
+  cashReceiptIdentityNumber,
   guestPassword,
   isMemberOrder,
   methodDef,
@@ -116,11 +126,27 @@ export function buildOrderBody({
     ...(pointUse > 0 ? { point_use: pointUse } : {}),
     ...(hopeDate ? { od_hope_date: hopeDate } : {}),
     payment_device: paymentDevice,
-    ...(taxRequest && isMemberOrder ? { od_tax_invoice_request: 1 } : {}),
+    ...(taxRequest && isMemberOrder
+      ? {
+          od_tax_invoice_request: 1,
+          od_tax_company: taxCompany.trim(),
+          od_tax_business_no: taxBusinessNo.replace(/\D/g, ""),
+          od_tax_email: taxInvoiceEmail.trim(),
+        }
+      : {}),
     ...(cashRequest &&
     isMemberOrder &&
     ["bank", "vbank", "iche"].includes(methodDef.value)
-      ? { od_cash_request: 1 }
+      ? {
+          od_cash_request: 1,
+          od_cash_type: cashReceiptType,
+          ...(methodDef.value === "bank"
+            ? {}
+            : {
+                cash_receipt_registration_number:
+                  cashReceiptIdentityNumber.replace(/\D/g, ""),
+              }),
+        }
       : {}),
   };
 }

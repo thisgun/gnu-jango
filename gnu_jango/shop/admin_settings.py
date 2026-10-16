@@ -25,7 +25,13 @@ from gnu_jango.config import signals
 from gnu_jango.config.models import Config
 
 from .models import ShopShippingPolicy
-from .payment_options import PAYMENT_OPTION_FIELDS, config_flag
+from .payment_options import (
+    CASH_RECEIPT_ENABLED_FIELD,
+    CASH_RECEIPT_TYPES_FIELD,
+    PAYMENT_OPTION_FIELDS,
+    cash_receipt_preferences,
+    config_flag,
+)
 from .settings_sync import sync_shop_phone_from_policy
 from .shipping import current_shipping_policy
 
@@ -48,6 +54,16 @@ class ShopSettingsForm(forms.ModelForm):
         widget=forms.Textarea(attrs={"rows": 4}),
         help_text="은행, 계좌번호, 예금주를 한 줄에 하나씩 입력하세요. 주문 화면에 공개됩니다.",
     )
+    de_taxsave_use = forms.BooleanField(
+        label="현금영수증 신청 사용",
+        required=False,
+        help_text="회원 주문에 신청 항목을 표시합니다. 무통장입금은 관리자 수동 발급 대상이며, 토스 가상계좌·계좌이체는 신청 시 발급 요청을 PG로 전달합니다.",
+    )
+    de_taxsave_type_account = forms.BooleanField(
+        label="무통장입금 (기본 적용)", required=False, disabled=True,
+    )
+    de_taxsave_type_vbank = forms.BooleanField(label="가상계좌", required=False)
+    de_taxsave_type_transfer = forms.BooleanField(label="실시간계좌이체", required=False)
     de_send_cost_case = forms.ChoiceField(
         label="배송비 방식",
         required=False,
@@ -90,10 +106,27 @@ class ShopSettingsForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        names = ["de_bank_use", "de_bank_account", "de_admin_company_tel", *PAYMENT_OPTION_FIELDS.values()]
+        names = [
+            "de_bank_use", "de_bank_account", "de_admin_company_tel",
+            CASH_RECEIPT_ENABLED_FIELD, CASH_RECEIPT_TYPES_FIELD,
+            *PAYMENT_OPTION_FIELDS.values(),
+        ]
         self.config_values = dict(Config.objects.filter(name__in=names).values_list("name", "value"))
         self.initial["de_bank_use"] = config_flag(self.config_values.get("de_bank_use", "0"))
         self.initial["de_bank_account"] = self.config_values.get("de_bank_account", "")
+        saved_receipt_types = self.config_values.get(CASH_RECEIPT_TYPES_FIELD)
+        initial_receipt_types = (
+            "account,vbank,transfer" if saved_receipt_types is None else saved_receipt_types
+        )
+        receipt_types = {
+            value.strip()
+            for value in str(initial_receipt_types or "").split(",")
+            if value.strip()
+        }
+        self.initial["de_taxsave_use"] = config_flag(self.config_values.get(CASH_RECEIPT_ENABLED_FIELD, "1"))
+        self.initial["de_taxsave_type_account"] = True
+        self.initial["de_taxsave_type_vbank"] = "vbank" in receipt_types
+        self.initial["de_taxsave_type_transfer"] = "transfer" in receipt_types
         if not self.instance.de_admin_company_tel:
             self.initial["de_admin_company_tel"] = self.config_values.get("de_admin_company_tel", "")
         for method, name in PAYMENT_OPTION_FIELDS.items():
@@ -145,6 +178,7 @@ class ShopSettingsForm(forms.ModelForm):
         groups = [
             ("bank", "무통장입금", "입금계좌를 등록하고 사용을 켜면 주문 화면에서 선택할 수 있습니다.", ["de_bank_use", "de_bank_account"]),
             ("online", "온라인 결제수단", "허용한 수단도 PG 연결이 준비되어야 표시됩니다. 변경은 새 주문부터 적용됩니다.", list(PAYMENT_OPTION_FIELDS.values())),
+            ("receipts", "현금영수증 신청", "무통장입금 신청은 주문에 기록됩니다. 토스 가상계좌·계좌이체는 고객이 요청한 경우에만 발급 옵션을 PG에 전달합니다.", ["de_taxsave_use", "de_taxsave_type_account", "de_taxsave_type_vbank", "de_taxsave_type_transfer"]),
             ("company", "쇼핑몰 정보", "쇼핑몰 안내에 사용하는 회사명과 고객센터입니다.", ["de_admin_company_name", "de_admin_company_tel"]),
             ("shipping", "배송비와 배송 안내", "상품별 배송비와 지역별 추가 배송비는 해당 상품·지역 설정이 함께 적용됩니다.", ["de_delivery_company", "de_send_cost_case", "de_send_cost_limit", "de_send_cost_list", "de_baesong_content", "de_change_content"]),
             ("policy", "포인트·세금·상품 후기", "포인트를 사용하려면 기본환경설정의 포인트 사용도 켜져 있어야 합니다.", ["de_settle_min_point", "de_settle_max_point", "de_settle_point_unit", "de_tax_flag_use", "de_item_use_write", "de_item_use_use"]),
@@ -165,6 +199,13 @@ class ShopSettingsForm(forms.ModelForm):
             values = {"de_bank_account": self.cleaned_data["de_bank_account"]}
             for name in ("de_bank_use", *PAYMENT_OPTION_FIELDS.values()):
                 values[name] = "1" if self.cleaned_data[name] else ""
+            receipt_types = ["account"]
+            if self.cleaned_data["de_taxsave_type_vbank"]:
+                receipt_types.append("vbank")
+            if self.cleaned_data["de_taxsave_type_transfer"]:
+                receipt_types.append("transfer")
+            values[CASH_RECEIPT_ENABLED_FIELD] = "1" if self.cleaned_data["de_taxsave_use"] else "0"
+            values[CASH_RECEIPT_TYPES_FIELD] = ",".join(receipt_types)
             # Existing site/company API consumers use this Config row.
             values["de_admin_company_tel"] = self.cleaned_data["de_admin_company_tel"]
             for name, value in values.items():
@@ -206,6 +247,7 @@ def shop_settings(request):
     adapter = payment_adapter_config()
     provider = configured_payment_provider()
     methods = checkout_payment_methods(toss_config=toss, pg_service=provider)
+    receipt_preferences = cash_receipt_preferences()
     preferences = {"bank": config_flag(Config.objects.filter(name="de_bank_use").values_list("value", flat=True).first())}
     # Missing legacy rows preserve the historical enabled default for online methods.
     saved_options = dict(Config.objects.filter(name__in=PAYMENT_OPTION_FIELDS.values()).values_list("name", "value"))
@@ -213,6 +255,10 @@ def shop_settings(request):
     gateway_labels = {
         "missing": "키 미등록", "incomplete": "키 한 개 누락", "invalid_prefix": "키 형식 확인 필요",
         "mode_mismatch": "테스트·실결제 키 혼합", "test": "테스트 키 쌍", "live": "실결제 키 쌍",
+    }
+    provider_labels = {
+        "toss": "토스페이먼츠",
+        "bank": "온라인 PG 미선택 (무통장입금만)",
     }
     payment_status = []
     for method, label in {"bank": "무통장입금", **PAYMENT_LABELS}.items():
@@ -241,6 +287,18 @@ def shop_settings(request):
         "sections": form.sections(),
         "payment_status": payment_status,
         "has_payment_method": any(methods.values()),
+        "cash_receipt": {
+            "enabled": receipt_preferences["enabled"],
+            "methods": [
+                label for key, label in (
+                    ("bank", "무통장입금"), ("vbank", "가상계좌"), ("iche", "실시간계좌이체")
+                ) if receipt_preferences["methods"][key]
+            ],
+        },
+        "payment_provider_label": provider_labels.get(
+            provider,
+            f"{provider} 확인 어댑터 (주문 결제 시작 미지원)",
+        ),
         # Only presence/mode is passed to the template, never keys or adapter secrets.
         "gateway": {
             "enabled": toss["enabled"], "has_client_key": bool(toss["client_key"]),
