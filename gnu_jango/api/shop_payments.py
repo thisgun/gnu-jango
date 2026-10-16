@@ -465,6 +465,16 @@ def redact_payment_data(data):
     return data
 
 
+def safe_receipt_url(value):
+    """A cash receipt link only when it is a web address.
+
+    The value ends up in an href on the order page. PG responses are outside our control, and
+    migrate_gnuboard5 copies Gnuboard's od_cash_info (PG response text, not a URL) into od_cash_res.
+    """
+    url = str(value or "").strip()
+    return url if url.lower().startswith(("https://", "http://")) and len(url) <= 255 else ""
+
+
 def toss_cash_receipt_from_payment(payment):
     if not isinstance(payment, dict):
         return None
@@ -905,11 +915,11 @@ def confirm_order_payment(order_id, amount, pg_service, transaction_id, raw_data
         cash_receipt = toss_cash_receipt_from_payment(toss_payment)
         if order.od_cash_request and cash_receipt:
             receipt_number = str(cash_receipt.get("issueNumber") or "").strip()
-            receipt_url = str(cash_receipt.get("receiptUrl") or "").strip()
+            receipt_url = safe_receipt_url(cash_receipt.get("receiptUrl"))
             if receipt_number:
                 order.od_cash_no = receipt_number[:255]
                 update_fields.append("od_cash_no")
-            if receipt_url and len(receipt_url) <= 255:
+            if receipt_url:
                 order.od_cash_res = receipt_url
                 update_fields.append("od_cash_res")
         if settle_case_is_vbank(order.od_settle_case):

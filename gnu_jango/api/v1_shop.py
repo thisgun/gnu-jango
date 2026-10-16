@@ -161,6 +161,7 @@ from .shop_payments import (
     record_payment_raw_log,
     redact_payment_data,  # noqa: F401 - re-exported for existing importers
     safe_amount_int,
+    safe_receipt_url,
     settle_case_is_bank,
     settle_case_is_vbank,
     settle_case_supports_cash_receipt,
@@ -571,7 +572,7 @@ def order_payload(order, *, detail=False):
     delivery_inquiry_url = ""
     if order.od_invoice:
         delivery_inquiry_url = f"https://trace.cjlogistics.com/next/tracking.html?wblNo={order.od_invoice}"
-    cash_receipt_url = order.od_cash_res or ""
+    cash_receipt_url = safe_receipt_url(order.od_cash_res)
     bank_account = str(order.od_bank_account or "").strip()
     if not bank_account and settle_case_is_bank(order.od_settle_case):
         # Older orders did not persist the selected account. Keep their prior
