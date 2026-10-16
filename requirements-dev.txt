@@ -1,5 +1,9 @@
 -r requirements.txt
 
+# Browser automation and isolated environment test runner.
+selenium==4.50.0
+tox==4.65.0
+
 black
 coverage[toml]
 django-stubs[compatible-mypy]
