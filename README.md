@@ -269,7 +269,7 @@ python manage.py migrate
 python manage.py collectstatic --noinput
 ```
 
-샘플 매뉴얼의 새 장을 반영하려면 `python manage.py ensure_handbook_samples`도 실행합니다. 테마 소스를 바꾼 경우에는 로컬에서 테마를 빌드하고 생성 결과 두 폴더를 함께 Git에 올려야 합니다. PythonAnywhere에서는 Next.js `npm run dev`가 아니라 Django Web 앱을 실행합니다.
+샘플 매뉴얼의 새 장을 반영하려면 `python manage.py ensure_handbook_samples`도 실행합니다. 이미 있는 샘플 장의 고쳐진 문구까지 반영하려면 `--refresh`를 붙이세요(샘플 장 제목을 가진 글의 본문을 다시 씁니다). 테마 소스를 바꾼 경우에는 로컬에서 테마를 빌드하고 생성 결과 두 폴더를 함께 Git에 올려야 합니다. PythonAnywhere에서는 Next.js `npm run dev`가 아니라 Django Web 앱을 실행합니다.
 
 무료 계정의 웹 앱은 한 달 뒤 멈춥니다. 만료 전에 Web 탭의 연장 버튼을 눌러야 하며, 사이트를 주기적으로 호출하는 것만으로는 연장되지 않습니다.
 
