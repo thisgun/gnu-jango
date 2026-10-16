@@ -25,6 +25,17 @@ function address(overrides: Partial<AddressForm> = {}): AddressForm {
   };
 }
 
+/** No receipt requested: the fields the receipt options add to every submission. */
+const noReceipts = {
+  taxRequest: false,
+  taxCompany: "",
+  taxBusinessNo: "",
+  taxInvoiceEmail: "",
+  cashRequest: false,
+  cashReceiptType: "income" as const,
+  cashReceiptIdentityNumber: "",
+};
+
 const bankMethod: PayMethodDef = {
   value: "bank",
   label: "Bank",
@@ -51,6 +62,7 @@ test.describe("order submit validation", () => {
   test("accepts a complete guest bank order with agreements", () => {
     const recipient = address({ name: "Recipient" });
     const result = validateOrderSubmission({
+      ...noReceipts,
       orderer: address(),
       recipient,
       addressSelection: "new",
@@ -71,6 +83,7 @@ test.describe("order submit validation", () => {
 
   test("rejects missing required fields before order submission", () => {
     const validInput = {
+      ...noReceipts,
       orderer: address(),
       recipient: address({ name: "Recipient" }),
       addressSelection: "new" as const,
@@ -156,6 +169,7 @@ test.describe("order submit payload", () => {
 
   test("builds guest order body with optional checkout fields", () => {
     const body = buildOrderBody({
+      ...noReceipts,
       orderer: address({
         name: "Buyer",
         tel: "02-1111-2222",
@@ -223,6 +237,7 @@ test.describe("order submit payload", () => {
 
   test("omits guest and optional fields for member orders", () => {
     const body = buildOrderBody({
+      ...noReceipts,
       orderer: address({ name: "Member" }),
       recipient: address({ name: "Ignored recipient" }),
       addressSelection: "same",
@@ -254,5 +269,108 @@ test.describe("order submit payload", () => {
     expect(body).not.toHaveProperty("point_use");
     expect(body).not.toHaveProperty("direct");
     expect(body.payment_device).toBe("pc");
+  });
+});
+
+test.describe("receipt requests", () => {
+  const transferMethod: PayMethodDef = { value: "iche", label: "Transfer", settle_case: "계좌이체" };
+  const memberTransfer = {
+    ...noReceipts,
+    orderer: address(),
+    recipient: address({ name: "Recipient" }),
+    addressSelection: "new" as const,
+    paymentMethod: "iche",
+    bankAccount: "",
+    depositName: "",
+    guestPassword: "",
+    isMemberOrder: true,
+    agreeTerms: true,
+    agreePrivacy: true,
+  };
+  const validTax = {
+    taxRequest: true,
+    taxCompany: "주식회사 예시",
+    taxBusinessNo: "123-45-67890",
+    taxInvoiceEmail: "tax@example.test",
+  };
+
+  test("a member tax invoice needs a company, a 10-digit business number and an email", () => {
+    expect(validateOrderSubmission({ ...memberTransfer, ...validTax }).ok).toBe(true);
+    for (const broken of [{ taxCompany: " " }, { taxBusinessNo: "123-45" }, { taxInvoiceEmail: "nope" }]) {
+      const result = validateOrderSubmission({ ...memberTransfer, ...validTax, ...broken });
+      expect(result.ok).toBe(false);
+    }
+  });
+
+  test("a guest's hidden tax invoice option never blocks the order", () => {
+    const guestBank = {
+      ...memberTransfer,
+      paymentMethod: "bank",
+      bankAccount: "Bank 123-456",
+      depositName: "Buyer",
+      guestPassword: "abc123",
+      isMemberOrder: false,
+    };
+    expect(validateOrderSubmission({ ...guestBank, taxRequest: true }).ok).toBe(true);
+  });
+
+  test("transfer cash receipts check the identification number for the receipt type", () => {
+    const cash = { ...memberTransfer, cashRequest: true };
+    expect(validateOrderSubmission({ ...cash, cashReceiptIdentityNumber: "010-1234-5678" }).ok).toBe(true);
+    expect(validateOrderSubmission({ ...cash, cashReceiptIdentityNumber: "1234" }).ok).toBe(false);
+    expect(
+      validateOrderSubmission({ ...cash, cashReceiptType: "expense", cashReceiptIdentityNumber: "010-1234-5678" }).ok
+    ).toBe(false);
+    expect(
+      validateOrderSubmission({ ...cash, cashReceiptType: "expense", cashReceiptIdentityNumber: "123-45-67890" }).ok
+    ).toBe(true);
+  });
+
+  test("the order body carries receipt details only for members, digits only", () => {
+    const base = {
+      ...noReceipts,
+      orderer: address(),
+      recipient: address(),
+      addressSelection: "same" as const,
+      saveAsNewAddress: false,
+      newAddressSubject: "",
+      newAddressDefault: false,
+      email: "member@example.com",
+      memo: "",
+      hopeDate: "",
+      guestPassword: "",
+      isMemberOrder: true,
+      methodDef: transferMethod,
+      selectedCouponId: "",
+      selectedSendCouponId: "",
+      pointUse: 0,
+      directCheckout: false,
+      directCtIds: "",
+      paymentDevice: "pc" as const,
+    };
+    const member = buildOrderBody({
+      ...base,
+      ...validTax,
+      cashRequest: true,
+      cashReceiptType: "income",
+      cashReceiptIdentityNumber: "010-1234-5678",
+    });
+    expect(member).toMatchObject({
+      od_tax_invoice_request: 1,
+      od_tax_company: "주식회사 예시",
+      od_tax_business_no: "1234567890",
+      od_tax_email: "tax@example.test",
+      od_cash_request: 1,
+      od_cash_type: "income",
+      cash_receipt_registration_number: "01012345678",
+    });
+
+    const bankMember = buildOrderBody({ ...base, methodDef: bankMethod, cashRequest: true });
+    expect(bankMember.od_cash_request).toBe(1);
+    expect(bankMember).not.toHaveProperty("cash_receipt_registration_number");
+
+    const guest = buildOrderBody({ ...base, ...validTax, cashRequest: true, isMemberOrder: false });
+    expect(guest).not.toHaveProperty("od_tax_invoice_request");
+    expect(guest).not.toHaveProperty("od_cash_request");
   });
 });

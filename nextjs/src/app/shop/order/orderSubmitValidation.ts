@@ -124,7 +124,9 @@ export function validateOrderSubmission({
   );
   if (!methodDef) return { ok: false };
 
-  if (taxRequest) {
+  // Receipt options are shown to members only and buildOrderBody sends them only for members, so a
+  // guest's (hidden) tax invoice state must not block the order.
+  if (taxRequest && isMemberOrder) {
     if (!taxCompany.trim()) {
       return { ok: false, message: "세금계산서 상호명을 입력해 주세요." };
     }
