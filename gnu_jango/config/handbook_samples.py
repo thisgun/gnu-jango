@@ -153,22 +153,38 @@ def _board(group, order, book):
         "bo_mobile_page_rows": 100,
         "bo_use_search": True,
     }
-    board, _created = Board.objects.update_or_create(bo_table=book.table, defaults=values)
+    board = Board.objects.filter(bo_table=book.table).first()
+    if board is None:
+        return Board.objects.create(bo_table=book.table, **values)
+    # The admin "sample data" page runs this on live sites: keep the book name, order and levels an
+    # admin may have changed, and only add the parts (categories) that new sample chapters need.
+    current = [part for part in (board.bo_category_list or "").split("|") if part]
+    missing_parts = [part for part, _ in book.parts if part and part not in current]
+    if missing_parts:
+        board.bo_category_list = "|".join(current + missing_parts)
+        board.bo_use_category = True
+        board.save(update_fields=("bo_category_list", "bo_use_category"))
     return board
 
 
-def _chapters(board, book, created_at):
+def _chapters(board, book, created_at, *, refresh=False):
     existing_posts = list(Post.objects.filter(board=board))
     chapters = [(part, title) for part, titles in book.parts for title in titles]
+    sample_titles = {title for _part, title in chapters}
     existing_titles = {post.wr_subject for post in existing_posts}
     missing = [(part, title) for part, title in chapters if title not in existing_titles]
     updated = 0
     for post in existing_posts:
-        # Refresh only the previous repeated placeholder. Preserve administrator-authored text.
-        if LEGACY_SAMPLE_MARKER in (post.wr_content or ""):
-            post.wr_content = _chapter_body(post.wr_subject)
-            post.save(update_fields=("wr_content",))
-            updated += 1
+        # By default refresh only the old repeated placeholder and keep administrator-authored text.
+        # --refresh rewrites every chapter that carries a sample title (an operator's explicit choice,
+        # e.g. to fix a factual error in already deployed sample text); other chapters stay untouched.
+        stale = LEGACY_SAMPLE_MARKER in (post.wr_content or "")
+        if stale or (refresh and post.wr_subject in sample_titles):
+            body = _chapter_body(post.wr_subject)
+            if post.wr_content != body:
+                post.wr_content = body
+                post.save(update_fields=("wr_content",))
+                updated += 1
 
     # A new post gets the smallest wr_num so that the newest comes first on a board list. A book is
     # read from its first chapter, so the chapters are written last to first.
@@ -206,8 +222,11 @@ def _clear_config_cache():
 
 
 @transaction.atomic
-def ensure_samples(*, stable_dates=False):
-    """Create the sample manual (or complete it) and point the theme at it. Safe to run again."""
+def ensure_samples(*, stable_dates=False, refresh=False):
+    """Create the sample manual (or complete it) and point the theme at it. Safe to run again.
+
+    A rerun keeps board settings and the chosen docs group; refresh=True also rewrites the bodies of
+    chapters that carry a sample title."""
     group = _group()
     _check_tables_are_free(group)
     now = (
@@ -219,10 +238,14 @@ def ensure_samples(*, stable_dates=False):
     updated = 0
     for order, book in enumerate(BOOKS, start=1):
         board = _board(group, order, book)
-        created_count, updated_count = _chapters(board, book, now)
+        created_count, updated_count = _chapters(board, book, now, refresh=refresh)
         created += created_count
         updated += updated_count
-    Config.objects.update_or_create(name=DOCS_GROUP_KEY, defaults={"value": GROUP_ID})
+    docs_group, _created = Config.objects.get_or_create(name=DOCS_GROUP_KEY, defaults={"value": GROUP_ID})
+    if not (docs_group.value or "").strip():
+        # Point the theme at the samples only when no manual group was chosen yet.
+        docs_group.value = GROUP_ID
+        docs_group.save(update_fields=("value",))
     _clear_config_cache()
     return {
         "group": GROUP_ID,

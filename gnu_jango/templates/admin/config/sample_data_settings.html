@@ -124,7 +124,7 @@
         {{ handbook_status.books }}/{{ handbook_status.expected_books }}{% translate "권" %} ·
         {{ handbook_status.chapters }}/{{ handbook_status.expected_chapters }}{% translate "장" %}
       </p>
-      <p>{% translate "아래 작업은 빠진 샘플 책과 장을 추가합니다. 기존에 직접 작성한 매뉴얼 본문은 덮어쓰지 않습니다." %}</p>
+      <p>{% translate "아래 작업은 빠진 샘플 책과 장을 추가합니다. 기존 매뉴얼 본문, 책 이름·순서·접근 권한, 선택한 매뉴얼 그룹은 바꾸지 않습니다." %}</p>
       <form method="post" action="{% url 'admin-sample-data' %}">
         {% csrf_token %}
         <input type="hidden" name="action" value="ensure_handbook">

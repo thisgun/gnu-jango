@@ -15,13 +15,21 @@ class Command(BaseCommand):
             action="store_true",
             help="Use a fixed post timestamp so generated exports are reproducible.",
         )
+        parser.add_argument(
+            "--refresh",
+            action="store_true",
+            help="Also rewrite the body of every chapter whose title is a sample chapter title, to pick up "
+            "corrected sample text. Edits made to those chapters are overwritten; other chapters are kept.",
+        )
 
     def handle(self, *args, **options):
         try:
             if options["remove"]:
                 result = {"removed": handbook_samples.remove_samples()}
             else:
-                result = handbook_samples.ensure_samples(stable_dates=options["stable_dates"])
+                result = handbook_samples.ensure_samples(
+                    stable_dates=options["stable_dates"], refresh=options["refresh"]
+                )
         except handbook_samples.HandbookSampleError as exc:
             raise CommandError(str(exc)) from exc
         self.stdout.write(json.dumps(result, ensure_ascii=False))
