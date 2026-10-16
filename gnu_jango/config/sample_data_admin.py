@@ -24,7 +24,7 @@ def sample_data_settings(request):
                 counts = sample_data.managed_counts(manifest)
                 messages.success(
                     request,
-                    _("샘플 데이터를 추가했습니다. 게시글 %(posts)s개, 댓글 %(comments)s개, 상품 %(products)s개, FAQ %(faqs)s개를 만들었습니다.")
+                    _("샘플 데이터를 준비했습니다. 게시글 %(posts)s개, 댓글 %(comments)s개, 상품 %(products)s개, FAQ %(faqs)s개, 메뉴 %(menus)s개, 소개 페이지 %(content_pages)s개입니다.")
                     % counts,
                 )
             elif action == "ensure_shop":

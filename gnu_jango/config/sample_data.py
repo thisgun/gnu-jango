@@ -10,9 +10,10 @@ from django.utils import timezone
 
 from gnu_jango.api.page_bootstrap import batch_bootstrap_changes
 from gnu_jango.bbs.models import Board, Comment, Group, Post, Post_file
-from gnu_jango.bbs.utils import get_next_num
+from gnu_jango.bbs.utils import get_next_num, get_pretty_url
+from gnu_jango.config import config as site_config
 from gnu_jango.config.models import Config
-from gnu_jango.core.models import FAQItem, FAQMaster, Poll, PollChoice
+from gnu_jango.core.models import ContentPage, FAQItem, FAQMaster, Poll, PollChoice, Site_menu
 from gnu_jango.shop.models import ShopBanner, ShopCategory, ShopProduct
 
 
@@ -45,7 +46,36 @@ MANIFEST_LIST_FIELDS = (
     "faq_items",
     "polls",
     "poll_choices",
+    "menus",
+    "menu_snapshots",
+    "content_pages",
+    "content_page_snapshots",
+    "home_settings",
+    "board_map",
 )
+
+COMMUNITY_MANIFEST_FIELDS = (
+    "groups", "boards", "boards_used", "posts", "comments", "post_files",
+    "faq_masters", "faq_items", "polls", "poll_choices", "menus", "content_pages",
+)
+
+SAMPLE_CONTENT_PAGES = {
+    "company": (
+        "사이트 소개",
+        "<p>이 사이트는 그누보드5와 영카트 기능을 살펴보기 위한 데모입니다. 게시글과 상품은 화면 예시를 위해 만든 가상 데이터입니다.</p>"
+        "<p>이 데모는 실제 판매나 서비스 운영을 위한 사이트가 아닙니다.</p>",
+    ),
+    "privacy": (
+        "개인정보처리방침",
+        "<p><strong>데모 안내</strong></p><p>이 페이지는 예시입니다. 실제 개인정보 처리방침이 아니며, 데모 운영자가 실제 개인정보를 수집한다는 뜻도 아닙니다.</p>"
+        "<p>실서비스를 시작하기 전에는 실제 수집 항목, 이용 목적, 보유 기간과 운영 방식에 맞춰 내용을 작성하고 검토해야 합니다.</p>",
+    ),
+    "provision": (
+        "이용약관",
+        "<p><strong>데모 안내</strong></p><p>이 페이지는 화면 확인을 위한 예시이며 실제 서비스에 적용되는 이용약관이 아닙니다.</p>"
+        "<p>실서비스를 시작하기 전에는 서비스 운영 방식과 관련 법령에 맞는 약관을 별도로 작성하고 검토해야 합니다.</p>",
+    ),
+}
 
 BOARD_CONTENT = {
     "notice": {
@@ -144,6 +174,8 @@ def _decode_manifest(config_row):
     if not isinstance(manifest, dict) or manifest.get("version") != MANIFEST_VERSION:
         raise SampleDataError("이 샘플 데이터 관리 기록은 현재 버전과 맞지 않습니다.")
     for field in MANIFEST_LIST_FIELDS:
+        # Older shop-only manifests predate the community navigation fields.
+        manifest.setdefault(field, [])
         if not isinstance(manifest.get(field), list):
             raise SampleDataError("샘플 데이터 관리 기록의 형식이 올바르지 않습니다.")
     return manifest
@@ -179,6 +211,8 @@ def managed_counts(manifest):
             "banners": 0,
             "faqs": 0,
             "polls": 0,
+            "menus": 0,
+            "content_pages": 0,
         }
     return {
         "groups": Group.objects.filter(pk__in=_ids(manifest, "groups")).count(),
@@ -191,6 +225,8 @@ def managed_counts(manifest):
         "banners": ShopBanner.objects.filter(pk__in=_ids(manifest, "banners")).count(),
         "faqs": FAQItem.objects.filter(pk__in=_ids(manifest, "faq_items")).count(),
         "polls": Poll.objects.filter(pk__in=_ids(manifest, "polls")).count(),
+        "menus": Site_menu.objects.filter(pk__in=_ids(manifest, "menus")).count(),
+        "content_pages": ContentPage.objects.filter(pk__in=_ids(manifest, "content_pages")).count(),
     }
 
 
@@ -202,6 +238,7 @@ def get_status():
         "manifest": manifest,
         "counts": counts,
         "has_data": any(counts.values()),
+        "has_community_data": any(counts[field] for field in ("boards", "posts", "comments", "faqs", "menus", "content_pages")),
         "shop_status": shop_sample_status(manifest),
         "assets": sample_asset_summary(),
     }
@@ -438,75 +475,248 @@ def ensure_shop_sample_data():
         return {**result, "products": len(manifest["products"])}
 
 
-@batch_bootstrap_changes()
-def create_sample_data():
-    """Create one public batch and record only rows created by this operation."""
+def _has_community_samples(manifest):
+    return any(_ids(manifest, field) for field in COMMUNITY_MANIFEST_FIELDS)
+
+
+def _create_community_records(manifest):
+    """Create the board, post, comment, FAQ and poll batch in an existing manifest."""
+    token = uuid.uuid4().hex
+    boards = {}
+    posts_by_table = {}
+    now = timezone.now()
+
+    for table, board_definition in BOARD_CONTENT.items():
+        board = _new_board(table, board_definition["subject"], token, manifest)
+        boards[table] = board
+        if board.pk not in manifest["boards_used"]:
+            manifest["boards_used"].append(board.pk)
+        posts_by_table[table] = []
+        for index, definition in enumerate(board_definition["posts"]):
+            created_at = now - timedelta(days=(index % 5) + 1, hours=index)
+            post = _create_post(board, definition, created_at, manifest)
+            posts_by_table[table].append(post)
+
+    _create_comment(posts_by_table["free"][0], "반갑습니다. 게시판이 보기 좋게 정리되어 있네요.", now - timedelta(hours=2), manifest)
+    _create_comment(posts_by_table["free"][1], "저도 책상 정리부터 해봐야겠습니다.", now - timedelta(hours=1), manifest)
+    _create_comment(posts_by_table["gallery"][0], "공간 사진 잘 봤습니다. 차분한 분위기가 좋네요.", now - timedelta(minutes=30), manifest)
+
+    for board in boards.values():
+        board.bo_count_write = board.posts.count()
+        board.bo_count_comment = board.comments.count()
+        board.save(update_fields=["bo_count_write", "bo_count_comment"])
+
+    faq_master = FAQMaster.objects.create(fm_subject="자주 묻는 질문", fm_order=1, fm_use=1)
+    manifest["faq_masters"].append(faq_master.pk)
+    for index, (subject, content) in enumerate(FAQS, start=1):
+        item = FAQItem.objects.create(
+            master=faq_master,
+            fa_subject=subject,
+            fa_content=content,
+            fa_order=index,
+            fa_use=1,
+        )
+        manifest["faq_items"].append(item.pk)
+
+    poll = Poll.objects.create(
+        po_subject="어떤 콘텐츠를 가장 기대하시나요?",
+        po_etc="샘플 설문입니다.",
+        po_use=1,
+        po_date=timezone.localdate(),
+        po_begin_date=timezone.localdate() - timedelta(days=1),
+        po_end_date=timezone.localdate() + timedelta(days=30),
+    )
+    manifest["polls"].append(poll.pk)
+    for index, choice in enumerate(POLL_CHOICES, start=1):
+        poll_choice = PollChoice.objects.create(poll=poll, num=index, content=choice)
+        manifest["poll_choices"].append(poll_choice.pk)
+
+    manifest["board_map"] = [{"table": table, "pk": board.pk} for table, board in boards.items()]
+    return boards
+
+
+def _sample_boards_from_manifest(manifest):
+    boards = {}
+    for item in manifest.get("board_map", []):
+        if isinstance(item, dict) and item.get("table") and item.get("pk"):
+            board = Board.objects.filter(pk=item["pk"]).first()
+            if board:
+                boards[item["table"]] = board
+
+    used_ids = _ids(manifest, "boards_used")
+    for table, definition in BOARD_CONTENT.items():
+        if table in boards:
+            continue
+        candidates = Board.objects.filter(pk__in=used_ids)
+        board = candidates.filter(bo_table=table).first()
+        board = board or next((candidate for candidate in candidates if candidate.bo_subject == definition["subject"]), None)
+        if board:
+            boards[table] = board
+    return boards
+
+
+def _content_page_snapshot(page):
+    return {
+        "id": page.pk,
+        "co_subject": page.co_subject,
+        "co_content": page.co_content,
+        "co_html": page.co_html,
+        "co_use": page.co_use,
+    }
+
+
+def _menu_snapshot(menu):
+    return {
+        "id": menu.pk,
+        "me_code": menu.me_code,
+        "me_name": menu.me_name,
+        "me_link": menu.me_link,
+        "me_type": menu.me_type,
+        "me_type_pk": menu.me_type_pk,
+        "me_target": menu.me_target,
+        "me_order": menu.me_order,
+        "me_use": menu.me_use,
+        "me_mobile_use": menu.me_mobile_use,
+    }
+
+
+def _ensure_sample_content_pages(manifest):
+    for order, (co_id, (subject, content)) in enumerate(SAMPLE_CONTENT_PAGES.items(), start=1):
+        if ContentPage.objects.filter(pk=co_id).exists():
+            continue
+        page = ContentPage.objects.create(
+            co_id=co_id,
+            co_subject=subject,
+            co_content=content,
+            co_mobile_content=content,
+            co_html=1,
+            co_order=order,
+            co_use=1,
+        )
+        manifest["content_pages"].append(page.pk)
+        manifest["content_page_snapshots"].append(_content_page_snapshot(page))
+
+
+def _sample_menu_definitions(boards):
+    def board_link(table):
+        board = boards.get(table)
+        return get_pretty_url("Board", board_pk=board.pk) if board else "/"
+
+    return [
+        ("10", "커뮤니티", board_link("free"), "Board", boards.get("free"), 1),
+        ("1001", "자유게시판", board_link("free"), "Board", boards.get("free"), 1),
+        ("1002", "질문답변", board_link("qa"), "Board", boards.get("qa"), 2),
+        ("1003", "갤러리", board_link("gallery"), "Board", boards.get("gallery"), 3),
+        ("1004", "새글", "/recent", "", None, 4),
+        ("20", "쇼핑몰", "/shop", "", None, 2),
+        ("2001", "전체 상품", "/shop", "", None, 1),
+        ("2002", "쿠폰존", "/shop/couponzone", "", None, 2),
+        ("30", "고객센터", "/faq", "", None, 3),
+        ("3001", "자주 묻는 질문", "/faq", "", None, 1),
+        ("3002", "1:1 문의", "/mypage/qas", "", None, 2),
+        ("40", "회원공간", "/mypage", "", None, 4),
+        ("4001", "로그인", "/login", "", None, 1),
+        ("4002", "회원가입", "/register", "", None, 2),
+        ("4003", "마이페이지", "/mypage", "", None, 3),
+        ("50", "사이트 안내", "/content/company", "", None, 5),
+        ("5001", "사이트 소개", "/content/company", "", None, 1),
+        ("5002", "개인정보처리방침", "/content/privacy", "", None, 2),
+        ("5003", "이용약관", "/content/provision", "", None, 3),
+    ]
+
+
+def _ensure_sample_menus(manifest, boards):
+    # Existing administrator-authored navigation always wins over demo defaults.
+    if Site_menu.objects.exists():
+        return
+    for code, name, link, menu_type, board, order in _sample_menu_definitions(boards):
+        menu = Site_menu.objects.create(
+            me_code=code,
+            me_name=name,
+            me_link=link,
+            me_type=menu_type,
+            me_type_pk=board.pk if menu_type == "Board" and board else 0,
+            me_target="",
+            me_order=order,
+            me_use=1,
+            me_mobile_use=1,
+        )
+        manifest["menus"].append(menu.pk)
+        manifest["menu_snapshots"].append(_menu_snapshot(menu))
+
+
+def _ensure_home_board_settings(manifest, boards):
+    configured_boards = [table for table in ("notice", "free", "qa") if table in boards]
+    desired = {
+        "cf_home_boards": ",".join(configured_boards),
+        "cf_home_gallery": "gallery" if "gallery" in boards else "",
+    }
+    site_config.clear()
+    for name, value in desired.items():
+        row = Config.objects.filter(name=name).first()
+        previous = row.value if row else None
+        if previous == value or previous not in (None, ""):
+            continue
+        if row:
+            row.value = value
+            row.save(update_fields=["value"])
+        else:
+            Config.objects.create(name=name, value=value)
+        manifest["home_settings"].append({"name": name, "previous": previous, "sample": value})
+    site_config.clear()
+
+
+def _ensure_demo_site_experience(manifest, boards):
+    _ensure_sample_content_pages(manifest)
+    _ensure_sample_menus(manifest, boards)
+    _ensure_home_board_settings(manifest, boards)
+
+
+def _apply_sample_data(require_new):
     sample_asset_summary()
     with transaction.atomic():
-        config_row = Config.objects.select_for_update().filter(name=MANIFEST_NAME).first()
-        existing_manifest = _decode_manifest(config_row)
-        if any(managed_counts(existing_manifest).values()):
-            raise SampleDataError("샘플 데이터가 이미 있습니다. 먼저 현재 샘플을 삭제해 주세요.")
-
-        manifest = empty_manifest()
-        token = uuid.uuid4().hex
-        boards = {}
-        posts_by_table = {}
-        now = timezone.now()
-
-        for table, board_definition in BOARD_CONTENT.items():
-            board = _new_board(table, board_definition["subject"], token, manifest)
-            boards[table] = board
-            if board.pk not in manifest["boards_used"]:
-                manifest["boards_used"].append(board.pk)
-            posts_by_table[table] = []
-            for index, definition in enumerate(board_definition["posts"]):
-                created_at = now - timedelta(days=(index % 5) + 1, hours=index)
-                post = _create_post(board, definition, created_at, manifest)
-                posts_by_table[table].append(post)
-
-        _create_comment(posts_by_table["free"][0], "반갑습니다. 게시판이 보기 좋게 정리되어 있네요.", now - timedelta(hours=2), manifest)
-        _create_comment(posts_by_table["free"][1], "저도 책상 정리부터 해봐야겠습니다.", now - timedelta(hours=1), manifest)
-        _create_comment(posts_by_table["gallery"][0], "공간 사진 잘 봤습니다. 차분한 분위기가 좋네요.", now - timedelta(minutes=30), manifest)
-
-        for board in boards.values():
-            board.bo_count_write = board.posts.count()
-            board.bo_count_comment = board.comments.count()
-            board.save(update_fields=["bo_count_write", "bo_count_comment"])
-
-        _ensure_shop_samples(manifest)
-
-        faq_master = FAQMaster.objects.create(fm_subject="자주 묻는 질문", fm_order=1, fm_use=1)
-        manifest["faq_masters"].append(faq_master.pk)
-        for index, (subject, content) in enumerate(FAQS, start=1):
-            item = FAQItem.objects.create(
-                master=faq_master,
-                fa_subject=subject,
-                fa_content=content,
-                fa_order=index,
-                fa_use=1,
-            )
-            manifest["faq_items"].append(item.pk)
-
-        poll = Poll.objects.create(
-            po_subject="어떤 콘텐츠를 가장 기대하시나요?",
-            po_etc="샘플 설문입니다.",
-            po_use=1,
-            po_date=timezone.localdate(),
-            po_begin_date=timezone.localdate() - timedelta(days=1),
-            po_end_date=timezone.localdate() + timedelta(days=30),
+        row, _ = Config.objects.get_or_create(
+            name=MANIFEST_NAME,
+            defaults={"value": json.dumps(empty_manifest(), ensure_ascii=False)},
         )
-        manifest["polls"].append(poll.pk)
-        for index, choice in enumerate(POLL_CHOICES, start=1):
-            poll_choice = PollChoice.objects.create(poll=poll, num=index, content=choice)
-            manifest["poll_choices"].append(poll_choice.pk)
+        row = Config.objects.select_for_update().get(pk=row.pk)
+        manifest = _decode_manifest(row)
+        if manifest is None:
+            manifest = empty_manifest()
 
-        if config_row:
-            config_row.value = json.dumps(manifest, ensure_ascii=False)
-            config_row.save(update_fields=["value"])
+        already_seeded = _has_community_samples(manifest)
+        if require_new and already_seeded:
+            raise SampleDataError("커뮤니티 샘플 데이터가 이미 있습니다. 먼저 현재 샘플을 삭제해 주세요.")
+
+        if already_seeded:
+            boards = _sample_boards_from_manifest(manifest)
         else:
-            Config.objects.create(name=MANIFEST_NAME, value=json.dumps(manifest, ensure_ascii=False))
+            boards = _create_community_records(manifest)
+
+        shop_result = _ensure_shop_samples(manifest)
+        _ensure_demo_site_experience(manifest, boards)
+        row.value = json.dumps(manifest, ensure_ascii=False)
+        row.save(update_fields=["value"])
+        return manifest, not already_seeded, shop_result
+
+
+@batch_bootstrap_changes()
+def create_sample_data():
+    """Create the community demo batch while preserving an already-seeded shop."""
+    manifest, _, _ = _apply_sample_data(require_new=True)
     return manifest
+
+
+@batch_bootstrap_changes()
+def ensure_demo_sample_data():
+    """Idempotently prepare demo community content, navigation, pages and shop samples."""
+    manifest, created_community, shop_result = _apply_sample_data(require_new=False)
+    return {
+        "created_community": created_community,
+        "counts": managed_counts(manifest),
+        "shop": shop_result,
+        "manifest": manifest,
+    }
 
 
 @batch_bootstrap_changes()
@@ -560,6 +770,27 @@ def _has_related_rows(instance):
     return False
 
 
+def _matches_snapshot(instance, snapshot, fields):
+    return bool(snapshot) and all(getattr(instance, field) == snapshot.get(field) for field in fields)
+
+
+def _modified_sample_experience(manifest):
+    menu_snapshots = {int(item["id"]): item for item in manifest.get("menu_snapshots", []) if isinstance(item, dict) and item.get("id")}
+    menu_fields = (
+        "me_code", "me_name", "me_link", "me_type", "me_type_pk", "me_target", "me_order", "me_use", "me_mobile_use",
+    )
+    for menu in Site_menu.objects.filter(pk__in=_ids(manifest, "menus")):
+        if not _matches_snapshot(menu, menu_snapshots.get(menu.pk), menu_fields):
+            return True
+
+    page_snapshots = {str(item["id"]): item for item in manifest.get("content_page_snapshots", []) if isinstance(item, dict) and item.get("id")}
+    page_fields = ("co_subject", "co_content", "co_html", "co_use")
+    for page in ContentPage.objects.filter(pk__in=_ids(manifest, "content_pages")):
+        if not _matches_snapshot(page, page_snapshots.get(str(page.pk)), page_fields):
+            return True
+    return False
+
+
 @batch_bootstrap_changes()
 def remove_sample_data():
     """Remove tracked sample rows while preserving any that gained real activity."""
@@ -577,6 +808,11 @@ def remove_sample_data():
         tracked_categories = _ids(manifest, "categories")
         tracked_masters = _ids(manifest, "faq_masters")
         tracked_polls = _ids(manifest, "polls")
+        tracked_menus = _ids(manifest, "menus")
+        tracked_pages = _ids(manifest, "content_pages")
+        menu_snapshots = {int(item["id"]): item for item in manifest.get("menu_snapshots", []) if isinstance(item, dict) and item.get("id")}
+        page_snapshots = {str(item["id"]): item for item in manifest.get("content_page_snapshots", []) if isinstance(item, dict) and item.get("id")}
+        preserve_demo_navigation = _modified_sample_experience(manifest)
 
         Comment.objects.filter(pk__in=tracked_comments).delete()
         Post_file.objects.filter(pk__in=tracked_files).delete()
@@ -598,6 +834,49 @@ def remove_sample_data():
                 retained_products.append(product.pk)
             else:
                 product.delete()
+
+        preserve_demo_navigation = preserve_demo_navigation or bool(retained_posts or retained_products)
+
+        retained_menus = []
+        if preserve_demo_navigation:
+            retained_menus = list(Site_menu.objects.filter(pk__in=tracked_menus).values_list("pk", flat=True))
+        else:
+            menu_fields = (
+                "me_code", "me_name", "me_link", "me_type", "me_type_pk", "me_target", "me_order", "me_use", "me_mobile_use",
+            )
+            for menu in Site_menu.objects.select_for_update().filter(pk__in=tracked_menus).order_by("pk"):
+                if _matches_snapshot(menu, menu_snapshots.get(menu.pk), menu_fields):
+                    menu.delete()
+                else:
+                    retained_menus.append(menu.pk)
+
+        retained_pages = []
+        if preserve_demo_navigation:
+            retained_pages = list(ContentPage.objects.filter(pk__in=tracked_pages).values_list("pk", flat=True))
+        else:
+            page_fields = ("co_subject", "co_content", "co_html", "co_use")
+            for page in ContentPage.objects.select_for_update().filter(pk__in=tracked_pages).order_by("pk"):
+                if _matches_snapshot(page, page_snapshots.get(str(page.pk)), page_fields):
+                    page.delete()
+                else:
+                    retained_pages.append(page.pk)
+
+        if preserve_demo_navigation:
+            retained_menus = list(Site_menu.objects.filter(pk__in=tracked_menus).values_list("pk", flat=True))
+            retained_pages = list(ContentPage.objects.filter(pk__in=tracked_pages).values_list("pk", flat=True))
+        else:
+            for item in manifest.get("home_settings", []):
+                if not isinstance(item, dict) or not item.get("name"):
+                    continue
+                setting = Config.objects.filter(name=item["name"]).first()
+                if not setting or setting.value != item.get("sample"):
+                    continue
+                if item.get("previous") is None:
+                    setting.delete()
+                else:
+                    setting.value = item["previous"]
+                    setting.save(update_fields=["value"])
+            site_config.clear()
 
         ShopBanner.objects.filter(pk__in=_ids(manifest, "banners")).delete()
         FAQItem.objects.filter(pk__in=_ids(manifest, "faq_items")).delete()
@@ -631,8 +910,9 @@ def remove_sample_data():
                 category.delete()
 
         retained_boards = []
+        tracked_board_ids = _ids(manifest, "boards")
         for board in Board.objects.select_for_update().filter(pk__in=_ids(manifest, "boards")).order_by("pk"):
-            if _has_related_rows(board):
+            if preserve_demo_navigation or _has_related_rows(board):
                 retained_boards.append(board.pk)
             else:
                 board.delete()
@@ -644,11 +924,15 @@ def remove_sample_data():
             else:
                 group.delete()
 
-        retained_used_boards = list(
-            Post.objects.filter(pk__in=retained_posts)
-            .order_by()
-            .values_list("board_id", flat=True)
-            .distinct()
+        retained_used_boards = (
+            list(Board.objects.filter(pk__in=tracked_board_ids).values_list("pk", flat=True))
+            if preserve_demo_navigation
+            else list(
+                Post.objects.filter(pk__in=retained_posts)
+                .order_by()
+                .values_list("board_id", flat=True)
+                .distinct()
+            )
         )
         for board in Board.objects.select_for_update().filter(pk__in=_ids(manifest, "boards_used")):
             board.bo_count_write = board.posts.count()
@@ -670,6 +954,12 @@ def remove_sample_data():
             "faq_items": [],
             "polls": retained_polls,
             "poll_choices": retained_choices,
+            "menus": retained_menus,
+            "menu_snapshots": [item for item in manifest.get("menu_snapshots", []) if isinstance(item, dict) and item.get("id") in retained_menus],
+            "content_pages": retained_pages,
+            "content_page_snapshots": [item for item in manifest.get("content_page_snapshots", []) if isinstance(item, dict) and item.get("id") in retained_pages],
+            "home_settings": manifest.get("home_settings", []) if preserve_demo_navigation else [],
+            "board_map": manifest.get("board_map", []) if preserve_demo_navigation else [],
         }
         if any(next_manifest[field] for field in MANIFEST_LIST_FIELDS if field != "boards_used"):
             config_row.value = json.dumps(next_manifest, ensure_ascii=False)

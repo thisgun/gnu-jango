@@ -77,6 +77,12 @@
       <article class="card card-border g5-sample-count-card">
         <div class="card-body"><span>{% translate "설문" %}</span><strong>{{ counts.polls|intcomma }}</strong></div>
       </article>
+      <article class="card card-border g5-sample-count-card">
+        <div class="card-body"><span>{% translate "메뉴" %}</span><strong>{{ counts.menus|intcomma }}</strong></div>
+      </article>
+      <article class="card card-border g5-sample-count-card">
+        <div class="card-body"><span>{% translate "안내 페이지" %}</span><strong>{{ counts.content_pages|intcomma }}</strong></div>
+      </article>
     </div>
   </section>
 
@@ -135,18 +141,20 @@
           <span class="g5-sample-icon" aria-hidden="true">＋</span>
           <div>
             <h2>{% translate "샘플 데이터 추가" %}</h2>
-            <p>{% translate "게시판 글과 갤러리, 댓글, 상품, 배너, FAQ와 설문을 한 번에 만듭니다." %}</p>
+            <p>{% translate "게시판과 메뉴를 연결하고, 글·갤러리·댓글·상품·FAQ와 안내 페이지를 함께 준비합니다." %}</p>
           </div>
         </div>
         <ul class="g5-sample-list">
           <li>{% translate "공지사항·자유게시판·질문과 답변·갤러리 예시" %}</li>
           <li>{% translate "상품 6개와 쇼핑몰 배너 1개" %}</li>
           <li>{% translate "FAQ 4개와 참여 가능한 설문 1개" %}</li>
+          <li>{% translate "자유게시판·질문답변·갤러리로 연결되는 메뉴와 홈페이지 진열 설정" %}</li>
+          <li>{% translate "사이트 소개와 데모 안내가 표시된 약관·개인정보 페이지" %}</li>
         </ul>
         <form method="post" action="{% url 'admin-sample-data' %}">
           {% csrf_token %}
           <input type="hidden" name="action" value="add">
-          {% if has_data %}
+          {% if has_community_data %}
           <button class="btn btn-primary button g5-sample-action" type="submit" disabled>{% translate "먼저 기존 샘플을 삭제하세요" %}</button>
           {% else %}
           <button class="btn btn-primary button g5-sample-action" type="submit">{% translate "샘플 데이터 추가" %}</button>
