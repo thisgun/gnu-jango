@@ -1,0 +1,2 @@
+# PythonAnywhere demo uses MEDIA_STORAGE=local and does not need boto3 or django-storages.
+-r requirements-base.txt

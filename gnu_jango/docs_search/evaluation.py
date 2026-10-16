@@ -19,4 +19,15 @@ EVALUATION_CASES = (
     ("테마 CSS와 이미지 파일을 서버에 올리는 방법", "hb_deploy", "정적 파일 올리기"),
     ("게시판 장이 404이거나 테마 CSS가 깨질 때 먼저 볼 것은", "hb_deploy", "자주 만나는 오류"),
     ("프로젝트에서 자주 사용하는 개발 용어를 찾아보려면", "hb_ref", "용어 사전"),
+    # Paraphrases: none of these reuse the words of the expected chapter title, so they measure
+    # matching on the chapter body rather than on its (heavily weighted) title.
+    ("광고 글이 자동으로 올라오는 걸 막고 싶어요", "hb_member", "스팸과 자동등록방지"),
+    ("로그인하지 않은 방문자도 의견을 남기게 하려면", "hb_member", "비회원 글쓰기와 댓글"),
+    ("특정 레벨 이상만 게시물을 읽게 제한하려면", "hb_member", "회원 등급과 접근 권한"),
+    ("작성자와 운영자만 볼 수 있는 글은 어떻게 쓰나요", "hb_board", "비밀글과 첨부파일 관리"),
+    ("새 커뮤니티 공간을 하나 추가하고 싶어요", "hb_board", "게시판 만들기"),
+    ("손님이 물건을 담고 계산하기까지 어떤 단계를 거치나요", "hb_shop", "장바구니와 주문 흐름"),
+    ("입금 기한이 지난 무통장 주문을 정리하려면", "hb_shop", "가상계좌 운영 점검"),
+    ("키보드로 문서 찾기 창을 바로 여는 방법", "hb_ref", "단축키"),
+    ("무료 파이썬 호스팅에 데모를 배포하려면", "hb_deploy", "PythonAnywhere에 올리기"),
 )

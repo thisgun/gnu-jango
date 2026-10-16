@@ -76,7 +76,19 @@ python manage.py ensure_handbook_samples
 python manage.py evaluate_handbook_search
 ```
 
-평가 명령은 18개 한국어 질문의 hit@1/hit@3을 표로 출력하고 hit@3 80% 미만이면 실패합니다.
+평가 명령은 27개 한국어 질문(그중 9개는 장 제목 단어를 쓰지 않은 바꿔 말한 질문)의 hit@1/hit@3을 표로 출력하고
+hit@3 80% 미만이면 실패합니다.
+
+### 이미 배포한 샘플 글 고치기
+
+`ensure_handbook_samples`를 다시 실행하면 빠진 책·장만 추가합니다. 기존 장의 본문, 책 이름·순서·접근 권한, 선택한
+매뉴얼 그룹(`cf_docs_group`)은 그대로 둡니다. 샘플 문구의 오류(예: 설치 명령의 Python 버전)를 이미 배포한 DB에도
+반영하려면 `--refresh`를 붙입니다. 샘플 장 제목을 가진 글의 본문을 현재 샘플 내용으로 다시 쓰므로, 그런 장을 직접
+고쳐 썼다면 그 내용은 덮어써집니다. 제목이 샘플과 다른 장은 건드리지 않습니다.
+
+```bash
+python manage.py ensure_handbook_samples --refresh
+```
 
 ## 주의
 

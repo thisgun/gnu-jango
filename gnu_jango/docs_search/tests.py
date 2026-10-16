@@ -13,9 +13,10 @@ from gnu_jango.config import config as site_config
 from gnu_jango.config import handbook_samples
 from gnu_jango.config.models import Config
 from gnu_jango.docs_search.evaluation import EVALUATION_CASES
+from gnu_jango.api.v1_docs import DocsAnswerRateThrottle
 from gnu_jango.docs_search.llm import generate_answer
 from gnu_jango.docs_search.parser import parse_manual_html, slugify_heading
-from gnu_jango.docs_search.service import clear_memory_cache, search_documents
+from gnu_jango.docs_search.service import clear_memory_cache
 
 API = "/api/v1/docs/ask"
 REST_FRAMEWORK_WITH_DOCS_TEST_RATE = {
@@ -66,9 +67,10 @@ class HandbookAskTests(TestCase):
         self.assertEqual(response.status_code, 200)
         results = response.json()["data"]["results"]
         self.assertTrue(results)
-        item = results[0]
+        # Other deploy chapters (e.g. PythonAnywhere) also cover uploading static files, so the
+        # target only has to be among the results; this test checks the result shape.
+        item = next(row for row in results if row["chapter"] == "정적 파일 올리기")
         self.assertEqual(item["bo_table"], "hb_deploy")
-        self.assertEqual(item["chapter"], "정적 파일 올리기")
         self.assertIn("/bbs/hb_deploy/", item["url"])
         self.assertRegex(item["url"], r"#.+-\d+$")
         self.assertIsInstance(item["snippet"], str)
@@ -231,6 +233,41 @@ class HandbookAskTests(TestCase):
             answer, reason = generate_answer("질문", [{"snippet": "근거", "book": "책", "part": "", "chapter": "장", "section": ""}])
         self.assertIsNone(answer)
         self.assertEqual(reason, "unavailable")
+
+    def test_chapter_with_a_single_heading_links_to_the_chapter_not_an_anchor(self):
+        # page-toc.tsx only names headings when a chapter has two or more (MIN_ITEMS), so an
+        # anchor on a one-heading chapter would point at nothing and the page would not move.
+        board = Board.objects.get(bo_table="hb_ref")
+        Post.objects.create(
+            board=board,
+            wr_num=-102,
+            wr_parent=0,
+            wr_subject="외톨이 장",
+            wr_content="<h2>단 하나의 절</h2><p>lonely-sentinel-512 고유한 문장입니다.</p>",
+            ca_name="",
+            wr_name="편집자",
+            wr_datetime=handbook_samples.timezone.now(),
+        )
+        results = self.search("lonely-sentinel-512").json()["data"]["results"]
+        hit = next(item for item in results if item["chapter"] == "외톨이 장")
+        self.assertEqual(hit["anchor"], "")
+        self.assertNotIn("#", hit["url"])
+
+    def test_answer_requests_have_their_own_tighter_rate_limit(self):
+        # DRF reads THROTTLE_RATES once per class, so override_settings cannot lower it here.
+        with patch.dict(DocsAnswerRateThrottle.THROTTLE_RATES, {"docs-ask-answer": "1/min"}):
+            self.assertEqual(self.search("환경 변수", answer=1).status_code, 200)
+            self.assertEqual(self.search("환경 변수", answer=1).status_code, 429)
+            # Plain question search keeps its own budget.
+            self.assertEqual(self.search("환경 변수").status_code, 200)
+
+    @override_settings(TRUSTED_PROXY_COUNT=0)
+    def test_a_forged_forwarded_for_header_does_not_buy_a_fresh_answer_budget(self):
+        with patch.dict(DocsAnswerRateThrottle.THROTTLE_RATES, {"docs-ask-answer": "1/min"}):
+            first = self.client.get(API, {"q": "환경 변수", "answer": 1}, HTTP_X_FORWARDED_FOR="203.0.113.1")
+            second = self.client.get(API, {"q": "환경 변수", "answer": 1}, HTTP_X_FORWARDED_FOR="203.0.113.2")
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 429)
 
 
 class HandbookHtmlParserTests(TestCase):

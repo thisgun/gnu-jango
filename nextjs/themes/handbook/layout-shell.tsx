@@ -173,7 +173,8 @@ export function HandbookLayoutShell({
   const [open, setOpen] = useState(false);
   const currentBook = bookForPath(docsBooks, highlightPath);
   const docsContext = useMemo(() => ({ books: docsBooks, settled: docsSettled }), [docsBooks, docsSettled]);
-  const menuItems = siteMenuItems(runtimeMenus);
+  // Memoized so headerMenuItems (below) only recomputes when the menus or the books change.
+  const menuItems = useMemo(() => siteMenuItems(runtimeMenus), [runtimeMenus]);
   const headerMenuItems = useMemo<SiteMenuItem[]>(() => {
     if (docsBooks.length === 0) return menuItems;
     const manuals: SiteMenuItem = {
