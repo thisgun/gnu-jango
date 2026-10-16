@@ -270,10 +270,11 @@ export function DocsSearch({ books, current }: { books: DocsBook[]; current?: Do
               event.preventDefault();
               // 장 제목을 그대로 친 경우는 그 장으로 간다. 그 밖에는 질문 검색 1위(있으면)를 연다.
               const typed = query.trim().toLocaleLowerCase();
-              const exactTitle = hits.length > 0 && hits[0].chapter.label.trim().toLocaleLowerCase() === typed;
-              const titleLink = listRef.current?.querySelector<HTMLAnchorElement>("a");
+              const exactIndex = hits.findIndex((hit) => hit.chapter.label.trim().toLocaleLowerCase() === typed);
+              const titleLinks = listRef.current?.querySelectorAll<HTMLAnchorElement>(":scope > li > a");
+              const exactLink = exactIndex >= 0 ? titleLinks?.[exactIndex] : undefined;
               const questionLink = dialogRef.current?.querySelector<HTMLAnchorElement>(".doc-ask-results a");
-              (exactTitle ? titleLink ?? questionLink : questionLink ?? titleLink)?.click();
+              (exactLink ?? questionLink ?? titleLinks?.[0])?.click();
             }}
           >
             <Search size={17} aria-hidden />

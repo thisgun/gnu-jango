@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generation": 13,
+  "generation": 14,
   "keepBuilds": 2,
   "files": [
     {
@@ -147,6 +147,11 @@
       "path": "_next/static/chunks/3cb8c7f1.80af8fed5039e512.js",
       "sha256": "4c919ba09a9af8effbc61ecb08ae9e27511365e229a029a60dcd6164041ad6b9",
       "retiredAt": 13
+    },
+    {
+      "path": "_next/static/chunks/43-3o4ewj9_sa.js",
+      "sha256": "10a2c7578ea756b2ebb56a955027f9fe0982840633fbf9295cc51e43f3d28703",
+      "retiredAt": 14
     },
     {
       "path": "_next/static/chunks/4403-9b4145875494aff1.js",
