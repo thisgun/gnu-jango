@@ -143,6 +143,10 @@ export async function requestPreparedOrderPayment({
       buyer_name: prepared.buyer_name,
       buyer_email: prepared.buyer_email || "noemail@example.com",
       buyer_tel: prepared.buyer_tel,
+      cash_receipt_request: prepared.cash_receipt_request,
+      cash_receipt_type: prepared.cash_receipt_type,
+      cash_receipt_registration_number:
+        prepared.cash_receipt_registration_number,
       pg_extra: prepared.pg_extra,
     },
     success_url: `${origin}/shop/payment/success`,

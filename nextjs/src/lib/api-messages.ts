@@ -85,6 +85,14 @@ const API_MESSAGES: Record<string, string> = {
   "Receipt requests require a member account.": "세금계산서·현금영수증은 회원만 신청할 수 있습니다.",
   "Cash receipt requests are available only for bank transfer, virtual account, or account transfer.":
     "현금영수증은 무통장입금, 가상계좌, 계좌이체에서만 신청할 수 있습니다.",
+  "Cash receipt requests are not enabled for this payment method.":
+    "관리자 설정에서 이 결제수단의 현금영수증 신청이 허용되지 않았습니다.",
+  "Select a valid cash receipt type.": "현금영수증 발급 용도를 선택해 주세요.",
+  "Enter a valid cash receipt identification number.": "현금영수증 발급 번호를 확인해 주세요.",
+  "Enter the company name for the tax invoice.": "세금계산서 상호명을 입력해 주세요.",
+  "Enter a 10-digit business registration number.": "사업자등록번호 10자리를 입력해 주세요.",
+  "The tax invoice email address is too long.": "세금계산서 수신 이메일 주소가 너무 깁니다.",
+  "Enter a valid email address for the tax invoice.": "세금계산서를 받을 이메일 주소를 확인해 주세요.",
   "Payment callback signature is required.": "결제 확인 서명이 없습니다.",
   "Invalid payment callback signature.": "결제 확인 서명이 올바르지 않습니다.",
   "Toss payment does not match this virtual account order.": "토스 결제 정보가 이 가상계좌 주문과 일치하지 않습니다.",

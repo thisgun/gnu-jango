@@ -650,6 +650,9 @@ class ShopOrder(models.Model):
     od_app_no = models.CharField(max_length=255, blank=True, default="")
     od_tax_flag = models.PositiveSmallIntegerField(default=0)
     od_tax_invoice_request = models.BooleanField(_("Tax invoice requested"), default=False)
+    od_tax_company = models.CharField(_("Tax invoice company"), max_length=100, blank=True, default="")
+    od_tax_business_no = models.CharField(_("Tax invoice business number"), max_length=10, blank=True, default="")
+    od_tax_email = models.EmailField(_("Tax invoice email"), blank=True, default="")
     od_tax_mny = models.IntegerField(default=0)
     od_vat_mny = models.IntegerField(default=0)
     od_free_mny = models.IntegerField(default=0)
@@ -657,6 +660,13 @@ class ShopOrder(models.Model):
     od_send_coupon = models.IntegerField(default=0)
     od_point = models.IntegerField(default=0)
     od_cash_request = models.BooleanField(_("Cash receipt requested"), default=False)
+    od_cash_type = models.CharField(
+        _("Cash receipt type"),
+        max_length=10,
+        blank=True,
+        default="",
+        choices=(("income", _("Income deduction")), ("expense", _("Business expense proof"))),
+    )
     od_cash_no = models.CharField(max_length=255, blank=True, default="")
     od_cash_res = models.CharField(max_length=255, blank=True, default="")
     od_delivery_company = models.CharField(max_length=100, blank=True, default="")

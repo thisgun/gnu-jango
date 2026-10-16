@@ -170,7 +170,10 @@ class ShopOrderAdmin(ModelAdmin):
             _("Receipt requests"),
             {
                 "classes": ("tab",),
-                "fields": (("od_tax_invoice_request", "od_cash_request"),),
+                "fields": (
+                    ("od_tax_invoice_request", "od_cash_request", "od_cash_type"),
+                    ("od_tax_company", "od_tax_business_no", "od_tax_email"),
+                ),
             },
         ),
         (
@@ -673,7 +676,12 @@ class ShopOrderAdmin(ModelAdmin):
                 (
                     _("Cash receipt request"),
                     _("Requested") if obj.od_cash_request else _("Not requested"),
-                    "-",
+                    obj.get_od_cash_type_display() if obj.od_cash_request else "-",
+                ),
+                (
+                    _("Tax invoice recipient"),
+                    obj.od_tax_company or "-",
+                    compact_text(obj.od_tax_business_no, obj.od_tax_email),
                 ),
                 (_("Cash receipt no"), obj.od_cash_no or "-", obj.od_cash_res or "-"),
                 (_("TID"), obj.od_tno or "-", obj.od_app_no or "-"),

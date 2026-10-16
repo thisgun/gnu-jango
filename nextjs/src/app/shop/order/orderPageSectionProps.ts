@@ -45,8 +45,18 @@ type DeliveryRequestState = {
   setHopeDate: (value: string) => void;
   taxRequest: boolean;
   setTaxRequest: (checked: boolean) => void;
+  taxCompany: string;
+  setTaxCompany: (value: string) => void;
+  taxBusinessNo: string;
+  setTaxBusinessNo: (value: string) => void;
+  taxInvoiceEmail: string;
+  setTaxInvoiceEmail: (value: string) => void;
   cashRequest: boolean;
   setCashRequest: (checked: boolean) => void;
+  cashReceiptType: "income" | "expense";
+  setCashReceiptType: (value: "income" | "expense") => void;
+  cashReceiptIdentityNumber: string;
+  setCashReceiptIdentityNumber: (value: string) => void;
 };
 
 type BuildRecipientInfoPropsInput = {
@@ -59,6 +69,7 @@ type BuildRecipientInfoPropsInput = {
   openPostcode: (target: PostcodeTarget) => void;
   isMemberOrder: boolean;
   paymentMethod: string;
+  paymentConfig: PaymentConfig | null;
   addressSave: AddressSaveState;
   deliveryRequest: DeliveryRequestState;
 };
@@ -132,13 +143,22 @@ export function buildRecipientInfoProps({
   addressSave,
   deliveryRequest,
   paymentMethod,
+  paymentConfig,
   ...input
 }: BuildRecipientInfoPropsInput) {
+  const cashReceipt = paymentConfig?.cash_receipt;
+  const canRequestCashReceipt = Boolean(
+    cashReceipt?.enabled &&
+      cashReceipt.methods[paymentMethod as "bank" | "vbank" | "iche"]
+  );
+
   return {
     ...input,
     ...addressSave,
     ...deliveryRequest,
-    canRequestCashReceipt: ["bank", "vbank", "iche"].includes(paymentMethod),
+    paymentMethod,
+    cashReceiptEnabled: Boolean(cashReceipt?.enabled),
+    canRequestCashReceipt,
   };
 }
 

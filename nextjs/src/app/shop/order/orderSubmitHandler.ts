@@ -34,7 +34,12 @@ export type UseOrderSubmitOptions = {
   memo: string;
   hopeDate: string;
   taxRequest: boolean;
+  taxCompany: string;
+  taxBusinessNo: string;
+  taxInvoiceEmail: string;
   cashRequest: boolean;
+  cashReceiptType: "income" | "expense";
+  cashReceiptIdentityNumber: string;
   guestPassword: string;
   isMemberOrder: boolean;
   paymentMethod: string;
@@ -93,7 +98,12 @@ export async function submitOrder({
   memo,
   hopeDate,
   taxRequest,
+  taxCompany,
+  taxBusinessNo,
+  taxInvoiceEmail,
   cashRequest,
+  cashReceiptType,
+  cashReceiptIdentityNumber,
   guestPassword,
   isMemberOrder,
   paymentMethod,
@@ -126,6 +136,13 @@ export async function submitOrder({
     isMemberOrder,
     agreeTerms,
     agreePrivacy,
+    taxRequest,
+    taxCompany,
+    taxBusinessNo,
+    taxInvoiceEmail,
+    cashRequest,
+    cashReceiptType,
+    cashReceiptIdentityNumber,
   });
 
   if (!validation.ok) {
@@ -148,7 +165,12 @@ export async function submitOrder({
     memo,
     hopeDate,
     taxRequest,
+    taxCompany,
+    taxBusinessNo,
+    taxInvoiceEmail,
     cashRequest,
+    cashReceiptType,
+    cashReceiptIdentityNumber,
     guestPassword,
     isMemberOrder,
     methodDef,

@@ -61,6 +61,7 @@ export function buildOrderPageControllerResult({
       openPostcode: addressBook.openPostcode,
       isMemberOrder: orderData.isMemberOrder,
       paymentMethod: orderData.paymentMethod,
+      paymentConfig: orderData.paymentConfig,
       addressSave: formState.addressSave,
       deliveryRequest: formState.deliveryRequest,
     }),
@@ -68,7 +69,12 @@ export function buildOrderPageControllerResult({
       paymentMethod: orderData.paymentMethod,
       setPaymentMethod: (value) => {
         orderData.setPaymentMethod(value);
-        if (!["bank", "vbank", "iche"].includes(value)) {
+        const cashReceipt = orderData.paymentConfig?.cash_receipt;
+        const canRequestCashReceipt = Boolean(
+          cashReceipt?.enabled &&
+            cashReceipt.methods[value as "bank" | "vbank" | "iche"]
+        );
+        if (!canRequestCashReceipt) {
           formState.deliveryRequest.setCashRequest(false);
         }
       },

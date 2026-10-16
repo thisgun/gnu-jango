@@ -22,6 +22,13 @@ type ValidateOrderSubmissionInput = {
   isMemberOrder: boolean;
   agreeTerms: boolean;
   agreePrivacy: boolean;
+  taxRequest: boolean;
+  taxCompany: string;
+  taxBusinessNo: string;
+  taxInvoiceEmail: string;
+  cashRequest: boolean;
+  cashReceiptType: "income" | "expense";
+  cashReceiptIdentityNumber: string;
 };
 
 export type OrderSubmitValidationResult =
@@ -78,6 +85,13 @@ export function validateOrderSubmission({
   isMemberOrder,
   agreeTerms,
   agreePrivacy,
+  taxRequest,
+  taxCompany,
+  taxBusinessNo,
+  taxInvoiceEmail,
+  cashRequest,
+  cashReceiptType,
+  cashReceiptIdentityNumber,
 }: ValidateOrderSubmissionInput): OrderSubmitValidationResult {
   if (!hasRequiredAddressFields(orderer)) {
     return { ok: false, message: "주문자 정보를 모두 입력해주세요." };
@@ -109,6 +123,43 @@ export function validateOrderSubmission({
     (method) => method.value === paymentMethod
   );
   if (!methodDef) return { ok: false };
+
+  // Receipt options are shown to members only and buildOrderBody sends them only for members, so a
+  // guest's (hidden) tax invoice state must not block the order.
+  if (taxRequest && isMemberOrder) {
+    if (!taxCompany.trim()) {
+      return { ok: false, message: "세금계산서 상호명을 입력해 주세요." };
+    }
+    if (taxBusinessNo.replace(/\D/g, "").length !== 10) {
+      return {
+        ok: false,
+        message: "세금계산서 사업자등록번호 10자리를 입력해 주세요.",
+      };
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(taxInvoiceEmail.trim())) {
+      return {
+        ok: false,
+        message: "세금계산서를 받을 이메일 주소를 확인해 주세요.",
+      };
+    }
+  }
+
+  if (cashRequest && isMemberOrder && methodDef.value !== "bank") {
+    const identityLength = cashReceiptIdentityNumber.replace(/\D/g, "").length;
+    const identityIsValid =
+      cashReceiptType === "expense"
+        ? identityLength === 10
+        : identityLength >= 8 && identityLength <= 30;
+    if (!identityIsValid) {
+      return {
+        ok: false,
+        message:
+          cashReceiptType === "expense"
+            ? "현금영수증 지출증빙 사업자등록번호 10자리를 입력해 주세요."
+            : "현금영수증 발급 번호를 확인해 주세요.",
+      };
+    }
+  }
 
   if (methodDef.value === "bank" && !depositName) {
     return { ok: false, message: "입금자명을 입력해주세요." };

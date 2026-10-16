@@ -10,7 +10,12 @@ export function useOrderFormState() {
   const [memo, setMemo] = useState("");
   const [hopeDate, setHopeDate] = useState("");
   const [taxRequest, setTaxRequest] = useState(false);
+  const [taxCompany, setTaxCompany] = useState("");
+  const [taxBusinessNo, setTaxBusinessNo] = useState("");
+  const [taxInvoiceEmail, setTaxInvoiceEmail] = useState("");
   const [cashRequest, setCashRequest] = useState(false);
+  const [cashReceiptType, setCashReceiptType] = useState<"income" | "expense">("income");
+  const [cashReceiptIdentityNumber, setCashReceiptIdentityNumber] = useState("");
   const [guestPassword, setGuestPassword] = useState("");
   const [addressSelection, setAddressSelection] =
     useState<AddressSelection>("same");
@@ -30,8 +35,18 @@ export function useOrderFormState() {
     setHopeDate,
     taxRequest,
     setTaxRequest,
+    taxCompany,
+    setTaxCompany,
+    taxBusinessNo,
+    setTaxBusinessNo,
+    taxInvoiceEmail,
+    setTaxInvoiceEmail,
     cashRequest,
     setCashRequest,
+    cashReceiptType,
+    setCashReceiptType,
+    cashReceiptIdentityNumber,
+    setCashReceiptIdentityNumber,
   };
   const addressSave = {
     saveAsNewAddress,

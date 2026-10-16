@@ -79,6 +79,9 @@ export interface PreparedOrder {
   buyer_name: string;
   buyer_email: string;
   buyer_tel: string;
+  cash_receipt_request?: boolean;
+  cash_receipt_type?: "income" | "expense";
+  cash_receipt_registration_number?: string;
   pg_extra?: {
     inicis?: InicisExtra;
     kcp?: KcpExtra;
