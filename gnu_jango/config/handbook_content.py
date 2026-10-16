@@ -384,7 +384,7 @@ GUIDES = {
             {"heading": "1. 저장소를 가져오고 가상환경을 만듭니다", "paragraphs": [
                 "PythonAnywhere 대시보드에서 Consoles를 열고 Bash 콘솔을 시작합니다. GitHub의 공개 저장소를 계정 홈에 복제합니다. 이 프로젝트 기준 Python 버전은 {{.python-version}}에 기록된 3.12입니다.",
                 "Web 앱에서 고른 Python 버전과 가상환경의 Python 버전은 서로 같아야 합니다."
-            ], "code": "cd ~\ngit clone https://github.com/thisgun/gnu-jango.git\ncd ~/gnu-jango\nmkvirtualenv --python=python3.12 gnu-jango\nworkon gnu-jango\npython -m pip install --upgrade pip\npython -m pip install -r requirements.txt", "note": "패키지 설치에 시간이 걸릴 수 있습니다. 무료 계정의 디스크 한도를 넘기면 더 큰 용량의 실행 환경을 선택해야 합니다."},
+            ], "code": "cd ~\ngit clone https://github.com/thisgun/gnu-jango.git\ncd ~/gnu-jango\nmkvirtualenv --python=python3.12 gnu-jango\nworkon gnu-jango\npython -m pip install --upgrade pip\npython -m pip install -r requirements-pythonanywhere.txt", "note": "PythonAnywhere는 로컬 미디어 저장소를 쓰므로 S3 전용 패키지는 설치하지 않습니다. 무료 계정의 디스크 한도를 넘기면 더 큰 용량의 실행 환경을 선택해야 합니다."},
             {"heading": "2. 운영용 .env 파일을 준비합니다", "paragraphs": [
                 "프로젝트 루트 {{~/gnu-jango}}에 {{.env}} 파일을 만듭니다. 이 파일에는 공개하면 안 되는 Django 비밀 키가 들어 있으므로 GitHub에 올리지 않습니다.",
                 "아래 명령이 출력하는 값을 복사해 {{SECRET_KEY}} 자리에 넣습니다. {{<username>}}은 PythonAnywhere 계정 이름으로 바꿉니다."
@@ -406,17 +406,17 @@ GUIDES = {
                 "핸드북에 샘플 책과 장을 추가하려면 {{python manage.py ensure_handbook_samples}}를 실행합니다."
             ], "note": "샘플 데이터 명령은 이미 만들어진 샘플을 확인하고 빠진 항목을 보완합니다. 실제 이용자 글과 상품을 테스트용 샘플로 덮어쓰지 않습니다."},
             {"heading": "5. CSS와 JavaScript 정적 파일을 연결합니다", "paragraphs": [
-                "{{collectstatic}}은 Django 관리자 화면과 테마가 사용하는 파일을 {{staticfiles}} 폴더에 모읍니다. PythonAnywhere Web 탭의 Static files 영역에 URL과 실제 폴더 경로를 연결합니다."
+                "{{collectstatic}}은 Django 관리자 화면과 일반 Django 정적 파일을 {{staticfiles}} 폴더에 모읍니다. Next.js의 {{/_next/static/}} 자산은 Django가 저장소의 빌드 디렉터리에서 직접 제공하므로 staticfiles에 다시 복사하지 않습니다. PythonAnywhere Web 탭의 Static files 영역에 URL과 실제 폴더 경로를 연결합니다."
             ], "code": "URL: /static/\nDirectory: /home/<username>/gnu-jango/staticfiles\n\nURL: /media/\nDirectory: /home/<username>/gnu-jango/media", "steps": [
                 "Web 탭에서 /static/ URL과 위 Directory 경로를 등록합니다.",
                 "로컬 미디어 저장소를 쓰는 데모라면 /media/도 같은 방법으로 연결합니다.",
                 "Web 탭의 Reload 버튼을 누릅니다.",
                 "{{https://<username>.pythonanywhere.com/}}을 열어 첫 화면을 확인하고 {{/admin/}}에서 관리자 로그인을 확인합니다.",
                 "화면에 CSS가 적용되지 않으면 {{python manage.py collectstatic --noinput}}을 다시 실행하고 URL·Directory 경로를 확인합니다."
-            ], "note": "Django 정적 파일 안내: https://help.pythonanywhere.com/pages/DjangoStaticFiles/"},
+            ], "note": "업데이트 전 버전에서 테마 자산이 staticfiles에 복사됐다면 저장소를 갱신한 뒤 한 번만 {{python manage.py collectstatic --clear --noinput}}을 실행해 오래된 복사본을 정리할 수 있습니다. 이 명령은 STATIC_ROOT 폴더를 비우고 다시 수집하므로 수동 파일이 없는 전용 staticfiles 폴더에서만 실행하세요. Django 정적 파일 안내: https://help.pythonanywhere.com/pages/DjangoStaticFiles/"},
             {"heading": "새 코드를 올릴 때", "paragraphs": [
-                "코드 변경은 GitHub에서 main에 반영한 다음 PythonAnywhere Bash 콘솔에서 가져옵니다. 패키지가 바뀐 경우 requirements.txt도 다시 설치합니다. 데이터베이스 구조와 정적 파일을 갱신한 뒤 Web 탭에서 반드시 Reload를 누릅니다."
-            ], "code": "workon gnu-jango\ncd ~/gnu-jango\ngit pull --ff-only origin main\npython -m pip install -r requirements.txt\npython manage.py migrate\npython manage.py collectstatic --noinput", "note": "테마 소스를 바꾸었다면 로컬에서 테마를 빌드하고 생성된 {{gnu_jango/templates/theme/}}와 {{gnu_jango/templates/theme_static/}}도 함께 GitHub에 올려야 합니다. PythonAnywhere는 이 Django 빌드 테마를 서비스하며 {{npm run dev}}를 실행하지 않습니다."},
+                "코드 변경은 GitHub에서 main에 반영한 다음 PythonAnywhere Bash 콘솔에서 가져옵니다. requirements-pythonanywhere.txt 또는 requirements-base.txt가 바뀐 경우에만 해당 PythonAnywhere 의존성 파일을 다시 설치합니다. 데이터베이스 구조와 정적 파일을 갱신한 뒤 Web 탭에서 반드시 Reload를 누릅니다."
+            ], "code": "workon gnu-jango\ncd ~/gnu-jango\ngit pull --ff-only origin main\npython -m pip install -r requirements-pythonanywhere.txt\npython manage.py migrate\npython manage.py collectstatic --noinput", "note": "requirements-pythonanywhere.txt 또는 requirements-base.txt가 바뀐 경우에만 pip install을 실행합니다. 테마 소스를 바꾸었다면 로컬에서 빌드하고 생성된 {{gnu_jango/templates/theme/}}와 {{gnu_jango/templates/theme_static/}}도 함께 GitHub에 올려야 합니다. PythonAnywhere는 이 Django 빌드 테마를 서비스하며 {{npm run dev}}를 실행하지 않습니다."},
             {"heading": "문제가 생기면 로그부터 확인합니다", "bullets": [
                 "Web 탭의 Error log에서 Django import 오류와 설정 오류를 확인합니다.",
                 "{{ModuleNotFoundError}}가 나오면 Web 앱이 사용하는 가상환경과 Bash 콘솔에서 활성화한 가상환경이 같은지 확인합니다.",

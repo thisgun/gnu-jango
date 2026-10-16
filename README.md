@@ -164,10 +164,10 @@ cd ~/gnu-jango
 mkvirtualenv --python=python3.12 gnu-jango
 workon gnu-jango
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-pythonanywhere.txt
 ```
 
-패키지 설치가 디스크 한도나 빌드 오류로 실패하면 무작정 패키지를 빼지 말고 Bash 콘솔의 오류와 사용량을 확인하세요. 현재 무료 계정 용량으로 설치가 끝나지 않는다면 더 큰 용량을 제공하는 실행 환경이 필요합니다.
+PythonAnywhere는 `MEDIA_STORAGE=local`을 사용하므로 S3 전용 `boto3`와 `django-storages`를 설치하지 않습니다. Vercel은 자동 빌드 호환성을 위해 루트의 `requirements.txt`를 계속 사용합니다. 패키지 설치가 디스크 한도나 빌드 오류로 실패하면 무작정 패키지를 빼지 말고 Bash 콘솔의 오류와 사용량을 확인하세요. 현재 무료 계정 용량으로 설치가 끝나지 않는다면 더 큰 용량을 제공하는 실행 환경이 필요합니다.
 
 #### 2. 운영 설정 파일 만들기
 
@@ -242,9 +242,15 @@ Web 탭의 **Static files**에 다음 매핑을 추가합니다. `<username>`은
 
 `MEDIA_STORAGE=local`로 설정한 데모에서만 `/media/` 매핑을 추가하세요. `https://<username>.pythonanywhere.com/`과 `/admin/`을 열어 확인합니다. CSS가 빠지면 `collectstatic` 실행 여부와 Web 탭의 `/static/` 경로를 확인하세요. 오류 원인은 Web 탭의 **Error log**에서 확인할 수 있습니다. Django의 WSGI·가상환경·정적 파일 설정은 [기존 Django 프로젝트 배포 안내](https://help.pythonanywhere.com/pages/DeployExistingDjangoProject/), [가상환경 안내](https://help.pythonanywhere.com/pages/VirtualEnvForWebsites/), [정적 파일 안내](https://help.pythonanywhere.com/pages/DjangoStaticFiles/)를 참고하세요.
 
+Next.js 테마의 `/_next/static/` 파일은 Django가 저장소의 빌드 디렉터리에서 직접 제공합니다. `collectstatic`은 관리자 화면과 일반 Django 정적 파일만 모으도록 구성되어 있어 테마 파일을 다시 복제하지 않습니다. 이전 버전에서 정적 파일 용량이 커졌다면 저장소를 갱신한 뒤 한 번만 다음 명령으로 전용 `staticfiles` 폴더를 정리하세요. 이 명령은 `STATIC_ROOT`의 기존 파일을 지우고 다시 모으므로, 해당 폴더에 수동 파일을 따로 저장하지 않았는지 먼저 확인하세요. `media/` 파일에는 영향을 주지 않습니다.
+
+```bash
+python manage.py collectstatic --clear --noinput
+```
+
 #### 코드 업데이트하기
 
-새 버전을 배포할 때는 Bash 콘솔에서 저장소를 갱신하고, 마이그레이션과 정적 파일을 적용한 뒤 Web 탭에서 Reload를 누릅니다. `requirements.txt`가 바뀐 경우에만 `python -m pip install -r requirements.txt`를 별도로 실행합니다.
+새 버전을 배포할 때는 Bash 콘솔에서 저장소를 갱신하고, 마이그레이션과 정적 파일을 적용한 뒤 Web 탭에서 Reload를 누릅니다. `requirements-pythonanywhere.txt` 또는 `requirements-base.txt`가 바뀐 경우에만 `python -m pip install -r requirements-pythonanywhere.txt`를 실행합니다. 루트 `requirements.txt`의 S3 패키지만 바뀌었다면 PythonAnywhere 가상환경은 갱신할 필요가 없습니다.
 
 ```bash
 workon gnu-jango
@@ -314,6 +320,8 @@ celery -A example worker --loglevel=INFO
 예약 유지보수 작업은 `python manage.py run_scheduled_jobs`로 실행하며, 프로필별 예약 설정은 [배포 프로필 안내](docs/04-deploy/deployment-profiles.md)를 참고하세요.
 
 ## 개발 점검
+
+GitHub의 `main` 브랜치는 관리자도 직접 푸시할 수 없도록 보호됩니다. 변경사항은 PR로 올리고 `django`, `nextjs`, `theme-bundles`, `docker` 점검이 모두 통과한 뒤 병합하세요. PR의 기준 브랜치가 최신 상태여야 합니다.
 
 백엔드 테스트:
 

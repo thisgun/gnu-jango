@@ -1050,7 +1050,9 @@ STATIC_URL = "/static/"
 
 STATICFILES_DIRS = [
     TEMPLATES_DIR / "statics",
-    TEMPLATES_DIR / "theme_static",
+    # Next.js theme assets are served from the committed theme_static tree by
+    # core.views.nextjs25_static. Copying every theme bundle here duplicates
+    # tens of MiB in collectstatic output without serving the /_next/static URLs.
     TEMPLATES_DIR / "skin_static",
     # os.path.join(TEMPLATES_DIR, 'static'),
     # os.path.join(TEMPLATES_DIR, 'theme'),
