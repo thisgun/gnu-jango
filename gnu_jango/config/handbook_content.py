@@ -37,7 +37,7 @@ GUIDES = {
         "sections": [
             {"heading": "처음 실행할 때 필요한 도구", "bullets": [
                 "Git: 프로젝트 파일을 내려받고 변경 내역을 관리합니다.",
-                "Python 3.13: Django 서버와 관리 명령을 실행합니다. 프로젝트 루트의 {{.python-version}}을 기준으로 버전을 맞춥니다.",
+                "Python 3.12: Django 서버와 관리 명령을 실행합니다. 프로젝트 루트의 {{.python-version}}을 기준으로 버전을 맞춥니다.",
                 "Node.js와 npm: {{nextjs/}} 폴더의 웹 화면을 실행하고 테마 파일을 만듭니다. 설치 버전은 저장소의 CI 설정과 Next.js 안내를 확인하세요.",
                 "코드 편집기와 터미널: VS Code와 Windows PowerShell을 사용할 수 있습니다."
             ]},
@@ -57,7 +57,7 @@ GUIDES = {
         "sections": [
             {"heading": "1. Python 가상환경 만들기", "paragraphs": [
                 "가상환경은 이 프로젝트가 사용하는 Python 패키지를 다른 프로젝트와 분리하는 폴더입니다. 저장소 루트에서 아래 명령을 실행합니다."
-            ], "code": "py -3.13 -m venv .venv\n.\\.venv\\Scripts\\Activate.ps1\npython -m pip install -r requirements.txt"},
+            ], "code": "py -3.12 -m venv .venv\n.\\.venv\\Scripts\\Activate.ps1\npython -m pip install -r requirements.txt"},
             {"heading": "2. 환경 설정과 데이터베이스 준비", "paragraphs": [
                 "{{.env.example}}을 복사해 {{.env}}를 만듭니다. {{.env}}는 컴퓨터에만 보관하는 설정 파일이므로 Git에 올리면 안 됩니다. 개발용 {{SECRET_KEY}}는 아래 명령으로 새 값을 만든 뒤 {{.env}}에 직접 넣습니다.",
                 "그 다음 데이터베이스 구조를 만들고 관리자 계정을 생성합니다. 관리자 계정은 로컬 사이트에서 게시판과 매뉴얼을 관리할 때 사용합니다."
@@ -291,7 +291,7 @@ GUIDES = {
         "intro": "서비스를 인터넷에 공개하려면 Django 앱을 실행할 서버, 영구 데이터베이스, 정적 파일과 업로드 파일을 저장할 장소가 필요합니다. 무료 데모와 실제 운영 사이트의 요구 수준은 다릅니다.",
         "sections": [
             {"heading": "이 프로젝트가 사용하는 구성", "bullets": [
-                "애플리케이션: Python 3.13과 Django. 배포 프로필에 맞는 Python 실행 환경이 필요합니다.",
+                "애플리케이션: Python 3.12와 Django. 배포 프로필에 맞는 Python 실행 환경이 필요합니다.",
                 "데이터베이스: 로컬 개발은 SQLite, 운영은 보통 PostgreSQL을 사용합니다.",
                 "업로드 파일: VPS는 디스크를 쓸 수 있지만, 서버리스 환경은 Supabase Storage 같은 외부 저장소를 사용합니다.",
                 "캐시와 예약 작업: 프로필에 따라 데이터베이스 캐시, Redis, Celery worker 또는 Vercel Cron을 사용합니다.",
@@ -371,6 +371,58 @@ GUIDES = {
                 "요청 주소가 이전 빌드의 해시 파일을 가리키는지 확인하고 페이지를 강력 새로고침합니다.",
                 "배포 산출물에 파일이 포함됐는지 확인하고, Vercel 배포 로그에 빌드 실패가 없는지 확인합니다."
             ], "note": "정적 파일 URL에는 빌드 해시가 들어갈 수 있습니다. 파일 하나만 수동으로 교체하지 말고 테마 전체를 같은 빌드 결과로 맞추세요."}
+        ]
+    },
+    "PythonAnywhere에 올리기": {
+        "intro": "PythonAnywhere는 Django WSGI 웹 앱을 실행하는 호스팅 서비스입니다. GNU Jango의 공개 데모를 올리는 과정을 따라 해 봅니다. 이 프로젝트는 저장소에 포함된 Next.js 테마 빌드 결과를 Django가 제공하므로 PythonAnywhere에서 Next.js 개발 서버를 계속 켜 둘 필요가 없습니다.",
+        "sections": [
+            {"heading": "시작 전에 무료 계정 한도를 확인합니다", "bullets": [
+                "현재 PythonAnywhere 무료 계정 안내에는 CPU 100초, 디스크 512 MiB, 웹 앱 1개와 한 달 만료가 표시되어 있습니다. 한도와 무료 플랜 조건은 바뀔 수 있으니 공식 안내를 먼저 확인합니다.",
+                "이 프로젝트는 여러 Python 패키지를 설치합니다. 디스크 부족으로 설치가 실패하면 패키지를 임의로 지우지 말고 계정 사용량과 오류를 확인합니다.",
+                "무료 계정은 학습·데모 용도로 사용합니다. 실제 결제와 민감한 회원 정보를 처리하는 운영 서버로 쓰지 않습니다."
+            ], "note": "공식 안내: https://help.pythonanywhere.com/pages/FreeAccountsFeatures/"},
+            {"heading": "1. 저장소를 가져오고 가상환경을 만듭니다", "paragraphs": [
+                "PythonAnywhere 대시보드에서 Consoles를 열고 Bash 콘솔을 시작합니다. GitHub의 공개 저장소를 계정 홈에 복제합니다. 이 프로젝트 기준 Python 버전은 {{.python-version}}에 기록된 3.12입니다.",
+                "Web 앱에서 고른 Python 버전과 가상환경의 Python 버전은 서로 같아야 합니다."
+            ], "code": "cd ~\ngit clone https://github.com/thisgun/gnu-jango.git\ncd ~/gnu-jango\nmkvirtualenv --python=python3.12 gnu-jango\nworkon gnu-jango\npython -m pip install --upgrade pip\npython -m pip install -r requirements.txt", "note": "패키지 설치에 시간이 걸릴 수 있습니다. 무료 계정의 디스크 한도를 넘기면 더 큰 용량의 실행 환경을 선택해야 합니다."},
+            {"heading": "2. 운영용 .env 파일을 준비합니다", "paragraphs": [
+                "프로젝트 루트 {{~/gnu-jango}}에 {{.env}} 파일을 만듭니다. 이 파일에는 공개하면 안 되는 Django 비밀 키가 들어 있으므로 GitHub에 올리지 않습니다.",
+                "아래 명령이 출력하는 값을 복사해 {{SECRET_KEY}} 자리에 넣습니다. {{<username>}}은 PythonAnywhere 계정 이름으로 바꿉니다."
+            ], "code": "cd ~/gnu-jango\npython -c \"from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())\"", "note": "파이썬 환경 변수와 개발 설정 파일을 읽는 법은 저장소 README의 PythonAnywhere 절을 참고합니다."},
+            {"heading": ".env에 넣을 데모 설정", "paragraphs": [
+                "데모는 PythonAnywhere 디스크에 저장하는 SQLite와 로컬 미디어 저장소를 사용할 수 있습니다. 업로드 경로는 프로젝트 폴더 안의 절대 경로로 지정합니다."
+            ], "code": "ENVIRONMENT=Production\nDEBUG=False\nSECRET_KEY=새로_생성한_비밀값\nALLOWED_HOSTS=<username>.pythonanywhere.com\nCSRF_TRUSTED_ORIGINS=https://<username>.pythonanywhere.com\nDB_ENGINE=django.db.backends.sqlite3\nDB_NAME=/home/<username>/gnu-jango/db.sqlite3\nMEDIA_STORAGE=local\nMEDIA_ROOT=/home/<username>/gnu-jango/media", "note": "SECRET_KEY에는 저장소의 예시 값을 쓰지 마세요. <username> 표시는 실제 계정 이름으로 바꾸고, .env 파일을 저장소에 커밋하지 않습니다."},
+            {"heading": "3. Web 앱과 가상환경을 연결합니다", "steps": [
+                "대시보드의 Web 탭에서 Add a new web app을 누릅니다.",
+                "Manual configuration을 고르고 Python 3.12를 선택합니다. 프로젝트 소스 경로는 {{/home/<username>/gnu-jango}}입니다.",
+                "Source code와 Working directory에는 프로젝트 루트를, Virtualenv에는 {{gnu-jango}}를 입력합니다.",
+                "Web 탭의 Code 영역에서 PythonAnywhere가 만든 WSGI configuration file을 엽니다. 저장소의 {{example/wsgi.py}}가 아니라 이 WSGI 파일을 편집합니다."
+            ], "code": "import os\nimport sys\n\npath = \"/home/<username>/gnu-jango\"\nif path not in sys.path:\n    sys.path.insert(0, path)\n\nos.environ.setdefault(\"DJANGO_SETTINGS_MODULE\", \"example.settings\")\nos.environ.setdefault(\"ENVIRONMENT\", \"Production\")\n\nfrom django.core.wsgi import get_wsgi_application\napplication = get_wsgi_application()", "note": "PythonAnywhere의 기존 Django 프로젝트 안내도 Manual configuration과 가상환경, WSGI 연결 순서로 설명합니다: https://help.pythonanywhere.com/pages/DeployExistingDjangoProject/"},
+            {"heading": "4. 데이터베이스와 샘플 데이터를 준비합니다", "paragraphs": [
+                "Bash 콘솔에서 같은 가상환경을 켜고 프로젝트 루트로 이동해 데이터베이스 테이블과 정적 파일을 준비합니다. {{migrate}}는 빈 SQLite 데이터베이스에 프로젝트 테이블을 만듭니다.",
+                "관리자 계정은 {{createsuperuser}}를 실행해 만듭니다. 명령이 사용자 이름과 비밀번호를 물으면 콘솔에 직접 입력합니다."
+            ], "code": "workon gnu-jango\ncd ~/gnu-jango\nmkdir -p media\npython manage.py check\npython manage.py migrate\npython manage.py collectstatic --noinput\npython manage.py createsuperuser", "steps": [
+                "게시판과 쇼핑몰 데모 콘텐츠를 준비하려면 {{python manage.py ensure_demo_samples --apply}}를 실행합니다.",
+                "핸드북에 샘플 책과 장을 추가하려면 {{python manage.py ensure_handbook_samples}}를 실행합니다."
+            ], "note": "샘플 데이터 명령은 이미 만들어진 샘플을 확인하고 빠진 항목을 보완합니다. 실제 이용자 글과 상품을 테스트용 샘플로 덮어쓰지 않습니다."},
+            {"heading": "5. CSS와 JavaScript 정적 파일을 연결합니다", "paragraphs": [
+                "{{collectstatic}}은 Django 관리자 화면과 테마가 사용하는 파일을 {{staticfiles}} 폴더에 모읍니다. PythonAnywhere Web 탭의 Static files 영역에 URL과 실제 폴더 경로를 연결합니다."
+            ], "code": "URL: /static/\nDirectory: /home/<username>/gnu-jango/staticfiles\n\nURL: /media/\nDirectory: /home/<username>/gnu-jango/media", "steps": [
+                "Web 탭에서 /static/ URL과 위 Directory 경로를 등록합니다.",
+                "로컬 미디어 저장소를 쓰는 데모라면 /media/도 같은 방법으로 연결합니다.",
+                "Web 탭의 Reload 버튼을 누릅니다.",
+                "{{https://<username>.pythonanywhere.com/}}을 열어 첫 화면을 확인하고 {{/admin/}}에서 관리자 로그인을 확인합니다.",
+                "화면에 CSS가 적용되지 않으면 {{python manage.py collectstatic --noinput}}을 다시 실행하고 URL·Directory 경로를 확인합니다."
+            ], "note": "Django 정적 파일 안내: https://help.pythonanywhere.com/pages/DjangoStaticFiles/"},
+            {"heading": "새 코드를 올릴 때", "paragraphs": [
+                "코드 변경은 GitHub에서 main에 반영한 다음 PythonAnywhere Bash 콘솔에서 가져옵니다. 패키지가 바뀐 경우 requirements.txt도 다시 설치합니다. 데이터베이스 구조와 정적 파일을 갱신한 뒤 Web 탭에서 반드시 Reload를 누릅니다."
+            ], "code": "workon gnu-jango\ncd ~/gnu-jango\ngit pull --ff-only origin main\npython -m pip install -r requirements.txt\npython manage.py migrate\npython manage.py collectstatic --noinput", "note": "테마 소스를 바꾸었다면 로컬에서 테마를 빌드하고 생성된 {{gnu_jango/templates/theme/}}와 {{gnu_jango/templates/theme_static/}}도 함께 GitHub에 올려야 합니다. PythonAnywhere는 이 Django 빌드 테마를 서비스하며 {{npm run dev}}를 실행하지 않습니다."},
+            {"heading": "문제가 생기면 로그부터 확인합니다", "bullets": [
+                "Web 탭의 Error log에서 Django import 오류와 설정 오류를 확인합니다.",
+                "{{ModuleNotFoundError}}가 나오면 Web 앱이 사용하는 가상환경과 Bash 콘솔에서 활성화한 가상환경이 같은지 확인합니다.",
+                "{{DisallowedHost}}가 나오면 .env의 {{ALLOWED_HOSTS}}에 실제 PythonAnywhere 도메인이 있는지 확인합니다.",
+                "정적 파일 404는 collectstatic 실행 여부와 Web 탭 Static files 경로를 확인합니다."
+            ], "note": "무료 계정 한도와 환경 설정은 변경될 수 있습니다. PythonAnywhere 공식 문서와 현재 대시보드의 안내를 우선하세요."}
         ]
     },
     "자주 만나는 오류": {

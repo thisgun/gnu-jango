@@ -14,6 +14,7 @@ GNU Jango는 그누보드5·영카트의 게시판, 회원, 쇼핑몰 기능을 
 
 - 커뮤니티·쇼핑몰 테마: [gnu-jango-demo.vercel.app](https://gnu-jango-demo.vercel.app/)
 - 매뉴얼 테마: [gnu-jango-handbook.vercel.app](https://gnu-jango-handbook.vercel.app/)
+- PythonAnywhere 데모: [thisgun.pythonanywhere.com](https://thisgun.pythonanywhere.com/)
 
 ## 현재 구성
 
@@ -144,6 +145,118 @@ npm run build:theme:handbook         # handbook
 | Vercel + Supabase | Django Python 함수, Supabase PostgreSQL·Storage, 공유 캐시와 Vercel Cron | [배포 프로필](docs/04-deploy/deployment-profiles.md), [환경변수 예시](deploy/env/vercel-supabase.env.example) |
 | VPS | Docker Compose의 Django, PostgreSQL, Redis, Celery worker; 또는 기존 운영 서버 구성 | [배포 프로필](docs/04-deploy/deployment-profiles.md), [환경변수 예시](deploy/env/vps.env.example) |
 | 분리형 | VPS의 Django API와 별도 Node 기반 Next.js 프런트엔드 | [배포 프로필](docs/04-deploy/deployment-profiles.md), [환경변수 예시](deploy/env/split-api.env.example) |
+| PythonAnywhere | Django와 저장소에 포함된 빌드 테마를 사용하는 가벼운 데모 | [아래 설치·업데이트 안내](#pythonanywhere에-데모-올리기) |
+
+### PythonAnywhere에 데모 올리기
+
+이 절차는 **새 PythonAnywhere 계정에 GNU Jango 데모를 올리는 방법**입니다. PythonAnywhere의 Web 앱은 Django WSGI 서버로 실행합니다. Next.js 개발 서버를 PythonAnywhere에서 실행하지 않아도 됩니다. 저장소의 `gnu_jango/templates/theme/`와 `gnu_jango/templates/theme_static/`에 포함된 빌드 결과를 Django가 제공합니다.
+
+PythonAnywhere 무료 계정의 현재 공개 한도는 CPU 100초, 디스크 512 MiB, 웹 앱 1개(작업자 1개, 한 달 만료)입니다. 패키지가 많은 프로젝트라 디스크 한도를 넘을 수 있고, 만료 전에 대시보드에서 웹 앱을 갱신해야 할 수 있습니다. 요금제와 한도는 바뀔 수 있으므로 [PythonAnywhere 무료 계정 안내](https://help.pythonanywhere.com/pages/FreeAccountsFeatures/)를 먼저 확인하세요. 무료 계정은 학습과 데모용으로만 사용하고, 실제 결제나 민감한 회원 정보를 처리하는 운영 사이트로 쓰지 마세요.
+
+#### 1. 저장소 복제 및 가상환경 준비
+
+PythonAnywhere 대시보드의 **Consoles → Bash**에서 다음 명령을 실행합니다. PythonAnywhere의 웹 앱과 가상환경은 같은 Python 버전을 사용해야 합니다. 이 프로젝트 기준은 Python 3.12입니다.
+
+```bash
+cd ~
+git clone https://github.com/thisgun/gnu-jango.git
+cd ~/gnu-jango
+mkvirtualenv --python=python3.12 gnu-jango
+workon gnu-jango
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+패키지 설치가 디스크 한도나 빌드 오류로 실패하면 무작정 패키지를 빼지 말고 Bash 콘솔의 오류와 사용량을 확인하세요. 현재 무료 계정 용량으로 설치가 끝나지 않는다면 더 큰 용량을 제공하는 실행 환경이 필요합니다.
+
+#### 2. 운영 설정 파일 만들기
+
+프로젝트 루트의 `.env` 파일을 PythonAnywhere **Files** 화면에서 만들거나 편집합니다. `<username>`은 PythonAnywhere 계정 이름으로 바꾸고, `SECRET_KEY`에는 아래 명령이 출력한 값을 넣습니다. `.env`를 GitHub에 올리면 안 됩니다.
+
+```bash
+cd ~/gnu-jango
+python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+```
+
+데모용으로는 PythonAnywhere 디스크에 저장하는 SQLite를 사용할 수 있습니다. `.env`에 다음 값을 넣습니다.
+
+```dotenv
+ENVIRONMENT=Production
+DEBUG=False
+SECRET_KEY=여기에_새로_생성한_비밀키
+ALLOWED_HOSTS=<username>.pythonanywhere.com
+CSRF_TRUSTED_ORIGINS=https://<username>.pythonanywhere.com
+DB_ENGINE=django.db.backends.sqlite3
+DB_NAME=/home/<username>/gnu-jango/db.sqlite3
+MEDIA_STORAGE=local
+MEDIA_ROOT=/home/<username>/gnu-jango/media
+```
+
+`SECRET_KEY`를 저장소의 예시 값 그대로 두지 마세요. 데이터베이스와 업로드 파일은 PythonAnywhere 계정의 디스크에 저장되므로, 중요한 데이터의 백업과 외부 미디어 저장소가 필요한 운영 서비스에는 적합하지 않습니다.
+
+#### 3. PythonAnywhere Web 앱 연결
+
+대시보드에서 **Web → Add a new web app → Manual configuration → Python 3.12**를 선택합니다. 이 저장소의 `manage.py`가 있는 폴더가 프로젝트 루트입니다. Web 설정에서 **Source code**와 **Working directory**를 `/home/<username>/gnu-jango`로 지정하고, **Virtualenv**에는 `gnu-jango`를 입력합니다.
+
+Web 탭의 Code 영역에서 PythonAnywhere가 만든 **WSGI configuration file**을 열어 Django 부분을 다음처럼 설정합니다. 저장소의 `example/wsgi.py`가 아니라 Web 탭에 연결된 WSGI 파일을 편집해야 합니다.
+
+```python
+import os
+import sys
+
+path = "/home/<username>/gnu-jango"
+if path not in sys.path:
+    sys.path.insert(0, path)
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "example.settings")
+os.environ.setdefault("ENVIRONMENT", "Production")
+
+from django.core.wsgi import get_wsgi_application
+
+application = get_wsgi_application()
+```
+
+#### 4. 데이터베이스와 데모 콘텐츠 준비
+
+Bash 콘솔에서 가상환경을 켜고 프로젝트의 데이터베이스 테이블과 정적 파일을 준비합니다.
+
+```bash
+workon gnu-jango
+cd ~/gnu-jango
+mkdir -p media
+python manage.py check
+python manage.py migrate
+python manage.py collectstatic --noinput
+```
+
+관리자 계정은 `python manage.py createsuperuser`로 만들 수 있습니다. 게시판·상품 샘플을 원하면 `python manage.py ensure_demo_samples --apply`, 매뉴얼 책과 장을 원하면 `python manage.py ensure_handbook_samples`를 실행하세요. 샘플 명령은 이미 있는 샘플을 중복으로 만들지 않도록 설계되어 있습니다.
+
+#### 5. 정적 파일 연결 후 접속 확인
+
+Web 탭의 **Static files**에 다음 매핑을 추가합니다. `<username>`은 실제 계정 이름으로 바꾸고 저장한 뒤 **Reload**를 누릅니다.
+
+| URL | Directory |
+|---|---|
+| `/static/` | `/home/<username>/gnu-jango/staticfiles` |
+| `/media/` | `/home/<username>/gnu-jango/media` |
+
+`MEDIA_STORAGE=local`로 설정한 데모에서만 `/media/` 매핑을 추가하세요. `https://<username>.pythonanywhere.com/`과 `/admin/`을 열어 확인합니다. CSS가 빠지면 `collectstatic` 실행 여부와 Web 탭의 `/static/` 경로를 확인하세요. 오류 원인은 Web 탭의 **Error log**에서 확인할 수 있습니다. Django의 WSGI·가상환경·정적 파일 설정은 [기존 Django 프로젝트 배포 안내](https://help.pythonanywhere.com/pages/DeployExistingDjangoProject/), [가상환경 안내](https://help.pythonanywhere.com/pages/VirtualEnvForWebsites/), [정적 파일 안내](https://help.pythonanywhere.com/pages/DjangoStaticFiles/)를 참고하세요.
+
+#### 코드 업데이트하기
+
+새 버전을 배포할 때는 Bash 콘솔에서 저장소를 갱신하고, 마이그레이션과 정적 파일을 적용한 뒤 Web 탭에서 Reload를 누릅니다. `requirements.txt`가 바뀐 경우에만 `python -m pip install -r requirements.txt`를 별도로 실행합니다.
+
+```bash
+workon gnu-jango
+cd ~/gnu-jango
+git pull --ff-only origin main
+python manage.py migrate
+python manage.py collectstatic --noinput
+```
+
+샘플 매뉴얼의 새 장을 반영하려면 `python manage.py ensure_handbook_samples`도 실행합니다. 테마 소스를 바꾼 경우에는 로컬에서 테마를 빌드하고 생성 결과 두 폴더를 함께 Git에 올려야 합니다. PythonAnywhere에서는 Next.js `npm run dev`가 아니라 Django Web 앱을 실행합니다.
+
+화면을 보며 따라 하고 싶다면 [GNU Jango 핸드북](https://gnu-jango-handbook.vercel.app/)의 **개발과 배포 → 서버에 올리기 → PythonAnywhere에 올리기** 장을 참고하세요.
 
 Docker Compose는 `.env`의 `SECRET_KEY`를 요구하고, 웹 컨테이너 시작 때 마이그레이션을 적용합니다. 로컬 컨테이너를 실행하려면 비밀값을 설정한 뒤 다음 명령을 사용합니다.
 
