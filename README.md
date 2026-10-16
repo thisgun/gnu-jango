@@ -92,16 +92,22 @@ python manage.py runserver 127.0.0.1:8000
 
 기본 개발 설정은 SQLite와 `DEBUG=True`를 사용합니다. 실제 운영 환경에는 적용하지 마세요.
 
+린트·테스트 도구(ruff, selenium, tox 등)가 필요하면 개발 의존성도 설치합니다. 운영 서버에는 설치하지 않아도 됩니다.
+
+```bash
+python -m pip install -r requirements-dev.txt
+```
+
 ## 기존 그누보드 데이터 가져오기
 
 `migrate_gnuboard5`는 원본 그누보드의 `data/dbconfig.php`를 읽어 MySQL 데이터를 Django 데이터베이스로 가져옵니다. 기본 실행은 가져올 항목과 건수를 확인하는 점검 모드이며, 실제 쓰기는 `--apply`를 지정해야 합니다.
 
 ```powershell
-python manage.py migrate_gnuboard5 --source-root "C:\xampp824\www\gnuboard5_3"
-python manage.py migrate_gnuboard5 --source-root "C:\xampp824\www\gnuboard5_3" --apply
+python manage.py migrate_gnuboard5 --source-root "<그누보드5 설치 경로>"
+python manage.py migrate_gnuboard5 --source-root "<그누보드5 설치 경로>" --apply
 ```
 
-다른 원본 경로를 사용하면 `--source-root` 값을 바꾸세요. 실제 DB에 적용하기 전에 대상 DB를 백업하고, 점검 모드 출력으로 가져올 테이블과 행 수를 확인하세요.
+`<그누보드5 설치 경로>`는 `data/dbconfig.php`가 들어 있는 그누보드 폴더입니다(예: Windows XAMPP는 `C:\xampp\htdocs\gnuboard5`, Linux는 `/var/www/gnuboard5`). 실제 DB에 적용하기 전에 대상 DB를 백업하고, 점검 모드 출력으로 가져올 테이블과 행 수를 확인하세요.
 
 ## Next.js 프런트엔드 실행
 
@@ -190,7 +196,10 @@ DB_ENGINE=django.db.backends.sqlite3
 DB_NAME=/home/<username>/gnu-jango/db.sqlite3
 MEDIA_STORAGE=local
 MEDIA_ROOT=/home/<username>/gnu-jango/media
+EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend
 ```
+
+`EMAIL_BACKEND` 줄을 빼면 운영 설정이 SMTP 메일 서버(`EMAIL_HOST`)를 요구해 Django가 시작하지 않습니다. 위 값은 메일을 보내지 않고 로그(Web 탭의 **Server log**)에만 남깁니다. 실제로 메일을 보내려면 이 줄 대신 `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_HOST_USER`, `EMAIL_HOST_PASSWORD`, `DEFAULT_FROM_EMAIL`을 설정하세요. 무료 계정은 바깥 연결이 제한되므로 외부 SMTP가 막힐 수 있습니다.
 
 `SECRET_KEY`를 저장소의 예시 값 그대로 두지 마세요. 데이터베이스와 업로드 파일은 PythonAnywhere 계정의 디스크에 저장되므로, 중요한 데이터의 백업과 외부 미디어 저장소가 필요한 운영 서비스에는 적합하지 않습니다.
 
@@ -262,7 +271,11 @@ python manage.py collectstatic --noinput
 
 샘플 매뉴얼의 새 장을 반영하려면 `python manage.py ensure_handbook_samples`도 실행합니다. 테마 소스를 바꾼 경우에는 로컬에서 테마를 빌드하고 생성 결과 두 폴더를 함께 Git에 올려야 합니다. PythonAnywhere에서는 Next.js `npm run dev`가 아니라 Django Web 앱을 실행합니다.
 
+무료 계정의 웹 앱은 한 달 뒤 멈춥니다. 만료 전에 Web 탭의 연장 버튼을 눌러야 하며, 사이트를 주기적으로 호출하는 것만으로는 연장되지 않습니다.
+
 화면을 보며 따라 하고 싶다면 [GNU Jango 핸드북](https://gnu-jango-handbook.vercel.app/)의 **개발과 배포 → 서버에 올리기 → PythonAnywhere에 올리기** 장을 참고하세요.
+
+### Docker Compose
 
 Docker Compose는 `.env`의 `SECRET_KEY`를 요구하고, 웹 컨테이너 시작 때 마이그레이션을 적용합니다. 로컬 컨테이너를 실행하려면 비밀값을 설정한 뒤 다음 명령을 사용합니다.
 
@@ -270,9 +283,13 @@ Docker Compose는 `.env`의 `SECRET_KEY`를 요구하고, 웹 컨테이너 시�
 docker compose up --build
 ```
 
+### Vercel 참고 사항
+
 Vercel 프로젝트는 저장소 루트를 기준으로 설정합니다. 테마 빌드 결과를 바꿨다면 두 테마 디렉터리의 산출물을 함께 커밋해야 합니다. 별도 handbook 데모처럼 같은 브랜치에 연결된 Vercel 프로젝트가 여러 개면 `main` 푸시가 모두 배포를 시작합니다. handbook 프로젝트의 테마 기본값과 DB 준비는 [handbook 데모 안내](docs/04-deploy/handbook-demo.md)를 참고하세요.
 
-운영 배포 전에 환경 변수 예시의 자리표시자를 실제 설정으로 바꾸고, 프로필 점검을 실행합니다.
+### 공통 운영 점검
+
+어느 배포 방식이든 운영 배포 전에 환경 변수 예시의 자리표시자를 실제 설정으로 바꾸고, 프로필 점검을 실행합니다.
 
 ```bash
 python manage.py check_deploy_profile --profile vps
@@ -327,6 +344,12 @@ GitHub의 `main` 브랜치는 관리자도 직접 푸시할 수 없도록 보호
 
 ```bash
 python manage.py test gnu_jango --parallel auto
+```
+
+병렬 실행 중 테스트가 실패하면 실패한 테스트 대신 `cannot pickle 'traceback' object`만 보일 수 있습니다. 그럴 때는 `--parallel` 없이 다시 실행해 실패 내용을 확인하세요(시간은 더 걸립니다).
+
+```bash
+python manage.py test gnu_jango
 ```
 
 프런트엔드 점검:
