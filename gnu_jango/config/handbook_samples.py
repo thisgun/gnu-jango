@@ -1,4 +1,4 @@
-"""A small sample manual for the handbook theme: one board group, seven books, 37 chapters.
+"""A small sample manual for the handbook theme: one board group, seven books, 38 chapters.
 
 The handbook theme maps gnuboard data onto a manual — a board group is the manual, each board in it
 a book (its subject "hint · name" gives a small hint and the book name), each board category a part
@@ -90,7 +90,7 @@ BOOKS = (
         (
             ("준비", ("서버 요구사항", "환경 변수")),
             ("올리기", ("빌드하기", "정적 파일 올리기", "PythonAnywhere에 올리기")),
-            ("막혔을 때", ("자주 만나는 오류",)),
+            ("막혔을 때", ("자주 만나는 오류", "느린 페이지 찾고 고치기")),
         ),
     ),
     Book(
