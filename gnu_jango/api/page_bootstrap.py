@@ -19,7 +19,9 @@ from .authentication import SessionJWTAuthentication
 from .response import api_response
 
 BOOTSTRAP_VERSION_KEY = "page-bootstrap:version:v1"
-BOOTSTRAP_TTL = 30
+# Content writes start a new generation at once (register_bootstrap_invalidation), so the TTL only
+# bounds time-based drift such as a banner's display window. Each rebuild costs ~70 queries.
+BOOTSTRAP_TTL = 300
 _change_batch = ContextVar("page_bootstrap_change_batch", default=None)
 
 
@@ -42,8 +44,27 @@ def _data(builder, request, *, params=None, fallback=None, **kwargs):
     return response.data.get("data", fallback)
 
 
+def _reads_differ_from_a_guest(request):
+    """Whether this visitor may read what an anonymous guest cannot.
+
+    Members and token-bearing requests can. A guest can too after entering a secret post's or
+    comment's password (session keys ss_secret_*, see access.secret_post_session_filters). Any other
+    cookie (CSRF token, an empty or view-count-only session) changes nothing, and nearly every
+    browser carries one, so it must not force a fresh build for each visitor.
+    """
+    if request.user.is_authenticated or request.headers.get("Authorization"):
+        return True
+    session = getattr(request, "session", None)
+    if session is None:
+        return False
+    try:
+        return any(value and str(key).startswith("ss_secret_") for key, value in session.items())
+    except Exception:  # an unreadable session: do not risk sharing a personal view
+        return True
+
+
 def _shared_data(request, kind, build):
-    # Logged-in and cookie-bearing requests can have different read permissions. Poll vote
+    # Visitors who may read more than a guest get their own build. Poll vote
     # state is also visitor-specific and is never stored in this shared snapshot.
     # A production worker's local cache cannot observe writes handled by another worker.
     # Keep those reads fresh unless the configured cache is shared (database/Redis).
@@ -53,7 +74,7 @@ def _shared_data(request, kind, build):
         "django.core.cache.backends.dummy.DummyCache",
         "django.core.cache.backends.filebased.FileBasedCache",
     }
-    if (not settings.DEBUG and local_cache) or request.user.is_authenticated or request.COOKIES or request.headers.get("Authorization"):
+    if (not settings.DEBUG and local_cache) or _reads_differ_from_a_guest(request):
         return build(request)
     version = cache.get(BOOTSTRAP_VERSION_KEY, "0")
     origin = hashlib.sha256(request.build_absolute_uri("/").encode()).hexdigest()[:16]
