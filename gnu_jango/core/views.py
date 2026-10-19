@@ -23,6 +23,7 @@ from gnu_jango.config import config
 from gnu_jango.config.theme_settings import theme_settings_for
 from gnu_jango.config.sample_data import SAMPLE_ASSET_SIZES
 from gnu_jango.core.legacy_assets import legacy_area_roots
+from gnu_jango.core.navigation import navigation_boards, site_menu_items
 
 from gnu_jango.utils.add_sample import add_sample_data
 from gnu_jango.utils import lib
@@ -280,6 +281,10 @@ def _rewrite_nextjs25_runtime_config(content, request):
     theme_settings = theme_settings_for(_nextjs_theme_name(), config.get_all())
     if theme_settings is not None:
         runtime_config["themeSettings"] = theme_settings
+    # The site's own menus and public boards: menus baked into the export at build time belong to
+    # the build machine's database and point at boards other installations do not have.
+    runtime_config["menus"] = site_menu_items(current_path, getattr(request, "user", None))
+    runtime_config["navBoards"] = navigation_boards()
     replacements = {
         "https://your-django-api.example.com/api/v1": api_base_url,
         "https://your-django-api.example.com": origin,

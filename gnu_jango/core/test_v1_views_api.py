@@ -219,7 +219,7 @@ class MenusEndpointTests(V1ViewsTestCase):
         self.assertEqual(
             set(item),
             {
-                "id", "me_code", "me_name", "me_link", "me_type", "me_type_pk",
+                "id", "me_id", "me_code", "me_name", "me_link", "me_type", "me_type_pk",
                 "me_target", "me_order", "me_use", "me_mobile_use", "children",
             },
         )
