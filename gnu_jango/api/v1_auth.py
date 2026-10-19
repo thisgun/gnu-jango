@@ -223,22 +223,42 @@ def _split_provider_list(value):
     return {item.strip().lower() for item in str(value or "").replace("|", ",").split(",") if item.strip()}
 
 
-def _provider_config(provider_name):
+SOCIAL_GLOBAL_CONFIG_NAMES = ("cf_social_login_use", "cf_social_servicelist")
+
+
+def _social_config_values():
+    """Every Config value the provider list needs, in one query (it is fetched on every page)."""
+    names = set(SOCIAL_GLOBAL_CONFIG_NAMES)
+    for spec in SOCIAL_PROVIDER_SPECS.values():
+        names.update(name for name in (spec.get("config_client_id"), spec.get("config_secret")) if name)
+    try:
+        return {name: str(value) for name, value in Config.objects.filter(name__in=names).values_list("name", "value") if value is not None}
+    except Exception:
+        return None
+
+
+def _provider_config(provider_name, config_values=None):
+    """config_values: Config values read in advance (_social_config_values); None reads each one."""
     provider = str(provider_name or "").strip().lower()
     spec = SOCIAL_PROVIDER_SPECS.get(provider)
     if not spec:
         return None
 
-    client_id = _setting_value(spec.get("setting_client_id", "")) or _config_value(spec.get("config_client_id", ""))
-    client_secret = _setting_value(spec.get("setting_secret", "")) or _config_value(spec.get("config_secret", ""))
+    def config_value(name, default=""):
+        if config_values is None:
+            return _config_value(name, default)
+        return config_values.get(name, default) if name else default
+
+    client_id = _setting_value(spec.get("setting_client_id", "")) or config_value(spec.get("config_client_id", ""))
+    client_secret = _setting_value(spec.get("setting_secret", "")) or config_value(spec.get("config_secret", ""))
     service_provider_code = _setting_value(spec.get("setting_service_provider_code", ""))
     configured_from_env = bool(_setting_value(spec.get("setting_client_id", "")))
     has_required_secret = bool(client_secret) or not spec.get("requires_secret", False)
     has_required_service_code = bool(service_provider_code) or not spec.get("requires_service_provider_code", False)
     has_api_key = bool(client_id and has_required_secret and has_required_service_code)
 
-    global_enabled = _truthy(_config_value("cf_social_login_use", "0"))
-    service_list = _split_provider_list(_config_value("cf_social_servicelist", ""))
+    global_enabled = _truthy(config_value("cf_social_login_use", "0"))
+    service_list = _split_provider_list(config_value("cf_social_servicelist", ""))
     provider_allowed = not service_list or provider in service_list
     enabled = has_api_key and (configured_from_env or (global_enabled and provider_allowed))
 
@@ -260,8 +280,9 @@ def _provider_config(provider_name):
 
 def _configured_social_providers():
     providers = []
+    config_values = _social_config_values()
     for name in SOCIAL_PROVIDER_SPECS:
-        config = _provider_config(name)
+        config = _provider_config(name, config_values)
         providers.append(
             {
                 "name": name,

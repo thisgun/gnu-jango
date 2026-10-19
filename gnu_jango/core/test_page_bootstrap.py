@@ -52,15 +52,27 @@ class PageBootstrapTests(TestCase):
             self.assertEqual(home["products"][f"type{number}"], expected)
             self.assertNotIn(disabled.pk, [row["it_id"] for row in expected])
 
-    def test_only_cookieless_anonymous_requests_share_snapshots(self):
+    def test_guests_share_snapshots_unless_their_session_unlocks_posts(self):
         with patch.object(page_bootstrap, "_shop_data", return_value={"settings": {}}) as build:
             self.data("/api/v1/shop/home")
             self.data("/api/v1/shop/home")
             self.assertEqual(build.call_count, 1)
+            # A browser always carries some cookie (CSRF token, an empty session); that alone gives a
+            # guest no other read permission, so it must not cost every visitor a fresh build.
             cookie_client = APIClient()
+            cookie_client.cookies["csrftoken"] = "guest-csrf"
             cookie_client.cookies["sessionid"] = "unknown-guest-session"
             self.data("/api/v1/shop/home", cookie_client)
             self.data("/api/v1/shop/home", cookie_client)
+            self.assertEqual(build.call_count, 1)
+            # A guest who entered a secret post's password may read more: build for them alone.
+            unlocked = APIClient()
+            session = unlocked.session
+            session["ss_secret_1_1"] = True
+            session.save()
+            unlocked.cookies["sessionid"] = session.session_key
+            self.data("/api/v1/shop/home", unlocked)
+            self.data("/api/v1/shop/home", unlocked)
             self.assertEqual(build.call_count, 3)
             member = get_user_model().objects.create_user(username="bootstrap-member")
             member_client = APIClient()
