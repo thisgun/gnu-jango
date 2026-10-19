@@ -40,7 +40,7 @@ export DB_DISABLE_SERVER_SIDE_CURSORS=True
 python manage.py migrate
 python manage.py createcachetable
 python manage.py createsuperuser
-python manage.py ensure_handbook_samples      # 샘플 매뉴얼: 책 7권 · 장 37개 (--remove 로 되돌림)
+python manage.py ensure_handbook_samples      # 샘플 매뉴얼: 책 7권 · 장 38개 (--remove 로 되돌림)
 python manage.py check_deploy_profile --profile vercel
 ```
 
