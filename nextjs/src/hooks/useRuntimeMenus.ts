@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import type { MenuItem } from "@/components/layout/menu";
 import { readApiResponse } from "@/lib/api-response";
-import { apiUrl } from "@/lib/config";
+import { apiUrl, clientRuntimeMenus } from "@/lib/config";
 import { menuItemListSchema } from "@/lib/schemas";
 
 export function useRuntimeMenus(initialMenus?: MenuItem[]): MenuItem[] {
@@ -14,6 +14,12 @@ export function useRuntimeMenus(initialMenus?: MenuItem[]): MenuItem[] {
     let alive = true;
 
     async function refreshMenus() {
+      // A Django-served page already carries the site's menus; no request is needed then.
+      const injected = menuItemListSchema.safeParse(clientRuntimeMenus());
+      if (injected.success) {
+        setMenus(injected.data);
+        return;
+      }
       try {
         const response = await fetch(apiUrl("/menus"), {
           cache: "no-store",

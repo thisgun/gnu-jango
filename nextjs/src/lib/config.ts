@@ -15,6 +15,10 @@ export interface G5NextRuntimeConfig {
   themeSettings?: unknown;
   /** 서버가 HTML 글자를 themeSettings 로 이미 바꿨는가. */
   themeSettingsApplied?: boolean;
+  /** 이 사이트의 메뉴(/api/v1/menus 와 같은 모양). 빌드한 PC의 메뉴 대신 쓴다. */
+  menus?: unknown;
+  /** 비회원도 목록을 볼 수 있는 게시판. 메뉴가 없을 때 헤더의 커뮤니티 메뉴를 만든다. */
+  navBoards?: unknown;
 }
 
 declare global {
@@ -182,6 +186,20 @@ export function clientThemeSettings(): unknown {
 
 export function clientThemeSettingsApplied(): boolean {
   return typeof window !== "undefined" && window.__G5_NEXTJS25_CONFIG__?.themeSettingsApplied === true;
+}
+
+/** The site's menus from the runtime config, unvalidated; undefined when the page has none (Node runtime). */
+export function clientRuntimeMenus(): unknown {
+  return typeof window === "undefined" ? undefined : window.__G5_NEXTJS25_CONFIG__?.menus;
+}
+
+/** The site's public boards from the runtime config; undefined when the server sent none. */
+export function clientNavigationBoards(): { bo_table: string; bo_subject: string }[] | undefined {
+  const value = typeof window === "undefined" ? undefined : window.__G5_NEXTJS25_CONFIG__?.navBoards;
+  if (!Array.isArray(value)) return undefined;
+  return value
+    .filter((item): item is { bo_table: unknown; bo_subject?: unknown } => typeof item?.bo_table === "string" && item.bo_table !== "")
+    .map((item) => ({ bo_table: String(item.bo_table), bo_subject: String(item.bo_subject ?? item.bo_table) }));
 }
 
 /** 앱이 직접 가진 첫 경로 조각(shop · mypage · login …)인가 — 아니면 짧은 게시판 주소(/free)다. */

@@ -118,7 +118,9 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const ThemeLayoutShell = themeComponents.LayoutShell;
   const [menus, initialUser] = await Promise.all([
-    getMenuItems(),
+    // A static export is built once and served by every installation: menus fetched now would be the
+    // build machine's (links to its boards). The page gets the site's menus at run time instead.
+    process.env.G5_NEXT_RUNTIME === "server" ? getMenuItems() : Promise.resolve([]),
     getInitialUserForLayout(),
   ]);
 

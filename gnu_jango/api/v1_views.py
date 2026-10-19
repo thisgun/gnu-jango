@@ -6,7 +6,7 @@ from rest_framework.permissions import AllowAny
 from gnu_jango.bbs.models import Board, Comment, Group, Post
 from gnu_jango.config import config
 from gnu_jango.core.models import Site_menu
-from gnu_jango.templatetags.gnu_menus import get_items
+from gnu_jango.core.navigation import site_menu_items
 
 from .response import api_response
 
@@ -26,29 +26,7 @@ User = get_user_model()
 
 def _menu_payload(request):
     current_path = request.query_params.get("path") or request.path
-    menuitems = get_items("main_menu", current_path, request.user)
-    wanted_keys = (
-        "id",
-        "me_code",
-        "me_name",
-        "me_link",
-        "me_type",
-        "me_type_pk",
-        "me_target",
-        "me_order",
-        "me_use",
-        "me_mobile_use",
-    )
-
-    menus = []
-    for menu in menuitems.values():
-        item = {key: getattr(menu, key) for key in wanted_keys if hasattr(menu, key)}
-        item["children"] = [
-            {key: getattr(child, key) for key in wanted_keys if hasattr(child, key)}
-            for child in getattr(menu, "sub", [])
-        ]
-        menus.append(item)
-    return menus
+    return site_menu_items(current_path, request.user)
 
 
 @api_view(["GET"])
