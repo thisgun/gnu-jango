@@ -30,6 +30,7 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from gnu_jango.config.models import Config
+from gnu_jango.shop.signup_coupon import issue_signup_coupon
 from gnu_jango.users import point_ledger
 from gnu_jango.users.models import Profile
 
@@ -1380,6 +1381,7 @@ def register_view(request):
             point_ledger.insert_point(
                 user, point_ledger.config_points("cf_register_point"), "회원가입 축하", "@member", user.pk, "회원가입"
             )
+            issue_signup_coupon(user)
         _consume_captcha(request)
     except IntegrityError:
         return api_error(
