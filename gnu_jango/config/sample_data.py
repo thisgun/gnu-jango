@@ -755,6 +755,10 @@ def repair_sample_product_types():
 def _has_related_rows(instance):
     """Keep a managed row if other records now depend on it."""
     for relation in instance._meta.related_objects:
+        # Search documents are derived data and cascade with their source. They
+        # must not make a disposable sample look like it gained real user data.
+        if relation.related_model._meta.label_lower == "site_search.searchdocument":
+            continue
         accessor = relation.get_accessor_name()
         if not accessor:
             continue
