@@ -690,6 +690,83 @@ def cancel_pending_toss_vbank(order, reason):
     return None
 
 
+class PaymentCancelError(Exception):
+    """The PG refused or could not confirm a cancellation; the order must be left as it is.
+    The message is shown to the shop admin."""
+
+
+TOSS_ALREADY_CANCELED_CODES = {"ALREADY_CANCELED_PAYMENT"}
+
+
+def order_paid_through_toss(order):
+    """A card / transfer / easy-pay order approved by Toss: it can be refunded with the cancel API.
+    A virtual account paid by deposit needs the customer's refund account, so it is refunded by
+    hand like a bank deposit."""
+    return (
+        str(order.od_pg or "").strip().lower() == "toss"
+        and bool(str(order.od_tno or "").strip())
+        and not settle_case_is_bank(order.od_settle_case)
+        and not settle_case_is_vbank(order.od_settle_case)
+    )
+
+
+def toss_api_cancel_payment(order, reason):
+    """Cancel the whole Toss payment of ``order`` (POST /v1/payments/{paymentKey}/cancel), as
+    youngcart orderformcartupdate.php does before it marks the order 취소.
+
+    Returns the Toss payment object; raises PaymentCancelError when Toss did not confirm the
+    cancellation. A payment already cancelled at Toss (in its dashboard) counts as cancelled."""
+    config = toss_payment_config()
+    secret_key = str(getattr(settings, "SHOP_TOSS_SECRET_KEY", "") or "").strip()
+    if not config["enabled"] or not secret_key:
+        raise PaymentCancelError("토스페이먼츠 키가 설정되지 않아 결제를 취소할 수 없습니다.")
+    payment_key_value = str(order.od_tno or "").strip()
+    credentials = base64.b64encode(f"{secret_key}:".encode("utf-8")).decode("ascii")
+    body = json.dumps(
+        {"cancelReason": (str(reason or "").strip() or "쇼핑몰 운영자 승인 취소")[:200]},
+        ensure_ascii=False,
+    ).encode("utf-8")
+    request = urllib_request.Request(
+        f"{config['api_base_url']}/v1/payments/{quote(payment_key_value, safe='')}/cancel",
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Basic {credentials}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Idempotency-Key": f"admin-cancel-{order.od_id}-{payment_key_value}"[:300],
+        },
+    )
+    try:
+        with urllib_request.urlopen(request, timeout=10) as response:
+            canceled = json.loads(response.read().decode("utf-8") or "{}")
+    except urllib_error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")[:1000]
+        try:
+            payload = json.loads(raw or "{}")
+        except ValueError:
+            payload = {}
+        payload = payload if isinstance(payload, dict) else {}
+        code = str(payload.get("code") or "")
+        if code in TOSS_ALREADY_CANCELED_CODES:
+            return {"orderId": order.od_id, "paymentKey": payment_key_value, "status": "CANCELED", "already_canceled": True}
+        message = str(payload.get("message") or "").strip()[:200]
+        detail = f"{message} ({code})" if message and code else message or code or f"HTTP {exc.code}"
+        raise PaymentCancelError(f"토스페이먼츠가 결제 취소를 거절했습니다: {detail}") from exc
+    except (urllib_error.URLError, TimeoutError, socket.timeout) as exc:
+        logger.warning("Toss payment cancel request for %s failed: %s", order.od_id, exc)
+        raise PaymentCancelError("토스페이먼츠에 연결하지 못했습니다. 잠시 후 다시 시도하세요.") from exc
+    except ValueError as exc:
+        raise PaymentCancelError("토스페이먼츠의 취소 응답을 확인하지 못했습니다.") from exc
+    if (
+        not isinstance(canceled, dict)
+        or str(canceled.get("orderId") or "") != str(order.od_id)
+        or str(canceled.get("status") or "").upper() != "CANCELED"
+    ):
+        raise PaymentCancelError("토스페이먼츠가 전체 취소를 확인하지 않았습니다. 토스페이먼츠 상점관리자에서 결제 상태를 확인하세요.")
+    return canceled
+
+
 def toss_method_is_vbank(value):
     normalized = str(value or "").strip().lower().replace(" ", "").replace("_", "").replace("-", "")
     return normalized in {"virtualaccount", "가상계좌", "vbank"}

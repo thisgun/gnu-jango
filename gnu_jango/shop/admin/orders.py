@@ -12,6 +12,7 @@ from unfold.forms import ActionForm
 
 from gnu_jango.api.shop_common import CANCELLED_STATUSES
 from gnu_jango.shop.models import ORDER_ITEM_STATUS_COMPLETED
+from gnu_jango.shop.order_flow import StatusChange, admin_cancel_order
 from gnu_jango.shop.order_points import item_status_update, run_save_order_points_safely, take_back_order_points
 
 # YoungCart order states an operator moves an order through (adm/shop_admin/orderlist.php).
@@ -26,20 +27,19 @@ def hope_date_label(value):
     return f"{value.isoformat()} ({KOREAN_WEEKDAYS[value.weekday()]})" if value else "-"
 
 
-def set_order_status(order, status, reason, *, pay_due_points=True):
-    """Move an order to ``status``: its items follow, and a cancellation goes through the shared
-    cancel path (stock back, coupons and points refunded once).
+def set_order_status(order, status, reason="", *, actor="", pay_due_points=True):
+    """Move an order to ``status``: its items follow, and a cancellation goes through
+    admin_cancel_order (the PG payment is cancelled first; stock, coupons and points come back
+    once).
 
-    Returns False for an order that is already cancelled: reopening it would not take back the
+    Returns a StatusChange, falsy (with the reason in ``message``) when the order was left as it
+    was - an order that is already cancelled is never reopened: that would not take back the
     stock, coupons and points the cancellation returned."""
     current = ShopOrder.objects.filter(pk=order.pk).values_list("od_status", flat=True).first()
     if str(current or "") in CANCELLED_STATUSES:
-        return False
+        return StatusChange(False, "취소된 주문은 다른 상태로 되돌릴 수 없습니다.")
     if status in CANCELLED_STATUSES:
-        from gnu_jango.api.v1_shop import cancel_order_and_refund_benefits
-
-        cancel_order_and_refund_benefits(order, reason)
-        return True
+        return admin_cancel_order(order, reason, actor=actor)
     with transaction.atomic():
         ShopOrder.objects.filter(pk=order.pk).update(od_status=status)
         order.items.exclude(ct_status__in=CANCELLED_STATUSES).update(**item_status_update(status))
@@ -48,7 +48,7 @@ def set_order_status(order, status, reason, *, pay_due_points=True):
     # 완료 runs save_order_point at once, so a 0-day wait pays immediately
     if pay_due_points and status == ORDER_ITEM_STATUS_COMPLETED:
         run_save_order_points_safely()
-    return True
+    return StatusChange(True)
 
 
 class OrderStatusActionForm(ActionForm):
@@ -99,20 +99,27 @@ class ShopOrderAdmin(ModelAdmin):
         if status not in ADMIN_ORDER_STATUSES:
             self.message_user(request, "변경할 주문 상태를 고르세요.", messages.WARNING)
             return
-        reason = f"관리자 취소 ({request.user.get_username()})"
-        changed = skipped = 0
+        actor = request.user.get_username()
+        changed = 0
+        skipped = {}
         for order in queryset:
-            if set_order_status(order, status, reason, pay_due_points=False):
+            result = set_order_status(order, status, actor=actor, pay_due_points=False)
+            if result:
                 self.log_change(request, order, f"주문 상태를 '{status}'(으)로 변경")
                 changed += 1
+                if result.manual_refund:
+                    self.message_user(request, result.message, messages.WARNING)
             else:
-                skipped += 1
+                skipped.setdefault(result.message, []).append(order.od_id)
         if changed and status == ORDER_ITEM_STATUS_COMPLETED:
             run_save_order_points_safely()  # once for the whole selection
         if changed:
             self.message_user(request, f"주문 {changed}건을 '{status}' 상태로 바꿨습니다.", messages.SUCCESS)
-        if skipped:
-            self.message_user(request, f"이미 취소된 주문 {skipped}건은 바꾸지 않았습니다.", messages.WARNING)
+        for message, order_ids in skipped.items():
+            shown = ", ".join(order_ids[:5]) + (f" 외 {len(order_ids) - 5}건" if len(order_ids) > 5 else "")
+            self.message_user(
+                request, f"주문 {len(order_ids)}건은 바꾸지 않았습니다 ({shown}): {message}", messages.WARNING
+            )
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         field = super().formfield_for_dbfield(db_field, request, **kwargs)
@@ -143,10 +150,13 @@ class ShopOrderAdmin(ModelAdmin):
             return
         request._pending_order_status = None
         order = form.instance
-        if set_order_status(order, status, f"관리자 취소 ({request.user.get_username()})"):
+        result = set_order_status(order, status, actor=request.user.get_username())
+        if result:
             order.refresh_from_db()
+            if result.message:
+                self.message_user(request, result.message, messages.WARNING if result.manual_refund else messages.SUCCESS)
         else:
-            self.message_user(request, "취소된 주문은 다른 상태로 되돌릴 수 없습니다.", messages.WARNING)
+            self.message_user(request, result.message, messages.ERROR)
     readonly_fields = (
         "operations_snapshot",
         "settlement_snapshot",
@@ -155,6 +165,7 @@ class ShopOrderAdmin(ModelAdmin):
         "memo_snapshot",
         "od_tax_invoice_request",
         "od_cash_request",
+        "od_mod_history",
     )
     fieldsets = (
         (
@@ -190,6 +201,7 @@ class ShopOrderAdmin(ModelAdmin):
                     ("od_status", "od_settle_case", "od_pg"),
                     ("od_cart_price", "od_send_cost", "od_send_cost2"),
                     ("od_receipt_price", "od_cancel_price", "od_misu"),
+                    ("od_refund_price",),
                     ("od_receipt_point", "od_coupon", "od_send_coupon", "od_point"),
                     ("od_tax_flag", "od_tax_mny", "od_vat_mny", "od_free_mny"),
                     ("od_tno", "od_app_no"),
@@ -252,7 +264,7 @@ class ShopOrderAdmin(ModelAdmin):
             _("Memo"),
             {
                 "classes": ("tab",),
-                "fields": ("od_memo",),
+                "fields": ("od_memo", "od_shop_memo", "od_mod_history"),
             },
         ),
     )
@@ -677,6 +689,7 @@ class ShopOrderAdmin(ModelAdmin):
                 (_("Receipt amount"), format_number(obj.od_receipt_price), compact_text(obj.od_settle_case, obj.od_pg)),
                 (_("Outstanding"), format_number(obj.od_misu), compact_text(obj.od_deposit_name, obj.od_receipt_time)),
                 (_("Bank account"), obj.od_bank_account or "-", ""),
+                ("환불금액", format_number(obj.od_refund_price), "PG 승인취소 또는 직접 환불한 금액"),
                 (_("Discount and point"), format_number(coupon_total + obj.od_point), _("Coupon %(coupon)s / point %(point)s") % {"coupon": format_number(coupon_total), "point": format_number(obj.od_point)}),
             ),
         )
