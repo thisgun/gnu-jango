@@ -36,7 +36,7 @@
 #shop-settings .errorlist { margin: 0; padding: 0; list-style: none; color: var(--g5-admin-danger); font-size: 13px; }
 #shop-settings .alert ul, #shop-settings details ul { list-style: disc; padding-left: 22px; margin: 12px 0; }
 #shop-settings .alert a { text-decoration: underline; }
-#shop-settings .overflow-x-auto { overflow-x: auto; }
+#shop-settings .overflow-x-auto { position: relative; overflow-x: auto; }
 #shop-settings .table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 16px 0; }
 #shop-settings .table th, #shop-settings .table td { padding: 10px 12px; border-bottom: 1px solid var(--color-base-300); text-align: left; }
 #shop-settings .table thead { background: var(--color-base-200); }
@@ -57,7 +57,9 @@
 #shop-settings code { white-space: normal; }
 #shop-settings footer { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 12px; padding: 16px; margin-top: 12px; border: 1px solid var(--color-base-300); border-radius: 10px; background: var(--color-base-100); }
 #shop-settings .shop-settings-savebar { position: sticky; bottom: 8px; z-index: 5; box-shadow: 0 4px 18px rgb(15 23 42 / 12%); }
+#shop-settings .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 #shop-settings .shop-settings-grid td .input { min-width: 72px; }
 #shop-settings .shop-settings-grid td, #shop-settings .shop-settings-grid th { vertical-align: middle; }
+#shop-settings .shop-settings-grid th { white-space: nowrap; }
 #shop-settings .shop-logo-preview img { max-width: 240px; max-height: 80px; padding: 8px; border: 1px solid var(--color-base-300); border-radius: 8px; background: var(--color-base-200); }
 @media (max-width: 640px) { #shop-settings footer .btn { width: 100%; } }
