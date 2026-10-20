@@ -1017,6 +1017,7 @@ def merge_guest_cart(request, user):
     the member cart (the member cart is a JSON list in Config, the guest cart lives in the session)."""
     from .shop_cart_keep import cart_keep_options, prune_cart_rows, reset_guest_cart_session
     from .shop_common import SHOP_CART_SESSION_KEY, auth_cart_config_name
+    from gnu_jango.shop.shipping import with_server_send_cost_flags
 
     session = getattr(request, "session", None)
     # a member session keeps the default lifetime, not the long guest cart one (de_guest_cart_use)
@@ -1038,6 +1039,8 @@ def merge_guest_cart(request, user):
     guest_rows, _ = prune_cart_rows(guest_rows, keep_term)
     known = {str(row.get("ct_id")) for row in member_rows}
     member_rows.extend(row for row in guest_rows if str(row.get("ct_id")) not in known)
+    # the guest rows came from the session: their ct_send_cost is recomputed, not carried over
+    member_rows = with_server_send_cost_flags(member_rows)
     Config.objects.update_or_create(
         name=name, defaults={"value": json.dumps(member_rows, ensure_ascii=False, separators=(",", ":"))}
     )

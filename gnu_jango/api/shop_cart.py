@@ -26,7 +26,9 @@ from gnu_jango.shop.models import (
 from gnu_jango.shop.shipping import (
     DEFAULT_FREE_THRESHOLD,
     DEFAULT_SHIPPING_COST,
+    cart_send_cost_flag,
     shipping_quote,
+    with_server_send_cost_flags,
 )
 
 from .response import api_error, api_response
@@ -88,6 +90,8 @@ def cart_items(request):
 
 
 def save_cart_items(request, items):
+    # ct_send_cost is the server's call (YoungCart cartupdate.php), whatever a row came in with
+    items = with_server_send_cost_flags(items)
     user = current_user(request)
     if user:
         value = json.dumps(list(items), ensure_ascii=False, separators=(",", ":"))
@@ -179,7 +183,7 @@ def cart_item_payload(item):
         "io_type": option_type,
         "io_price": option_price,
         "ct_direct": safe_int(item.get("ct_direct"), 0),
-        "ct_send_cost": safe_int(item.get("ct_send_cost"), 0),
+        "ct_send_cost": cart_send_cost_flag(product, item.get("ct_send_cost")),
         "it_sc_type": product.it_sc_type if product else 0,
         "it_sc_method": product.it_sc_method if product else 0,
         "it_sc_price": product.it_sc_price if product else DEFAULT_SHIPPING_COST,
@@ -577,7 +581,8 @@ def add_to_cart(request, data):
             "io_type": io_type,
             "io_price": option["io_price"],
             "ct_direct": bool_int(data.get("direct")),
-            "ct_send_cost": safe_int(data.get("ct_send_cost"), 0),
+            # only a product that lets the customer pick (it_sc_method 2) takes their pick
+            "ct_send_cost": cart_send_cost_flag(product, data.get("ct_send_cost")),
             CART_TIME_KEY: cart_now(),
         }
         items.append(row)
