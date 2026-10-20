@@ -360,6 +360,8 @@ def settings_view(request):
 
 
 def settings_response(request):
+    from gnu_jango.shop.shop_display import list_display, public_logo_urls
+
     data = config.get_all()
     visit_stats_payload = visit_stats()
     return api_response(
@@ -387,6 +389,10 @@ def settings_response(request):
             "comment_editor": False,
             "pwa_enabled": False,
             "visit": visit_stats_payload,
+            # Shop logos (uploaded in the shop settings; "" when not uploaded) and the
+            # search / type-list / related-products layout from the shop display settings.
+            **public_logo_urls(),
+            "shop_display": list_display(),
         }
     )
 

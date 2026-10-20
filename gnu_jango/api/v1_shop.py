@@ -56,6 +56,7 @@ from gnu_jango.shop.shipping import (
     current_shipping_policy,
     shipping_quote,
 )
+from gnu_jango.shop.shop_display import related_list_enabled
 from gnu_jango.shop.taxes import calculate_order_tax_amounts
 from gnu_jango.users import point_ledger
 from gnu_jango.users.models import Profile
@@ -436,7 +437,8 @@ def product_payload(product, request=None, *, detail=False):
         next_product = annotate_product_coupon_badge(
             on_sale_products().filter(it_id__gt=product.it_id)
         ).order_by("it_id").first()
-        relation = read_smoke_config(f"rel_{product.it_id}", {})
+        # The shop setting de_rel_list_use switches the related-products list off (no lookup at all).
+        relation = read_smoke_config(f"rel_{product.it_id}", {}) if related_list_enabled() else {}
         related_ids = [
             item.strip()
             for item in str(relation.get("related_csv") or "").split(",")

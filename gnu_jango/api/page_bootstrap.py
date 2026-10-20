@@ -177,24 +177,36 @@ def _community_data(request):
 
 
 def _shop_data(request):
+    from gnu_jango.shop.shop_display import home_display
+
     from . import v1_board, v1_community, v1_shop
     from .shop_reviews import reviews_response
 
     boards = _data(v1_board.board_list_response, request, fallback=[])
     notice = next((board for board in boards if board["bo_table"] == "notice"), None)
     notice = notice or next((board for board in boards if "공지" in board.get("bo_subject", "")), None)
+    # Admin display settings: a switched-off section is not fetched, the others fetch enough for the
+    # larger of the PC (mod x row) and mobile layouts. Saving them writes Config rows, which starts
+    # a new snapshot generation (register_bootstrap_invalidation).
+    display = home_display()
     products = {
-        f"type{number}": _data(v1_shop.products_response, request, params={f"it_type{number}": 1}, limit=12, fallback=[])
-        for number in range(1, 6)
+        key: _data(v1_shop.products_response, request, params={f"it_type{key[4:]}": 1}, limit=section["count"], fallback=[])
+        if section["use"] else []
+        for key, section in display.items()
     }
-    # Catalog items without merchandising flags still have a truthful place on the home page.
-    catalog_preview = [] if any(products.values()) else _data(v1_shop.products_response, request, limit=12, fallback=[])
+    # Catalog items without merchandising flags still have a truthful place on the home page,
+    # in the hit section's slot, so only while that section is switched on.
+    catalog_preview = (
+        _data(v1_shop.products_response, request, limit=display["type1"]["count"], fallback=[])
+        if display["type1"]["use"] and not any(products.values()) else []
+    )
     return {
         "settings": _data(v1_community.settings_response, request, fallback={}),
         "categories": _data(v1_shop.categories_response, request, fallback=[]),
         "banners": _data(v1_shop.banners_response, request, params={"position": "메인", "device": "all"}, fallback=[]),
         "popups": _data(v1_shop.popups_response, request, params={"device": "all", "limit": 5}, fallback=[]),
         "products": products,
+        "display": display,
         "catalogPreview": catalog_preview,
         "reviews": _data(reviews_response, request, params={"per_page": 12}, fallback=[]),
         "noticeBoard": notice,
