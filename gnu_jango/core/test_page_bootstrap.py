@@ -48,7 +48,7 @@ class PageBootstrapTests(TestCase):
         self.assertTrue(home["banners"])
         self.assertEqual(home["categories"], self.data("/api/v1/shop/categories"))
         for number in range(1, 6):
-            expected = self.data(f"/api/v1/shop/products?it_type{number}=1&per_page=12")
+            expected = self.data(f"/api/v1/shop/products?it_type{number}=1&per_page={home['display'][f'type{number}']['count']}")
             self.assertEqual(home["products"][f"type{number}"], expected)
             self.assertNotIn(disabled.pk, [row["it_id"] for row in expected])
 
