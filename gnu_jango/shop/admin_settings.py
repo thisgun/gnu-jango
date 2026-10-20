@@ -34,6 +34,7 @@ from .payment_options import (
 )
 from .settings_sync import sync_shop_phone_from_policy
 from .shipping import current_shipping_policy
+from .shop_options import COMPANY_OPTIONS, SHOP_CONFIG_OPTIONS, to_python, to_stored
 
 
 PAYMENT_LABELS = {
@@ -43,6 +44,19 @@ PAYMENT_LABELS = {
     "hp": "휴대폰 결제",
     "easy_pay": "간편결제 (토스페이)",
 }
+
+
+def option_form_field(option):
+    common = {"label": option.label, "required": False, "help_text": option.help_text}
+    if option.kind == "bool":
+        return forms.BooleanField(**common)
+    if option.kind == "int":
+        return forms.IntegerField(min_value=option.min_value, max_value=option.max_value, **common)
+    if option.kind == "email":
+        return forms.EmailField(max_length=option.max_length, **common)
+    if option.kind == "html":
+        return forms.CharField(max_length=option.max_length, widget=forms.Textarea(attrs={"rows": 5}), **common)
+    return forms.CharField(max_length=option.max_length, **common)
 
 
 class ShopSettingsForm(forms.ModelForm):
@@ -109,9 +123,12 @@ class ShopSettingsForm(forms.ModelForm):
         names = [
             "de_bank_use", "de_bank_account", "de_admin_company_tel",
             CASH_RECEIPT_ENABLED_FIELD, CASH_RECEIPT_TYPES_FIELD,
-            *PAYMENT_OPTION_FIELDS.values(),
+            *PAYMENT_OPTION_FIELDS.values(), *SHOP_CONFIG_OPTIONS,
         ]
         self.config_values = dict(Config.objects.filter(name__in=names).values_list("name", "value"))
+        for name, option in SHOP_CONFIG_OPTIONS.items():
+            self.fields[name] = option_form_field(option)
+            self.initial[name] = to_python(option, self.config_values.get(name))
         self.initial["de_bank_use"] = config_flag(self.config_values.get("de_bank_use", "0"))
         self.initial["de_bank_account"] = self.config_values.get("de_bank_account", "")
         saved_receipt_types = self.config_values.get(CASH_RECEIPT_TYPES_FIELD)
@@ -179,7 +196,9 @@ class ShopSettingsForm(forms.ModelForm):
             ("bank", "무통장입금", "입금계좌를 등록하고 사용을 켜면 주문 화면에서 선택할 수 있습니다.", ["de_bank_use", "de_bank_account"]),
             ("online", "온라인 결제수단", "허용한 수단도 PG 연결이 준비되어야 표시됩니다. 변경은 새 주문부터 적용됩니다.", list(PAYMENT_OPTION_FIELDS.values())),
             ("receipts", "현금영수증 신청", "무통장입금 신청은 주문에 기록됩니다. 토스 가상계좌·계좌이체는 고객이 요청한 경우에만 발급 옵션을 PG에 전달합니다.", ["de_taxsave_use", "de_taxsave_type_account", "de_taxsave_type_vbank", "de_taxsave_type_transfer"]),
-            ("company", "쇼핑몰 정보", "쇼핑몰 안내에 사용하는 회사명과 고객센터입니다.", ["de_admin_company_name", "de_admin_company_tel"]),
+            ("company", "사업자정보",
+             "대표자·사업자번호·주소 등은 기본환경설정의 사이트 정보와 같은 값이며 쇼핑몰 하단에 표시됩니다.",
+             ["de_admin_company_name", "de_admin_company_tel", *(option.name for option in COMPANY_OPTIONS)]),
             ("shipping", "배송비와 배송 안내", "상품별 배송비와 지역별 추가 배송비는 해당 상품·지역 설정이 함께 적용됩니다.", ["de_delivery_company", "de_send_cost_case", "de_send_cost_limit", "de_send_cost_list", "de_baesong_content", "de_change_content"]),
             ("policy", "포인트·세금·상품 후기", "포인트를 사용하려면 기본환경설정의 포인트 사용도 켜져 있어야 합니다.", ["de_settle_min_point", "de_settle_max_point", "de_settle_point_unit", "de_tax_flag_use", "de_item_use_write", "de_item_use_use"]),
         ]
@@ -206,6 +225,11 @@ class ShopSettingsForm(forms.ModelForm):
                 receipt_types.append("transfer")
             values[CASH_RECEIPT_ENABLED_FIELD] = "1" if self.cleaned_data["de_taxsave_use"] else "0"
             values[CASH_RECEIPT_TYPES_FIELD] = ",".join(receipt_types)
+            for name, option in SHOP_CONFIG_OPTIONS.items():
+                value = self.cleaned_data.get(name)
+                if option.kind == "int" and value is None:
+                    value = to_python(option, None)
+                values[name] = to_stored(option, value)
             # Existing site/company API consumers use this Config row.
             values["de_admin_company_tel"] = self.cleaned_data["de_admin_company_tel"]
             for name, value in values.items():

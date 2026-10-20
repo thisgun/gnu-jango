@@ -15,6 +15,8 @@ type CompanyKey =
   | "cf_company_biz_no"
   | "cf_company_tel"
   | "cf_company_tongsin_no"
+  | "cf_company_buga_no"
+  | "cf_company_fax"
   | "cf_company_info_name";
 
 /* 레퍼런스 site-company.tsx 의 사이트 정보 항목 · 순서. 커뮤니티와 쇼핑몰이 이름표와 순서가 조금 다르다. */
@@ -34,8 +36,10 @@ const SHOP_FIELDS: [CompanyKey, string][] = [
   ["cf_company_biz_no", "사업자 등록번호"],
   ["cf_company_owner", "대표"],
   ["cf_company_tel", "전화"],
+  ["cf_company_fax", "팩스"],
   ["cf_company_tongsin_no", "통신판매업신고번호"],
   ["cf_company_info_name", "개인정보 보호책임자"],
+  ["cf_company_buga_no", "부가통신사업신고번호"],
 ];
 
 /* 레퍼런스 layout-shell · shop-shell 의 FOOTER_LINKS — 내용 페이지 셋. */

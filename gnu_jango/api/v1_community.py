@@ -371,6 +371,8 @@ def settings_response(request):
             "cf_company_biz_no": data.get("cf_company_biz_no", ""),
             "cf_company_tel": data.get("cf_company_tel", ""),
             "cf_company_tongsin_no": data.get("cf_company_tongsin_no", ""),
+            "cf_company_buga_no": data.get("cf_company_buga_no", ""),
+            "cf_company_fax": data.get("cf_company_fax", ""),
             "cf_company_info_name": data.get("cf_company_info_name", ""),
             "cf_company_email": data.get("cf_company_email", ""),
             "de_admin_company_tel": data.get("de_admin_company_tel", ""),

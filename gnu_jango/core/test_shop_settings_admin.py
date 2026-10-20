@@ -82,6 +82,22 @@ class TossReadOnlyConnectionTests(TestCase):
 
 
 class ShopSettingsAdminTests(TestCase):
+    minimal_form = {
+        "de_admin_company_name": "Demo Shop",
+        "de_admin_company_tel": "",
+        "de_delivery_company": "Courier",
+        "de_send_cost_case": "",
+        "de_send_cost_limit": "",
+        "de_send_cost_list": "",
+        "de_baesong_content": "",
+        "de_change_content": "",
+        "de_item_use_write": "0",
+        "de_item_use_use": "0",
+        "de_settle_min_point": "0",
+        "de_settle_max_point": "0",
+        "de_settle_point_unit": "1",
+    }
+
     def setUp(self):
         self.url = reverse("admin-shop-settings")
         self.admin = get_user_model().objects.create_superuser(
@@ -136,6 +152,40 @@ class ShopSettingsAdminTests(TestCase):
         self.assertEqual(ShopShippingPolicy.objects.get(pk=1).de_admin_company_tel, "02-1234-5678")
         self.assertEqual(Config.objects.get(name="de_admin_company_tel").value, "02-1234-5678")
         self.assertEqual(Config.objects.get(name="de_card_use").value, "")
+
+    def test_business_info_is_saved_to_site_config_and_published(self):
+        Config.objects.create(name="cf_company_owner", value="Before")
+        self.client.force_login(self.admin)
+        page = self.client.get(self.url).content.decode()
+        self.assertIn('value="Before"', page)
+        self.assertIn("부가통신 사업자번호", page)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.url, {
+                **self.minimal_form,
+                "cf_company_owner": "Owner",
+                "cf_company_biz_no": "123-45-67890",
+                "cf_company_fax": "02-000-0000",
+                "cf_company_zip": "04524",
+                "cf_company_buga_no": "VAN-1",
+                "cf_company_email": "privacy@example.test",
+            })
+        self.assertEqual(response.status_code, 302)
+        saved = dict(Config.objects.filter(name__startswith="cf_company_").values_list("name", "value"))
+        self.assertEqual(saved["cf_company_owner"], "Owner")
+        self.assertEqual(saved["cf_company_fax"], "02-000-0000")
+        self.assertEqual(saved["cf_company_zip"], "04524")
+        self.assertEqual(saved["cf_company_buga_no"], "VAN-1")
+
+        public = self.client.get("/api/v1/settings").json()["data"]
+        self.assertEqual(public["cf_company_fax"], "02-000-0000")
+        self.assertEqual(public["cf_company_buga_no"], "VAN-1")
+
+    def test_business_email_must_be_valid(self):
+        form = ShopSettingsForm(data={**self.minimal_form, "cf_company_email": "not-an-email"},
+                                instance=ShopShippingPolicy(pk=1))
+        self.assertFalse(form.is_valid())
+        self.assertIn("cf_company_email", form.errors)
 
     @override_settings(SHOP_TOSS_CLIENT_KEY="test_ck_private_client", SHOP_TOSS_SECRET_KEY="test_sk_private_secret")
     def test_pg_check_post_does_not_save_the_settings_form(self):

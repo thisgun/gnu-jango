@@ -719,6 +719,8 @@ export const publicSettingsSchema = z
     cf_company_biz_no: optionalString,
     cf_company_tel: optionalString,
     cf_company_tongsin_no: optionalString,
+    cf_company_buga_no: optionalString,
+    cf_company_fax: optionalString,
     cf_company_info_name: optionalString,
     cf_company_email: optionalString,
     de_admin_company_name: optionalString,
