@@ -293,3 +293,41 @@ def admin_cancel_order(order, reason="", *, actor=""):
         message = f"주문 {current.od_id}을(를) 취소했습니다."
     return StatusChange(True, message, manual_refund=manual_refund)
 
+
+def order_delete_block_reason(order):
+    """Why the admin may not delete ``order`` ("" when it may).
+
+    youngcart orderlistdelete.php deletes only 주문 orders; a cancelled order has nothing left to
+    give back, so it may go too. Anything paid, shipped or completed stays on record, and an
+    order with an issued virtual account is cancelled first (that closes the account at Toss)."""
+    from gnu_jango.api.shop_payments import settle_case_is_vbank
+
+    status = canonical_status(order.od_status)
+    if status == STATUS_CANCELLED:
+        return ""
+    if status != STATUS_ORDERED:
+        return f"'{status or '-'}' 상태의 주문은 삭제할 수 없습니다. 주문(미입금) 또는 취소된 주문만 삭제할 수 있습니다."
+    if paid_amount(order) > 0:
+        return "입금 기록이 있는 주문은 삭제할 수 없습니다. 먼저 취소하세요."
+    if settle_case_is_vbank(order.od_settle_case) and order.od_tno:
+        return "가상계좌가 발급된 주문은 먼저 취소한 뒤 삭제하세요."
+    return ""
+
+
+def delete_order(order, *, actor=""):
+    """Delete an unpaid or cancelled order. An unpaid one is cancelled first through the shared
+    cancel path, so its reserved stock, coupons and points come back before it disappears."""
+    from gnu_jango.api.v1_shop import cancel_order_and_refund_benefits
+    from gnu_jango.shop.inventory import order_history_line
+
+    with transaction.atomic():
+        locked = ShopOrder.objects.select_for_update().filter(pk=order.pk).first()
+        if locked is None:
+            return StatusChange(True)
+        reason = order_delete_block_reason(locked)
+        if reason:
+            return StatusChange(False, reason)
+        if canonical_status(locked.od_status) != STATUS_CANCELLED:
+            cancel_order_and_refund_benefits(locked, "", history=order_history_line("주문삭제 전 취소 처리", actor))
+        locked.delete()
+    return StatusChange(True)

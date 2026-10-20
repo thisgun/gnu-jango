@@ -1097,6 +1097,11 @@ class ShopOrderItemAdmin(ModelAdmin):
     def has_add_permission(self, request):
         return False
 
+    def has_delete_permission(self, request, obj=None):
+        # a line deleted on its own leaves the order total and the reserved stock wrong; lines go
+        # only with their order (ShopOrderAdmin deletes unpaid or cancelled orders)
+        return False
+
     @admin.display(description=_("Order"), ordering="order__od_id")
     def order_link(self, obj):
         if not obj.order_id:

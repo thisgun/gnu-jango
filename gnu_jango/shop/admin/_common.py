@@ -447,12 +447,41 @@ class PersonalPayDateFilter(DatePeriodFilter):
 
 
 class ShopOrderItemInline(TabularInline):
+    """The order lines, for reading only. Editing a line's status, quantity, price or stock flag
+    here changed neither the stock nor the order amounts, and adding or deleting lines left the
+    order total wrong: lines move with the order's status actions (a partial cancel would be its
+    own feature, youngcart orderpartcancel.php)."""
+
     model = ShopOrderItem
     extra = 0
+    max_num = 0
+    can_delete = False
     tab = True
     show_count = True
-    readonly_fields = ("ct_notax", "line_total")
-    fields = ("ct_id", "it_id", "it_name", "ct_status", "ct_price", "ct_qty", "ct_notax", "line_total", "stock_adjusted")
+    fields = (
+        "ct_id",
+        "it_id",
+        "it_name",
+        "ct_option",
+        "ct_status",
+        "ct_price",
+        "io_price",
+        "ct_qty",
+        "ct_point",
+        "ct_notax",
+        "line_total",
+        "stock_adjusted",
+    )
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
     @admin.display(description=_("Line total"))
     def line_total(self, obj):

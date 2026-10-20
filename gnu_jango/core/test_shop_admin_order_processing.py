@@ -368,3 +368,95 @@ class StatusTransitionTests(OrderAdminBase):
         form = form_class(data=data, instance=ShopOrder.objects.get(pk=order.pk))
         self.assertTrue(form.is_valid(), form.errors)
 
+
+class OrderLineAndDeleteTests(OrderAdminBase):
+    def change_form_data(self, order, **changes):
+        ordered_at = timezone.localtime(order.od_datetime)
+        data = {key: ("" if value is None else value) for key, value in model_to_dict(order).items()}
+        data.update(
+            od_datetime_0=ordered_at.strftime("%Y-%m-%d"),
+            od_datetime_1=ordered_at.strftime("%H:%M:%S"),
+            **{"items-TOTAL_FORMS": "1", "items-INITIAL_FORMS": "1", "items-MIN_NUM_FORMS": "0", "items-MAX_NUM_FORMS": "0"},
+            **{"raw_logs-TOTAL_FORMS": "0", "raw_logs-INITIAL_FORMS": "0", "raw_logs-MIN_NUM_FORMS": "0", "raw_logs-MAX_NUM_FORMS": "1000"},
+            **{"items-0-id": str(order.items.get().pk), "items-0-order": order.pk},
+            **changes,
+        )
+        return data
+
+    def test_the_order_lines_are_shown_read_only(self):
+        order = self.make_order()
+        body = self.client.get(reverse("admin:shop_shoporder_change", args=[order.pk])).content.decode()
+        self.assertIn("Shirt", body)
+        for field in ("ct_qty", "ct_price", "ct_status", "stock_adjusted", "DELETE"):
+            self.assertNotIn(f'name="items-0-{field}"', body)
+
+    def test_posted_line_edits_are_ignored_while_the_status_change_applies(self):
+        order = self.make_order()
+        data = self.change_form_data(
+            order, od_status="입금", **{"items-0-ct_qty": "99", "items-0-ct_price": "1", "items-0-ct_status": "완료"}
+        )
+        response = self.client.post(reverse("admin:shop_shoporder_change", args=[order.pk]), data)
+        self.assertEqual(response.status_code, 302, response.content.decode()[:2000])
+
+        self.reload(order, self.product)
+        item = order.items.get()
+        self.assertEqual((item.ct_qty, item.ct_price, item.ct_status), (2, 5000, "입금"))
+        self.assertEqual((order.od_status, order.od_receipt_price, order.od_misu), ("입금", 13000, 0))
+        self.assertEqual(self.product.it_stock_qty, 5)
+
+    def test_editing_the_amounts_recomputes_what_is_owed(self):
+        order = self.paid_order()
+        data = self.change_form_data(order, od_refund_price="3000", od_misu="999999")
+        self.client.post(reverse("admin:shop_shoporder_change", args=[order.pk]), data)
+        self.reload(order)
+        self.assertEqual((order.od_refund_price, order.od_misu), (3000, 3000))
+
+    def test_a_single_order_line_cannot_be_deleted(self):
+        order = self.make_order()
+        item = order.items.get()
+        response = self.client.post(reverse("admin:shop_shoporderitem_delete", args=[item.pk]), {"post": "yes"})
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(ShopOrderItem.objects.filter(pk=item.pk).exists())
+
+    def test_paid_and_shipped_orders_cannot_be_deleted(self):
+        for index, status in enumerate(("입금", "준비", "배송", "완료")):
+            order = self.paid_order(status, od_id=f"YC-D{index}")
+            with self.subTest(status=status):
+                response = self.client.post(reverse("admin:shop_shoporder_delete", args=[order.pk]), {"post": "yes"})
+                self.assertEqual(response.status_code, 403)
+                self.assertTrue(ShopOrder.objects.filter(pk=order.pk).exists())
+        response = self.client.post(
+            reverse("admin:shop_shoporder_changelist"),
+            {"action": "delete_selected", "_selected_action": list(ShopOrder.objects.values_list("pk", flat=True)), "post": "yes"},
+            follow=True,
+        )
+        self.assertEqual(ShopOrder.objects.count(), 4)
+        self.assertTrue(any("삭제하지 않습니다" in message for message in self.messages_of(response)))
+
+    def test_deleting_an_unpaid_order_gives_its_stock_and_points_back(self):
+        order = self.make_order(od_receipt_point=2000)
+        response = self.client.post(reverse("admin:shop_shoporder_delete", args=[order.pk]), {"post": "yes"})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(ShopOrder.objects.filter(pk=order.pk).exists())
+        self.assertFalse(ShopOrderItem.objects.filter(order_id=order.pk).exists())
+        self.reload(self.product, self.profile)
+        self.assertEqual(self.product.it_stock_qty, 7)
+        self.assertEqual(self.profile.user_point, 2000)
+
+    def test_the_bulk_delete_removes_unpaid_and_cancelled_orders_only(self):
+        unpaid = self.make_order(od_id="YC-U1")
+        cancelled = self.make_order("취소", od_id="YC-X1")
+        paid = self.paid_order(od_id="YC-P1")
+        selected = [unpaid.pk, cancelled.pk, paid.pk]
+        url = reverse("admin:shop_shoporder_changelist")
+        confirm = self.client.post(url, {"action": "delete_selected", "_selected_action": selected})
+        self.assertEqual(confirm.status_code, 200)
+        self.assertContains(confirm, "YC-U1")
+        self.assertNotContains(confirm, "YC-P1</a>")
+        response = self.client.post(
+            url, {"action": "delete_selected", "_selected_action": [unpaid.pk, cancelled.pk], "post": "yes"}, follow=True
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(ShopOrder.objects.values_list("pk", flat=True)), [paid.pk])
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.it_stock_qty, 7)  # the unpaid order's 2 units; the cancelled one held none

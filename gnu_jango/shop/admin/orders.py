@@ -3,6 +3,7 @@ from functools import update_wrapper
 
 from django import forms
 from django.contrib import messages
+from django.contrib.admin.actions import delete_selected
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
@@ -15,7 +16,9 @@ from gnu_jango.shop.order_flow import (
     ADMIN_ORDER_STATUSES,
     admin_cancel_order,
     allowed_targets,
+    delete_order,
     move_order_status,
+    order_delete_block_reason,
     order_misu,
     transition_error,
 )
@@ -169,6 +172,55 @@ class ShopOrderAdmin(ModelAdmin):
             self.message_user(
                 request, f"주문 {len(order_ids)}건은 바꾸지 않았습니다 ({shown}): {message}", messages.WARNING
             )
+
+    def has_delete_permission(self, request, obj=None):
+        # youngcart orderlistdelete.php: only unpaid (주문) orders, here also cancelled ones
+        if not super().has_delete_permission(request, obj):
+            return False
+        return obj is None or not order_delete_block_reason(obj)
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if "delete_selected" in actions:
+            _func, name, description = actions["delete_selected"]
+            actions["delete_selected"] = (type(self).delete_selected_orders, name, description)
+        return actions
+
+    def delete_selected_orders(self, request, queryset):
+        """Django's delete-selected action, for the orders that may be deleted; the others are
+        named and left alone."""
+        blocked = {}
+        for order in queryset:
+            reason = order_delete_block_reason(order)
+            if reason:
+                blocked.setdefault(reason, []).append(order.od_id)
+        for reason, order_ids in blocked.items():
+            shown = ", ".join(order_ids[:5]) + (f" 외 {len(order_ids) - 5}건" if len(order_ids) > 5 else "")
+            self.message_user(request, f"주문 {len(order_ids)}건은 삭제하지 않습니다 ({shown}): {reason}", messages.WARNING)
+        skipped = [order_id for order_ids in blocked.values() for order_id in order_ids]
+        deletable = queryset.exclude(pk__in=skipped)
+        if not deletable.exists():
+            return None
+        return delete_selected(self, request, deletable)
+
+    def get_deleted_objects(self, objs, request):
+        deleted, model_count, perms_needed, protected = super().get_deleted_objects(objs, request)
+        # an order's lines go with it; their own admin refuses only deleting a single line
+        line_name = str(ShopOrderItem._meta.verbose_name)
+        perms_needed = {name for name in perms_needed if str(name) != line_name}
+        return deleted, model_count, perms_needed, protected
+
+    def delete_model(self, request, obj):
+        result = delete_order(obj, actor=request.user.get_username())
+        if not result:
+            raise PermissionDenied(result.message)
+
+    def delete_queryset(self, request, queryset):
+        actor = request.user.get_username()
+        for order in queryset:
+            result = delete_order(order, actor=actor)
+            if not result:
+                self.message_user(request, f"주문 {order.od_id}은(는) 삭제하지 않았습니다: {result.message}", messages.WARNING)
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         field = super().formfield_for_dbfield(db_field, request, **kwargs)
