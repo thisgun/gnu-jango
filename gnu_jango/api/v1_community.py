@@ -44,6 +44,7 @@ from gnu_jango.users.models import Profile, User_Point
 from gnu_jango.utils.users import get_user_level, is_admin as gnu_is_admin
 
 from .access import readable_post_queryset
+from .search import apply_text_search
 from .response import api_error, api_response
 from .member_certify import (
     PasswordCheckThrottle,
@@ -632,7 +633,10 @@ def search_view(request):
                 search_q |= Q(user__username__icontains=keyword)
             if not search_q:
                 search_q = Q(wr_subject__icontains=keyword) | _body_match(request, board, keyword)
-            queryset = queryset.filter(search_q)
+            selected = set(sfl.split("||"))
+            indexed_fields = [name for field, name in (("wr_subject", "title"), ("wr_content", "body")) if field in selected]
+            queryset = apply_text_search(queryset, keyword, search_q, request=request,
+                                         fields=(indexed_fields or ["title", "body"]) if not selected.intersection({"wr_name", "mb_id"}) else False)
             count = queryset.count()
             if not count:
                 continue
@@ -640,7 +644,7 @@ def search_view(request):
             # 제목이 맞은 글을 먼저 — 본문에만 스친 최신 글이 위에 오면 찾는 사람이 끝까지 훑어야 한다.
             ranked = queryset.annotate(
                 title_rank=Case(When(wr_subject__icontains=keyword, then=Value(0)), default=Value(1), output_field=IntegerField())
-            ).order_by("title_rank", "-wr_datetime", "-pk")
+            ).order_by("title_rank", *(["-_search_rank"] if "_search_rank" in queryset.query.annotations else []), "-wr_datetime", "-pk")
             posts = list(ranked[offset : offset + per_page])
             previewable_ids = _excerpt_post_ids(request, board, posts)
             groups.append(

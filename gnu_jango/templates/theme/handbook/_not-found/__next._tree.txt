@@ -1,4 +1,4 @@
-:HL["/_next/static/chunks/15t3aefg5-naf.css","style"]
+:HL["/_next/static/chunks/2pqcyz0woqlvg.css","style"]
 :HL["/_next/static/chunks/0c2_300mu1915.css","style"]
 :HL["/_next/static/chunks/2e1bxxs8-k70d.css","style"]
 0:{"tree":{"name":"","param":null,"prefetchHints":4116,"slots":{"children":{"name":"/_not-found","param":null,"prefetchHints":4160,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":4256,"slots":null}}}}},"staleTime":300,"buildId":"g5-handbook-static"}

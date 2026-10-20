@@ -1127,7 +1127,8 @@ def products_response(request, *, limit=None):
         qa_count=Count("qas", distinct=True),
         review_stats=Avg("reviews__is_score"),
     )
-    queryset = queryset.order_by(*shop_product_ordering(sort, request.query_params.get("sortodr")))
+    relevance = ["-_search_rank"] if q and sort in {"", "default", "relevance"} and "_search_rank" in queryset.query.annotations else []
+    queryset = queryset.order_by(*relevance, *shop_product_ordering(sort, request.query_params.get("sortodr")))
     if limit is None:
         page, meta = paginate_queryset(request, queryset, default_per_page=20)
     else:

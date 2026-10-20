@@ -311,7 +311,9 @@ export const shopProductSchema = z
     image_url: stringValue,
     images: z.array(stringValue).optional(),
     options: z.array(shopProductOptionSchema).optional(),
-    category: shopCategorySchema.optional(),
+    // Django returns null for a product without a primary category. Such products
+    // are public and searchable, so normalize it to the existing optional shape.
+    category: shopCategorySchema.nullish().transform((value) => value ?? undefined),
     prev_item: shopProductNavItemSchema.nullable().optional(),
     next_item: shopProductNavItemSchema.nullable().optional(),
   })

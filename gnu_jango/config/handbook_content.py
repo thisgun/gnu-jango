@@ -3,6 +3,8 @@
 from html import escape
 import re
 
+from .handbook_search_content import SEARCH_GUIDES
+
 
 # The marker lets ensure_handbook_samples refresh old demo text without replacing
 # a chapter that an administrator has edited.
@@ -916,6 +918,9 @@ GUIDES = {
         ]
     }
 }
+
+
+GUIDES.update(SEARCH_GUIDES)
 
 
 def _inline_text(value):

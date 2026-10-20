@@ -1,4 +1,4 @@
-"""A small sample manual for the handbook theme: one board group, seven books, 38 chapters.
+"""Sample manuals for the handbook theme: a board group of books and chapters.
 
 The handbook theme maps gnuboard data onto a manual — a board group is the manual, each board in it
 a book (its subject "hint · name" gives a small hint and the book name), each board category a part
@@ -97,6 +97,16 @@ BOOKS = (
         "hb_ref",
         "부록 · 용어와 참고",
         (("", ("용어 사전", "단축키", "변경 기록")),),
+    ),
+    Book(
+        "hb_search",
+        "검색 운영 · 통합 검색 가이드",
+        (
+            ("먼저 읽기", ("통합 검색으로 자료 찾기", "색인과 검색 엔진 이해하기")),
+            ("설치와 연결", ("통합 검색 처음 설정하기", "Vercel과 PythonAnywhere 검색 적용")),
+            ("품질과 보안", ("한국어 분석과 오타 검색 설정", "검색 권한과 비공개 자료 점검", "검색 순위와 클릭 기록 관리")),
+            ("개발과 운영", ("통합 검색 API 연결하기", "검색 오류 해결하기", "검색 품질과 속도 점검")),
+        ),
     ),
 )
 

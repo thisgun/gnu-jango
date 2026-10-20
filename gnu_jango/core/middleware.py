@@ -299,6 +299,10 @@ class VisitTrackingMiddleware:
             return ""
         for param_name in self.SEARCH_PARAM_NAMES:
             value = strip_tags(str(params.get(param_name) or "")).strip()
+            # QueryDict has already decoded %00. PostgreSQL rejects NUL strings
+            # even when the search view correctly returns a validation error.
+            if "\x00" in value:
+                return ""
             if value:
                 return " ".join(value.split())[:255]
         return ""

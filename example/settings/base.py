@@ -107,6 +107,7 @@ INSTALLED_APPS = [
     "gnu_jango.config",
     "gnu_jango.bbs",
     "gnu_jango.docs_search.apps.DocsSearchConfig",
+    "gnu_jango.site_search.apps.SiteSearchConfig",
     "gnu_jango.shop",
     "gnu_jango.api",
     "gnu_jango.editor.apps.EditorConfig",
@@ -573,6 +574,8 @@ REST_FRAMEWORK = {
         "guest-password": "10/min",
         "docs-ask": "30/min",
         "docs-ask-answer": "5/min",
+        "site-search": "60/min",
+        "search-click": "30/min",
     },
     # 'DEFAULT_FILTER_BACKENDS': (
     #     'django_filters.rest_framework.DjangoFilterBackend',
@@ -718,6 +721,12 @@ G5_DEFAULT_DOCS_GROUP = de_config("G5_DEFAULT_DOCS_GROUP", default="").strip()
 G5_DOCS_LLM_BASE_URL = de_config("G5_DOCS_LLM_BASE_URL", default="").strip()
 G5_DOCS_LLM_MODEL = de_config("G5_DOCS_LLM_MODEL", default="").strip()
 G5_DOCS_LLM_TIMEOUT = de_config("G5_DOCS_LLM_TIMEOUT", default=20, cast=int)
+
+# Unified DB search: PostgreSQL FTS or the portable token inverted index.
+G5_SEARCH_ENABLED = bool_config("G5_SEARCH_ENABLED", default=True)
+# Install pg_trgm first with configure_search_postgres before opting in.
+G5_SEARCH_TRIGRAM = bool_config("G5_SEARCH_TRIGRAM", default=False)
+G5_SEARCH_CLICK_LOG_ENABLED = bool_config("G5_SEARCH_CLICK_LOG_ENABLED", default=True)
 
 # Optional OAuth provider credentials for the Django social-login bridge.
 # Values in the imported Gnuboard config table are still used as fallback.

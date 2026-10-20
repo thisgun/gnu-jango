@@ -40,7 +40,7 @@ export DB_DISABLE_SERVER_SIDE_CURSORS=True
 python manage.py migrate
 python manage.py createcachetable
 python manage.py createsuperuser
-python manage.py ensure_handbook_samples      # 샘플 매뉴얼: 책 7권 · 장 38개 (--remove 로 되돌림)
+python manage.py ensure_handbook_samples      # 빠진 샘플 책·장을 추가 (기존에 편집한 본문 보존)
 python manage.py check_deploy_profile --profile vercel
 ```
 
@@ -89,6 +89,18 @@ hit@3 80% 미만이면 실패합니다.
 ```bash
 python manage.py ensure_handbook_samples --refresh
 ```
+
+## 통합 검색과 검색 운영 가이드
+
+게시글·상품·내용관리 문서·매뉴얼을 함께 찾는 `/search`는 위의 매뉴얼 질문 검색과 별도 기능입니다. 처음 적용할 때는 해당 사이트 DB에 검색 마이그레이션과 전체 재색인이 필요합니다. 상세 절차는 [통합 검색 운영 안내](unified-search.md)를 따릅니다.
+
+```bash
+python manage.py migrate
+python manage.py ensure_handbook_samples
+python manage.py rebuild_search_index
+```
+
+`ensure_handbook_samples`는 **「검색 운영 · 통합 검색 가이드」** 책(`hb_search`)과 10개 장을 추가합니다. 사용법, 설치, 호스팅별 적용, 한국어 검색, 열람 권한, 순위·클릭 기록, API 연결, 문제 해결과 품질 점검을 설명합니다. 새 책을 추가할 때 `--refresh`를 붙이지 않습니다. 소스 파일만 배포하면 DB에 새 책이 생성되지 않으므로 위 명령을 해당 핸드북 DB에서 실행해야 합니다.
 
 ## 주의
 

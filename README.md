@@ -319,6 +319,29 @@ python manage.py audit_external_integrations --fail-on-missing
 
 `--strict-production`은 운영 배포에 필요한 설정과 자산의 누락을 찾아 알립니다. PG·소셜 로그인·본인인증 항목은 실제 공급자 키와 callback 설정을 준비한 뒤 외부 연동 점검도 실행하세요.
 
+## 통합 검색
+
+사이트 검색(`/search`)에서 게시글·상품·문서와 매뉴얼을 함께 찾을 수 있습니다. 한국어 형태소 분석기 Kiwi가 설치되어 있으면 재사용하고, 없으면 내장 한글 2-gram 분석기로 동작합니다. PostgreSQL은 GIN 전문 검색 인덱스를, SQLite는 토큰 역색인을 사용하므로 별도 검색 서버나 Celery worker가 필요하지 않습니다.
+
+업데이트 뒤 **각 사이트가 사용하는 DB**에 마이그레이션과 최초 재색인을 실행하세요.
+
+```bash
+python manage.py migrate
+python manage.py rebuild_search_index
+```
+
+일반 저장·삭제는 색인을 자동 갱신합니다. 대량 import, `bulk_create`, `QuerySet.update`, Kiwi 설치·제거 뒤에는 재색인이 필요합니다. 한 종류만 다시 만들려면 `--kind post`, `--kind product`, `--kind page`를 사용합니다. 최초 재색인 전에는 통합 검색에 준비 안내와 기존 게시판 검색 링크가 표시되며, 기존 게시판·상품 검색 API는 계속 동작합니다.
+
+PostgreSQL에서 영문 오타 등 유사한 제목도 찾으려면 DB 확장 설치 권한이 있는 계정으로 아래 명령을 실행하고 `G5_SEARCH_TRIGRAM=True`를 설정합니다. 기본 검색에는 이 확장이 필요하지 않습니다.
+
+```bash
+python manage.py configure_search_postgres
+```
+
+통합 API는 `GET /api/v1/search/unified?q=입금확인&type=all`입니다. `type`은 `all`, `post`, `product`, `document`를 지원합니다. 기존의 특정 게시판·작성자 검색은 유지됩니다. 검색 결과의 관련도 보정에는 최근 인기어와 일별 클릭 집계를 사용하며, 클릭 집계에는 질문 원문·사용자 ID·IP를 저장하지 않습니다. `G5_SEARCH_CLICK_LOG_ENABLED=False`로 클릭 수집을 끌 수 있고, 오래된 집계는 `python manage.py cleanup_search_clicks --days 90`으로 정리합니다.
+
+전체 운영 절차와 성능·검색 범위의 제한은 [통합 검색 운영 안내](docs/04-deploy/unified-search.md), 요구사항은 [PRD](docs/01-plan/features/unified-search.prd.md), 구현 계획은 [계획서](docs/01-plan/features/unified-search.plan.md)를 참고하세요.
+
 ## 백그라운드 작업
 
 메일 캠페인과 정기 유지보수 작업에는 Celery와 Redis를 사용합니다. 개발 환경은 기본적으로 작업을 요청 안에서 실행하므로 Redis 없이도 기본 개발 서버를 사용할 수 있습니다. 운영에서는 worker를 별도 프로세스로 실행하거나 Docker Compose의 `worker` 서비스를 사용합니다.
