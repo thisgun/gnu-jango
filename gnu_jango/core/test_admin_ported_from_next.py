@@ -165,11 +165,12 @@ class OrderStatusAdminTests(AdminTestBase):
         )
 
     def test_the_bulk_action_changes_the_order_and_its_items(self):
-        self.run_action("admin:shop_shoporder_changelist", "change_selected_order_status", [self.order], od_status="배송")
+        # youngcart orderlistupdate.php moves one step at a time: 입금 -> 준비
+        self.run_action("admin:shop_shoporder_changelist", "change_selected_order_status", [self.order], od_status="준비")
 
         self.order.refresh_from_db()
         self.item.refresh_from_db()
-        self.assertEqual((self.order.od_status, self.item.ct_status), ("배송", "배송"))
+        self.assertEqual((self.order.od_status, self.item.ct_status), ("준비", "준비"))
 
     def test_choosing_cancel_runs_the_cancellation_with_refunds(self):
         self.run_action("admin:shop_shoporder_changelist", "change_selected_order_status", [self.order], od_status="취소")
@@ -260,8 +261,8 @@ class ReviewFollowUpTests(AdminTestBase):
         from django.contrib.admin.models import LogEntry
 
         order = self.make_order("입금")
-        self.run_action("admin:shop_shoporder_changelist", "change_selected_order_status", [order], od_status="배송")
-        self.assertTrue(LogEntry.objects.filter(object_id=str(order.pk), change_message__contains="배송").exists())
+        self.run_action("admin:shop_shoporder_changelist", "change_selected_order_status", [order], od_status="준비")
+        self.assertTrue(LogEntry.objects.filter(object_id=str(order.pk), change_message__contains="준비").exists())
 
     def test_the_order_form_applies_the_status_after_the_items_are_saved(self):
         from types import SimpleNamespace
@@ -269,15 +270,19 @@ class ReviewFollowUpTests(AdminTestBase):
         from django.contrib import admin
         from django.test import RequestFactory
 
-        order = self.make_order("입금")
+        order = self.make_order("준비")
         model_admin = admin.site._registry[ShopOrder]
         request = RequestFactory().post("/admin/")
         request.user = self.admin
         form = SimpleNamespace(
-            changed_data=["od_status", "od_invoice"], initial={"od_status": "입금"}, instance=order, save_m2m=lambda: None
+            changed_data=["od_status", "od_invoice", "od_delivery_company"],
+            initial={"od_status": "준비"},
+            instance=order,
+            save_m2m=lambda: None,
         )
         order.od_status = "배송"
         order.od_invoice = "123-456"
+        order.od_delivery_company = "CJ대한통운"
         model_admin.save_model(request, order, form, True)
         model_admin.save_related(request, form, [], True)
 

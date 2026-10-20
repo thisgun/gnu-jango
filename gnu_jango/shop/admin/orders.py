@@ -2,7 +2,6 @@ from gnu_jango.shop.admin._common import *  # noqa: F401,F403
 from functools import update_wrapper
 
 from django import forms
-from django.db import transaction
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
@@ -12,11 +11,28 @@ from unfold.forms import ActionForm
 
 from gnu_jango.api.shop_common import CANCELLED_STATUSES
 from gnu_jango.shop.models import ORDER_ITEM_STATUS_COMPLETED
-from gnu_jango.shop.order_flow import StatusChange, admin_cancel_order
-from gnu_jango.shop.order_points import item_status_update, run_save_order_points_safely, take_back_order_points
+from gnu_jango.shop.order_flow import (
+    ADMIN_ORDER_STATUSES,
+    admin_cancel_order,
+    allowed_targets,
+    move_order_status,
+    order_misu,
+    transition_error,
+)
+from gnu_jango.shop.order_points import run_save_order_points_safely, take_back_order_points
 
-# YoungCart order states an operator moves an order through (adm/shop_admin/orderlist.php).
-ADMIN_ORDER_STATUSES = ("주문", "입금", "준비", "배송", "완료", "취소")
+# Amounts the order form can edit: od_misu is worked out from them (youngcart get_order_info).
+ORDER_MONEY_FIELDS = {
+    "od_cart_price",
+    "od_send_cost",
+    "od_send_cost2",
+    "od_receipt_price",
+    "od_cancel_price",
+    "od_refund_price",
+    "od_receipt_point",
+    "od_coupon",
+    "od_send_coupon",
+}
 
 HOPE_DATE_LABEL = "희망배송일"
 KOREAN_WEEKDAYS = ("월", "화", "수", "목", "금", "토", "일")
@@ -28,27 +44,57 @@ def hope_date_label(value):
 
 
 def set_order_status(order, status, reason="", *, actor="", pay_due_points=True):
-    """Move an order to ``status``: its items follow, and a cancellation goes through
+    """Move an order to ``status`` the way youngcart orderlistupdate.php does: one step along
+    주문→입금(무통장)→준비→배송(운송장)→완료, or a cancellation from 주문/입금/준비 through
     admin_cancel_order (the PG payment is cancelled first; stock, coupons and points come back
     once).
 
     Returns a StatusChange, falsy (with the reason in ``message``) when the order was left as it
     was - an order that is already cancelled is never reopened: that would not take back the
     stock, coupons and points the cancellation returned."""
-    current = ShopOrder.objects.filter(pk=order.pk).values_list("od_status", flat=True).first()
-    if str(current or "") in CANCELLED_STATUSES:
-        return StatusChange(False, "취소된 주문은 다른 상태로 되돌릴 수 없습니다.")
     if status in CANCELLED_STATUSES:
         return admin_cancel_order(order, reason, actor=actor)
-    with transaction.atomic():
-        ShopOrder.objects.filter(pk=order.pk).update(od_status=status)
-        order.items.exclude(ct_status__in=CANCELLED_STATUSES).update(**item_status_update(status))
-        # youngcart orderformcartupdate.php: a paid line that leaves 완료 gives its point back
-        take_back_order_points(order)
+    result = move_order_status(order, status, actor=actor)
     # 완료 runs save_order_point at once, so a 0-day wait pays immediately
-    if pay_due_points and status == ORDER_ITEM_STATUS_COMPLETED:
+    if result and pay_due_points and status == ORDER_ITEM_STATUS_COMPLETED:
         run_save_order_points_safely()
-    return StatusChange(True)
+    return result
+
+
+class ShopOrderAdminForm(forms.ModelForm):
+    """The order form offers only the statuses the order can move to, and checks the move with
+    the values being saved (a 배송 needs the carrier and invoice entered in the same form)."""
+
+    class Meta:
+        model = ShopOrder
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "od_status" not in self.fields:
+            return
+        if self.instance.pk:
+            current = self.instance.od_status
+            choices = [(current, f"{current} (현재 상태)")] + [(status, status) for status in allowed_targets(self.instance)]
+            help_text = "주문→입금(무통장)→준비→배송→완료 순서로 한 단계씩 바꿀 수 있고, 주문·입금·준비 상태에서는 취소할 수 있습니다."
+        else:
+            choices = [(status, status) for status in ADMIN_ORDER_STATUSES]
+            help_text = ""
+        self.fields["od_status"] = forms.ChoiceField(label="주문상태", choices=choices, help_text=help_text)
+
+    def clean(self):
+        cleaned = super().clean()
+        target = cleaned.get("od_status")
+        if self.instance.pk and target and target != self.instance.od_status:
+            error = transition_error(
+                self.instance,
+                target,
+                invoice=cleaned.get("od_invoice", self.instance.od_invoice),
+                delivery_company=cleaned.get("od_delivery_company", self.instance.od_delivery_company),
+            )
+            if error:
+                self.add_error("od_status", error)
+        return cleaned
 
 
 class OrderStatusActionForm(ActionForm):
@@ -91,6 +137,9 @@ class ShopOrderAdmin(ModelAdmin):
     list_filter_submit = True
     actions = ("change_selected_order_status", "export_selected_orders_csv", "export_selected_receipts_csv")
     action_form = OrderStatusActionForm
+    form = ShopOrderAdminForm
+    # a member picker, not a select listing every member
+    raw_id_fields = ("user",)
     inlines = [ShopOrderItemInline, ShopOrderDataInline]
 
     @admin.action(description="선택 주문 상태 변경", permissions=["change"])
@@ -138,6 +187,8 @@ class ShopOrderAdmin(ModelAdmin):
             # status, because the cancel path refunds only an order that is not cancelled yet.
             request._pending_order_status = obj.od_status
             obj.od_status = form.initial.get("od_status", obj.od_status)
+        if change and changed & ORDER_MONEY_FIELDS:
+            obj.od_misu = order_misu(obj)
         super().save_model(request, obj, form, change)
 
     def save_related(self, request, form, formsets, change):
@@ -165,6 +216,7 @@ class ShopOrderAdmin(ModelAdmin):
         "memo_snapshot",
         "od_tax_invoice_request",
         "od_cash_request",
+        "od_misu",
         "od_mod_history",
     )
     fieldsets = (

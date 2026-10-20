@@ -8,15 +8,20 @@ import json
 from unittest.mock import patch
 from urllib import error as urllib_error
 
+from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.core.management import call_command
-from django.test import TestCase, override_settings
+from django.forms.models import model_to_dict
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework.test import APIClient
 
+from gnu_jango.config.models import Config
 from gnu_jango.core.test_shop_payments_api import FAKE_TOSS, fake_http_response, http_error
 from gnu_jango.shop.admin.orders import set_order_status
+from gnu_jango.shop.order_flow import order_misu
 from gnu_jango.shop.models import (
     ShopCoupon,
     ShopCouponLog,
@@ -244,3 +249,122 @@ class AdminCancelTests(OrderAdminBase):
         self.assertIn("wrong size", order.od_memo)
         self.assertIn("주문취소 처리 - wrong size", order.od_mod_history)
         self.assertNotIn("od_mod_history", response.json()["data"])
+
+
+class StatusTransitionTests(OrderAdminBase):
+    def test_bulk_deposit_on_a_bank_order_records_the_payment(self):
+        order = self.make_order()
+        response = self.bulk([order], "입금")
+
+        self.reload(order)
+        self.assertEqual(order.od_status, "입금")
+        self.assertEqual((order.od_receipt_price, order.od_misu), (13000, 0))
+        self.assertTrue(order.od_receipt_time.startswith(timezone.localtime().strftime("%Y-%m-%d ")))
+        self.assertRegex(order.od_receipt_time, r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$")
+        self.assertEqual(order.items.get().ct_status, "입금")
+        self.assertIn("order-admin 주문상태 주문→입금 처리", order.od_mod_history)
+        self.assertTrue(any("1건" in message for message in self.messages_of(response)))
+        # the customer now sees the order as paid
+        api = APIClient()
+        api.force_authenticate(self.member)
+        payload = api.get(f"/api/v1/shop/orders/{order.od_id}").json()["data"]
+        self.assertTrue(payload["od_is_fully_paid"])
+        self.assertEqual(payload["od_misu_price"], 0)
+
+    def test_a_deposit_adds_to_what_was_received_already(self):
+        order = self.make_order(od_receipt_price=3000, od_misu=10000)
+        self.assertTrue(set_order_status(order, "입금"))
+        self.reload(order)
+        self.assertEqual((order.od_receipt_price, order.od_misu), (13000, 0))
+
+    def test_an_online_payment_order_cannot_be_marked_paid_by_hand(self):
+        order = self.make_order(settle_case="신용카드", od_pg="toss", od_receipt_price=13000)
+        response = self.bulk([order], "입금")
+        self.reload(order)
+        self.assertEqual((order.od_status, order.od_misu), ("주문", 13000))
+        self.assertTrue(any("무통장입금 주문만" in message for message in self.messages_of(response)))
+
+    def test_jumps_and_moves_back_are_refused(self):
+        cases = (("주문", "완료"), ("주문", "배송"), ("입금", "배송"), ("입금", "주문"), ("준비", "입금"), ("완료", "배송"))
+        for index, (current, target) in enumerate(cases):
+            with self.subTest(current=current, target=target):
+                order = self.paid_order(current, od_id=f"YC-J{index}", od_invoice="1", od_delivery_company="CJ")
+                result = set_order_status(order, target)
+                self.assertFalse(result)
+                self.assertIn(f"'{current}' 상태", result.message)
+                self.reload(order)
+                self.assertEqual(order.od_status, current)
+
+    def test_shipped_and_completed_orders_cannot_be_cancelled(self):
+        for index, status in enumerate(("배송", "완료")):
+            order = self.paid_order(status, od_id=f"YC-C{index}")
+            with patch(URLOPEN) as urlopen:
+                result = set_order_status(order, "취소")
+            urlopen.assert_not_called()
+            self.assertFalse(result)
+            self.assertIn("취소할 수 없습니다", result.message)
+            self.reload(order)
+            self.assertEqual((order.od_status, order.od_refund_price), (status, 0))
+
+    def test_shipping_needs_an_invoice_and_skips_orders_without_one(self):
+        ready = self.paid_order("준비", od_id="YC-S1", od_invoice="6000-1234", od_delivery_company="CJ대한통운")
+        missing = self.paid_order("준비", od_id="YC-S2")
+        response = self.bulk([ready, missing], "배송")
+
+        self.reload(ready, missing)
+        self.assertEqual(ready.od_status, "배송")
+        self.assertTrue(ready.od_invoice_time)
+        self.assertEqual(missing.od_status, "준비")
+        messages = self.messages_of(response)
+        self.assertTrue(any("YC-S2" in message and "운송장번호" in message for message in messages), messages)
+
+    def test_completing_updates_the_sales_quantity_and_pays_the_points(self):
+        Config.objects.update_or_create(name="de_point_days", defaults={"value": "0"})
+        self.paid_order("완료", od_id="YC-OTHER", qty=3)
+        order = self.paid_order("배송", od_id="YC-DONE", od_invoice="1", od_delivery_company="CJ")
+        order.items.update(ct_point=100)
+        self.bulk([order], "완료")
+
+        self.reload(order, self.product, self.profile)
+        self.assertEqual(order.od_status, "완료")
+        self.assertEqual(self.product.it_sum_qty, 5)  # 3 + 2 completed units
+        self.assertEqual(self.profile.user_point, 200)
+
+    def test_the_outstanding_amount_counts_coupons_points_and_refunds(self):
+        coupon = ShopCoupon.objects.create(cp_id="YC-CP2", cp_subject="Product coupon", cp_method=0, cp_price=1000)
+        order = self.make_order(od_receipt_point=500, od_send_coupon=1000)
+        ShopCouponLog.objects.create(
+            cl_id=2, coupon=coupon, cp_id=coupon.cp_id, order=order, od_id=order.od_id, cp_price=1000
+        )
+        self.assertEqual(order_misu(order), 10000 + 3000 - 1000 - 1000 - 500)
+        order.od_status, order.od_receipt_price = "입금", 20000
+        self.assertEqual(order_misu(order), 0)  # never negative
+
+    def test_the_order_form_offers_only_the_next_statuses(self):
+        order = self.make_order()
+        body = self.client.get(reverse("admin:shop_shoporder_change", args=[order.pk])).content.decode()
+        select = body[body.index('name="od_status"'):]
+        select = select[: select.index("</select>")]
+        self.assertIn('value="입금"', select)
+        self.assertIn('value="취소"', select)
+        for status in ("준비", "배송", "완료"):
+            self.assertNotIn(f'value="{status}"', select)
+        # the member is picked by id, not from a select of every member
+        self.assertIn("vForeignKeyRawIdAdminField", body)
+
+    def test_the_order_form_rejects_a_move_the_order_cannot_make(self):
+        order = self.paid_order("준비")
+        model_admin = admin.site._registry[ShopOrder]
+        request = RequestFactory().get("/admin/")
+        request.user = self.admin
+        form_class = model_admin.get_form(request, order)
+        data = {key: ("" if value is None else value) for key, value in model_to_dict(order).items()}
+        ordered_at = timezone.localtime(order.od_datetime)
+        data.update(od_status="배송", od_datetime_0=ordered_at.strftime("%Y-%m-%d"), od_datetime_1=ordered_at.strftime("%H:%M:%S"))
+        form = form_class(data=data, instance=order)
+        self.assertFalse(form.is_valid())
+        self.assertIn("운송장번호", str(form.errors["od_status"]))
+        data.update(od_invoice="6000-1", od_delivery_company="CJ대한통운")
+        form = form_class(data=data, instance=ShopOrder.objects.get(pk=order.pk))
+        self.assertTrue(form.is_valid(), form.errors)
+
