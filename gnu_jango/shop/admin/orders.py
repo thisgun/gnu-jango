@@ -9,6 +9,7 @@ from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 from unfold.forms import ActionForm
+from unfold.widgets import UnfoldAdminSelectWidget
 
 from gnu_jango.api.shop_common import CANCELLED_STATUSES
 from gnu_jango.shop.models import ORDER_ITEM_STATUS_COMPLETED
@@ -83,7 +84,9 @@ class ShopOrderAdminForm(forms.ModelForm):
         else:
             choices = [(status, status) for status in ADMIN_ORDER_STATUSES]
             help_text = ""
-        self.fields["od_status"] = forms.ChoiceField(label="주문상태", choices=choices, help_text=help_text)
+        self.fields["od_status"] = forms.ChoiceField(
+            label="주문상태", choices=choices, help_text=help_text, widget=UnfoldAdminSelectWidget
+        )
 
     def clean(self):
         cleaned = super().clean()
@@ -1291,6 +1294,8 @@ class ShopOrderAdmin(ModelAdmin):
             {"label": _("Tax exempt"), "value": format_number(money_sum(orders, "od_free_mny")), "hint": _("Tax-exempt product amount")},
             {"label": _("Outstanding"), "value": format_number(money_sum(orders, "od_misu")), "hint": _("Unpaid balance")},
             {"label": _("Cancelled"), "value": format_number(money_sum(orders, "od_cancel_price")), "hint": _("%(count)s orders") % {"count": format_number(cancelled_orders.count())}},
+            # a cancelled paid order keeps its receipt; the refund is what went back
+            {"label": "환불금액", "value": format_number(money_sum(orders, "od_refund_price")), "hint": "PG 승인취소와 직접 환불"},
             {"label": _("Cash receipts"), "value": format_number(cash_receipt_orders.count()), "hint": format_number(money_sum(cash_receipt_orders, "od_receipt_price"))},
             {"label": _("Coupon discount"), "value": format_number(money_sum(coupon_logs, "cp_price")), "hint": _("%(count)s usage logs") % {"count": format_number(coupon_logs.count())}},
             {"label": _("Personal pay"), "value": format_number(money_sum(personal_pays, "pp_receipt_price")), "hint": _("%(count)s requests") % {"count": format_number(personal_pays.count())}},
