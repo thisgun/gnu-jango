@@ -25,6 +25,11 @@ export interface PaymentConfig {
       iche: boolean;
     };
   };
+  /** 구매 포인트: enabled = cf_use_point, pg_orders = de_card_point (PG 결제 주문에도 지급). */
+  purchase_point?: {
+    enabled: boolean;
+    pg_orders: boolean;
+  };
   easy_pay_services?: string[];
   bank_accounts?: string[];
   /** 희망배송일 rule (de_hope_date_use / de_hope_date_after); min/max are server-local YYYY-MM-DD. */
