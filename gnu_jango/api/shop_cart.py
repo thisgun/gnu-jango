@@ -30,6 +30,13 @@ from gnu_jango.shop.shipping import (
 )
 
 from .response import api_error, api_response
+from .shop_cart_keep import (
+    CART_TIME_KEY,
+    cart_keep_options,
+    cart_now,
+    keep_guest_cart_session,
+    prune_cart_rows,
+)
 
 from .shop_common import (
     SHOP_CART_SESSION_KEY,
@@ -54,7 +61,7 @@ from .shop_common import (
 MAX_CART_ROWS = 100
 
 
-def cart_items(request):
+def _stored_cart_items(request):
     user = current_user(request)
     if user:
         item = Config.objects.filter(name=auth_cart_config_name(user)).first()
@@ -68,6 +75,18 @@ def cart_items(request):
     return list(request.session.get(SHOP_CART_SESSION_KEY, []))
 
 
+def cart_items(request):
+    """The stored cart lines, without lines older than the cart keep term (de_cart_keep_term)."""
+    rows = _stored_cart_items(request)
+    if not rows:
+        return rows
+    _, keep_term = cart_keep_options(request)
+    kept, changed = prune_cart_rows(rows, keep_term)
+    if changed:
+        save_cart_items(request, kept)
+    return kept
+
+
 def save_cart_items(request, items):
     user = current_user(request)
     if user:
@@ -79,6 +98,7 @@ def save_cart_items(request, items):
         return
     request.session[SHOP_CART_SESSION_KEY] = items
     request.session.modified = True
+    keep_guest_cart_session(request, bool(items))
 
 
 def next_cart_id(items):
@@ -558,6 +578,7 @@ def add_to_cart(request, data):
             "io_price": option["io_price"],
             "ct_direct": bool_int(data.get("direct")),
             "ct_send_cost": safe_int(data.get("ct_send_cost"), 0),
+            CART_TIME_KEY: cart_now(),
         }
         items.append(row)
         created.append({"ct_id": row["ct_id"]})

@@ -1014,9 +1014,12 @@ def member_payload(user, request=None):
 def merge_guest_cart(request, user):
     """YoungCart keeps what a visitor put in the cart when they sign in: move the session cart into
     the member cart (the member cart is a JSON list in Config, the guest cart lives in the session)."""
+    from .shop_cart_keep import cart_keep_options, prune_cart_rows, reset_guest_cart_session
     from .shop_common import SHOP_CART_SESSION_KEY, auth_cart_config_name
 
     session = getattr(request, "session", None)
+    # a member session keeps the default lifetime, not the long guest cart one (de_guest_cart_use)
+    reset_guest_cart_session(request)
     guest_rows = list(session.get(SHOP_CART_SESSION_KEY, [])) if session is not None else []
     if not guest_rows:
         return
@@ -1028,8 +1031,12 @@ def merge_guest_cart(request, user):
         member_rows = []
     if not isinstance(member_rows, list):
         member_rows = []
-    known = {str(row.get("ct_id")) for row in member_rows if isinstance(row, dict)}
-    member_rows.extend(row for row in guest_rows if isinstance(row, dict) and str(row.get("ct_id")) not in known)
+    # lines older than the cart keep term (de_cart_keep_term) are not carried over
+    _, keep_term = cart_keep_options(request)
+    member_rows, _ = prune_cart_rows(member_rows, keep_term)
+    guest_rows, _ = prune_cart_rows(guest_rows, keep_term)
+    known = {str(row.get("ct_id")) for row in member_rows}
+    member_rows.extend(row for row in guest_rows if str(row.get("ct_id")) not in known)
     Config.objects.update_or_create(
         name=name, defaults={"value": json.dumps(member_rows, ensure_ascii=False, separators=(",", ":"))}
     )
