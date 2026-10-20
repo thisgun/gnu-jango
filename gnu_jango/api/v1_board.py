@@ -674,7 +674,12 @@ def _filter_posts(request, queryset):
                 search_q |= Q(**{lookup: stx})
         if not search_q:
             search_q = Q(wr_subject__icontains=stx) | Q(wr_content__icontains=stx)
-        queryset = apply_text_search(queryset, stx, search_q)
+        selected = set(sfl.split("||"))
+        indexed_fields = [name for field, name in (("wr_subject", "title"), ("wr_content", "body")) if field in selected]
+        if not selected.intersection(fields):
+            indexed_fields = ["title", "body"]
+        queryset = apply_text_search(queryset, stx, search_q, request=request,
+                                     fields=indexed_fields if not selected.intersection({"wr_name", "mb_id", "ca_name"}) else False)
 
     return queryset
 

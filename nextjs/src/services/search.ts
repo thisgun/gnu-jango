@@ -1,5 +1,6 @@
 import { apiClient } from "@/lib/api";
 import { apiUrl } from "@/lib/config";
+import { z } from "zod";
 import { fetchApiData, fetchApiResult, validateApiData, type ApiResult } from "@/lib/api-response";
 import {
   popularKeywordListSchema,
@@ -69,4 +70,34 @@ export async function getClientSearchSuggestions(
   }
 
   return suggestions;
+}
+
+export const unifiedSearchSchema = z.object({
+  query: z.string(),
+  results: z.array(z.object({
+    type: z.enum(["post", "product", "document"]),
+    id: z.string(),
+    title: z.string(),
+    url: z.string().refine((value) => value.startsWith("/") && !value.startsWith("//") && !/[\\\u0000-\u001f]/.test(value)),
+    snippet: z.string(),
+    score: z.number(),
+    click_token: z.string(),
+    price: z.number().optional(),
+    bo_subject: z.string().optional(),
+  })),
+});
+
+export type UnifiedSearchResult = z.infer<typeof unifiedSearchSchema>["results"][number];
+export type SearchKind = "all" | "post" | "product" | "document";
+
+export async function searchUnified(query: string, type: SearchKind, page = 1) {
+  const response = await apiClient.get<unknown>("/search/unified", { params: { q: query, type, page, limit: 20 } });
+  return { ...unifiedSearchSchema.parse(response.data), meta: response.meta };
+}
+
+export function recordSearchClick(token: string) {
+  if (!token || (typeof navigator !== "undefined" && navigator.doNotTrack === "1")) return;
+  // Logging must not delay navigation. Keepalive lets an in-flight request finish
+  // when the next page requires a full document navigation in the Django theme.
+  void apiClient.post("/search/click", { token }, { keepalive: true }).catch(() => undefined);
 }

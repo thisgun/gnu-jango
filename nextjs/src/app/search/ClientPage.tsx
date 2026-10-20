@@ -18,6 +18,7 @@ import { getClientPublicSettings } from "@/services/settings";
 import type { SearchResult } from "@/lib/schemas";
 import { boardPostHref } from "@/lib/board-url";
 import { g5PathForRuntime } from "@/lib/config";
+import UnifiedResults from "./UnifiedResults";
 
 function toPage(value: string | null): number {
   const parsed = Number.parseInt(value || "1", 10);
@@ -55,6 +56,13 @@ function Highlight({ text, query }: { text: string; query: string }) {
  * 거기서는 쪽을 넘긴다(bo_table · page).
  */
 export default function ClientPage() {
+  const params = useSearchParams();
+  return params.get("bo_table") || params.get("sfl") || params.get("legacy") === "1"
+    ? <LegacySearchPage />
+    : <UnifiedResults />;
+}
+
+function LegacySearchPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const query = (searchParams.get("q") || searchParams.get("stx") || "").trim();

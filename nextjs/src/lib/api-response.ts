@@ -9,6 +9,9 @@ export interface ApiMeta {
   to: number | null;
   notice_count?: number;
   total_notice_count?: number;
+  total_pages?: number;
+  engine?: string;
+  truncated?: boolean;
 }
 
 export interface ApiResponse<T> {
@@ -72,6 +75,9 @@ function parseMeta(value: unknown): ApiMeta | undefined {
     ...(value.total_notice_count === undefined
       ? {}
       : { total_notice_count: toNumber(value.total_notice_count) }),
+    ...(value.total_pages === undefined ? {} : { total_pages: toNumber(value.total_pages) }),
+    ...(typeof value.engine === "string" ? { engine: value.engine } : {}),
+    ...(typeof value.truncated === "boolean" ? { truncated: value.truncated } : {}),
   };
 }
 
