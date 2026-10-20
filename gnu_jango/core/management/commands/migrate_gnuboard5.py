@@ -582,8 +582,24 @@ class Command(BaseCommand):
                 continue
             Config.objects.update_or_create(name=target_name, defaults={"value": value})
             imported += 1
+        imported += self.import_shop_options(shop_row)
         if imported:
             signals.config_done.send(sender=Config)
+        return imported
+
+    def import_shop_options(self, shop_row):
+        """Copy youngcart's non-secret shop options (same column names) from g5_shop_default."""
+        from gnu_jango.shop.shop_options import SHOP_CONFIG_OPTIONS
+
+        imported = 0
+        for name, option in SHOP_CONFIG_OPTIONS.items():
+            if not name.startswith("de_") or name not in shop_row:
+                continue
+            value = text(shop_row, name, max_length=option.max_length if option.kind != "int" else None).strip()
+            if option.kind == "int" and not value.lstrip("-").isdigit():
+                continue
+            Config.objects.update_or_create(name=name, defaults={"value": value})
+            imported += 1
         return imported
 
     def count_board_posts(self, cursor, config):
