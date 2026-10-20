@@ -189,6 +189,11 @@ class CompleteTimeTests(PurchasePointBase):
         item.refresh_from_db()
         self.assertIsNone(item.ct_complete_time)
 
+    def test_the_complete_time_is_assigned_before_the_status(self):
+        # MySQL evaluates SET left to right: the CASE must see the old status
+        for status in (COMPLETED, "배송"):
+            self.assertEqual(list(item_status_update(status)), ["ct_complete_time", "ct_status"])
+
     def test_the_bulk_status_update_keeps_an_existing_complete_time(self):
         order = self.make_order(status=COMPLETED)
         earlier = timezone.now() - timedelta(days=3)
@@ -213,6 +218,22 @@ class SaveOrderPointsTests(PurchasePointBase):
         row = self.delivery_rows().get()
         self.assertEqual((row.po_rel_id, row.po_rel_action, row.po_point), (item.pk, order.od_id, 6000))
         self.assertEqual(row.po_content, f"주문번호 {order.od_id} (1) 배송완료")
+
+    def test_the_admin_bulk_action_pays_once_after_the_selection(self):
+        set_config("de_point_days", "0")
+        order = self.make_order()
+        self.assertTrue(set_order_status(order, COMPLETED, "test", pay_due_points=False))
+        self.assertEqual(self.balance(), 0)
+        admin = get_user_model().objects.create_superuser("bulkadmin", "bulkadmin@example.test", "password")
+        self.client.force_login(admin)
+        order.items.update(ct_status="배송", ct_complete_time=None)
+        ShopOrder.objects.filter(pk=order.pk).update(od_status="배송")
+        response = self.client.post(
+            "/admin/shop/shoporder/",
+            {"action": "change_selected_order_status", "_selected_action": [order.pk], "od_status": COMPLETED},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.balance(), 6000)
 
     def test_the_point_waits_for_de_point_days(self):
         set_config("de_point_days", "7")

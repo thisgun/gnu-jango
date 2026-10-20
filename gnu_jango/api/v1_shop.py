@@ -51,6 +51,7 @@ from gnu_jango.shop.order_points import (
     item_status_update,
     order_line_points_enabled,
     purchase_point_notice,
+    take_back_order_points,
 )
 from gnu_jango.shop.payment_options import (
     cash_receipt_method_enabled,
@@ -1939,6 +1940,7 @@ def toss_vbank_webhook_view(request):
                 locked.od_misu = locked.od_receipt_price
                 locked.od_receipt_time = ""
                 locked.items.exclude(ct_status__in=CANCELLED_STATUSES).update(**item_status_update(ORDER_STATUS_ORDERED))
+                take_back_order_points(locked)
                 fields.extend(["od_status", "od_misu", "od_receipt_time"])
             locked.save(update_fields=fields)
             record_payment_raw_log(locked, order_id, "toss-vbank", provider_payment_key, raw_data, prefix="toss-vbank")

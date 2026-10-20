@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 DELIVERY_POINT_TABLE = "@delivery"
 POINT_TRUNC = 10  # youngcart get_item_point rounds a percentage point down to 10 won
 DEFAULT_BATCH_LIMIT = 500
+REQUEST_BATCH_LIMIT = 100  # admin pages pay a smaller batch; the scheduled job takes the rest
 
 
 def item_purchase_point(product, *, io_type=0, io_price=0, has_option=False):
@@ -75,12 +76,14 @@ def purchase_point_notice():
 def item_status_update(status, now=None):
     """``.update()`` kwargs that move lines to ``status`` and keep ct_complete_time in step
     (youngcart get_cart_complete_time_sql): stamped when a line first becomes 완료, kept while it
-    stays 완료, cleared when it leaves."""
+    stays 완료, cleared when it leaves.
+
+    ct_complete_time comes first: MySQL evaluates SET assignments left to right, so the CASE must
+    read the old ct_status (youngcart orderformcartupdate.php orders them the same way)."""
     if status != ORDER_ITEM_STATUS_COMPLETED:
-        return {"ct_status": status, "ct_complete_time": None}
+        return {"ct_complete_time": None, "ct_status": status}
     now = now or timezone.now()
     return {
-        "ct_status": status,
         "ct_complete_time": Case(
             When(
                 ct_status=ORDER_ITEM_STATUS_COMPLETED,
@@ -89,6 +92,7 @@ def item_status_update(status, now=None):
             ),
             default=Value(now),
         ),
+        "ct_status": status,
     }
 
 
@@ -170,7 +174,7 @@ def run_save_order_points_safely():
     try:
         # a savepoint, so a failure inside the admin's own transaction does not break it
         with transaction.atomic():
-            return save_order_points()
+            return save_order_points(limit=REQUEST_BATCH_LIMIT)
     except Exception:  # noqa: BLE001 - paying points must not break the admin page
         logger.exception("save_order_points failed")
         return None

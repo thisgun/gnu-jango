@@ -1,5 +1,6 @@
 from gnu_jango.shop.admin._common import *  # noqa: F401,F403
 from django import forms
+from django.db import transaction
 from django.contrib import messages
 from django.core.paginator import Paginator
 from django.db.models import Q
@@ -22,7 +23,7 @@ def hope_date_label(value):
     return f"{value.isoformat()} ({KOREAN_WEEKDAYS[value.weekday()]})" if value else "-"
 
 
-def set_order_status(order, status, reason):
+def set_order_status(order, status, reason, *, pay_due_points=True):
     """Move an order to ``status``: its items follow, and a cancellation goes through the shared
     cancel path (stock back, coupons and points refunded once).
 
@@ -36,12 +37,13 @@ def set_order_status(order, status, reason):
 
         cancel_order_and_refund_benefits(order, reason)
         return True
-    ShopOrder.objects.filter(pk=order.pk).update(od_status=status)
-    order.items.exclude(ct_status__in=CANCELLED_STATUSES).update(**item_status_update(status))
-    # youngcart orderformcartupdate.php: a paid line that leaves 완료 gives its point back, and
-    # 완료 runs save_order_point at once so a 0-day wait pays immediately.
-    take_back_order_points(order)
-    if status == ORDER_ITEM_STATUS_COMPLETED:
+    with transaction.atomic():
+        ShopOrder.objects.filter(pk=order.pk).update(od_status=status)
+        order.items.exclude(ct_status__in=CANCELLED_STATUSES).update(**item_status_update(status))
+        # youngcart orderformcartupdate.php: a paid line that leaves 완료 gives its point back
+        take_back_order_points(order)
+    # 완료 runs save_order_point at once, so a 0-day wait pays immediately
+    if pay_due_points and status == ORDER_ITEM_STATUS_COMPLETED:
         run_save_order_points_safely()
     return True
 
@@ -97,11 +99,13 @@ class ShopOrderAdmin(ModelAdmin):
         reason = f"관리자 취소 ({request.user.get_username()})"
         changed = skipped = 0
         for order in queryset:
-            if set_order_status(order, status, reason):
+            if set_order_status(order, status, reason, pay_due_points=False):
                 self.log_change(request, order, f"주문 상태를 '{status}'(으)로 변경")
                 changed += 1
             else:
                 skipped += 1
+        if changed and status == ORDER_ITEM_STATUS_COMPLETED:
+            run_save_order_points_safely()  # once for the whole selection
         if changed:
             self.message_user(request, f"주문 {changed}건을 '{status}' 상태로 바꿨습니다.", messages.SUCCESS)
         if skipped:
