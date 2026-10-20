@@ -256,7 +256,15 @@ class ShopOrderAdmin(ModelAdmin):
             return
         request._pending_order_status = None
         order = form.instance
-        result = set_order_status(order, status, actor=request.user.get_username())
+        if status in CANCELLED_STATUSES:
+            # A cancellation may refund the payment at the PG. It must not run inside the order
+            # form's transaction, where a later error would roll the local cancel back while the
+            # refund stands: change_view runs it once that transaction has committed.
+            request._pending_order_cancel = order.pk
+            return
+        self.report_status_change(request, order, set_order_status(order, status, actor=request.user.get_username()))
+
+    def report_status_change(self, request, order, result):
         if result:
             order.refresh_from_db()
             if result.message:
@@ -389,7 +397,15 @@ class ShopOrderAdmin(ModelAdmin):
         order = self.get_object(request, object_id)
         if order:
             extra_context["order_detail_ops"] = self.order_detail_context(request, order)
-        return super().change_view(request, object_id, form_url, extra_context=extra_context)
+        request._pending_order_cancel = None
+        response = super().change_view(request, object_id, form_url, extra_context=extra_context)
+        # the form's edits are committed; now the cancellation (PG refund first) in its own
+        # durable transaction (admin_cancel_order)
+        if request._pending_order_cancel is not None and order is not None:
+            request._pending_order_cancel = None
+            result = set_order_status(order, "취소", actor=request.user.get_username())
+            self.report_status_change(request, order, result)
+        return response
 
     def order_ops_context(self, request):
         orders = ShopOrder.objects.all()
@@ -402,7 +418,7 @@ class ShopOrderAdmin(ModelAdmin):
         cash_receipt_orders = orders.exclude(od_cash_no="")
         receipt_requests = orders.filter(Q(od_tax_invoice_request=True) | Q(od_cash_request=True))
         receipt_request_count = receipt_requests.count()
-        receipt_proof_needed = orders.filter(od_receipt_price__gt=0, od_cash_no="", od_tno="", od_app_no="")
+        receipt_proof_needed = orders.filter(has_net_receipt(), od_cash_no="", od_tno="", od_app_no="")
         personal_pay_due = ShopPersonalPay.objects.filter(active=True, pp_price__gt=0, pp_receipt_price__lte=0)
 
         return {
@@ -410,7 +426,7 @@ class ShopOrderAdmin(ModelAdmin):
                 {
                     "label": _("Today orders"),
                     "value": format_number(today_orders.count()),
-                    "hint": _("%(amount)s received") % {"amount": format_number(money_sum(today_orders, "od_receipt_price"))},
+                    "hint": _("%(amount)s received") % {"amount": format_number(money_sum(today_orders, net_receipt_expression()))},
                     "tone": "info",
                     "url": self.order_list_url(request, receipt_state=None, shipping_state=None),
                 },
@@ -431,7 +447,7 @@ class ShopOrderAdmin(ModelAdmin):
                 {
                     "label": _("Cash receipts"),
                     "value": format_number(cash_receipt_orders.count()),
-                    "hint": _("%(amount)s issued") % {"amount": format_number(money_sum(cash_receipt_orders, "od_receipt_price"))},
+                    "hint": _("%(amount)s issued") % {"amount": format_number(money_sum(cash_receipt_orders, net_receipt_expression()))},
                     "tone": "success",
                     "url": self.order_list_url(request, receipt_state="cash", shipping_state=None),
                 },
@@ -539,7 +555,7 @@ class ShopOrderAdmin(ModelAdmin):
                 flow_step(
                     _("Settlement report"),
                     paid_orders.count(),
-                    _("%(amount)s received") % {"amount": format_number(money_sum(paid_orders, "od_receipt_price"))},
+                    _("%(amount)s received") % {"amount": format_number(money_sum(paid_orders, net_receipt_expression()))},
                     "/admin/shop/shoporder/reports/",
                     "info",
                     "monitoring",
@@ -1048,7 +1064,7 @@ class ShopOrderAdmin(ModelAdmin):
         metrics = [
             {"label": _("Orders"), "value": format_number(order_count), "hint": _("Matched printable orders")},
             {"label": _("Print rows"), "value": format_number(len(rows)), "hint": _("Limited for browser print stability")},
-            {"label": _("Receipt total"), "value": format_number(money_sum(orders, "od_receipt_price")), "hint": _("Collected amount")},
+            {"label": _("Receipt total"), "value": format_number(money_sum(orders, net_receipt_expression())), "hint": _("Collected amount")},
             {"label": _("Outstanding"), "value": format_number(money_sum(orders, "od_misu")), "hint": _("Remaining balance")},
         ]
 
@@ -1106,7 +1122,7 @@ class ShopOrderAdmin(ModelAdmin):
         elif receipt_state == "requested":
             orders = orders.filter(Q(od_tax_invoice_request=True) | Q(od_cash_request=True))
         elif receipt_state == "proof_needed":
-            orders = orders.filter(od_receipt_price__gt=0, od_cash_no="", od_tno="", od_app_no="")
+            orders = orders.filter(has_net_receipt(), od_cash_no="", od_tno="", od_app_no="")
 
         if shipping_state == "waiting_invoice":
             orders = orders.filter(od_receipt_price__gt=0, od_cancel_price__lte=0, od_invoice="")
@@ -1282,13 +1298,13 @@ class ShopOrderAdmin(ModelAdmin):
         outstanding_orders = orders.filter(od_misu__gt=0)
         cancelled_orders = orders.filter(od_cancel_price__gt=0)
         cash_receipt_orders = orders.exclude(od_cash_no="")
-        receipt_proof_needed = orders.filter(od_receipt_price__gt=0, od_cash_no="", od_tno="", od_app_no="")
+        receipt_proof_needed = orders.filter(has_net_receipt(), od_cash_no="", od_tno="", od_app_no="")
         shipping_queue = paid_orders.filter(od_cancel_price__lte=0, od_invoice="")
         personal_pay_due = personal_pays.filter(active=True, pp_price__gt=0, pp_receipt_price__lte=0)
 
         metrics = [
             {"label": _("Orders"), "value": format_number(orders.count()), "hint": _("%(count)s items") % {"count": format_number(order_items.count())}},
-            {"label": _("Receipt total"), "value": format_number(money_sum(orders, "od_receipt_price")), "hint": _("Paid and confirmed")},
+            {"label": _("Receipt total"), "value": format_number(money_sum(orders, net_receipt_expression())), "hint": _("Paid and confirmed")},
             {"label": _("Tax base"), "value": format_number(money_sum(orders, "od_tax_mny")), "hint": _("Order amount excluding VAT")},
             {"label": _("VAT"), "value": format_number(money_sum(orders, "od_vat_mny")), "hint": _("Calculated order VAT")},
             {"label": _("Tax exempt"), "value": format_number(money_sum(orders, "od_free_mny")), "hint": _("Tax-exempt product amount")},
@@ -1296,7 +1312,7 @@ class ShopOrderAdmin(ModelAdmin):
             {"label": _("Cancelled"), "value": format_number(money_sum(orders, "od_cancel_price")), "hint": _("%(count)s orders") % {"count": format_number(cancelled_orders.count())}},
             # a cancelled paid order keeps its receipt; the refund is what went back
             {"label": "환불금액", "value": format_number(money_sum(orders, "od_refund_price")), "hint": "PG 승인취소와 직접 환불"},
-            {"label": _("Cash receipts"), "value": format_number(cash_receipt_orders.count()), "hint": format_number(money_sum(cash_receipt_orders, "od_receipt_price"))},
+            {"label": _("Cash receipts"), "value": format_number(cash_receipt_orders.count()), "hint": format_number(money_sum(cash_receipt_orders, net_receipt_expression()))},
             {"label": _("Coupon discount"), "value": format_number(money_sum(coupon_logs, "cp_price")), "hint": _("%(count)s usage logs") % {"count": format_number(coupon_logs.count())}},
             {"label": _("Personal pay"), "value": format_number(money_sum(personal_pays, "pp_receipt_price")), "hint": _("%(count)s requests") % {"count": format_number(personal_pays.count())}},
             {"label": _("Raw PG logs"), "value": format_number(raw_logs.count()), "hint": _("Imported order data")},
@@ -1422,14 +1438,14 @@ class ShopOrderAdmin(ModelAdmin):
             "receipt_command_queue": receipt_command_queue,
             "settlement_pipeline": settlement_pipeline,
             "sales_series": sales_series(orders, period),
-            "status_rows": grouped_money(orders, "od_status", "od_receipt_price"),
-            "settle_rows": grouped_money(orders, "od_settle_case", "od_receipt_price"),
-            "pg_rows": grouped_money(orders, "od_pg", "od_receipt_price"),
+            "status_rows": grouped_money(orders, "od_status", net_receipt_expression()),
+            "settle_rows": grouped_money(orders, "od_settle_case", net_receipt_expression()),
+            "pg_rows": grouped_money(orders, "od_pg", net_receipt_expression()),
             "receipt_rows": [
-                report_row(_("Paid"), paid_orders, "od_receipt_price"),
+                report_row(_("Paid"), paid_orders, net_receipt_expression()),
                 report_row(_("Outstanding"), outstanding_orders, "od_misu"),
                 report_row(_("Cancelled"), cancelled_orders, "od_cancel_price"),
-                report_row(_("Cash receipt"), cash_receipt_orders, "od_receipt_price"),
+                report_row(_("Cash receipt"), cash_receipt_orders, net_receipt_expression()),
             ],
             "top_coupons": top_coupons,
             "coupon_summary": {
@@ -1462,6 +1478,7 @@ class ShopOrderAdmin(ModelAdmin):
                 "od_cart_price",
                 "od_receipt_price",
                 "od_cancel_price",
+                "od_refund_price",
                 "od_misu",
                 "od_coupon",
                 "od_send_coupon",
@@ -1486,6 +1503,7 @@ class ShopOrderAdmin(ModelAdmin):
                     order.od_cart_price,
                     order.od_receipt_price,
                     order.od_cancel_price,
+                    order.od_refund_price,
                     order.od_misu,
                     order.od_coupon,
                     order.od_send_coupon,
@@ -1752,6 +1770,17 @@ class ShopOrderDataAdmin(ModelAdmin):
         ),
     )
     list_fullwidth = True
+
+    # Raw PG responses and the cart snapshot a cancelled order restores: evidence, not data to
+    # edit or delete. They are written only by the order and payment paths.
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
     @admin.display(description=_("Log ID"), ordering="log_id")
     def log_id_display(self, obj):

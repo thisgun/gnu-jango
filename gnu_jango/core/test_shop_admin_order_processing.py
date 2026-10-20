@@ -13,7 +13,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.core.management import call_command
 from django.forms.models import model_to_dict
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import RequestFactory, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -74,7 +74,7 @@ class OrderReportPermissionTests(TestCase):
         self.assertEqual(response.status_code, 302)
 
 
-class OrderAdminBase(TestCase):
+class OrderAdminMixin:
     def setUp(self):
         self.admin = get_user_model().objects.create_superuser(
             username="order-admin", email="order-admin@example.test", password="password"
@@ -126,6 +126,23 @@ class OrderAdminBase(TestCase):
     def reload(self, *objects):
         for obj in objects:
             obj.refresh_from_db()
+
+    def change_form_data(self, order, **changes):
+        ordered_at = timezone.localtime(order.od_datetime)
+        data = {key: ("" if value is None else value) for key, value in model_to_dict(order).items()}
+        data.update(
+            od_datetime_0=ordered_at.strftime("%Y-%m-%d"),
+            od_datetime_1=ordered_at.strftime("%H:%M:%S"),
+            **{"items-TOTAL_FORMS": "1", "items-INITIAL_FORMS": "1", "items-MIN_NUM_FORMS": "0", "items-MAX_NUM_FORMS": "0"},
+            **{"raw_logs-TOTAL_FORMS": "0", "raw_logs-INITIAL_FORMS": "0", "raw_logs-MIN_NUM_FORMS": "0", "raw_logs-MAX_NUM_FORMS": "1000"},
+            **{"items-0-id": str(order.items.get().pk), "items-0-order": order.pk},
+            **changes,
+        )
+        return data
+
+
+class OrderAdminBase(OrderAdminMixin, TestCase):
+    pass
 
 
 @override_settings(**FAKE_TOSS)
@@ -275,6 +292,12 @@ class StatusTransitionTests(OrderAdminBase):
         self.assertTrue(payload["od_is_fully_paid"])
         self.assertEqual(payload["od_misu_price"], 0)
 
+    def test_a_deposit_records_the_amount_worked_out_not_a_stale_stored_misu(self):
+        order = self.make_order(od_misu=999)  # a migrated row whose od_misu is out of date
+        self.assertTrue(set_order_status(order, "입금"))
+        self.reload(order)
+        self.assertEqual((order.od_receipt_price, order.od_misu), (13000, 0))
+
     def test_a_deposit_adds_to_what_was_received_already(self):
         order = self.make_order(od_receipt_price=3000, od_misu=10000)
         self.assertTrue(set_order_status(order, "입금"))
@@ -374,19 +397,6 @@ class StatusTransitionTests(OrderAdminBase):
 
 
 class OrderLineAndDeleteTests(OrderAdminBase):
-    def change_form_data(self, order, **changes):
-        ordered_at = timezone.localtime(order.od_datetime)
-        data = {key: ("" if value is None else value) for key, value in model_to_dict(order).items()}
-        data.update(
-            od_datetime_0=ordered_at.strftime("%Y-%m-%d"),
-            od_datetime_1=ordered_at.strftime("%H:%M:%S"),
-            **{"items-TOTAL_FORMS": "1", "items-INITIAL_FORMS": "1", "items-MIN_NUM_FORMS": "0", "items-MAX_NUM_FORMS": "0"},
-            **{"raw_logs-TOTAL_FORMS": "0", "raw_logs-INITIAL_FORMS": "0", "raw_logs-MIN_NUM_FORMS": "0", "raw_logs-MAX_NUM_FORMS": "1000"},
-            **{"items-0-id": str(order.items.get().pk), "items-0-order": order.pk},
-            **changes,
-        )
-        return data
-
     def test_the_order_lines_are_shown_read_only(self):
         order = self.make_order()
         body = self.client.get(reverse("admin:shop_shoporder_change", args=[order.pk])).content.decode()
@@ -471,3 +481,114 @@ class OrderLineAndDeleteTests(OrderAdminBase):
         self.assertEqual(list(ShopOrder.objects.values_list("pk", flat=True)), [paid.pk])
         self.product.refresh_from_db()
         self.assertEqual(self.product.it_stock_qty, 7)  # the unpaid order's 2 units; the cancelled one held none
+
+    def test_coupon_logs_and_payment_logs_are_read_only(self):
+        order = self.make_order()
+        log = ShopCouponLog.objects.create(cl_id=9, cp_id="X", order=order, od_id=order.od_id, cp_price=1000)
+        raw = ShopOrderData.objects.create(log_id="cart-YC-1", order=order, od_id=order.od_id, dt_data="[]")
+        for model, obj in (("shopcouponlog", log), ("shoporderdata", raw)):
+            with self.subTest(model=model):
+                self.assertEqual(self.client.get(reverse(f"admin:shop_{model}_add")).status_code, 403)
+                self.assertEqual(
+                    self.client.post(reverse(f"admin:shop_{model}_delete", args=[obj.pk]), {"post": "yes"}).status_code,
+                    403,
+                )
+                self.assertEqual(self.client.get(reverse(f"admin:shop_{model}_change", args=[obj.pk])).status_code, 200)
+                self.client.post(reverse(f"admin:shop_{model}_change", args=[obj.pk]), {"cp_price": "1", "dt_data": "x"})
+        log.refresh_from_db()
+        raw.refresh_from_db()
+        self.assertEqual((log.cp_price, raw.dt_data), (1000, "[]"))
+        body = self.client.get(reverse("admin:shop_shoporder_change", args=[order.pk])).content.decode()
+        self.assertNotIn('name="raw_logs-0-dt_pg"', body)
+
+
+class NetReceiptTests(OrderAdminBase):
+    """A cancelled paid order keeps od_receipt_price next to od_refund_price; receipt totals count
+    what the shop kept."""
+
+    def setUp(self):
+        super().setUp()
+        self.kept = self.paid_order(od_id="YC-N1")
+        self.refunded = self.paid_order("취소", od_id="YC-N2", od_refund_price=13000, od_cancel_price=10000)
+
+    def test_the_settlement_report_counts_receipts_net_of_refunds(self):
+        context = self.client.get(reverse("admin:shop_shoporder_reports")).context
+        metrics = {str(metric["label"]): metric["value"] for metric in context["metrics"]}
+        self.assertEqual(context["metrics"][1]["value"], "13,000")  # receipt total
+        self.assertEqual(metrics["환불금액"], "13,000")
+        self.assertEqual(sum(row["amount"] for row in context["status_rows"]), 13000)
+        self.assertEqual(sum(row["amount"] for row in context["settle_rows"]), 13000)
+        self.assertEqual(sum(row["receipt_price"] for row in context["sales_series"]), 13000)
+
+    def test_the_order_print_and_proof_lists_leave_refunded_money_out(self):
+        context = self.client.get(reverse("admin:shop_shoporder_print")).context
+        self.assertEqual(context["metrics"][2]["value"], "13,000")
+        context = self.client.get(reverse("admin:shop_shoporder_print") + "?receipt_state=proof_needed").context
+        self.assertEqual([row["id"] for row in context["print_rows"]], ["YC-N1"])
+
+    @override_settings(SHOP_PAYMENT_ADAPTER_BASE_URL="https://adapter.invalid/verify", SHOP_PAYMENT_ADAPTER_SECRET="s")
+    def test_the_adapter_reconciliation_skips_cancelled_and_refunded_orders(self):
+        ShopOrder.objects.filter(pk__in=[self.kept.pk, self.refunded.pk]).update(od_pg="kcp", od_tno="T1")
+        ShopOrder.objects.filter(pk=self.kept.pk).update(od_status="입금")
+        out = io.StringIO()
+        call_command("reconcile_payment_adapter", "--json", "--operation", "cash_receipt", stdout=out)
+        summary = json.loads(out.getvalue())
+        self.assertEqual(summary["orders_inspected"], 1)
+        self.assertNotIn("YC-N2", out.getvalue())
+
+
+class AdminCancelTransactionTests(OrderAdminMixin, TransactionTestCase):
+    """The order form runs a cancellation after its own transaction: a Toss refund is never left
+    behind by a rolled-back local cancel."""
+
+    def post_cancel(self, order):
+        return self.client.post(
+            reverse("admin:shop_shoporder_change", args=[order.pk]), self.change_form_data(order, od_status="취소")
+        )
+
+    @override_settings(**FAKE_TOSS)
+    def test_the_order_form_cancels_and_refunds_a_toss_order(self):
+        order = self.toss_order()
+        reply = fake_http_response({"orderId": order.od_id, "paymentKey": order.od_tno, "status": "CANCELED"})
+        with patch(URLOPEN, return_value=reply) as urlopen:
+            response = self.post_cancel(order)
+        self.assertEqual(response.status_code, 302)
+        urlopen.assert_called_once()
+        self.reload(order)
+        self.assertEqual((order.od_status, order.od_refund_price), ("취소", 13000))
+
+    @override_settings(**FAKE_TOSS)
+    def test_an_error_in_the_form_request_before_the_cancel_never_reaches_toss(self):
+        order = self.toss_order()
+        with patch(URLOPEN) as urlopen, patch(
+            "gnu_jango.shop.admin.orders.ShopOrderAdmin.response_change", side_effect=RuntimeError("boom")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.post_cancel(order)
+        urlopen.assert_not_called()
+        self.reload(order)
+        self.assertEqual((order.od_status, order.od_refund_price), ("입금", 0))
+
+    @override_settings(**FAKE_TOSS)
+    def test_an_error_after_the_toss_refund_keeps_the_order_cancelled(self):
+        order = self.toss_order()
+        reply = fake_http_response({"orderId": order.od_id, "paymentKey": order.od_tno, "status": "CANCELED"})
+        with patch(URLOPEN, return_value=reply), patch(
+            "gnu_jango.shop.admin.orders.ShopOrderAdmin.report_status_change", side_effect=RuntimeError("boom")
+        ):
+            with self.assertRaises(RuntimeError):
+                self.post_cancel(order)
+        self.reload(order, self.product)
+        self.assertEqual((order.od_status, order.od_receipt_price, order.od_refund_price), ("취소", 13000, 13000))
+        self.assertEqual(self.product.it_stock_qty, 7)
+
+    @override_settings(**FAKE_TOSS)
+    def test_a_failing_payment_log_does_not_stop_the_cancel_after_the_refund(self):
+        order = self.toss_order()
+        reply = fake_http_response({"orderId": order.od_id, "paymentKey": order.od_tno, "status": "CANCELED"})
+        with patch(URLOPEN, return_value=reply), patch(
+            "gnu_jango.api.shop_payments.record_payment_raw_log", side_effect=RuntimeError("disk full")
+        ):
+            self.assertTrue(set_order_status(order, "취소"))
+        self.reload(order)
+        self.assertEqual((order.od_status, order.od_refund_price), ("취소", 13000))

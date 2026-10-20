@@ -186,3 +186,15 @@ class ShopCouponLogAdmin(ModelAdmin):
     list_filter = ("cl_datetime",)
     readonly_fields = ("cl_id",)
 
+    # A coupon log is the order's record of the discount: editing or deleting one changed what
+    # the order owes (od_misu) and stopped the coupon from coming back when the order is
+    # cancelled. Logs are written and removed only by the order and cancel paths.
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+

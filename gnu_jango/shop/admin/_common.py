@@ -44,6 +44,17 @@ from gnu_jango.utils.admin_display import (
 )
 
 
+def net_receipt_expression():
+    """What the shop kept of an order's payment: od_receipt_price - od_refund_price (a cancelled
+    paid order keeps its receipt as the record of the payment, next to the refund)."""
+    return ExpressionWrapper(F("od_receipt_price") - F("od_refund_price"), output_field=IntegerField())
+
+
+def has_net_receipt():
+    """Orders that kept some of their payment (not fully refunded)."""
+    return Q(od_receipt_price__gt=F("od_refund_price"))
+
+
 def report_date_range(request):
     start = parse_date(str(request.GET.get("date_from") or request.GET.get("start") or ""))
     end = parse_date(str(request.GET.get("date_to") or request.GET.get("end") or ""))
@@ -94,7 +105,7 @@ def sales_series(queryset, period):
         .values("period_value")
         .annotate(
             order_count=Count("pk"),
-            receipt_price=Sum("od_receipt_price"),
+            receipt_price=Sum(net_receipt_expression()),
             cancel_price=Sum("od_cancel_price"),
             coupon_price=Sum("od_coupon"),
             tax_base=Sum("od_tax_mny"),
@@ -364,7 +375,7 @@ class ReceiptStateFilter(DropdownFilter):
         if value == "requested":
             return queryset.filter(Q(od_tax_invoice_request=True) | Q(od_cash_request=True))
         if value == "proof_needed":
-            return queryset.filter(od_receipt_price__gt=0, od_cash_no="", od_tno="", od_app_no="")
+            return queryset.filter(has_net_receipt(), od_cash_no="", od_tno="", od_app_no="")
         return queryset
 
 
@@ -498,6 +509,13 @@ class ShopOrderDataInline(TabularInline):
     readonly_fields = ("log_id", "dt_pg", "cart_id", "dt_time", "dt_data_excerpt")
     fields = ("log_id", "dt_pg", "cart_id", "dt_time", "dt_data_excerpt")
     can_delete = False
+    max_num = 0
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
     @admin.display(description=_("Raw data"))
     def dt_data_excerpt(self, obj):

@@ -187,10 +187,12 @@ def move_order_status(order, target, *, actor=""):
         previous = canonical_status(locked.od_status)
         now_label = timezone.localtime().strftime("%Y-%m-%d %H:%M:%S")
         fields = ["od_status", "od_misu", "od_mod_history"]
+        # worked out from the amounts, not the stored od_misu (stale on some migrated orders)
+        owed = order_misu(locked)
         locked.od_status = target
         if target == STATUS_PAID:
             # order_update_receipt: the amount owed is received now
-            locked.od_receipt_price = int(locked.od_receipt_price or 0) + max(0, int(locked.od_misu or 0))
+            locked.od_receipt_price = int(locked.od_receipt_price or 0) + owed
             locked.od_receipt_time = now_label
             fields += ["od_receipt_price", "od_receipt_time"]
         if target == STATUS_SHIPPING and not locked.od_invoice_time:
@@ -220,8 +222,11 @@ def admin_cancel_order(order, reason="", *, actor=""):
     through the shared cancel path, and the payment stays on record (od_receipt_price) next to the
     refund (od_refund_price)."""
     # The row stays locked from the checks through the PG call to the local cancel, so a status
-    # move or a second cancel in between cannot slip past the checks or the refund amount.
-    with transaction.atomic():
+    # move or a second cancel in between cannot slip past the checks or the refund amount. The
+    # block is durable: once Toss has refunded, the cancellation commits on its own and cannot be
+    # rolled back by whatever the caller's request does afterwards (the order form runs this after
+    # its own transaction, see ShopOrderAdmin.change_view).
+    with transaction.atomic(durable=True):
         current = ShopOrder.objects.select_for_update().filter(pk=order.pk).first()
         return _cancel_locked_order(current, reason, actor)
 
@@ -266,11 +271,16 @@ def _cancel_locked_order(current, reason, actor):
             canceled = toss_api_cancel_payment(current, reason or "쇼핑몰 운영자 승인 취소")
         except PaymentCancelError as exc:
             return StatusChange(False, f"결제 취소에 실패해 주문을 취소하지 않았습니다. {exc}")
-        record_payment_raw_log(
-            current, current.od_id, "toss", current.od_tno, {"toss_cancel": canceled}, prefix="toss-cancel"
-        )
         note = f" PG {current.od_settle_case or '결제'} 승인취소 처리"
         pg_cancelled = True
+        try:
+            # a savepoint: a failed log write must not break the cancellation that follows
+            with transaction.atomic():
+                record_payment_raw_log(
+                    current, current.od_id, "toss", current.od_tno, {"toss_cancel": canceled}, prefix="toss-cancel"
+                )
+        except Exception:  # noqa: BLE001 - Toss refunded already; the order must still be cancelled
+            logger.exception("order %s: could not record the Toss cancel response", current.od_id)
     else:
         manual_refund = True
         if settle_case_is_bank(current.od_settle_case):
