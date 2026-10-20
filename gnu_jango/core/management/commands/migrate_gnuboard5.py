@@ -38,6 +38,7 @@ from gnu_jango.shop.models import (
     ShopStockNotification,
     ShopShippingCost,
     ShopShippingPolicy,
+    ORDER_ITEM_STATUS_COMPLETED,
     generate_order_uid,
 )
 from gnu_jango.users.hashers import convert_gnuboard_password_hash
@@ -1713,10 +1714,27 @@ class Command(BaseCommand):
             order_item.io_price = integer(row, "io_price", 0)
             order_item.ct_notax = integer(row, "ct_notax", 0)
             order_item.ct_send_cost = integer(row, "ct_send_cost", 0)
+            self.apply_cart_point_state(order_item, row)
             order_item.image_url = product.image_url if product else ""
             order_item.save()
             count += 1
         return count
+
+    def apply_cart_point_state(self, order_item, row):
+        """Carry youngcart ct_point_use / ct_complete_time so a line PHP already paid is not paid
+        again. A completed row without the column counts as paid; a line this site already paid
+        stays paid on a re-import."""
+        is_completed = order_item.ct_status == ORDER_ITEM_STATUS_COMPLETED
+        if "ct_point_use" in row:
+            point_use = bool(integer(row, "ct_point_use", 0))
+        else:
+            point_use = is_completed
+        order_item.ct_point_use = bool(order_item.ct_point_use) or point_use
+        complete_time = optional_datetime_value(scalar(row, "ct_complete_time"))
+        if complete_time is None and is_completed:
+            # youngcart save_order_point counts an unstamped completed line from its cart time
+            complete_time = optional_datetime_value(scalar(row, "ct_time"))
+        order_item.ct_complete_time = (complete_time or order_item.ct_complete_time) if is_completed else None
 
     def import_shop_order_data(self, rows):
         count = 0

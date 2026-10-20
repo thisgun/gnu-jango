@@ -46,6 +46,12 @@ from gnu_jango.shop.models import (
 )
 from gnu_jango.shop.inventory import StockAdjustmentError, cancel_order_with_stock_restore, reserve_product_stock
 from gnu_jango.shop.images import upload_product_images
+from gnu_jango.shop.order_points import (
+    item_purchase_point,
+    item_status_update,
+    order_line_points_enabled,
+    purchase_point_notice,
+)
 from gnu_jango.shop.payment_options import (
     cash_receipt_method_enabled,
     cash_receipt_preferences,
@@ -882,6 +888,9 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
             or address_subject
         )
     )
+    # youngcart cartupdate.php / orderformupdate.php: each line records its purchase point; with
+    # de_card_point off an order paid online (card, transfer, phone, easy pay) records none.
+    earns_line_points = order_line_points_enabled(settle_case, receipt_due)
     with transaction.atomic():
         order = ShopOrder.objects.create(**fit_to_columns(ShopOrder, dict(
             od_id=order_id,
@@ -939,6 +948,12 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
                 it_name=item["it_name"],
                 ct_price=item["ct_price"],
                 ct_qty=item["ct_qty"],
+                ct_point=item_purchase_point(
+                    product,
+                    io_type=item.get("io_type") or 0,
+                    io_price=item.get("io_price") or 0,
+                    has_option=bool(item.get("ct_option")),
+                ) if earns_line_points else 0,
                 ct_option=item["ct_option"],
                 ct_status=status_value,
                 io_type=item.get("io_type") or 0,
@@ -1653,6 +1668,7 @@ def payment_config_view(request):
             "hope_date": hope_date_range(),
             "guest_privacy": guest_privacy_html(),
             "is_test_mode": toss_config["is_test_mode"],
+            "purchase_point": purchase_point_notice(),
             "providers": {
                 "toss": {
                     "enabled": toss_config["enabled"],
@@ -1922,7 +1938,7 @@ def toss_vbank_webhook_view(request):
                 locked.od_status = ORDER_STATUS_ORDERED
                 locked.od_misu = locked.od_receipt_price
                 locked.od_receipt_time = ""
-                locked.items.exclude(ct_status__in=CANCELLED_STATUSES).update(ct_status=ORDER_STATUS_ORDERED)
+                locked.items.exclude(ct_status__in=CANCELLED_STATUSES).update(**item_status_update(ORDER_STATUS_ORDERED))
                 fields.extend(["od_status", "od_misu", "od_receipt_time"])
             locked.save(update_fields=fields)
             record_payment_raw_log(locked, order_id, "toss-vbank", provider_payment_key, raw_data, prefix="toss-vbank")

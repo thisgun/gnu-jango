@@ -394,6 +394,7 @@ class ScheduledJobsRunnerTests(TestCase):
                 "expire_pending_email_members",
                 "expire_toss_vbank_orders",
                 "cleanup_admin_privacy",
+                "save_order_points",
             ],
         )
         for name, args in runner.calls:
@@ -426,8 +427,8 @@ class ScheduledJobsRunnerTests(TestCase):
 
         self.assertFalse(report["ok"])
         self.assertEqual(report["failed"], 1)
-        self.assertEqual(report["succeeded"], 3)
-        self.assertEqual(len(runner.calls), 4)
+        self.assertEqual(report["succeeded"], 4)
+        self.assertEqual(len(runner.calls), 5)
         failed = report["jobs"][1]
         self.assertEqual(failed["status"], "failed")
         self.assertIn("exploded", failed["error"])
@@ -458,7 +459,7 @@ class RunScheduledJobsCommandTests(TestCase):
 
         output = stdout.getvalue()
         self.assertIn("expire_pending_payment_orders: ok", output)
-        self.assertIn("4 ok, 0 failed", output)
+        self.assertIn("5 ok, 0 failed", output)
 
     def test_exits_non_zero_when_any_job_failed(self):
         stdout = StringIO()
@@ -519,7 +520,7 @@ class CronEndpointTests(TestCase):
         body = response.json()
         self.assertTrue(body["ok"])
         self.assertEqual(body["data"]["failed"], 0)
-        self.assertEqual(len(body["data"]["jobs"]), 4)
+        self.assertEqual(len(body["data"]["jobs"]), 5)
         self.assertIn("no-store", response["Cache-Control"])
         self.assertTrue(all("--apply" in args for name, args in runner.calls if name != "cleanup_admin_privacy"))
 

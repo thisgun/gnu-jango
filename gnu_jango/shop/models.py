@@ -10,6 +10,10 @@ from django.utils.translation import gettext_lazy as _
 from django.core.validators import FileExtensionValidator
 
 
+# youngcart 완료: the status whose lines earn their purchase point (ct_complete_time is its clock).
+ORDER_ITEM_STATUS_COMPLETED = "완료"
+
+
 def generate_order_uid():
     return uuid.uuid4().hex + uuid.uuid4().hex
 
@@ -727,6 +731,25 @@ class ShopOrderItem(models.Model):
             models.Index(fields=["ct_status"]),
             models.Index(fields=["product", "ct_status"]),
         ]
+
+    def sync_complete_time(self):
+        """Stamp ct_complete_time when the line is 완료 without one, clear it otherwise
+        (youngcart get_cart_complete_time_sql). Returns True when it changed."""
+        if self.ct_status == ORDER_ITEM_STATUS_COMPLETED:
+            if self.ct_complete_time is None:
+                self.ct_complete_time = timezone.now()
+                return True
+            return False
+        if self.ct_complete_time is not None:
+            self.ct_complete_time = None
+            return True
+        return False
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        if self.sync_complete_time() and update_fields is not None and "ct_status" in update_fields:
+            kwargs["update_fields"] = {*update_fields, "ct_complete_time"}
+        super().save(*args, **kwargs)
 
 
 class ShopOrderData(models.Model):

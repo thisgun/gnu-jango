@@ -22,6 +22,7 @@ from gnu_jango.shop.models import (
     ShopOrder,
     ShopOrderData,
 )
+from gnu_jango.shop.order_points import item_status_update
 from gnu_jango.shop.payment_options import online_payment_preferences
 
 from .response import api_error
@@ -928,7 +929,7 @@ def confirm_order_payment(order_id, amount, pg_service, transaction_id, raw_data
         if transaction_id:
             order.od_tno = transaction_id
         order.save(update_fields=update_fields)
-        order.items.exclude(ct_status__in=CANCELLED_STATUSES).update(ct_status=ORDER_STATUS_PAID)
+        order.items.exclude(ct_status__in=CANCELLED_STATUSES).update(**item_status_update(ORDER_STATUS_PAID))
         for log in order.coupon_logs.select_related("coupon").all():
             if log.coupon_id:
                 # an all-member coupon stays open for the other members (use is in the log)

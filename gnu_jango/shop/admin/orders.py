@@ -7,6 +7,8 @@ from django.utils.translation import gettext_lazy as _
 from unfold.forms import ActionForm
 
 from gnu_jango.api.shop_common import CANCELLED_STATUSES
+from gnu_jango.shop.models import ORDER_ITEM_STATUS_COMPLETED
+from gnu_jango.shop.order_points import item_status_update, run_save_order_points_safely, take_back_order_points
 
 # YoungCart order states an operator moves an order through (adm/shop_admin/orderlist.php).
 ADMIN_ORDER_STATUSES = ("주문", "입금", "준비", "배송", "완료", "취소")
@@ -35,7 +37,12 @@ def set_order_status(order, status, reason):
         cancel_order_and_refund_benefits(order, reason)
         return True
     ShopOrder.objects.filter(pk=order.pk).update(od_status=status)
-    order.items.exclude(ct_status__in=CANCELLED_STATUSES).update(ct_status=status)
+    order.items.exclude(ct_status__in=CANCELLED_STATUSES).update(**item_status_update(status))
+    # youngcart orderformcartupdate.php: a paid line that leaves 완료 gives its point back, and
+    # 완료 runs save_order_point at once so a 0-day wait pays immediately.
+    take_back_order_points(order)
+    if status == ORDER_ITEM_STATUS_COMPLETED:
+        run_save_order_points_safely()
     return True
 
 
@@ -121,8 +128,11 @@ class ShopOrderAdmin(ModelAdmin):
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
+        # item rows edited in the inline: a paid line moved off 완료 gives its point back
+        take_back_order_points(form.instance)
         status = getattr(request, "_pending_order_status", None)
         if status is None:
+            run_save_order_points_safely()
             return
         request._pending_order_status = None
         order = form.instance
@@ -247,6 +257,9 @@ class ShopOrderAdmin(ModelAdmin):
 
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
+        if request.method == "GET":
+            # youngcart orderform.php runs save_order_point("완료") when the order is opened
+            run_save_order_points_safely()
         order = self.get_object(request, object_id)
         if order:
             extra_context["order_detail_ops"] = self.order_detail_context(request, order)
