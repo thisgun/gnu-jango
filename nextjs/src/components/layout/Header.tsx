@@ -13,6 +13,7 @@ import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { ChevronDown } from "lucide-react";
 import { HeaderClientActions } from "@/components/layout/HeaderClientActions";
+import { hasShopLogo, ShopLogoPicture, shopLogoSources } from "@/components/layout/ShopLogo";
 import { ShopHeaderNav } from "@/components/layout/ShopHeaderNav";
 import { isExternalMenuLink, menuHref, type MenuItem } from "@/components/layout/menu";
 import { buildNavigationMenus, type NavigationBoard } from "@/components/layout/navigation-menus";
@@ -23,6 +24,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { useAuthStore } from "@/store/auth";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import { useRouter } from "@bprogress/next/app";
+import type { PublicSettings } from "@/lib/schemas";
+import { getClientPublicSettings } from "@/services/settings";
 
 function MenuLink({
   menu,
@@ -260,6 +263,22 @@ export function Header({
   const [searchOpen, setSearchOpen] = useState(false);
   const [headerScrolled, setHeaderScrolled] = useState(false);
   const [headerCondensed, setHeaderCondensed] = useState(false);
+  // 쇼핑몰 설정에서 올린 상단 로고. 정적 내보내기에는 굽지 않으므로 공개 설정을 받은 뒤 바꿔 단다.
+  const [shopSettings, setShopSettings] = useState<PublicSettings | null>(null);
+
+  useEffect(() => {
+    if (!isShop || shopSettings) return;
+    let alive = true;
+    void getClientPublicSettings()
+      .then((settings) => {
+        if (alive) setShopSettings(settings);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [isShop, shopSettings]);
+  const shopLogo = shopLogoSources(shopSettings, "header");
 
   useEffect(() => {
     let frame = 0;
@@ -326,7 +345,16 @@ export function Header({
               className="solune-community-brand"
               aria-label={isShop ? "영카트 쇼핑몰 홈" : "그누보드5 홈"}
             >
-              {isShop ? (
+              {isShop && hasShopLogo(shopLogo) ? (
+                <ShopLogoPicture
+                  sources={shopLogo}
+                  fallbackSrc="/img/shop-logo.png"
+                  alt={shopSettings?.cf_title?.trim() || "영카트"}
+                  className="solune-brand-logo solune-shop-brand-logo"
+                  width={167}
+                  height={33}
+                />
+              ) : isShop ? (
                 <Image className="solune-brand-logo solune-shop-brand-logo" src="/img/shop-logo.png" alt="영카트" width={167} height={33} priority unoptimized />
               ) : (
                 <Image className="solune-brand-logo" src="/img/logo.png" alt="그누보드5" width={124} height={30} priority unoptimized />

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import { contentHref } from "@/lib/content-links";
+import { hasShopLogo, ShopLogoPicture, shopLogoSources } from "@/components/layout/ShopLogo";
 import { getClientPublicSettings } from "@/services/settings";
 import type { PublicSettings } from "@/lib/schemas";
 
@@ -160,13 +161,25 @@ function ShopFooter() {
   const settings = usePublicSettings();
   const siteTitle = siteTitleOf(settings);
   const owner = settings?.cf_company_name?.trim() || siteTitle;
+  // 쇼핑몰 설정에서 올린 하단 로고(모바일 하단 로고는 폰 폭에서). 없으면 사이트 이름 글자를 그대로 둔다.
+  const footerLogo = shopLogoSources(settings, "footer");
 
   return (
     <footer className="solune-shop-footer">
       <div className="solune-shop-shell solune-shop-footer-inner">
         <div className="solune-shop-footer-brand">
           <Link href="/shop" aria-label={`${siteTitle} 쇼핑몰 홈`}>
-            <span className="solune-shop-footer-name">{siteTitle}</span>
+            {footerLogo.pc ? (
+              <ShopLogoPicture sources={footerLogo} alt={siteTitle} className="solune-shop-footer-logo" />
+            ) : hasShopLogo(footerLogo) ? (
+              // 모바일 하단 로고만 올렸다: 폰 폭은 그 그림, 넓은 화면은 지금처럼 사이트 이름 글자.
+              <>
+                <span className="solune-shop-footer-name solune-shop-logo-wide-only">{siteTitle}</span>
+                <ShopLogoPicture sources={footerLogo} alt={siteTitle} className="solune-shop-footer-logo solune-shop-logo-narrow-only" />
+              </>
+            ) : (
+              <span className="solune-shop-footer-name">{siteTitle}</span>
+            )}
           </Link>
           <p>Solune가 고른 상품과 더 나은 쇼핑 경험을 만나보세요.</p>
         </div>
