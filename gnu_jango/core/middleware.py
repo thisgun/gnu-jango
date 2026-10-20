@@ -168,7 +168,11 @@ class G5SecurityHeadersMiddleware:
         resolver_match = getattr(request, "resolver_match", None)
         unfold_admin = resolver_match is not None and (
             "admin" in resolver_match.app_names
-            or resolver_match.url_name in {"admin-theme-settings", "admin-sample-data"}
+            or resolver_match.url_name in {
+                "admin-theme-settings",
+                "admin-sample-data",
+                "admin-shop-settings",
+            }
         )
         policy = build_content_security_policy(unfold_admin=True) if unfold_admin else CONTENT_SECURITY_POLICY
         response.setdefault("Content-Security-Policy", policy)
