@@ -103,7 +103,11 @@ export function buildOrderPageControllerResult({
       pointWarn: discounts.pointWarn,
       couponPoint: formState.couponPoint,
     }),
-    agreements: formState.agreements,
+    agreements: {
+      ...formState.agreements,
+      isGuestOrder: !orderData.isMemberOrder,
+      guestPrivacyHtml: orderData.paymentConfig?.guest_privacy ?? "",
+    },
     summary: buildSummaryProps({
       subtotal: discounts.subtotal,
       cartCoupon: discounts.cartCoupon,

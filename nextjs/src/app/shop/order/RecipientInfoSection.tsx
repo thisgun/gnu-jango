@@ -6,6 +6,7 @@ import {
   type SavedAddress,
 } from "./orderAddressHelpers";
 import type { AddressFieldUpdater, PostcodeTarget } from "./OrderAddressFields";
+import type { HopeDateRule } from "./orderPaymentHelpers";
 import { RecipientAddressDetails } from "./RecipientAddressDetails";
 import { RecipientAddressSelector } from "./RecipientAddressSelector";
 import { RecipientDeliveryOptions } from "./RecipientDeliveryOptions";
@@ -33,6 +34,7 @@ type RecipientInfoSectionProps = {
   setMemo: (value: string) => void;
   hopeDate: string;
   setHopeDate: (value: string) => void;
+  hopeDateRule: HopeDateRule | null;
   taxRequest: boolean;
   setTaxRequest: (checked: boolean) => void;
   taxCompany: string;
@@ -72,6 +74,7 @@ export function RecipientInfoSection({
   setMemo,
   hopeDate,
   setHopeDate,
+  hopeDateRule,
   taxRequest,
   setTaxRequest,
   taxCompany,
@@ -115,6 +118,7 @@ export function RecipientInfoSection({
         setMemo={setMemo}
         hopeDate={hopeDate}
         setHopeDate={setHopeDate}
+        hopeDateRule={hopeDateRule}
         isMemberOrder={isMemberOrder}
         paymentMethod={paymentMethod}
         cashReceiptEnabled={cashReceiptEnabled}
