@@ -219,6 +219,14 @@ def admin_cancel_order(order, reason="", *, actor=""):
     here and recorded as a refund the admin makes by hand. Stock, coupons and points go back once
     through the shared cancel path, and the payment stays on record (od_receipt_price) next to the
     refund (od_refund_price)."""
+    # The row stays locked from the checks through the PG call to the local cancel, so a status
+    # move or a second cancel in between cannot slip past the checks or the refund amount.
+    with transaction.atomic():
+        current = ShopOrder.objects.select_for_update().filter(pk=order.pk).first()
+        return _cancel_locked_order(current, reason, actor)
+
+
+def _cancel_locked_order(current, reason, actor):
     from gnu_jango.api.shop_common import CANCELLED_STATUSES
     from gnu_jango.api.shop_payments import (
         PaymentCancelError,
@@ -232,7 +240,6 @@ def admin_cancel_order(order, reason="", *, actor=""):
     from gnu_jango.api.v1_shop import cancel_order_and_refund_benefits
     from gnu_jango.shop.inventory import order_history_line
 
-    current = ShopOrder.objects.filter(pk=order.pk).first()
     if current is None:
         return StatusChange(False, "주문을 찾을 수 없습니다.")
     if str(current.od_status or "") in CANCELLED_STATUSES:
@@ -297,13 +304,16 @@ def admin_cancel_order(order, reason="", *, actor=""):
 def order_delete_block_reason(order):
     """Why the admin may not delete ``order`` ("" when it may).
 
-    youngcart orderlistdelete.php deletes only 주문 orders; a cancelled order has nothing left to
-    give back, so it may go too. Anything paid, shipped or completed stays on record, and an
+    youngcart orderlistdelete.php deletes only 주문 orders; a cancelled order that was never paid
+    has nothing left to give back, so it may go too. Anything paid, shipped or completed stays on record, and an
     order with an issued virtual account is cancelled first (that closes the account at Toss)."""
     from gnu_jango.api.shop_payments import settle_case_is_vbank
 
     status = canonical_status(order.od_status)
     if status == STATUS_CANCELLED:
+        if int(order.od_receipt_price or 0) > 0 or int(order.od_refund_price or 0) > 0:
+            # the payment and refund record (a manual refund may still be owed) stays
+            return "결제·환불 기록이 있는 취소 주문은 삭제할 수 없습니다."
         return ""
     if status != STATUS_ORDERED:
         return f"'{status or '-'}' 상태의 주문은 삭제할 수 없습니다. 주문(미입금) 또는 취소된 주문만 삭제할 수 있습니다."

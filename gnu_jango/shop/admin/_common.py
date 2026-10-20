@@ -353,7 +353,8 @@ class ReceiptStateFilter(DropdownFilter):
     def queryset(self, request, queryset):
         value = self.value()
         if value == "paid":
-            return queryset.filter(od_receipt_price__gt=0, od_misu__lte=0)
+            # a cancelled order keeps its receipt next to the refund: it is not "paid"
+            return queryset.filter(od_receipt_price__gt=0, od_misu__lte=0, od_cancel_price__lte=0)
         if value == "outstanding":
             return queryset.filter(od_misu__gt=0)
         if value == "cancelled":

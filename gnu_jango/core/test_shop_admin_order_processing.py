@@ -140,7 +140,7 @@ class AdminCancelTests(OrderAdminBase):
         request = urlopen.call_args.args[0]
         self.assertEqual(request.full_url, f"https://api.tosspayments.com/v1/payments/{order.od_tno}/cancel")
         self.assertEqual(json.loads(request.data), {"cancelReason": "고객 요청"})
-        self.assertEqual(request.get_header("Idempotency-key"), f"admin-cancel-{order.od_id}-{order.od_tno}")
+        self.assertTrue(request.get_header("Idempotency-key").startswith(f"admin-cancel-{order.od_id}-{order.od_tno}-"))
         self.reload(order, self.product)
         self.assertEqual(order.od_status, "취소")
         self.assertEqual((order.od_receipt_price, order.od_refund_price, order.od_misu), (13000, 13000, 0))
@@ -201,6 +201,10 @@ class AdminCancelTests(OrderAdminBase):
         self.assertIn("무통장 환불 필요 (수동)", order.od_mod_history)
         self.assertEqual(self.product.it_stock_qty, 7)
         self.assertTrue(any("직접 환불" in message for message in self.messages_of(response)))
+        api = APIClient()
+        api.force_authenticate(self.member)
+        payload = api.get(f"/api/v1/shop/orders/{order.od_id}").json()["data"]
+        self.assertEqual((payload["od_receipt_price"], payload["od_refund_price"], payload["od_misu_price"]), (13000, 13000, 0))
 
     def test_a_pending_online_payment_is_not_treated_as_paid(self):
         # a card order waiting for its payment carries the amount due in od_receipt_price
@@ -432,6 +436,13 @@ class OrderLineAndDeleteTests(OrderAdminBase):
         )
         self.assertEqual(ShopOrder.objects.count(), 4)
         self.assertTrue(any("삭제하지 않습니다" in message for message in self.messages_of(response)))
+
+    def test_a_cancelled_order_with_a_payment_record_is_kept(self):
+        order = self.paid_order()
+        self.assertTrue(set_order_status(order, "취소"))  # bank deposit: refund owed by hand
+        response = self.client.post(reverse("admin:shop_shoporder_delete", args=[order.pk]), {"post": "yes"})
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(ShopOrder.objects.filter(pk=order.pk).exists())
 
     def test_deleting_an_unpaid_order_gives_its_stock_and_points_back(self):
         order = self.make_order(od_receipt_point=2000)

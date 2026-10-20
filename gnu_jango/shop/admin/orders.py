@@ -1278,7 +1278,7 @@ class ShopOrderAdmin(ModelAdmin):
         if export_type == "receipts":
             return self.receipts_csv(orders, personal_pays)
 
-        paid_orders = orders.filter(od_receipt_price__gt=0, od_misu__lte=0)
+        paid_orders = orders.filter(od_receipt_price__gt=0, od_misu__lte=0, od_cancel_price__lte=0)
         outstanding_orders = orders.filter(od_misu__gt=0)
         cancelled_orders = orders.filter(od_cancel_price__gt=0)
         cash_receipt_orders = orders.exclude(od_cash_no="")

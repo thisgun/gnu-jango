@@ -734,7 +734,9 @@ def toss_api_cancel_payment(order, reason):
             "Authorization": f"Basic {credentials}",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "Idempotency-Key": f"admin-cancel-{order.od_id}-{payment_key_value}"[:300],
+            # the reason is part of the body: a retry with another reason is a new request (Toss
+            # answers ALREADY_CANCELED_PAYMENT when the first one went through)
+            "Idempotency-Key": f"admin-cancel-{order.od_id}-{payment_key_value}-{hashlib.sha256(body).hexdigest()[:16]}"[:300],
         },
     )
     try:

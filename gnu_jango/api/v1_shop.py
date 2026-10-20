@@ -616,6 +616,7 @@ def order_payload(order, *, detail=False):
         "od_send_cost2": order.od_send_cost2,
         "od_receipt_price": order.od_receipt_price,
         "od_cancel_price": order.od_cancel_price,
+        "od_refund_price": order.od_refund_price,
         "od_receipt_point": order.od_receipt_point,
         "od_deposit_name": order.od_deposit_name,
         "od_status": status_value,
