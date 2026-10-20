@@ -4,12 +4,14 @@ import {
 } from "./orderAddressHelpers";
 import {
   PAYMENT_METHODS,
+  type HopeDateRule,
   type PayMethodDef,
 } from "./orderPaymentHelpers";
 import {
   isValidKoreanPhone,
   isValidKoreanZip,
 } from "@/lib/address-validation";
+import { parseIsoDate } from "@/lib/hope-date";
 
 type ValidateOrderSubmissionInput = {
   orderer: AddressForm;
@@ -29,6 +31,9 @@ type ValidateOrderSubmissionInput = {
   cashRequest: boolean;
   cashReceiptType: "income" | "expense";
   cashReceiptIdentityNumber: string;
+  /** 희망배송일 and the shop's rule; checked only while the rule is on. */
+  hopeDate?: string;
+  hopeDateRule?: HopeDateRule | null;
 };
 
 export type OrderSubmitValidationResult =
@@ -67,6 +72,21 @@ export function resolveRecipientAddress(
   return addressSelection === "same" ? orderer : recipient;
 }
 
+/** YoungCart orderform: while 희망배송일 is on a date inside [min, max] must be chosen. */
+export function validateHopeDate(
+  hopeDate: string,
+  rule: HopeDateRule | null | undefined
+): string | null {
+  if (!rule?.use) return null;
+  const value = hopeDate.trim();
+  if (!value) return "희망배송일을 선택하여 주십시오.";
+  if (!parseIsoDate(value)) return "희망배송일이 올바르지 않습니다.";
+  if (value < rule.min || value > rule.max) {
+    return `희망배송일은 ${rule.min} 부터 ${rule.max} 사이에서 선택해 주십시오.`;
+  }
+  return null;
+}
+
 export function shouldPersistAddress(
   addressSelection: AddressSelection,
   saveAsNewAddress: boolean
@@ -92,6 +112,8 @@ export function validateOrderSubmission({
   cashRequest,
   cashReceiptType,
   cashReceiptIdentityNumber,
+  hopeDate = "",
+  hopeDateRule = null,
 }: ValidateOrderSubmissionInput): OrderSubmitValidationResult {
   if (!hasRequiredAddressFields(orderer)) {
     return { ok: false, message: "주문자 정보를 모두 입력해주세요." };
@@ -117,6 +139,11 @@ export function validateOrderSubmission({
   );
   if (recipientFormatError) {
     return { ok: false, message: recipientFormatError };
+  }
+
+  const hopeDateError = validateHopeDate(hopeDate, hopeDateRule);
+  if (hopeDateError) {
+    return { ok: false, message: hopeDateError };
   }
 
   const methodDef = PAYMENT_METHODS.find(

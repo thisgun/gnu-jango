@@ -82,6 +82,22 @@ class TossReadOnlyConnectionTests(TestCase):
 
 
 class ShopSettingsAdminTests(TestCase):
+    minimal_form = {
+        "de_admin_company_name": "Demo Shop",
+        "de_admin_company_tel": "",
+        "de_delivery_company": "Courier",
+        "de_send_cost_case": "",
+        "de_send_cost_limit": "",
+        "de_send_cost_list": "",
+        "de_baesong_content": "",
+        "de_change_content": "",
+        "de_item_use_write": "0",
+        "de_item_use_use": "0",
+        "de_settle_min_point": "0",
+        "de_settle_max_point": "0",
+        "de_settle_point_unit": "1",
+    }
+
     def setUp(self):
         self.url = reverse("admin-shop-settings")
         self.admin = get_user_model().objects.create_superuser(
@@ -136,6 +152,104 @@ class ShopSettingsAdminTests(TestCase):
         self.assertEqual(ShopShippingPolicy.objects.get(pk=1).de_admin_company_tel, "02-1234-5678")
         self.assertEqual(Config.objects.get(name="de_admin_company_tel").value, "02-1234-5678")
         self.assertEqual(Config.objects.get(name="de_card_use").value, "")
+
+    def test_business_info_is_saved_to_site_config_and_published(self):
+        Config.objects.create(name="cf_company_owner", value="Before")
+        self.client.force_login(self.admin)
+        page = self.client.get(self.url).content.decode()
+        self.assertIn('value="Before"', page)
+        self.assertIn("부가통신 사업자번호", page)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.url, {
+                **self.minimal_form,
+                "cf_company_owner": "Owner",
+                "cf_company_biz_no": "123-45-67890",
+                "cf_company_fax": "02-000-0000",
+                "cf_company_zip": "04524",
+                "cf_company_buga_no": "VAN-1",
+                "cf_company_email": "privacy@example.test",
+            })
+        self.assertEqual(response.status_code, 302)
+        saved = dict(Config.objects.filter(name__startswith="cf_company_").values_list("name", "value"))
+        self.assertEqual(saved["cf_company_owner"], "Owner")
+        self.assertEqual(saved["cf_company_fax"], "02-000-0000")
+        self.assertEqual(saved["cf_company_zip"], "04524")
+        self.assertEqual(saved["cf_company_buga_no"], "VAN-1")
+
+        public = self.client.get("/api/v1/settings").json()["data"]
+        self.assertEqual(public["cf_company_fax"], "02-000-0000")
+        self.assertEqual(public["cf_company_buga_no"], "VAN-1")
+
+    def test_new_option_sections_render_with_youngcart_defaults(self):
+        self.client.force_login(self.admin)
+        page = self.client.get(self.url).content.decode()
+        for title in ("주문·장바구니", "구매 포인트·신규회원 쿠폰", "쇼핑몰 초기화면 진열", "상품 목록·관련상품 진열", "쇼핑몰 로고"):
+            self.assertIn(title, page)
+        self.assertIn('enctype="multipart/form-data"', page)
+        self.assertIn('name="de_cart_keep_term" value="15"', page)
+        self.assertIn('name="de_type1_list_mod" value="5"', page)
+
+    def test_blank_numbers_fall_back_to_defaults_and_flags_save_as_zero_or_one(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(self.url, {**self.minimal_form, "de_hope_date_use": "on", "de_point_days": "0"})
+        self.assertEqual(response.status_code, 302)
+        saved = dict(Config.objects.values_list("name", "value"))
+        self.assertEqual(saved["de_hope_date_use"], "1")
+        self.assertEqual(saved["de_guest_cart_use"], "0")
+        self.assertEqual(saved["de_point_days"], "0")
+        self.assertEqual(saved["de_cart_keep_term"], "15")
+        self.assertEqual(saved["de_type3_list_use"], "0")
+
+    def test_member_coupon_needs_price_and_term(self):
+        form = ShopSettingsForm(data={**self.minimal_form, "de_member_reg_coupon_use": "on"},
+                                instance=ShopShippingPolicy(pk=1))
+        self.assertFalse(form.is_valid())
+        self.assertIn("de_member_reg_coupon_price", form.errors)
+        self.assertIn("de_member_reg_coupon_term", form.errors)
+
+    def test_logo_upload_replaces_and_delete_clears(self):
+        from io import BytesIO
+        from tempfile import TemporaryDirectory
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        def png():
+            buffer = BytesIO()
+            Image.new("RGB", (4, 4), "red").save(buffer, "PNG")
+            return SimpleUploadedFile("logo.png", buffer.getvalue(), content_type="image/png")
+
+        self.client.force_login(self.admin)
+        storages = {"default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+                    "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"}}
+        with TemporaryDirectory() as media, self.settings(MEDIA_ROOT=media, MEDIA_URL="/media/", STORAGES=storages):
+            with self.captureOnCommitCallbacks(execute=True):
+                self.client.post(self.url, {**self.minimal_form, "de_logo_img": png()})
+            first = Config.objects.get(name="de_logo_img").value
+            self.assertTrue(first.startswith("shop/logo/de_logo_img-"))
+            self.assertIn(f"/media/{first}", self.client.get(self.url).content.decode())
+
+            with self.captureOnCommitCallbacks(execute=True):
+                self.client.post(self.url, {**self.minimal_form, "de_logo_img_delete": "on"})
+            self.assertEqual(Config.objects.get(name="de_logo_img").value, "")
+            from django.core.files.storage import default_storage
+            self.assertFalse(default_storage.exists(first))
+
+    def test_logo_rejects_non_image(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        upload = SimpleUploadedFile("logo.png", b"not an image", content_type="image/png")
+        form = ShopSettingsForm(data=self.minimal_form, files={"de_logo_img": upload},
+                                instance=ShopShippingPolicy(pk=1))
+        self.assertFalse(form.is_valid())
+        self.assertIn("de_logo_img", form.errors)
+
+    def test_business_email_must_be_valid(self):
+        form = ShopSettingsForm(data={**self.minimal_form, "cf_company_email": "not-an-email"},
+                                instance=ShopShippingPolicy(pk=1))
+        self.assertFalse(form.is_valid())
+        self.assertIn("cf_company_email", form.errors)
 
     @override_settings(SHOP_TOSS_CLIENT_KEY="test_ck_private_client", SHOP_TOSS_SECRET_KEY="test_sk_private_secret")
     def test_pg_check_post_does_not_save_the_settings_form(self):

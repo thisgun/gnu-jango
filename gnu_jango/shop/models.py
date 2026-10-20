@@ -10,6 +10,10 @@ from django.utils.translation import gettext_lazy as _
 from django.core.validators import FileExtensionValidator
 
 
+# youngcart 완료: the status whose lines earn their purchase point (ct_complete_time is its clock).
+ORDER_ITEM_STATUS_COMPLETED = "완료"
+
+
 def generate_order_uid():
     return uuid.uuid4().hex + uuid.uuid4().hex
 
@@ -627,6 +631,8 @@ class ShopOrder(models.Model):
     od_b_addr2 = models.CharField(max_length=255, blank=True, default="")
     od_b_addr3 = models.CharField(max_length=255, blank=True, default="")
     od_memo = models.TextField(blank=True, default="")
+    # youngcart 희망배송일 (de_hope_date_use); empty when the shop does not ask for one.
+    od_hope_date = models.DateField(null=True, blank=True)
     od_cart_price = models.IntegerField(default=0)
     od_send_cost = models.IntegerField(default=0)
     od_send_cost2 = models.IntegerField(default=0)
@@ -703,6 +709,10 @@ class ShopOrderItem(models.Model):
     ct_price = models.IntegerField(default=0)
     ct_qty = models.PositiveIntegerField(default=1)
     ct_point = models.IntegerField(default=0)
+    # youngcart ct_point_use / ct_complete_time: the purchase point of this line was handled,
+    # and when the line first reached the completed status (the de_point_days clock).
+    ct_point_use = models.BooleanField(default=False)
+    ct_complete_time = models.DateTimeField(null=True, blank=True)
     ct_option = models.CharField(max_length=255, blank=True, default="")
     ct_status = models.CharField(max_length=50, default="order")
     io_type = models.PositiveSmallIntegerField(default=0)
@@ -721,6 +731,25 @@ class ShopOrderItem(models.Model):
             models.Index(fields=["ct_status"]),
             models.Index(fields=["product", "ct_status"]),
         ]
+
+    def sync_complete_time(self):
+        """Stamp ct_complete_time when the line is 완료 without one, clear it otherwise
+        (youngcart get_cart_complete_time_sql). Returns True when it changed."""
+        if self.ct_status == ORDER_ITEM_STATUS_COMPLETED:
+            if self.ct_complete_time is None:
+                self.ct_complete_time = timezone.now()
+                return True
+            return False
+        if self.ct_complete_time is not None:
+            self.ct_complete_time = None
+            return True
+        return False
+
+    def save(self, *args, **kwargs):
+        update_fields = kwargs.get("update_fields")
+        if self.sync_complete_time() and update_fields is not None and "ct_status" in update_fields:
+            kwargs["update_fields"] = {*update_fields, "ct_complete_time"}
+        super().save(*args, **kwargs)
 
 
 class ShopOrderData(models.Model):

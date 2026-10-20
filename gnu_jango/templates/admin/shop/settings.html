@@ -87,7 +87,7 @@
     </div>
   </section>
 
-  <form method="post">
+  <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
     {% if form.errors %}
     <div class="alert" role="alert">
@@ -124,6 +124,28 @@
           </table>
         </div>
         {% endif %}
+        {% if section.table %}
+        <div class="overflow-x-auto">
+          <table class="table shop-settings-grid">
+            <caption class="sr-only">{{ section.title }}</caption>
+            <thead><tr><th scope="col">상품 묶음</th>{% for column in section.table.columns %}<th scope="col">{{ column }}</th>{% endfor %}</tr></thead>
+            <tbody>
+              {% for row in section.table.rows %}
+              <tr>
+                <th scope="row">{{ row.label }}</th>
+                {% for field in row.fields %}
+                <td>
+                  <label class="sr-only" for="{{ field.id_for_label }}">{{ field.label }}</label>
+                  {{ field }}
+                  {% if field.errors %}<div id="{{ field.id_for_label }}_errors">{{ field.errors }}</div>{% endif %}
+                </td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
         {% for item in section.fields %}
         {% with field=item.bound %}
         <div class="fieldset">
@@ -131,6 +153,7 @@
           <label class="label" for="{{ field.id_for_label }}">{{ field }} <span>{{ field.label }}</span></label>
           {% else %}
           <label class="fieldset-legend" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} (필수){% endif %}</label>
+          {% if item.current_url %}<p class="shop-logo-preview"><img src="{{ item.current_url }}" alt="현재 {{ field.label }}"></p>{% endif %}
           {{ field }}
           {% endif %}
           <div id="{{ field.id_for_label }}_help">{% if field.help_text %}<p>{{ field.help_text }}</p>{% endif %}</div>

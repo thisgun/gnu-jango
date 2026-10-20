@@ -10,6 +10,7 @@ import { runtimeRouterPush } from "@/lib/runtime-router";
 import type { ShopOrder } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
 import { formatPrice, formatDate, cn } from "@/lib/utils";
+import { formatHopeDate } from "@/lib/hope-date";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Check, X } from "lucide-react";
 import { toastSuccess, toastError } from "@/lib/toast";
@@ -453,6 +454,12 @@ export default function OrderDetailPage() {
                 {shippingAddr3}
               </dd>
             </div>
+            {order.od_hope_date && (
+              <div>
+                <dt className="text-muted-foreground">희망배송일</dt>
+                <dd className="font-medium">{formatHopeDate(order.od_hope_date)}</dd>
+              </div>
+            )}
             {hasInvoice ? (
               <div className="sm:col-span-2 mt-2 rounded-md border bg-muted/30 p-3">
                 <dt className="mb-1 text-xs text-muted-foreground">송장 정보</dt>

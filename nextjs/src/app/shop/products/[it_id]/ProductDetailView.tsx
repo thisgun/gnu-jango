@@ -7,6 +7,7 @@ import type { ShopProduct } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
 import { g5ShortHref } from "@/lib/g5-short-url";
 import { sanitizeCommerceHtml } from "@/lib/sanitize";
+import type { ShopRelatedDisplay } from "@/lib/shop-display";
 import { productPointLabel } from "@/components/shop/productDetailHelpers";
 import { RecommendationDialog, RestockAlertDialog } from "./ProductDetailDialogs";
 import { ProductImageGallery, RecentlyViewed, RelatedProducts } from "./ProductDetailSections";
@@ -31,6 +32,8 @@ interface ProductDetailViewProps {
   product: ShopProduct;
   itId: string;
   productRewriteMode: BbsRewriteMode;
+  /** 관련상품 출력 여부 · 칸 수(관리자 진열 설정). */
+  relatedDisplay: ShopRelatedDisplay;
   selectedImage: number;
   onSelectedImageChange: Dispatch<SetStateAction<number>>;
   lightboxOpen: boolean;
@@ -56,6 +59,7 @@ export function ProductDetailView({
   product,
   itId,
   productRewriteMode,
+  relatedDisplay,
   selectedImage,
   onSelectedImageChange,
   lightboxOpen,
@@ -131,7 +135,7 @@ export function ProductDetailView({
         purchaseControls={<ProductPurchaseControls {...purchaseControls} />}
       />
 
-      <RelatedProducts items={product.related_items} productRewriteMode={productRewriteMode} />
+      <RelatedProducts items={product.related_items} productRewriteMode={productRewriteMode} display={relatedDisplay} />
 
       <RecentlyViewed currentId={itId || product.it_id} productRewriteMode={productRewriteMode} />
 

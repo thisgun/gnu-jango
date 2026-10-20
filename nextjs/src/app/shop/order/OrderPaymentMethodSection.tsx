@@ -46,6 +46,9 @@ export function OrderPaymentMethodSection({
   const enabledMethods = PAYMENT_METHODS.filter((method) =>
     isPaymentMethodEnabled(method, paymentConfig)
   );
+  // 영카트 주문서(#sod_frm_pt_alert): de_card_point 가 꺼져 있으면 PG 결제 주문에는 구매 포인트가 없다.
+  const purchasePoint = paymentConfig?.purchase_point;
+  const showPurchasePointNotice = Boolean(purchasePoint?.enabled && !purchasePoint.pg_orders);
 
   return (
     <section className="shop-order-section shop-order-section--payment box-border w-full min-w-0 rounded-lg border p-4 sm:p-6">
@@ -79,6 +82,12 @@ export function OrderPaymentMethodSection({
         <div className="alert alert-warning py-3 text-sm" role="status">
           현재 이용할 수 있는 결제 수단이 설정되어 있지 않습니다.
         </div>
+      )}
+
+      {showPurchasePointNotice && enabledMethods.length > 0 && (
+        <p className="shop-pay-point-notice mt-3 text-xs leading-relaxed text-muted-foreground">
+          무통장입금·가상계좌 이외의 결제수단으로 결제하시면 구매 포인트를 적립해 드리지 않습니다.
+        </p>
       )}
 
       {paymentMethod === "bank" && paymentConfig?.payment_methods.bank && (

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import { contentHref } from "@/lib/content-links";
+import { hasShopLogo, ShopLogoPicture, shopLogoSources } from "@/components/layout/ShopLogo";
 import { getClientPublicSettings } from "@/services/settings";
 import type { PublicSettings } from "@/lib/schemas";
 
@@ -15,6 +16,8 @@ type CompanyKey =
   | "cf_company_biz_no"
   | "cf_company_tel"
   | "cf_company_tongsin_no"
+  | "cf_company_buga_no"
+  | "cf_company_fax"
   | "cf_company_info_name";
 
 /* 레퍼런스 site-company.tsx 의 사이트 정보 항목 · 순서. 커뮤니티와 쇼핑몰이 이름표와 순서가 조금 다르다. */
@@ -34,8 +37,10 @@ const SHOP_FIELDS: [CompanyKey, string][] = [
   ["cf_company_biz_no", "사업자 등록번호"],
   ["cf_company_owner", "대표"],
   ["cf_company_tel", "전화"],
+  ["cf_company_fax", "팩스"],
   ["cf_company_tongsin_no", "통신판매업신고번호"],
   ["cf_company_info_name", "개인정보 보호책임자"],
+  ["cf_company_buga_no", "부가통신사업신고번호"],
 ];
 
 /* 레퍼런스 layout-shell · shop-shell 의 FOOTER_LINKS — 내용 페이지 셋. */
@@ -156,13 +161,25 @@ function ShopFooter() {
   const settings = usePublicSettings();
   const siteTitle = siteTitleOf(settings);
   const owner = settings?.cf_company_name?.trim() || siteTitle;
+  // 쇼핑몰 설정에서 올린 하단 로고(모바일 하단 로고는 폰 폭에서). 없으면 사이트 이름 글자를 그대로 둔다.
+  const footerLogo = shopLogoSources(settings, "footer");
 
   return (
     <footer className="solune-shop-footer">
       <div className="solune-shop-shell solune-shop-footer-inner">
         <div className="solune-shop-footer-brand">
           <Link href="/shop" aria-label={`${siteTitle} 쇼핑몰 홈`}>
-            <span className="solune-shop-footer-name">{siteTitle}</span>
+            {footerLogo.pc ? (
+              <ShopLogoPicture sources={footerLogo} alt={siteTitle} className="solune-shop-footer-logo" />
+            ) : hasShopLogo(footerLogo) ? (
+              // 모바일 하단 로고만 올렸다: 폰 폭은 그 그림, 넓은 화면은 지금처럼 사이트 이름 글자.
+              <>
+                <span className="solune-shop-footer-name solune-shop-logo-wide-only">{siteTitle}</span>
+                <ShopLogoPicture sources={footerLogo} alt={siteTitle} className="solune-shop-footer-logo solune-shop-logo-narrow-only" />
+              </>
+            ) : (
+              <span className="solune-shop-footer-name">{siteTitle}</span>
+            )}
           </Link>
           <p>Solune가 고른 상품과 더 나은 쇼핑 경험을 만나보세요.</p>
         </div>

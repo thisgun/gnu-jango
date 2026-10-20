@@ -34,6 +34,19 @@ from .payment_options import (
 )
 from .settings_sync import sync_shop_phone_from_policy
 from .shipping import current_shipping_policy
+from .logo_uploads import delete_logo_file, logo_form_fields, store_logo
+from .shop_options import (
+    COMPANY_OPTIONS,
+    HOME_LIST_TYPES,
+    LIST_OPTIONS,
+    ORDER_OPTIONS,
+    POINT_OPTIONS,
+    SHOP_CONFIG_OPTIONS,
+    SHOP_LOGO_FIELDS,
+    shop_logo_urls,
+    to_python,
+    to_stored,
+)
 
 
 PAYMENT_LABELS = {
@@ -43,6 +56,19 @@ PAYMENT_LABELS = {
     "hp": "휴대폰 결제",
     "easy_pay": "간편결제 (토스페이)",
 }
+
+
+def option_form_field(option):
+    common = {"label": option.label, "required": False, "help_text": option.help_text}
+    if option.kind == "bool":
+        return forms.BooleanField(**common)
+    if option.kind == "int":
+        return forms.IntegerField(min_value=option.min_value, max_value=option.max_value, **common)
+    if option.kind == "email":
+        return forms.EmailField(max_length=option.max_length, **common)
+    if option.kind == "html":
+        return forms.CharField(max_length=option.max_length, widget=forms.Textarea(attrs={"rows": 5}), **common)
+    return forms.CharField(max_length=option.max_length, **common)
 
 
 class ShopSettingsForm(forms.ModelForm):
@@ -109,9 +135,14 @@ class ShopSettingsForm(forms.ModelForm):
         names = [
             "de_bank_use", "de_bank_account", "de_admin_company_tel",
             CASH_RECEIPT_ENABLED_FIELD, CASH_RECEIPT_TYPES_FIELD,
-            *PAYMENT_OPTION_FIELDS.values(),
+            *PAYMENT_OPTION_FIELDS.values(), *SHOP_CONFIG_OPTIONS, *SHOP_LOGO_FIELDS,
         ]
         self.config_values = dict(Config.objects.filter(name__in=names).values_list("name", "value"))
+        for name, option in SHOP_CONFIG_OPTIONS.items():
+            self.fields[name] = option_form_field(option)
+            self.initial[name] = to_python(option, self.config_values.get(name))
+        self.fields.update(logo_form_fields())
+        self.logo_urls = shop_logo_urls()
         self.initial["de_bank_use"] = config_flag(self.config_values.get("de_bank_use", "0"))
         self.initial["de_bank_account"] = self.config_values.get("de_bank_account", "")
         saved_receipt_types = self.config_values.get(CASH_RECEIPT_TYPES_FIELD)
@@ -172,6 +203,13 @@ class ShopSettingsForm(forms.ModelForm):
                 self.add_error("de_send_cost_limit", "주문금액 상한은 0보다 큰 금액을 중복 없이 오름차순으로 입력하세요.")
             if limits is not None and costs is not None and len(limits) != len(costs):
                 self.add_error("de_send_cost_list", "배송비 개수를 주문금액 상한 개수와 맞춰 주세요.")
+        if cleaned.get("de_member_reg_coupon_use"):
+            for name, message in (
+                ("de_member_reg_coupon_price", "신규회원 쿠폰을 발행하려면 할인금액을 1원 이상 입력하세요."),
+                ("de_member_reg_coupon_term", "신규회원 쿠폰을 발행하려면 유효기간을 1일 이상 입력하세요."),
+            ):
+                if not cleaned.get(name):
+                    self.add_error(name, message)
         return cleaned
 
     def sections(self):
@@ -179,15 +217,53 @@ class ShopSettingsForm(forms.ModelForm):
             ("bank", "무통장입금", "입금계좌를 등록하고 사용을 켜면 주문 화면에서 선택할 수 있습니다.", ["de_bank_use", "de_bank_account"]),
             ("online", "온라인 결제수단", "허용한 수단도 PG 연결이 준비되어야 표시됩니다. 변경은 새 주문부터 적용됩니다.", list(PAYMENT_OPTION_FIELDS.values())),
             ("receipts", "현금영수증 신청", "무통장입금 신청은 주문에 기록됩니다. 토스 가상계좌·계좌이체는 고객이 요청한 경우에만 발급 옵션을 PG에 전달합니다.", ["de_taxsave_use", "de_taxsave_type_account", "de_taxsave_type_vbank", "de_taxsave_type_transfer"]),
-            ("company", "쇼핑몰 정보", "쇼핑몰 안내에 사용하는 회사명과 고객센터입니다.", ["de_admin_company_name", "de_admin_company_tel"]),
+            ("company", "사업자정보",
+             "대표자·사업자번호·주소 등은 기본환경설정의 사이트 정보와 같은 값이며 쇼핑몰 하단에 표시됩니다.",
+             ["de_admin_company_name", "de_admin_company_tel", *(option.name for option in COMPANY_OPTIONS)]),
             ("shipping", "배송비와 배송 안내", "상품별 배송비와 지역별 추가 배송비는 해당 상품·지역 설정이 함께 적용됩니다.", ["de_delivery_company", "de_send_cost_case", "de_send_cost_limit", "de_send_cost_list", "de_baesong_content", "de_change_content"]),
             ("policy", "포인트·세금·상품 후기", "포인트를 사용하려면 기본환경설정의 포인트 사용도 켜져 있어야 합니다.", ["de_settle_min_point", "de_settle_max_point", "de_settle_point_unit", "de_tax_flag_use", "de_item_use_write", "de_item_use_use"]),
+            ("order", "주문·장바구니",
+             "장바구니 보관과 주문서의 희망배송일, 비회원 개인정보 수집 안내입니다.",
+             [option.name for option in ORDER_OPTIONS]),
+            ("points", "구매 포인트·신규회원 쿠폰",
+             "구매 포인트는 상품의 포인트 설정에 따라 주문 상품이 완료된 뒤 회원에게 지급합니다.",
+             [option.name for option in POINT_OPTIONS]),
+            ("lists", "상품 목록·관련상품 진열",
+             "검색결과와 유형별 상품 목록, 상품 상세의 관련상품 진열입니다.",
+             [option.name for option in LIST_OPTIONS]),
+            ("logos", "쇼핑몰 로고", "올린 로고가 테마 기본 로고 대신 표시됩니다.",
+             [field for name in SHOP_LOGO_FIELDS for field in (name, f"{name}_delete")]),
         ]
-        return [
+        sections = [
             {"id": key, "title": title, "description": description,
-             "fields": [{"bound": self[name], "checkbox": isinstance(self.fields[name].widget, forms.CheckboxInput)} for name in names]}
+             "fields": [self._section_field(name) for name in names]}
             for key, title, description, names in groups
         ]
+        sections.insert(len(sections) - 2, self._home_list_section())
+        return sections
+
+    def _section_field(self, name):
+        item = {"bound": self[name], "checkbox": isinstance(self.fields[name].widget, forms.CheckboxInput)}
+        if name in SHOP_LOGO_FIELDS:
+            item["current_url"] = self.logo_urls.get(name, "")
+        return item
+
+    def _home_list_section(self):
+        rows = [
+            {"label": title, "fields": [self[f"de_type{number}_list_use"]] + [
+                self[name] for name in (
+                    f"de_type{number}_list_mod", f"de_type{number}_list_row",
+                    f"de_mobile_type{number}_list_mod", f"de_mobile_type{number}_list_row",
+                )
+            ]}
+            for number, title in HOME_LIST_TYPES
+        ]
+        return {
+            "id": "home", "title": "쇼핑몰 초기화면 진열",
+            "description": "초기화면 상품 묶음별 출력 여부와 진열 수입니다. 표시되는 상품 수는 1줄당 상품 수 × 줄 수입니다.",
+            "fields": [],
+            "table": {"columns": ["출력", "PC 1줄당", "PC 줄 수", "모바일 1줄당", "모바일 줄 수"], "rows": rows},
+        }
 
     def save_settings(self, user):
         # Save only this screen's known fields; never accept PG credentials or
@@ -206,10 +282,23 @@ class ShopSettingsForm(forms.ModelForm):
                 receipt_types.append("transfer")
             values[CASH_RECEIPT_ENABLED_FIELD] = "1" if self.cleaned_data["de_taxsave_use"] else "0"
             values[CASH_RECEIPT_TYPES_FIELD] = ",".join(receipt_types)
+            for name, option in SHOP_CONFIG_OPTIONS.items():
+                value = self.cleaned_data.get(name)
+                if option.kind == "int" and value is None:
+                    value = to_python(option, None)
+                values[name] = to_stored(option, value)
             # Existing site/company API consumers use this Config row.
             values["de_admin_company_tel"] = self.cleaned_data["de_admin_company_tel"]
+            replaced_logos = []
+            for name in SHOP_LOGO_FIELDS:
+                uploaded = self.cleaned_data.get(name)
+                if uploaded or self.cleaned_data.get(f"{name}_delete"):
+                    replaced_logos.append(self.config_values.get(name, ""))
+                    values[name] = store_logo(name, uploaded) if uploaded else ""
             for name, value in values.items():
                 Config.objects.update_or_create(name=name, defaults={"value": value})
+            for path in replaced_logos:
+                transaction.on_commit(lambda path=path: delete_logo_file(path))
             sync_shop_phone_from_policy(self.cleaned_data["de_admin_company_tel"])
             LogEntry.objects.create(
                 user_id=user.pk,
@@ -237,7 +326,10 @@ def shop_settings(request):
         else:
             messages.error(request, "토스페이먼츠에 연결하지 못했습니다. 네트워크와 API 응답을 확인하세요.")
         return HttpResponseRedirect(reverse("admin-shop-settings"))
-    form = ShopSettingsForm(request.POST if request.method == "POST" else None, instance=current_shipping_policy())
+    is_post = request.method == "POST"
+    form = ShopSettingsForm(
+        request.POST if is_post else None, request.FILES if is_post else None, instance=current_shipping_policy()
+    )
     if request.method == "POST" and form.is_valid():
         form.save_settings(request.user)
         messages.success(request, "쇼핑몰 설정을 저장했습니다. 새 주문부터 적용됩니다.")

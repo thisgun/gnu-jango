@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ShopProductRow, ShopProductRowSkeleton } from "@/components/shop/ShopProductRow";
 import type { ShopProduct } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
+import { DEFAULT_HOME_SECTION_DISPLAY, type ShopHomeSectionDisplay } from "@/lib/shop-display";
 import { getShopHomeData } from "@/services/shop-home";
 
 export function ShopHomePopular() {
@@ -12,6 +13,7 @@ export function ShopHomePopular() {
   const [productRewriteMode, setProductRewriteMode] = useState<BbsRewriteMode>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [display, setDisplay] = useState<ShopHomeSectionDisplay>(DEFAULT_HOME_SECTION_DISPLAY);
 
   useEffect(() => {
     let alive = true;
@@ -19,7 +21,8 @@ export function ShopHomePopular() {
     getShopHomeData()
       .then((home) => {
         if (!alive) return;
-        setProducts(home.products.type4);
+        setDisplay(home.display.type4);
+        setProducts(home.display.type4.use ? home.products.type4 : []);
         setProductRewriteMode(home.settings.cf_bbs_rewrite);
         setError(false);
       })
@@ -43,6 +46,9 @@ export function ShopHomePopular() {
     );
   }
 
+  // 관리자가 인기상품 출력을 끄면 빈 자리 안내도 그리지 않는다.
+  if (!error && !display.use) return null;
+
   if (error || products.length === 0) {
     return (
       <EmptyState
@@ -65,6 +71,7 @@ export function ShopHomePopular() {
       viewAllHref="/shop/type-4"
       productRewriteMode={productRewriteMode}
       peek={false}
+      display={display}
       className="shop-home-popular-section"
     />
   );

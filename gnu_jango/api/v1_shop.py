@@ -46,6 +46,13 @@ from gnu_jango.shop.models import (
 )
 from gnu_jango.shop.inventory import StockAdjustmentError, cancel_order_with_stock_restore, reserve_product_stock
 from gnu_jango.shop.images import upload_product_images
+from gnu_jango.shop.order_points import (
+    item_purchase_point,
+    item_status_update,
+    order_line_points_enabled,
+    purchase_point_notice,
+    take_back_order_points,
+)
 from gnu_jango.shop.payment_options import (
     cash_receipt_method_enabled,
     cash_receipt_preferences,
@@ -56,6 +63,7 @@ from gnu_jango.shop.shipping import (
     current_shipping_policy,
     shipping_quote,
 )
+from gnu_jango.shop.shop_display import related_list_enabled
 from gnu_jango.shop.taxes import calculate_order_tax_amounts
 from gnu_jango.users import point_ledger
 from gnu_jango.users.models import Profile
@@ -113,6 +121,7 @@ from .shop_coupons import (
     valid_coupons_queryset,
     validated_item_coupons,
 )
+from .shop_order_options import guest_privacy_html, hope_date_range, order_hope_date
 from .shop_cart import (
     refresh_cart_prices,
     address_detail_view,  # noqa: F401 - re-exported for existing importers
@@ -436,7 +445,8 @@ def product_payload(product, request=None, *, detail=False):
         next_product = annotate_product_coupon_badge(
             on_sale_products().filter(it_id__gt=product.it_id)
         ).order_by("it_id").first()
-        relation = read_smoke_config(f"rel_{product.it_id}", {})
+        # The shop setting de_rel_list_use switches the related-products list off (no lookup at all).
+        relation = read_smoke_config(f"rel_{product.it_id}", {}) if related_list_enabled() else {}
         related_ids = [
             item.strip()
             for item in str(relation.get("related_csv") or "").split(",")
@@ -600,6 +610,7 @@ def order_payload(order, *, detail=False):
         "od_b_addr2": order.od_b_addr2,
         "od_b_addr3": order.od_b_addr3,
         "od_memo": order.od_memo,
+        "od_hope_date": order.od_hope_date.isoformat() if order.od_hope_date else "",
         "od_cart_price": order.od_cart_price,
         "od_send_cost": order.od_send_cost,
         "od_send_cost2": order.od_send_cost2,
@@ -684,6 +695,7 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
             "장바구니 금액에 변동사항이 있습니다. 장바구니를 다시 확인해 주세요.",
             code="cart_price_changed",
         )
+    hope_date = order_hope_date(data)
     order_id = order_id or generate_numeric_order_id()
     selected_ct_ids = {str(item["ct_id"]) for item in cart["items"]}
     cart_total = cart["total_price"]
@@ -877,6 +889,9 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
             or address_subject
         )
     )
+    # youngcart cartupdate.php / orderformupdate.php: each line records its purchase point; with
+    # de_card_point off an order paid online (card, transfer, phone, easy pay) records none.
+    earns_line_points = order_line_points_enabled(settle_case, receipt_due)
     with transaction.atomic():
         order = ShopOrder.objects.create(**fit_to_columns(ShopOrder, dict(
             od_id=order_id,
@@ -897,6 +912,7 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
             od_b_addr2=str(data.get("od_b_addr2") or data.get("od_addr2") or ""),
             od_b_addr3=str(data.get("od_b_addr3") or data.get("od_addr3") or ""),
             od_memo=str(data.get("od_memo") or ""),
+            od_hope_date=hope_date,
             od_cart_price=cart_total,
             od_send_cost=send_cost,
             od_send_cost2=send_cost2,
@@ -933,6 +949,12 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
                 it_name=item["it_name"],
                 ct_price=item["ct_price"],
                 ct_qty=item["ct_qty"],
+                ct_point=item_purchase_point(
+                    product,
+                    io_type=item.get("io_type") or 0,
+                    io_price=item.get("io_price") or 0,
+                    has_option=bool(item.get("ct_option")),
+                ) if earns_line_points else 0,
                 ct_option=item["ct_option"],
                 ct_status=status_value,
                 io_type=item.get("io_type") or 0,
@@ -1644,7 +1666,10 @@ def payment_config_view(request):
             "cash_receipt": cash_receipt,
             "easy_pay_services": ["tosspay"] if methods["easy_pay"] else [],
             "bank_accounts": bank_accounts,
+            "hope_date": hope_date_range(),
+            "guest_privacy": guest_privacy_html(),
             "is_test_mode": toss_config["is_test_mode"],
+            "purchase_point": purchase_point_notice(),
             "providers": {
                 "toss": {
                     "enabled": toss_config["enabled"],
@@ -1914,7 +1939,8 @@ def toss_vbank_webhook_view(request):
                 locked.od_status = ORDER_STATUS_ORDERED
                 locked.od_misu = locked.od_receipt_price
                 locked.od_receipt_time = ""
-                locked.items.exclude(ct_status__in=CANCELLED_STATUSES).update(ct_status=ORDER_STATUS_ORDERED)
+                locked.items.exclude(ct_status__in=CANCELLED_STATUSES).update(**item_status_update(ORDER_STATUS_ORDERED))
+                take_back_order_points(locked)
                 fields.extend(["od_status", "od_misu", "od_receipt_time"])
             locked.save(update_fields=fields)
             record_payment_raw_log(locked, order_id, "toss-vbank", provider_payment_key, raw_data, prefix="toss-vbank")

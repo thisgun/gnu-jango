@@ -300,7 +300,10 @@ class LoginCartMergeTests(AuthTestBase):
         for stored in ("{not json", json.dumps({"ct_id": 1})):
             self.set_config(self.name, stored)
             self.log_in_with_guest_cart([{"ct_id": 9, "it_id": "z"}])
-            self.assertEqual(json.loads(Config.objects.get(name=self.name).value), [{"ct_id": 9, "it_id": "z"}])
+            rows = json.loads(Config.objects.get(name=self.name).value)
+            # the moved line is stamped with when it was put in the cart (de_cart_keep_term)
+            self.assertEqual([{key: row[key] for key in ("ct_id", "it_id")} for row in rows], [{"ct_id": 9, "it_id": "z"}])
+            self.assertIsInstance(rows[0]["ct_time"], int)
 
     def test_login_without_a_guest_cart_leaves_the_member_cart_alone(self):
         self.set_config(self.name, json.dumps([{"ct_id": 5}]))

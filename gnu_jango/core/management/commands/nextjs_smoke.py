@@ -18,6 +18,7 @@ from gnu_jango.bbs.models import Post_scrap
 from gnu_jango.config.models import Config
 from gnu_jango.core.models import Poll, PollChoice, PollComment, PollVote
 from gnu_jango.shop.inventory import cancel_order_with_stock_restore
+from gnu_jango.shop.order_points import item_status_update, take_back_order_points
 from gnu_jango.shop.models import ShopCoupon, ShopCouponLog, ShopCouponZone, ShopOrder, ShopOrderData, ShopOrderItem, ShopPersonalPay, ShopProduct, ShopQA, ShopReview
 from gnu_jango.users.models import Profile, User_Memo, User_Point
 
@@ -652,7 +653,8 @@ class Command(BaseCommand):
             update_fields.extend(["od_pg", "od_cash_no", "od_cash_res"])
 
         order.save(update_fields=sorted(set(update_fields)))
-        order.items.exclude(ct_status__in=["취소", "cancel", "cancelled"]).update(ct_status=status_value)
+        order.items.exclude(ct_status__in=["취소", "cancel", "cancelled"]).update(**item_status_update(status_value))
+        take_back_order_points(order)
         return {
             "success": True,
             "order_id": order.od_id,

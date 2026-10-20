@@ -1,6 +1,7 @@
 from django.db import transaction
 
 from .models import ShopOrder, ShopProduct
+from .order_points import item_status_update, take_back_order_points
 
 
 class StockAdjustmentError(Exception):
@@ -109,7 +110,9 @@ def cancel_order_with_stock_restore(order, reason=""):
             item.ct_status = "취소"
             item.save(update_fields=["stock_adjusted", "ct_status"])
 
-        locked_order.items.exclude(ct_status="취소").update(ct_status="취소")
+        locked_order.items.exclude(ct_status="취소").update(**item_status_update("취소"))
+        # a line that already earned its purchase point gives it back
+        take_back_order_points(locked_order)
 
         update_fields = ["od_status"]
         locked_order.od_status = "취소"

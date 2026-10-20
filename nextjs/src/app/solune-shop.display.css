@@ -1,0 +1,54 @@
+/* 관리자 진열 설정(쇼핑몰 설정 > 초기화면 진열 · 목록 진열)과 올린 로고를 화면에 거는 규칙.
+   값은 lib/shop-display.ts 가 CSS 변수로 넣는다. 칸 수 단계는 기존 규칙과 같은 폭에서 바뀐다:
+   진열 줄 640 · 900 · 1200(solune-shop.carousel.css), 상품 격자 768 · 1024 · 1280(Tailwind md · lg · xl).
+   solune-shop.css 의 맨 끝에 싣는다 — 같은 무게의 기존 규칙(걸친 칸 2.5 ~ 5.5, 목록 다섯 칸)은 여기가 이긴다. */
+
+/* --- 첫 화면 진열 줄 ----------------------------------------------------- */
+.solune-shop-page .solune-shop-swiper[data-solune-row-display]:not(.swiper-initialized) { --pre-spv: var(--solune-row-spv-xs); }
+@media (min-width: 640px) {
+  .solune-shop-page .solune-shop-swiper[data-solune-row-display]:not(.swiper-initialized) { --pre-spv: var(--solune-row-spv-sm); }
+}
+@media (min-width: 900px) {
+  .solune-shop-page .solune-shop-swiper[data-solune-row-display]:not(.swiper-initialized) { --pre-spv: var(--solune-row-spv-md); }
+}
+@media (min-width: 1200px) {
+  .solune-shop-page .solune-shop-swiper[data-solune-row-display]:not(.swiper-initialized) { --pre-spv: var(--solune-row-spv-lg); }
+}
+/* 폰은 모바일 표시 수(1줄당 × 줄 수), 그보다 넓으면 PC 표시 수까지만. 같은 마크업을 CSS 로 가려
+   서버 · 브라우저 렌더가 같고, 화면 폭이 바뀌어도 다시 받지 않는다. */
+@media (max-width: 639.98px) {
+  .solune-shop-page .solune-shop-swiper .swiper-slide.solune-row-item--hide-mobile { display: none; }
+}
+@media (min-width: 640px) {
+  .solune-shop-page .solune-shop-swiper .swiper-slide.solune-row-item--hide-pc { display: none; }
+}
+
+/* --- 상품 격자: 검색 · 유형별 목록 · 관련상품 -------------------------- */
+body .solune-shop-page .shop-display-grid[data-shop-grid]:not([data-view="list"]) {
+  grid-template-columns: repeat(var(--shop-grid-cols-xs, 2), minmax(0, 1fr));
+}
+@media (min-width: 768px) {
+  body .solune-shop-page .shop-display-grid[data-shop-grid]:not([data-view="list"]) {
+    grid-template-columns: repeat(var(--shop-grid-cols-sm, 3), minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  body .solune-shop-page .shop-display-grid[data-shop-grid]:not([data-view="list"]) {
+    grid-template-columns: repeat(var(--shop-grid-cols-md, 4), minmax(0, 1fr));
+  }
+}
+@media (min-width: 1280px) {
+  body .solune-shop-page .shop-display-grid[data-shop-grid]:not([data-view="list"]) {
+    grid-template-columns: repeat(var(--shop-grid-cols-lg, 5), minmax(0, 1fr));
+  }
+}
+
+/* --- 올린 로고 ----------------------------------------------------------- */
+/* 기본 로고(짙은 회색 글자)는 어두운 모드에서 흰색으로 뒤집지만, 올린 로고는 제 색 그대로 둔다. */
+:root[data-solune-theme="dark"] .solune-brand-logo.solune-brand-logo--uploaded { filter: none; opacity: 1; }
+.solune-brand-logo--uploaded { max-width: min(240px, 52vw); object-fit: contain; object-position: left center; }
+.solune-brand-picture { display: contents; }
+.solune-shop-page .solune-shop-footer-logo { display: block; width: auto; max-width: min(240px, 70vw); height: 36px; object-fit: contain; object-position: left center; }
+/* 모바일 하단 로고만 올렸을 때: 폰 폭은 그림, 넓은 화면은 사이트 이름 글자(Footer.tsx). 폭은 SHOP_LOGO_MOBILE_MEDIA 와 같다. */
+@media (max-width: 767px) { .solune-shop-page .solune-shop-logo-wide-only { display: none; } }
+@media (min-width: 768px) { .solune-shop-page .solune-shop-logo-narrow-only { display: none; } }

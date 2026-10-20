@@ -360,6 +360,8 @@ def settings_view(request):
 
 
 def settings_response(request):
+    from gnu_jango.shop.shop_display import list_display, public_logo_urls
+
     data = config.get_all()
     visit_stats_payload = visit_stats()
     return api_response(
@@ -371,6 +373,8 @@ def settings_response(request):
             "cf_company_biz_no": data.get("cf_company_biz_no", ""),
             "cf_company_tel": data.get("cf_company_tel", ""),
             "cf_company_tongsin_no": data.get("cf_company_tongsin_no", ""),
+            "cf_company_buga_no": data.get("cf_company_buga_no", ""),
+            "cf_company_fax": data.get("cf_company_fax", ""),
             "cf_company_info_name": data.get("cf_company_info_name", ""),
             "cf_company_email": data.get("cf_company_email", ""),
             "de_admin_company_tel": data.get("de_admin_company_tel", ""),
@@ -385,6 +389,10 @@ def settings_response(request):
             "comment_editor": False,
             "pwa_enabled": False,
             "visit": visit_stats_payload,
+            # Shop logos (uploaded in the shop settings; "" when not uploaded) and the
+            # search / type-list / related-products layout from the shop display settings.
+            **public_logo_urls(),
+            "shop_display": list_display(),
         }
     )
 

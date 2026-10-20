@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { shopListDisplaySchema } from "./shop-display";
 import type {
   Board,
   BoardCategoryCounts,
@@ -719,6 +720,8 @@ export const publicSettingsSchema = z
     cf_company_biz_no: optionalString,
     cf_company_tel: optionalString,
     cf_company_tongsin_no: optionalString,
+    cf_company_buga_no: optionalString,
+    cf_company_fax: optionalString,
     cf_company_info_name: optionalString,
     cf_company_email: optionalString,
     de_admin_company_name: optionalString,
@@ -731,6 +734,13 @@ export const publicSettingsSchema = z
     infinite_scroll: booleanValue.optional(),
     comment_editor: booleanValue.optional(),
     pwa_enabled: booleanValue.optional(),
+    /** 쇼핑몰 설정에서 올린 로고(없으면 ""): 상단 · 하단 · 모바일 상단 · 모바일 하단. */
+    shop_logo: optionalString,
+    shop_logo_footer: optionalString,
+    shop_logo_mobile: optionalString,
+    shop_logo_mobile_footer: optionalString,
+    /** 검색 · 유형별 목록 · 관련상품 진열(lib/shop-display.ts). */
+    shop_display: shopListDisplaySchema.optional(),
     visit: z.object({
       today: numberValue,
       yesterday: numberValue,

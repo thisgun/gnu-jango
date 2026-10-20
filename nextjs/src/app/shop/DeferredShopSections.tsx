@@ -3,23 +3,25 @@
 import { useEffect, useState } from "react";
 import type { ShopProduct } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
+import { DEFAULT_HOME_DISPLAY, type ShopHomeDisplay } from "@/lib/shop-display";
 import { ShopProductRow, ShopProductRowSkeleton } from "@/components/shop/ShopProductRow";
 import { getShopHomeData } from "@/services/shop-home";
 
-type SectionKey = "recommended" | "new" | "discount";
+type SectionKey = "type3" | "type2" | "type5";
 
 type ProductSections = Record<SectionKey, ShopProduct[]>;
 
 const EMPTY_SECTIONS: ProductSections = {
-  recommended: [],
-  new: [],
-  discount: [],
+  type3: [],
+  type2: [],
+  type5: [],
 };
 
-const LOADING_SECTION_LABELS = [
-  { eyebrow: "NEW ARRIVAL", title: "최신상품", subtitle: "가장 최근에 등록된 상품입니다." },
-  { eyebrow: "MD PICK", title: "추천상품", subtitle: "오래 쓰이는 것으로 골랐습니다." },
-  { eyebrow: "SALE", title: "할인상품", subtitle: "지금 값을 내린 상품입니다." },
+/** 그리는 차례: 최신 · 추천 · 할인. key 는 쇼핑 홈 스냅샷의 products · display 키(it_typeN). */
+const SECTIONS: { key: SectionKey; eyebrow: string; title: string; subtitle: string }[] = [
+  { key: "type3", eyebrow: "NEW ARRIVAL", title: "최신상품", subtitle: "가장 최근에 등록된 상품입니다." },
+  { key: "type2", eyebrow: "MD PICK", title: "추천상품", subtitle: "오래 쓰이는 것으로 골랐습니다." },
+  { key: "type5", eyebrow: "SALE", title: "할인상품", subtitle: "지금 값을 내린 상품입니다." },
 ];
 
 export function DeferredShopSections() {
@@ -27,6 +29,7 @@ export function DeferredShopSections() {
   const [productRewriteMode, setProductRewriteMode] = useState<BbsRewriteMode>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [display, setDisplay] = useState<ShopHomeDisplay>(DEFAULT_HOME_DISPLAY);
 
   useEffect(() => {
     let alive = true;
@@ -35,7 +38,10 @@ export function DeferredShopSections() {
       .then((home) => {
         if (!alive) return;
         setError("");
-        setSections({ recommended: home.products.type2, new: home.products.type3, discount: home.products.type5 });
+        // 관리자가 끈 섹션은 상품이 와도 비워 둔다(ShopProductRow 는 빈 줄을 그리지 않는다).
+        const shown = (key: SectionKey) => (home.display[key].use ? home.products[key] : []);
+        setDisplay(home.display);
+        setSections({ type2: shown("type2"), type3: shown("type3"), type5: shown("type5") });
         setProductRewriteMode(home.settings.cf_bbs_rewrite);
       })
       .catch(() => {
@@ -55,8 +61,8 @@ export function DeferredShopSections() {
   if (loading) {
     return (
       <>
-        {LOADING_SECTION_LABELS.map((section) => (
-          <ShopProductRowSkeleton key={section.title} eyebrow={section.eyebrow} title={section.title} subtitle={section.subtitle} />
+        {SECTIONS.map((section) => (
+          <ShopProductRowSkeleton key={section.key} eyebrow={section.eyebrow} title={section.title} subtitle={section.subtitle} />
         ))}
       </>
     );
@@ -70,40 +76,24 @@ export function DeferredShopSections() {
     );
   }
 
-  if (
-    sections.recommended.length === 0 &&
-    sections.new.length === 0 &&
-    sections.discount.length === 0
-  ) {
+  if (SECTIONS.every(({ key }) => sections[key].length === 0)) {
     return null;
   }
 
   return (
     <>
-      <ShopProductRow
-        eyebrow="NEW ARRIVAL"
-        title="최신상품"
-        subtitle="가장 최근에 등록된 상품입니다."
-        products={sections.new}
-        viewAllHref="/shop/type-3"
-        productRewriteMode={productRewriteMode}
-      />
-      <ShopProductRow
-        eyebrow="MD PICK"
-        title="추천상품"
-        subtitle="오래 쓰이는 것으로 골랐습니다."
-        products={sections.recommended}
-        viewAllHref="/shop/type-2"
-        productRewriteMode={productRewriteMode}
-      />
-      <ShopProductRow
-        eyebrow="SALE"
-        title="할인상품"
-        subtitle="지금 값을 내린 상품입니다."
-        products={sections.discount}
-        viewAllHref="/shop/type-5"
-        productRewriteMode={productRewriteMode}
-      />
+      {SECTIONS.map((section) => (
+        <ShopProductRow
+          key={section.key}
+          eyebrow={section.eyebrow}
+          title={section.title}
+          subtitle={section.subtitle}
+          products={sections[section.key]}
+          viewAllHref={`/shop/type-${section.key.slice(4)}`}
+          productRewriteMode={productRewriteMode}
+          display={display[section.key]}
+        />
+      ))}
     </>
   );
 }

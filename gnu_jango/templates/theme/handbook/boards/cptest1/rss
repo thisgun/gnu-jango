@@ -6,7 +6,7 @@
     <description></description>
     <language>ko-KR</language>
     <atom:link href="http://localhost:3000/rss/cptest1" rel="self" type="application/rss+xml"/>
-    <lastBuildDate>Mon, 19 Oct 2026 07:37:26 GMT</lastBuildDate>
+    <lastBuildDate>Tue, 20 Oct 2026 02:56:48 GMT</lastBuildDate>
     <item>
       <title>test</title>
       <link>http://localhost:3000/bbs/cptest1/178</link>

@@ -38,6 +38,7 @@ from gnu_jango.shop.models import (
     ShopStockNotification,
     ShopShippingCost,
     ShopShippingPolicy,
+    ORDER_ITEM_STATUS_COMPLETED,
     generate_order_uid,
 )
 from gnu_jango.users.hashers import convert_gnuboard_password_hash
@@ -564,6 +565,9 @@ class Command(BaseCommand):
             (shop_row, "de_admin_company_saupja_no", "cf_company_biz_no", 64),
             (shop_row, "de_admin_company_tel", "cf_company_tel", 64),
             (shop_row, "de_admin_tongsin_no", "cf_company_tongsin_no", 128),
+            (shop_row, "de_admin_buga_no", "cf_company_buga_no", 128),
+            (shop_row, "de_admin_company_fax", "cf_company_fax", 64),
+            (shop_row, "de_admin_company_zip", "cf_company_zip", 16),
             (shop_row, "de_admin_info_name", "cf_company_info_name", 255),
             (shop_row, "de_admin_info_email", "cf_company_email", 255),
             (shop_row, "de_admin_company_tel", "de_admin_company_tel", 64),
@@ -579,8 +583,24 @@ class Command(BaseCommand):
                 continue
             Config.objects.update_or_create(name=target_name, defaults={"value": value})
             imported += 1
+        imported += self.import_shop_options(shop_row)
         if imported:
             signals.config_done.send(sender=Config)
+        return imported
+
+    def import_shop_options(self, shop_row):
+        """Copy youngcart's non-secret shop options (same column names) from g5_shop_default."""
+        from gnu_jango.shop.shop_options import SHOP_CONFIG_OPTIONS
+
+        imported = 0
+        for name, option in SHOP_CONFIG_OPTIONS.items():
+            if not name.startswith("de_") or name not in shop_row:
+                continue
+            value = text(shop_row, name, max_length=option.max_length if option.kind != "int" else None).strip()
+            if option.kind == "int" and not value.lstrip("-").isdigit():
+                continue
+            Config.objects.update_or_create(name=name, defaults={"value": value})
+            imported += 1
         return imported
 
     def count_board_posts(self, cursor, config):
@@ -1694,10 +1714,27 @@ class Command(BaseCommand):
             order_item.io_price = integer(row, "io_price", 0)
             order_item.ct_notax = integer(row, "ct_notax", 0)
             order_item.ct_send_cost = integer(row, "ct_send_cost", 0)
+            self.apply_cart_point_state(order_item, row)
             order_item.image_url = product.image_url if product else ""
             order_item.save()
             count += 1
         return count
+
+    def apply_cart_point_state(self, order_item, row):
+        """Carry youngcart ct_point_use / ct_complete_time so a line PHP already paid is not paid
+        again. A completed row without the column counts as paid; a line this site already paid
+        stays paid on a re-import."""
+        is_completed = order_item.ct_status == ORDER_ITEM_STATUS_COMPLETED
+        if "ct_point_use" in row:
+            point_use = bool(integer(row, "ct_point_use", 0))
+        else:
+            point_use = is_completed
+        order_item.ct_point_use = bool(order_item.ct_point_use) or point_use
+        complete_time = optional_datetime_value(scalar(row, "ct_complete_time"))
+        if complete_time is None and is_completed:
+            # youngcart save_order_point counts an unstamped completed line from its cart time
+            complete_time = optional_datetime_value(scalar(row, "ct_time"))
+        order_item.ct_complete_time = (complete_time or order_item.ct_complete_time) if is_completed else None
 
     def import_shop_order_data(self, rows):
         count = 0

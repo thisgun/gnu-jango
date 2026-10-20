@@ -1,5 +1,8 @@
 "use client";
 
+import { formatHopeDate } from "@/lib/hope-date";
+import type { HopeDateRule } from "./orderPaymentHelpers";
+
 type CashReceiptType = "income" | "expense";
 
 type RecipientDeliveryOptionsProps = {
@@ -8,6 +11,7 @@ type RecipientDeliveryOptionsProps = {
   setMemo: (value: string) => void;
   hopeDate: string;
   setHopeDate: (value: string) => void;
+  hopeDateRule: HopeDateRule | null;
   isMemberOrder: boolean;
   paymentMethod: string;
   cashReceiptEnabled: boolean;
@@ -28,16 +32,13 @@ type RecipientDeliveryOptionsProps = {
   setCashReceiptIdentityNumber: (value: string) => void;
 };
 
-function getTomorrowDateInputValue(): string {
-  return new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-}
-
 export function RecipientDeliveryOptions({
   inputClassName,
   memo,
   setMemo,
   hopeDate,
   setHopeDate,
+  hopeDateRule,
   isMemberOrder,
   paymentMethod,
   cashReceiptEnabled,
@@ -79,19 +80,32 @@ export function RecipientDeliveryOptions({
         />
       </div>
 
-      <div className="mt-4">
-        <label htmlFor="order-hope-date" className="mb-1 block text-sm font-medium">
-          희망 배송일 <span className="text-xs text-base-content/60">(선택)</span>
-        </label>
-        <input
-          id="order-hope-date"
-          type="date"
-          value={hopeDate}
-          onChange={(event) => setHopeDate(event.target.value)}
-          min={getTomorrowDateInputValue()}
-          className={`${inputClassName} max-w-[200px]`}
-        />
-      </div>
+      {hopeDateRule?.use && (
+        <div className="mt-4">
+          <label htmlFor="order-hope-date" className="mb-1 block text-sm font-medium">
+            희망배송일 <span className="text-xs text-error">(필수)</span>
+          </label>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <input
+              id="order-hope-date"
+              type="date"
+              required
+              value={hopeDate}
+              onChange={(event) => setHopeDate(event.target.value)}
+              min={hopeDateRule.min}
+              max={hopeDateRule.max}
+              aria-describedby="order-hope-date-help"
+              className={`${inputClassName} max-w-[200px]`}
+            />
+            {hopeDate && (
+              <span className="text-sm text-base-content/70">{formatHopeDate(hopeDate)}</span>
+            )}
+          </div>
+          <p id="order-hope-date-help" className="mt-1 text-xs text-base-content/60">
+            {formatHopeDate(hopeDateRule.min)} ~ {formatHopeDate(hopeDateRule.max)} 사이에서 선택해 주세요.
+          </p>
+        </div>
+      )}
 
       {isMemberOrder && (
         <div className="mt-4 space-y-3">

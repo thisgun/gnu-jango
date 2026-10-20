@@ -903,6 +903,9 @@ class ImporterPublicConfigTests(TestCase):
             "de_bank_account": "Fixture Bank Account",
             "de_pg_service_key": "private-pg-sentinel",
             "de_sms_password": "private-sms-sentinel",
+            "de_cart_keep_term": "30",
+            "de_hope_date_use": "1",
+            "de_point_days": "not-a-number",
         }
 
         with patch.object(migrate_gnuboard5, "table_exists", return_value=True):
@@ -914,7 +917,10 @@ class ImporterPublicConfigTests(TestCase):
                 imported = command.import_public_config(Mock(), config)
 
         stored = dict(ConfigModel.objects.values_list("name", "value"))
-        self.assertEqual(imported, 12)
+        self.assertEqual(imported, 14)
+        self.assertEqual(stored["de_cart_keep_term"], "30")
+        self.assertEqual(stored["de_hope_date_use"], "1")
+        self.assertNotIn("de_point_days", stored)
         self.assertEqual(stored["cf_title"], "Fixture storefront")
         self.assertEqual(stored["cf_company_name"], "Fixture Company")
         self.assertEqual(stored["de_bank_account"], "Fixture Bank Account")

@@ -8,8 +8,10 @@ import {
 import {
   resolveRecipientAddress,
   shouldPersistAddress,
+  validateHopeDate,
   validateOrderSubmission,
 } from "../src/app/shop/order/orderSubmitValidation";
+import { formatHopeDate } from "../src/lib/hope-date";
 
 function address(overrides: Partial<AddressForm> = {}): AddressForm {
   return {
@@ -132,6 +134,49 @@ test.describe("order submit validation", () => {
         agreePrivacy: false,
       }).ok
     ).toBe(false);
+  });
+});
+
+test.describe("hope date (희망배송일) validation", () => {
+  const rule = { use: true, after: 3, min: "2026-10-23", max: "2026-10-29" };
+  const validInput = {
+    ...noReceipts,
+    orderer: address(),
+    recipient: address({ name: "Recipient" }),
+    addressSelection: "new" as const,
+    paymentMethod: "bank",
+    bankAccount: "Bank 123-456",
+    depositName: "Buyer",
+    guestPassword: "abc123",
+    isMemberOrder: false,
+    agreeTerms: true,
+    agreePrivacy: true,
+  };
+
+  test("is not checked while the shop does not use it", () => {
+    expect(validateHopeDate("", null)).toBeNull();
+    expect(validateHopeDate("junk", { ...rule, use: false })).toBeNull();
+    expect(validateOrderSubmission({ ...validInput, hopeDate: "", hopeDateRule: { ...rule, use: false } }).ok).toBe(true);
+  });
+
+  test("requires a real date inside the allowed range while it is used", () => {
+    expect(validateHopeDate("", rule)).toBe("희망배송일을 선택하여 주십시오.");
+    expect(validateHopeDate("2026-02-30", rule)).toBe("희망배송일이 올바르지 않습니다.");
+    expect(validateHopeDate("2026-10-22", rule)).toContain("2026-10-23 부터 2026-10-29");
+    expect(validateHopeDate("2026-10-30", rule)).toContain("사이에서 선택해 주십시오");
+    expect(validateHopeDate("2026-10-23", rule)).toBeNull();
+    expect(validateHopeDate("2026-10-29", rule)).toBeNull();
+
+    const missing = validateOrderSubmission({ ...validInput, hopeDateRule: rule });
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) expect(missing.message).toBe("희망배송일을 선택하여 주십시오.");
+    expect(validateOrderSubmission({ ...validInput, hopeDate: "2026-10-25", hopeDateRule: rule }).ok).toBe(true);
+  });
+
+  test("formats the date with its Korean weekday", () => {
+    expect(formatHopeDate("2026-10-25")).toBe("2026-10-25 (일)");
+    expect(formatHopeDate("2026-10-26")).toBe("2026-10-26 (월)");
+    expect(formatHopeDate("not-a-date")).toBe("not-a-date");
   });
 });
 

@@ -5,6 +5,7 @@ import { EmptyState } from "@/components/EmptyState";
 import { ShopProductRow, ShopProductRowSkeleton } from "@/components/shop/ShopProductRow";
 import type { ShopProduct } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
+import { DEFAULT_HOME_SECTION_DISPLAY, type ShopHomeSectionDisplay } from "@/lib/shop-display";
 import { getShopHomeData } from "@/services/shop-home";
 
 export function ShopHomeHit() {
@@ -14,6 +15,7 @@ export function ShopHomeHit() {
   const [error, setError] = useState(false);
   const [catalogFallback, setCatalogFallback] = useState(false);
   const [hasOtherSections, setHasOtherSections] = useState(false);
+  const [display, setDisplay] = useState<ShopHomeSectionDisplay>(DEFAULT_HOME_SECTION_DISPLAY);
 
   useEffect(() => {
     let alive = true;
@@ -21,8 +23,12 @@ export function ShopHomeHit() {
     getShopHomeData()
       .then((home) => {
         if (!alive) return;
-        setProducts(home.products.type1.length ? home.products.type1 : home.catalogPreview);
-        setCatalogFallback(home.products.type1.length === 0 && home.catalogPreview.length > 0);
+        const section = home.display.type1;
+        // 히트상품을 끈 쇼핑몰은 이 자리를 비운다 — 전체 상품 미리보기도 히트상품 자리를 빌린 것이라 함께 빠진다.
+        const preview = section.use ? home.catalogPreview : [];
+        setDisplay(section);
+        setProducts(!section.use ? [] : home.products.type1.length ? home.products.type1 : preview);
+        setCatalogFallback(home.products.type1.length === 0 && preview.length > 0);
         setHasOtherSections(Object.values(home.products).some(section => section.length > 0));
         setProductRewriteMode(home.settings.cf_bbs_rewrite);
         setError(false);
@@ -46,6 +52,8 @@ export function ShopHomeHit() {
       <ShopProductRowSkeleton eyebrow="HIT" title="히트상품" subtitle="가장 많이 나간 상품입니다." className="shop-home-hit-section" />
     );
   }
+
+  if (!error && !display.use) return null;
 
   if (!error && products.length === 0 && hasOtherSections) return null;
 
@@ -71,6 +79,7 @@ export function ShopHomeHit() {
       products={products}
       viewAllHref={catalogFallback ? "/shop/search" : "/shop/type-1"}
       productRewriteMode={productRewriteMode}
+      display={display}
       className="shop-home-hit-section"
     />
   );

@@ -159,6 +159,7 @@ export function buildRecipientInfoProps({
     paymentMethod,
     cashReceiptEnabled: Boolean(cashReceipt?.enabled),
     canRequestCashReceipt,
+    hopeDateRule: paymentConfig?.hope_date ?? null,
   };
 }
 

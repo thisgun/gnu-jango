@@ -143,6 +143,8 @@ export async function submitOrder({
     cashRequest,
     cashReceiptType,
     cashReceiptIdentityNumber,
+    hopeDate,
+    hopeDateRule: paymentConfig?.hope_date ?? null,
   });
 
   if (!validation.ok) {
