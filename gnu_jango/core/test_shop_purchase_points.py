@@ -327,8 +327,16 @@ class TakeBackTests(PurchasePointBase):
         self.assertEqual(self.balance(), 0)
         self.assertFalse(self.delivery_rows().exists())
 
-    def test_an_admin_cancel_takes_the_point_back(self):
+    def test_an_admin_cancel_of_a_completed_order_is_refused_and_keeps_the_point(self):
+        # youngcart orderlistupdate.php cancels only 주문/입금/준비 orders; a completed one is a return
         order = self.paid_order()
+        self.assertFalse(set_order_status(order, "취소", "test"))
+        self.assertEqual(order.items.get().ct_status, COMPLETED)
+        self.assertEqual(self.balance(), 6000)
+
+    def test_cancelling_a_line_that_earned_its_point_takes_it_back(self):
+        order = self.paid_order()
+        ShopOrder.objects.filter(pk=order.pk).update(od_status="준비")
         self.assertTrue(set_order_status(order, "취소", "test"))
         self.assert_taken_back(order)
         self.assertEqual(order.items.get().ct_status, "취소")
@@ -340,8 +348,11 @@ class TakeBackTests(PurchasePointBase):
         self.assert_taken_back(order)
 
     def test_moving_a_paid_line_off_completed_takes_it_back_and_completing_pays_again(self):
+        # the admin no longer moves an order back; the virtual account webhook still can
         order = self.paid_order()
-        set_order_status(order, "배송", "test")
+        ShopOrder.objects.filter(pk=order.pk).update(od_status="배송")
+        order.items.update(**item_status_update("배송"))
+        take_back_order_points(order)
         self.assert_taken_back(order)
         set_order_status(order, COMPLETED, "test")
         self.assertEqual(self.balance(), 6000)

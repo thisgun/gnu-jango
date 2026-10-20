@@ -9,6 +9,58 @@ from .models import ShopShippingCost, ShopShippingPolicy
 DEFAULT_SHIPPING_COST = 3000
 DEFAULT_FREE_THRESHOLD = 50000
 
+# ct_send_cost of a cart line (YoungCart g5_shop_cart.ct_send_cost)
+SEND_COST_PREPAID = 0
+SEND_COST_ON_DELIVERY = 1  # 착불: the customer pays the courier, not the order
+SEND_COST_FREE = 2  # 무료
+# it_sc_method of a product
+SC_METHOD_ON_DELIVERY = 1
+SC_METHOD_CUSTOMER_CHOICE = 2
+
+
+def _flag_value(value):
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return SEND_COST_PREPAID
+
+
+def cart_send_cost_flag(product, chosen=SEND_COST_PREPAID):
+    """The ct_send_cost a cart line of this product carries, decided by the server.
+
+    YoungCart cartupdate.php: free shipping products (it_sc_type 1) are 2, products with their own
+    fee paid on delivery (it_sc_type > 1, it_sc_method 1) are 1, everything else 0. A client value
+    never sets it; only where the product lets the customer pick (it_sc_method 2) is their pick
+    between prepaid (0) and on delivery (1) kept.
+    """
+    if product is None:
+        return SEND_COST_PREPAID
+    sc_type = int(product.it_sc_type or 0)
+    if sc_type == 1:
+        return SEND_COST_FREE
+    if sc_type > 1:
+        method = int(product.it_sc_method or 0)
+        if method == SC_METHOD_ON_DELIVERY:
+            return SEND_COST_ON_DELIVERY
+        if method == SC_METHOD_CUSTOMER_CHOICE and _flag_value(chosen) == SEND_COST_ON_DELIVERY:
+            return SEND_COST_ON_DELIVERY
+    return SEND_COST_PREPAID
+
+
+def with_server_send_cost_flags(rows):
+    """Copies of the cart rows with ct_send_cost recomputed from the current products."""
+    from .models import ShopProduct
+
+    rows = list(rows)
+    it_ids = {str(row.get("it_id") or "") for row in rows if isinstance(row, dict)}
+    products = ShopProduct.objects.in_bulk(list(it_ids)) if it_ids else {}
+    return [
+        {**row, "ct_send_cost": cart_send_cost_flag(products.get(str(row.get("it_id") or "")), row.get("ct_send_cost"))}
+        if isinstance(row, dict)
+        else row
+        for row in rows
+    ]
+
 
 def current_shipping_policy():
     return ShopShippingPolicy.objects.filter(pk=1).first() or ShopShippingPolicy(
@@ -81,20 +133,23 @@ def items_shipping_cost(items, policy=None):
 
     Per product: 1 free; 2 free from its own minimum, else its fee; 3 its fee; 4 its fee per started
     batch of it_sc_qty. Products without a type of their own (0) share the shop rule on their
-    combined price. Lines the customer pays on delivery (ct_send_cost) are left out.
+    combined price. Lines paid on delivery or shipped free (ct_send_cost) are left out; the flag
+    comes from the current product, never from what the cart line stored or a client sent.
     """
     from math import ceil
 
     from .models import ShopProduct
 
+    items = list(items)
+    products = ShopProduct.objects.in_bulk(list({str(item.get("it_id")) for item in items}))
     groups = {}
     for item in items:
-        if int(item.get("ct_send_cost") or 0):
+        it_id = str(item.get("it_id"))
+        if cart_send_cost_flag(products.get(it_id), item.get("ct_send_cost")) != SEND_COST_PREPAID:
             continue
-        group = groups.setdefault(str(item.get("it_id")), [0, 0])
+        group = groups.setdefault(it_id, [0, 0])
         group[0] += max(0, int(item.get("line_total") or 0))
         group[1] += max(0, int(item.get("ct_qty") or 0))
-    products = ShopProduct.objects.in_bulk(list(groups))
     total = 0
     shared_price = 0
     for it_id, (price, qty) in groups.items():

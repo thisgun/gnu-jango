@@ -616,6 +616,7 @@ def order_payload(order, *, detail=False):
         "od_send_cost2": order.od_send_cost2,
         "od_receipt_price": order.od_receipt_price,
         "od_cancel_price": order.od_cancel_price,
+        "od_refund_price": order.od_refund_price,
         "od_receipt_point": order.od_receipt_point,
         "od_deposit_name": order.od_deposit_name,
         "od_status": status_value,
@@ -1573,13 +1574,18 @@ def restore_order_coupons_and_points(order):
         change_member_point(order.user, point_to_restore, f"주문번호 {order.od_id} 취소", "@order-cancel", order.od_id)
 
 
-def cancel_order_and_refund_benefits(order, reason):
-    """Cancel an order, put the stock back and give its coupons and points back, once."""
+def cancel_order_and_refund_benefits(order, reason, *, refund_price=0, history=""):
+    """Cancel an order, put the stock back and give its coupons and points back, once.
+
+    The one cancel path of the customer, the expiry jobs and the admin (which cancels the PG
+    payment first and passes the refunded amount). An order that is already cancelled is left
+    as it is, so its refund record is not overwritten by a second call."""
     with transaction.atomic():
         locked = ShopOrder.objects.select_for_update().filter(pk=order.pk).first() or order
-        if str(locked.od_status or "") not in CANCELLED_STATUSES:
-            restore_order_coupons_and_points(locked)
-        return cancel_order_with_stock_restore(locked, reason)
+        if str(locked.od_status or "") in CANCELLED_STATUSES:
+            return locked, 0
+        restore_order_coupons_and_points(locked)
+        return cancel_order_with_stock_restore(locked, reason, refund_price=refund_price, history=history)
 
 
 def cancel_shop_order_locally(order_id, reason):

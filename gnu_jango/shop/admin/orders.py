@@ -1,18 +1,42 @@
 from gnu_jango.shop.admin._common import *  # noqa: F401,F403
+from functools import update_wrapper
+
 from django import forms
-from django.db import transaction
 from django.contrib import messages
+from django.contrib.admin.actions import delete_selected
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 from unfold.forms import ActionForm
+from unfold.widgets import UnfoldAdminSelectWidget
 
 from gnu_jango.api.shop_common import CANCELLED_STATUSES
 from gnu_jango.shop.models import ORDER_ITEM_STATUS_COMPLETED
-from gnu_jango.shop.order_points import item_status_update, run_save_order_points_safely, take_back_order_points
+from gnu_jango.shop.order_flow import (
+    ADMIN_ORDER_STATUSES,
+    admin_cancel_order,
+    allowed_targets,
+    delete_order,
+    move_order_status,
+    order_delete_block_reason,
+    order_misu,
+    transition_error,
+)
+from gnu_jango.shop.order_points import run_save_order_points_safely, take_back_order_points
 
-# YoungCart order states an operator moves an order through (adm/shop_admin/orderlist.php).
-ADMIN_ORDER_STATUSES = ("주문", "입금", "준비", "배송", "완료", "취소")
+# Amounts the order form can edit: od_misu is worked out from them (youngcart get_order_info).
+ORDER_MONEY_FIELDS = {
+    "od_cart_price",
+    "od_send_cost",
+    "od_send_cost2",
+    "od_receipt_price",
+    "od_cancel_price",
+    "od_refund_price",
+    "od_receipt_point",
+    "od_coupon",
+    "od_send_coupon",
+}
 
 HOPE_DATE_LABEL = "희망배송일"
 KOREAN_WEEKDAYS = ("월", "화", "수", "목", "금", "토", "일")
@@ -23,29 +47,60 @@ def hope_date_label(value):
     return f"{value.isoformat()} ({KOREAN_WEEKDAYS[value.weekday()]})" if value else "-"
 
 
-def set_order_status(order, status, reason, *, pay_due_points=True):
-    """Move an order to ``status``: its items follow, and a cancellation goes through the shared
-    cancel path (stock back, coupons and points refunded once).
+def set_order_status(order, status, reason="", *, actor="", pay_due_points=True):
+    """Move an order to ``status`` the way youngcart orderlistupdate.php does: one step along
+    주문→입금(무통장)→준비→배송(운송장)→완료, or a cancellation from 주문/입금/준비 through
+    admin_cancel_order (the PG payment is cancelled first; stock, coupons and points come back
+    once).
 
-    Returns False for an order that is already cancelled: reopening it would not take back the
+    Returns a StatusChange, falsy (with the reason in ``message``) when the order was left as it
+    was - an order that is already cancelled is never reopened: that would not take back the
     stock, coupons and points the cancellation returned."""
-    current = ShopOrder.objects.filter(pk=order.pk).values_list("od_status", flat=True).first()
-    if str(current or "") in CANCELLED_STATUSES:
-        return False
     if status in CANCELLED_STATUSES:
-        from gnu_jango.api.v1_shop import cancel_order_and_refund_benefits
-
-        cancel_order_and_refund_benefits(order, reason)
-        return True
-    with transaction.atomic():
-        ShopOrder.objects.filter(pk=order.pk).update(od_status=status)
-        order.items.exclude(ct_status__in=CANCELLED_STATUSES).update(**item_status_update(status))
-        # youngcart orderformcartupdate.php: a paid line that leaves 완료 gives its point back
-        take_back_order_points(order)
+        return admin_cancel_order(order, reason, actor=actor)
+    result = move_order_status(order, status, actor=actor)
     # 완료 runs save_order_point at once, so a 0-day wait pays immediately
-    if pay_due_points and status == ORDER_ITEM_STATUS_COMPLETED:
+    if result and pay_due_points and status == ORDER_ITEM_STATUS_COMPLETED:
         run_save_order_points_safely()
-    return True
+    return result
+
+
+class ShopOrderAdminForm(forms.ModelForm):
+    """The order form offers only the statuses the order can move to, and checks the move with
+    the values being saved (a 배송 needs the carrier and invoice entered in the same form)."""
+
+    class Meta:
+        model = ShopOrder
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "od_status" not in self.fields:
+            return
+        if self.instance.pk:
+            current = self.instance.od_status
+            choices = [(current, f"{current} (현재 상태)")] + [(status, status) for status in allowed_targets(self.instance)]
+            help_text = "주문→입금(무통장)→준비→배송→완료 순서로 한 단계씩 바꿀 수 있고, 주문·입금·준비 상태에서는 취소할 수 있습니다."
+        else:
+            choices = [(status, status) for status in ADMIN_ORDER_STATUSES]
+            help_text = ""
+        self.fields["od_status"] = forms.ChoiceField(
+            label="주문상태", choices=choices, help_text=help_text, widget=UnfoldAdminSelectWidget
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        target = cleaned.get("od_status")
+        if self.instance.pk and target and target != self.instance.od_status:
+            error = transition_error(
+                self.instance,
+                target,
+                invoice=cleaned.get("od_invoice", self.instance.od_invoice),
+                delivery_company=cleaned.get("od_delivery_company", self.instance.od_delivery_company),
+            )
+            if error:
+                self.add_error("od_status", error)
+        return cleaned
 
 
 class OrderStatusActionForm(ActionForm):
@@ -88,6 +143,9 @@ class ShopOrderAdmin(ModelAdmin):
     list_filter_submit = True
     actions = ("change_selected_order_status", "export_selected_orders_csv", "export_selected_receipts_csv")
     action_form = OrderStatusActionForm
+    form = ShopOrderAdminForm
+    # a member picker, not a select listing every member
+    raw_id_fields = ("user",)
     inlines = [ShopOrderItemInline, ShopOrderDataInline]
 
     @admin.action(description="선택 주문 상태 변경", permissions=["change"])
@@ -96,20 +154,76 @@ class ShopOrderAdmin(ModelAdmin):
         if status not in ADMIN_ORDER_STATUSES:
             self.message_user(request, "변경할 주문 상태를 고르세요.", messages.WARNING)
             return
-        reason = f"관리자 취소 ({request.user.get_username()})"
-        changed = skipped = 0
+        actor = request.user.get_username()
+        changed = 0
+        skipped = {}
         for order in queryset:
-            if set_order_status(order, status, reason, pay_due_points=False):
+            result = set_order_status(order, status, actor=actor, pay_due_points=False)
+            if result:
                 self.log_change(request, order, f"주문 상태를 '{status}'(으)로 변경")
                 changed += 1
+                if result.manual_refund:
+                    self.message_user(request, result.message, messages.WARNING)
             else:
-                skipped += 1
+                skipped.setdefault(result.message, []).append(order.od_id)
         if changed and status == ORDER_ITEM_STATUS_COMPLETED:
             run_save_order_points_safely()  # once for the whole selection
         if changed:
             self.message_user(request, f"주문 {changed}건을 '{status}' 상태로 바꿨습니다.", messages.SUCCESS)
-        if skipped:
-            self.message_user(request, f"이미 취소된 주문 {skipped}건은 바꾸지 않았습니다.", messages.WARNING)
+        for message, order_ids in skipped.items():
+            shown = ", ".join(order_ids[:5]) + (f" 외 {len(order_ids) - 5}건" if len(order_ids) > 5 else "")
+            self.message_user(
+                request, f"주문 {len(order_ids)}건은 바꾸지 않았습니다 ({shown}): {message}", messages.WARNING
+            )
+
+    def has_delete_permission(self, request, obj=None):
+        # youngcart orderlistdelete.php: only unpaid (주문) orders, here also cancelled ones
+        if not super().has_delete_permission(request, obj):
+            return False
+        return obj is None or not order_delete_block_reason(obj)
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if "delete_selected" in actions:
+            _func, name, description = actions["delete_selected"]
+            actions["delete_selected"] = (type(self).delete_selected_orders, name, description)
+        return actions
+
+    def delete_selected_orders(self, request, queryset):
+        """Django's delete-selected action, for the orders that may be deleted; the others are
+        named and left alone."""
+        blocked = {}
+        for order in queryset:
+            reason = order_delete_block_reason(order)
+            if reason:
+                blocked.setdefault(reason, []).append(order.od_id)
+        for reason, order_ids in blocked.items():
+            shown = ", ".join(order_ids[:5]) + (f" 외 {len(order_ids) - 5}건" if len(order_ids) > 5 else "")
+            self.message_user(request, f"주문 {len(order_ids)}건은 삭제하지 않습니다 ({shown}): {reason}", messages.WARNING)
+        skipped = [order_id for order_ids in blocked.values() for order_id in order_ids]
+        deletable = queryset.exclude(pk__in=skipped)
+        if not deletable.exists():
+            return None
+        return delete_selected(self, request, deletable)
+
+    def get_deleted_objects(self, objs, request):
+        deleted, model_count, perms_needed, protected = super().get_deleted_objects(objs, request)
+        # an order's lines go with it; their own admin refuses only deleting a single line
+        line_name = str(ShopOrderItem._meta.verbose_name)
+        perms_needed = {name for name in perms_needed if str(name) != line_name}
+        return deleted, model_count, perms_needed, protected
+
+    def delete_model(self, request, obj):
+        result = delete_order(obj, actor=request.user.get_username())
+        if not result:
+            raise PermissionDenied(result.message)
+
+    def delete_queryset(self, request, queryset):
+        actor = request.user.get_username()
+        for order in queryset:
+            result = delete_order(order, actor=actor)
+            if not result:
+                self.message_user(request, f"주문 {order.od_id}은(는) 삭제하지 않았습니다: {result.message}", messages.WARNING)
 
     def formfield_for_dbfield(self, db_field, request, **kwargs):
         field = super().formfield_for_dbfield(db_field, request, **kwargs)
@@ -128,6 +242,8 @@ class ShopOrderAdmin(ModelAdmin):
             # status, because the cancel path refunds only an order that is not cancelled yet.
             request._pending_order_status = obj.od_status
             obj.od_status = form.initial.get("od_status", obj.od_status)
+        if change and changed & ORDER_MONEY_FIELDS:
+            obj.od_misu = order_misu(obj)
         super().save_model(request, obj, form, change)
 
     def save_related(self, request, form, formsets, change):
@@ -140,10 +256,21 @@ class ShopOrderAdmin(ModelAdmin):
             return
         request._pending_order_status = None
         order = form.instance
-        if set_order_status(order, status, f"관리자 취소 ({request.user.get_username()})"):
+        if status in CANCELLED_STATUSES:
+            # A cancellation may refund the payment at the PG. It must not run inside the order
+            # form's transaction, where a later error would roll the local cancel back while the
+            # refund stands: change_view runs it once that transaction has committed.
+            request._pending_order_cancel = order.pk
+            return
+        self.report_status_change(request, order, set_order_status(order, status, actor=request.user.get_username()))
+
+    def report_status_change(self, request, order, result):
+        if result:
             order.refresh_from_db()
+            if result.message:
+                self.message_user(request, result.message, messages.WARNING if result.manual_refund else messages.SUCCESS)
         else:
-            self.message_user(request, "취소된 주문은 다른 상태로 되돌릴 수 없습니다.", messages.WARNING)
+            self.message_user(request, result.message, messages.ERROR)
     readonly_fields = (
         "operations_snapshot",
         "settlement_snapshot",
@@ -152,6 +279,8 @@ class ShopOrderAdmin(ModelAdmin):
         "memo_snapshot",
         "od_tax_invoice_request",
         "od_cash_request",
+        "od_misu",
+        "od_mod_history",
     )
     fieldsets = (
         (
@@ -187,6 +316,7 @@ class ShopOrderAdmin(ModelAdmin):
                     ("od_status", "od_settle_case", "od_pg"),
                     ("od_cart_price", "od_send_cost", "od_send_cost2"),
                     ("od_receipt_price", "od_cancel_price", "od_misu"),
+                    ("od_refund_price",),
                     ("od_receipt_point", "od_coupon", "od_send_coupon", "od_point"),
                     ("od_tax_flag", "od_tax_mny", "od_vat_mny", "od_free_mny"),
                     ("od_tno", "od_app_no"),
@@ -249,7 +379,7 @@ class ShopOrderAdmin(ModelAdmin):
             _("Memo"),
             {
                 "classes": ("tab",),
-                "fields": ("od_memo",),
+                "fields": ("od_memo", "od_shop_memo", "od_mod_history"),
             },
         ),
     )
@@ -267,7 +397,15 @@ class ShopOrderAdmin(ModelAdmin):
         order = self.get_object(request, object_id)
         if order:
             extra_context["order_detail_ops"] = self.order_detail_context(request, order)
-        return super().change_view(request, object_id, form_url, extra_context=extra_context)
+        request._pending_order_cancel = None
+        response = super().change_view(request, object_id, form_url, extra_context=extra_context)
+        # the form's edits are committed; now the cancellation (PG refund first) in its own
+        # durable transaction (admin_cancel_order)
+        if request._pending_order_cancel is not None and order is not None:
+            request._pending_order_cancel = None
+            result = set_order_status(order, "취소", actor=request.user.get_username())
+            self.report_status_change(request, order, result)
+        return response
 
     def order_ops_context(self, request):
         orders = ShopOrder.objects.all()
@@ -280,7 +418,7 @@ class ShopOrderAdmin(ModelAdmin):
         cash_receipt_orders = orders.exclude(od_cash_no="")
         receipt_requests = orders.filter(Q(od_tax_invoice_request=True) | Q(od_cash_request=True))
         receipt_request_count = receipt_requests.count()
-        receipt_proof_needed = orders.filter(od_receipt_price__gt=0, od_cash_no="", od_tno="", od_app_no="")
+        receipt_proof_needed = orders.filter(has_net_receipt(), od_cash_no="", od_tno="", od_app_no="")
         personal_pay_due = ShopPersonalPay.objects.filter(active=True, pp_price__gt=0, pp_receipt_price__lte=0)
 
         return {
@@ -288,7 +426,7 @@ class ShopOrderAdmin(ModelAdmin):
                 {
                     "label": _("Today orders"),
                     "value": format_number(today_orders.count()),
-                    "hint": _("%(amount)s received") % {"amount": format_number(money_sum(today_orders, "od_receipt_price"))},
+                    "hint": _("%(amount)s received") % {"amount": format_number(money_sum(today_orders, net_receipt_expression()))},
                     "tone": "info",
                     "url": self.order_list_url(request, receipt_state=None, shipping_state=None),
                 },
@@ -309,7 +447,7 @@ class ShopOrderAdmin(ModelAdmin):
                 {
                     "label": _("Cash receipts"),
                     "value": format_number(cash_receipt_orders.count()),
-                    "hint": _("%(amount)s issued") % {"amount": format_number(money_sum(cash_receipt_orders, "od_receipt_price"))},
+                    "hint": _("%(amount)s issued") % {"amount": format_number(money_sum(cash_receipt_orders, net_receipt_expression()))},
                     "tone": "success",
                     "url": self.order_list_url(request, receipt_state="cash", shipping_state=None),
                 },
@@ -417,7 +555,7 @@ class ShopOrderAdmin(ModelAdmin):
                 flow_step(
                     _("Settlement report"),
                     paid_orders.count(),
-                    _("%(amount)s received") % {"amount": format_number(money_sum(paid_orders, "od_receipt_price"))},
+                    _("%(amount)s received") % {"amount": format_number(money_sum(paid_orders, net_receipt_expression()))},
                     "/admin/shop/shoporder/reports/",
                     "info",
                     "monitoring",
@@ -674,6 +812,7 @@ class ShopOrderAdmin(ModelAdmin):
                 (_("Receipt amount"), format_number(obj.od_receipt_price), compact_text(obj.od_settle_case, obj.od_pg)),
                 (_("Outstanding"), format_number(obj.od_misu), compact_text(obj.od_deposit_name, obj.od_receipt_time)),
                 (_("Bank account"), obj.od_bank_account or "-", ""),
+                ("환불금액", format_number(obj.od_refund_price), "PG 승인취소 또는 직접 환불한 금액"),
                 (_("Discount and point"), format_number(coupon_total + obj.od_point), _("Coupon %(coupon)s / point %(point)s") % {"coupon": format_number(coupon_total), "point": format_number(obj.od_point)}),
             ),
         )
@@ -776,27 +915,26 @@ class ShopOrderAdmin(ModelAdmin):
     def _snapshot_panel(self, title, state, tone, description, cards):
         return snapshot_panel(title, state, tone, description, cards)
 
+    def order_report_view(self, view):
+        """An order report or export: it lists customers' names, phones and addresses, so it needs
+        the view permission on orders, not just a staff account."""
+
+        def guarded(request, *args, **kwargs):
+            if not self.has_view_permission(request):
+                raise PermissionDenied
+            return view(request, *args, **kwargs)
+
+        return self.admin_site.admin_view(update_wrapper(guarded, view))
+
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
-            path(
-                "reports/",
-                self.admin_site.admin_view(self.reports_view),
-                name="shop_shoporder_reports",
-            ),
-            path(
-                "sales-rank/",
-                self.admin_site.admin_view(self.sales_rank_view),
-                name="shop_shoporder_sales_rank",
-            ),
-            path(
-                "order-print/",
-                self.admin_site.admin_view(self.order_print_view),
-                name="shop_shoporder_print",
-            ),
+            path("reports/", self.order_report_view(self.reports_view), name="shop_shoporder_reports"),
+            path("sales-rank/", self.order_report_view(self.sales_rank_view), name="shop_shoporder_sales_rank"),
+            path("order-print/", self.order_report_view(self.order_print_view), name="shop_shoporder_print"),
             path(
                 "unresolved/",
-                self.admin_site.admin_view(self.unresolved_orders_view),
+                self.order_report_view(self.unresolved_orders_view),
                 name="shop_shoporder_unresolved",
             ),
         ]
@@ -926,7 +1064,7 @@ class ShopOrderAdmin(ModelAdmin):
         metrics = [
             {"label": _("Orders"), "value": format_number(order_count), "hint": _("Matched printable orders")},
             {"label": _("Print rows"), "value": format_number(len(rows)), "hint": _("Limited for browser print stability")},
-            {"label": _("Receipt total"), "value": format_number(money_sum(orders, "od_receipt_price")), "hint": _("Collected amount")},
+            {"label": _("Receipt total"), "value": format_number(money_sum(orders, net_receipt_expression())), "hint": _("Collected amount")},
             {"label": _("Outstanding"), "value": format_number(money_sum(orders, "od_misu")), "hint": _("Remaining balance")},
         ]
 
@@ -984,7 +1122,7 @@ class ShopOrderAdmin(ModelAdmin):
         elif receipt_state == "requested":
             orders = orders.filter(Q(od_tax_invoice_request=True) | Q(od_cash_request=True))
         elif receipt_state == "proof_needed":
-            orders = orders.filter(od_receipt_price__gt=0, od_cash_no="", od_tno="", od_app_no="")
+            orders = orders.filter(has_net_receipt(), od_cash_no="", od_tno="", od_app_no="")
 
         if shipping_state == "waiting_invoice":
             orders = orders.filter(od_receipt_price__gt=0, od_cancel_price__lte=0, od_invoice="")
@@ -1156,23 +1294,25 @@ class ShopOrderAdmin(ModelAdmin):
         if export_type == "receipts":
             return self.receipts_csv(orders, personal_pays)
 
-        paid_orders = orders.filter(od_receipt_price__gt=0, od_misu__lte=0)
+        paid_orders = orders.filter(od_receipt_price__gt=0, od_misu__lte=0, od_cancel_price__lte=0)
         outstanding_orders = orders.filter(od_misu__gt=0)
         cancelled_orders = orders.filter(od_cancel_price__gt=0)
         cash_receipt_orders = orders.exclude(od_cash_no="")
-        receipt_proof_needed = orders.filter(od_receipt_price__gt=0, od_cash_no="", od_tno="", od_app_no="")
+        receipt_proof_needed = orders.filter(has_net_receipt(), od_cash_no="", od_tno="", od_app_no="")
         shipping_queue = paid_orders.filter(od_cancel_price__lte=0, od_invoice="")
         personal_pay_due = personal_pays.filter(active=True, pp_price__gt=0, pp_receipt_price__lte=0)
 
         metrics = [
             {"label": _("Orders"), "value": format_number(orders.count()), "hint": _("%(count)s items") % {"count": format_number(order_items.count())}},
-            {"label": _("Receipt total"), "value": format_number(money_sum(orders, "od_receipt_price")), "hint": _("Paid and confirmed")},
+            {"label": _("Receipt total"), "value": format_number(money_sum(orders, net_receipt_expression())), "hint": _("Paid and confirmed")},
             {"label": _("Tax base"), "value": format_number(money_sum(orders, "od_tax_mny")), "hint": _("Order amount excluding VAT")},
             {"label": _("VAT"), "value": format_number(money_sum(orders, "od_vat_mny")), "hint": _("Calculated order VAT")},
             {"label": _("Tax exempt"), "value": format_number(money_sum(orders, "od_free_mny")), "hint": _("Tax-exempt product amount")},
             {"label": _("Outstanding"), "value": format_number(money_sum(orders, "od_misu")), "hint": _("Unpaid balance")},
             {"label": _("Cancelled"), "value": format_number(money_sum(orders, "od_cancel_price")), "hint": _("%(count)s orders") % {"count": format_number(cancelled_orders.count())}},
-            {"label": _("Cash receipts"), "value": format_number(cash_receipt_orders.count()), "hint": format_number(money_sum(cash_receipt_orders, "od_receipt_price"))},
+            # a cancelled paid order keeps its receipt; the refund is what went back
+            {"label": "환불금액", "value": format_number(money_sum(orders, "od_refund_price")), "hint": "PG 승인취소와 직접 환불"},
+            {"label": _("Cash receipts"), "value": format_number(cash_receipt_orders.count()), "hint": format_number(money_sum(cash_receipt_orders, net_receipt_expression()))},
             {"label": _("Coupon discount"), "value": format_number(money_sum(coupon_logs, "cp_price")), "hint": _("%(count)s usage logs") % {"count": format_number(coupon_logs.count())}},
             {"label": _("Personal pay"), "value": format_number(money_sum(personal_pays, "pp_receipt_price")), "hint": _("%(count)s requests") % {"count": format_number(personal_pays.count())}},
             {"label": _("Raw PG logs"), "value": format_number(raw_logs.count()), "hint": _("Imported order data")},
@@ -1298,14 +1438,14 @@ class ShopOrderAdmin(ModelAdmin):
             "receipt_command_queue": receipt_command_queue,
             "settlement_pipeline": settlement_pipeline,
             "sales_series": sales_series(orders, period),
-            "status_rows": grouped_money(orders, "od_status", "od_receipt_price"),
-            "settle_rows": grouped_money(orders, "od_settle_case", "od_receipt_price"),
-            "pg_rows": grouped_money(orders, "od_pg", "od_receipt_price"),
+            "status_rows": grouped_money(orders, "od_status", net_receipt_expression()),
+            "settle_rows": grouped_money(orders, "od_settle_case", net_receipt_expression()),
+            "pg_rows": grouped_money(orders, "od_pg", net_receipt_expression()),
             "receipt_rows": [
-                report_row(_("Paid"), paid_orders, "od_receipt_price"),
+                report_row(_("Paid"), paid_orders, net_receipt_expression()),
                 report_row(_("Outstanding"), outstanding_orders, "od_misu"),
                 report_row(_("Cancelled"), cancelled_orders, "od_cancel_price"),
-                report_row(_("Cash receipt"), cash_receipt_orders, "od_receipt_price"),
+                report_row(_("Cash receipt"), cash_receipt_orders, net_receipt_expression()),
             ],
             "top_coupons": top_coupons,
             "coupon_summary": {
@@ -1338,6 +1478,7 @@ class ShopOrderAdmin(ModelAdmin):
                 "od_cart_price",
                 "od_receipt_price",
                 "od_cancel_price",
+                "od_refund_price",
                 "od_misu",
                 "od_coupon",
                 "od_send_coupon",
@@ -1362,6 +1503,7 @@ class ShopOrderAdmin(ModelAdmin):
                     order.od_cart_price,
                     order.od_receipt_price,
                     order.od_cancel_price,
+                    order.od_refund_price,
                     order.od_misu,
                     order.od_coupon,
                     order.od_send_coupon,
@@ -1628,6 +1770,17 @@ class ShopOrderDataAdmin(ModelAdmin):
         ),
     )
     list_fullwidth = True
+
+    # Raw PG responses and the cart snapshot a cancelled order restores: evidence, not data to
+    # edit or delete. They are written only by the order and payment paths.
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
     @admin.display(description=_("Log ID"), ordering="log_id")
     def log_id_display(self, obj):

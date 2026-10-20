@@ -3,6 +3,7 @@ import json
 from django.core.management.base import BaseCommand, CommandError
 
 from gnu_jango.api import v1_shop
+from gnu_jango.api.shop_common import CANCELLED_STATUSES
 from gnu_jango.shop.models import ShopOrder
 
 
@@ -82,8 +83,11 @@ class Command(BaseCommand):
         return providers & set(v1_shop.PAYMENT_ADAPTER_PROVIDERS)
 
     def orders(self, providers, order_ids, limit):
+        # a cancelled order keeps its receipt next to the refund; it has nothing left to verify
+        # or issue a cash receipt for
         queryset = (
-            ShopOrder.objects.filter(od_receipt_price__gt=0)
+            ShopOrder.objects.filter(od_receipt_price__gt=0, od_refund_price__lte=0)
+            .exclude(od_status__in=CANCELLED_STATUSES)
             .exclude(od_pg="")
             .exclude(od_pg__iexact="bank")
             .order_by("-od_datetime", "-od_id")

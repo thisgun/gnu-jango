@@ -44,6 +44,17 @@ from gnu_jango.utils.admin_display import (
 )
 
 
+def net_receipt_expression():
+    """What the shop kept of an order's payment: od_receipt_price - od_refund_price (a cancelled
+    paid order keeps its receipt as the record of the payment, next to the refund)."""
+    return ExpressionWrapper(F("od_receipt_price") - F("od_refund_price"), output_field=IntegerField())
+
+
+def has_net_receipt():
+    """Orders that kept some of their payment (not fully refunded)."""
+    return Q(od_receipt_price__gt=F("od_refund_price"))
+
+
 def report_date_range(request):
     start = parse_date(str(request.GET.get("date_from") or request.GET.get("start") or ""))
     end = parse_date(str(request.GET.get("date_to") or request.GET.get("end") or ""))
@@ -94,7 +105,7 @@ def sales_series(queryset, period):
         .values("period_value")
         .annotate(
             order_count=Count("pk"),
-            receipt_price=Sum("od_receipt_price"),
+            receipt_price=Sum(net_receipt_expression()),
             cancel_price=Sum("od_cancel_price"),
             coupon_price=Sum("od_coupon"),
             tax_base=Sum("od_tax_mny"),
@@ -353,7 +364,8 @@ class ReceiptStateFilter(DropdownFilter):
     def queryset(self, request, queryset):
         value = self.value()
         if value == "paid":
-            return queryset.filter(od_receipt_price__gt=0, od_misu__lte=0)
+            # a cancelled order keeps its receipt next to the refund: it is not "paid"
+            return queryset.filter(od_receipt_price__gt=0, od_misu__lte=0, od_cancel_price__lte=0)
         if value == "outstanding":
             return queryset.filter(od_misu__gt=0)
         if value == "cancelled":
@@ -363,7 +375,7 @@ class ReceiptStateFilter(DropdownFilter):
         if value == "requested":
             return queryset.filter(Q(od_tax_invoice_request=True) | Q(od_cash_request=True))
         if value == "proof_needed":
-            return queryset.filter(od_receipt_price__gt=0, od_cash_no="", od_tno="", od_app_no="")
+            return queryset.filter(has_net_receipt(), od_cash_no="", od_tno="", od_app_no="")
         return queryset
 
 
@@ -447,12 +459,41 @@ class PersonalPayDateFilter(DatePeriodFilter):
 
 
 class ShopOrderItemInline(TabularInline):
+    """The order lines, for reading only. Editing a line's status, quantity, price or stock flag
+    here changed neither the stock nor the order amounts, and adding or deleting lines left the
+    order total wrong: lines move with the order's status actions (a partial cancel would be its
+    own feature, youngcart orderpartcancel.php)."""
+
     model = ShopOrderItem
     extra = 0
+    max_num = 0
+    can_delete = False
     tab = True
     show_count = True
-    readonly_fields = ("ct_notax", "line_total")
-    fields = ("ct_id", "it_id", "it_name", "ct_status", "ct_price", "ct_qty", "ct_notax", "line_total", "stock_adjusted")
+    fields = (
+        "ct_id",
+        "it_id",
+        "it_name",
+        "ct_option",
+        "ct_status",
+        "ct_price",
+        "io_price",
+        "ct_qty",
+        "ct_point",
+        "ct_notax",
+        "line_total",
+        "stock_adjusted",
+    )
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
     @admin.display(description=_("Line total"))
     def line_total(self, obj):
@@ -468,6 +509,13 @@ class ShopOrderDataInline(TabularInline):
     readonly_fields = ("log_id", "dt_pg", "cart_id", "dt_time", "dt_data_excerpt")
     fields = ("log_id", "dt_pg", "cart_id", "dt_time", "dt_data_excerpt")
     can_delete = False
+    max_num = 0
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
     @admin.display(description=_("Raw data"))
     def dt_data_excerpt(self, obj):

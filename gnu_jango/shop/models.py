@@ -631,6 +631,10 @@ class ShopOrder(models.Model):
     od_b_addr2 = models.CharField(max_length=255, blank=True, default="")
     od_b_addr3 = models.CharField(max_length=255, blank=True, default="")
     od_memo = models.TextField(blank=True, default="")
+    # youngcart od_shop_memo / od_mod_history: an admin-only memo, and the log of admin changes
+    # (status moves, cancellations, refunds); neither is shown to the customer.
+    od_shop_memo = models.TextField("관리자 메모", blank=True, default="")
+    od_mod_history = models.TextField("주문 변경 이력", blank=True, default="")
     # youngcart 희망배송일 (de_hope_date_use); empty when the shop does not ask for one.
     od_hope_date = models.DateField(null=True, blank=True)
     od_cart_price = models.IntegerField(default=0)
@@ -638,6 +642,9 @@ class ShopOrder(models.Model):
     od_send_cost2 = models.IntegerField(default=0)
     od_receipt_price = models.IntegerField(default=0)
     od_cancel_price = models.IntegerField(default=0)
+    # youngcart od_refund_price: what was paid back (PG cancel or a manual bank refund);
+    # od_receipt_price keeps what the customer paid.
+    od_refund_price = models.IntegerField("환불금액", default=0)
     od_receipt_point = models.IntegerField(default=0)
     od_bank_account = models.CharField(_("Bank account"), max_length=255, blank=True, default="")
     od_vbank_bank_code = models.CharField(max_length=10, blank=True, default="")
