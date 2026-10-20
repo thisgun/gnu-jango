@@ -11,6 +11,14 @@ from gnu_jango.api.shop_common import CANCELLED_STATUSES
 # YoungCart order states an operator moves an order through (adm/shop_admin/orderlist.php).
 ADMIN_ORDER_STATUSES = ("주문", "입금", "준비", "배송", "완료", "취소")
 
+HOPE_DATE_LABEL = "희망배송일"
+KOREAN_WEEKDAYS = ("월", "화", "수", "목", "금", "토", "일")
+
+
+def hope_date_label(value):
+    """2026-10-25 (일), as youngcart's order view shows the hoped-for delivery date."""
+    return f"{value.isoformat()} ({KOREAN_WEEKDAYS[value.weekday()]})" if value else "-"
+
 
 def set_order_status(order, status, reason):
     """Move an order to ``status``: its items follow, and a cancellation goes through the shared
@@ -91,6 +99,13 @@ class ShopOrderAdmin(ModelAdmin):
             self.message_user(request, f"주문 {changed}건을 '{status}' 상태로 바꿨습니다.", messages.SUCCESS)
         if skipped:
             self.message_user(request, f"이미 취소된 주문 {skipped}건은 바꾸지 않았습니다.", messages.WARNING)
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        field = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name == "od_hope_date" and field is not None:
+            field.label = HOPE_DATE_LABEL
+            field.help_text = "주문서에서 고객이 고른 희망배송일입니다. 희망배송일을 쓰지 않으면 비어 있습니다."
+        return field
 
     def save_model(self, request, obj, form, change):
         changed = set(getattr(form, "changed_data", ()) or ())
@@ -191,6 +206,7 @@ class ShopOrderAdmin(ModelAdmin):
                 "classes": ("tab",),
                 "fields": (
                     ("od_delivery_company", "od_invoice", "od_invoice_time"),
+                    ("od_hope_date",),
                 ),
             },
         ),
@@ -714,6 +730,7 @@ class ShopOrderAdmin(ModelAdmin):
                 (_("Carrier and invoice"), compact_text(obj.od_delivery_company, obj.od_invoice), obj.od_invoice_time or "-"),
                 (_("Recipient"), obj.od_b_name or "-", compact_text(obj.od_b_hp, obj.od_b_tel)),
                 (_("Recipient address"), recipient_address, _("Copy this into shipping tools when needed.")),
+                *(((HOPE_DATE_LABEL, hope_date_label(obj.od_hope_date), ""),) if obj.od_hope_date else ()),
                 (_("Shipping edit target"), _("Shipping tab"), _("Carrier, invoice, and invoice time fields.")),
             ),
         )

@@ -114,6 +114,7 @@ from .shop_coupons import (
     valid_coupons_queryset,
     validated_item_coupons,
 )
+from .shop_order_options import guest_privacy_html, hope_date_range, order_hope_date
 from .shop_cart import (
     refresh_cart_prices,
     address_detail_view,  # noqa: F401 - re-exported for existing importers
@@ -602,6 +603,7 @@ def order_payload(order, *, detail=False):
         "od_b_addr2": order.od_b_addr2,
         "od_b_addr3": order.od_b_addr3,
         "od_memo": order.od_memo,
+        "od_hope_date": order.od_hope_date.isoformat() if order.od_hope_date else "",
         "od_cart_price": order.od_cart_price,
         "od_send_cost": order.od_send_cost,
         "od_send_cost2": order.od_send_cost2,
@@ -686,6 +688,7 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
             "장바구니 금액에 변동사항이 있습니다. 장바구니를 다시 확인해 주세요.",
             code="cart_price_changed",
         )
+    hope_date = order_hope_date(data)
     order_id = order_id or generate_numeric_order_id()
     selected_ct_ids = {str(item["ct_id"]) for item in cart["items"]}
     cart_total = cart["total_price"]
@@ -899,6 +902,7 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
             od_b_addr2=str(data.get("od_b_addr2") or data.get("od_addr2") or ""),
             od_b_addr3=str(data.get("od_b_addr3") or data.get("od_addr3") or ""),
             od_memo=str(data.get("od_memo") or ""),
+            od_hope_date=hope_date,
             od_cart_price=cart_total,
             od_send_cost=send_cost,
             od_send_cost2=send_cost2,
@@ -1646,6 +1650,8 @@ def payment_config_view(request):
             "cash_receipt": cash_receipt,
             "easy_pay_services": ["tosspay"] if methods["easy_pay"] else [],
             "bank_accounts": bank_accounts,
+            "hope_date": hope_date_range(),
+            "guest_privacy": guest_privacy_html(),
             "is_test_mode": toss_config["is_test_mode"],
             "providers": {
                 "toss": {
