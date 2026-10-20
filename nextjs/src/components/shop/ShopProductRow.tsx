@@ -5,11 +5,10 @@ import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import type { ShopProduct } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
+import { shopRowItemClass, shopRowLimit, shopRowStyle, type ShopHomeSectionDisplay } from "@/lib/shop-display";
 import { cn } from "@/lib/utils";
 import { SoluneProductCard } from "./SoluneProductCard";
 
-/** 쇼핑 홈 진열 줄 · 후기 줄에 싣는 개수 — 레퍼런스 lib/shop-home.ts 의 SHOP_HOME_ROW_LIMIT 와 같다. */
-export const SHOP_HOME_ROW_LIMIT = 12;
 
 interface ShopProductRowProps {
   eyebrow: string;
@@ -21,6 +20,11 @@ interface ShopProductRowProps {
   productRewriteMode?: BbsRewriteMode;
   /** 마지막 한 장을 반쯤 걸쳐 둔다(레퍼런스 peek — 2.5 · 3.5 · 4.5 · 5.5칸). 아니면 2 · 3 · 4 · 5칸. */
   peek?: boolean;
+  /**
+   * 관리자 진열 설정(1줄당 상품 수 · 표시 수, PC/모바일). 주면 한 화면 칸 수를 그 값으로 두고, 폰에서는
+   * 모바일 수 · 넓은 화면에서는 PC 수를 넘는 상품을 CSS 로 감춘다. 없으면 기본 칸 수(2.5 ~ 5.5)로 모두 보인다.
+   */
+  display?: ShopHomeSectionDisplay;
   className?: string;
 }
 
@@ -132,6 +136,7 @@ export function ShopProductRow({
   viewAllHref,
   productRewriteMode,
   peek = true,
+  display,
   className,
 }: ShopProductRowProps) {
   const headingId = useId();
@@ -180,6 +185,7 @@ export function ShopProductRow({
   };
 
   if (products.length === 0) return null;
+  const shown = display ? products.slice(0, shopRowLimit(display)) : products;
 
   return (
     <section className={cn("solune-shop-product-section solune-shop-row", className)} aria-labelledby={headingId}>
@@ -224,11 +230,13 @@ export function ShopProductRow({
         ref={trackRef}
         className="swiper solune-shop-swiper solune-shop-scroll-track"
         data-solune-swiper-peek={peek ? "1" : undefined}
+        data-solune-row-display={display ? "1" : undefined}
+        style={display ? shopRowStyle(display, peek) : undefined}
         onScroll={sync}
       >
         <div className="swiper-wrapper sct">
-          {products.map((product, index) => (
-            <div key={product.it_id} className="swiper-slide">
+          {shown.map((product, index) => (
+            <div key={product.it_id} className={cn("swiper-slide", display && shopRowItemClass(index, display))}>
               <SoluneProductCard product={product} priority={index < 2} productRewriteMode={productRewriteMode} />
             </div>
           ))}

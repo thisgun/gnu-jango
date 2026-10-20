@@ -8,6 +8,7 @@ import type { ShopProduct } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
 import { shouldBypassImageOptimization } from "@/lib/image";
 import { shopProductHref } from "@/lib/product-url";
+import { shopGridStyle, type ShopRelatedDisplay } from "@/lib/shop-display";
 import { cn, formatPrice } from "@/lib/utils";
 import { useRecentProductsStore, type RecentProduct } from "@/store/recent-products";
 
@@ -245,16 +246,23 @@ function ProductGridCard({
 export function RelatedProducts({
   items,
   productRewriteMode,
+  display,
 }: {
   items?: ShopProduct[];
   productRewriteMode?: BbsRewriteMode;
+  /** 관리자 진열 설정 — 끄면 그리지 않고(서버도 related_items 를 비운다), 칸 수는 PC · 모바일 1줄당 수. */
+  display?: ShopRelatedDisplay;
 }) {
-  if (!items || items.length === 0) return null;
+  if (!items || items.length === 0 || display?.use === false) return null;
 
   return (
     <section className="product-related mt-12 border-t pt-8">
       <h2 className="product-related-title mb-6 text-xl font-bold">관련 상품</h2>
-      <div className="product-related-grid grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+      <div
+        className={cn("product-related-grid grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4", display && "shop-display-grid")}
+        data-shop-grid={display ? "" : undefined}
+        style={display ? shopGridStyle(display.mobile_cols, display.pc_cols) : undefined}
+      >
         {items.map((item) => (
           <ProductGridCard
             key={item.it_id}

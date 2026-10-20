@@ -14,6 +14,7 @@ import { applyClientPageMetadata } from "@/lib/client-metadata";
 import { currentPathForRuntime } from "@/lib/config";
 import { shouldBypassImageOptimization } from "@/lib/image";
 import { shopProductHref } from "@/lib/product-url";
+import { DEFAULT_SHOP_LIST_DISPLAY, shopGridStyle, shopListDisplayOf, type ShopListDisplay } from "@/lib/shop-display";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import { cn, formatPrice } from "@/lib/utils";
 import { useShopProductSuggest } from "@/hooks/useShopProductSuggest";
@@ -139,6 +140,8 @@ export default function ProductListPage() {
   const [searchInput, setSearchInput] = useState(searchParams.get("q") || "");
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [productRewriteMode, setProductRewriteMode] = useState<BbsRewriteMode>(0);
+  // 한 쪽 상품 수 · 칸 수(관리자 진열 설정). 받기 전에는 목록을 부르지 않는다 — 쪽 크기가 바뀌면 쪽 번호가 어긋난다.
+  const [listDisplay, setListDisplay] = useState<ShopListDisplay | null>(null);
   const { items: suggestItems } = useShopProductSuggest(searchInput, suggestOpen);
 
   const currentPage = Number(searchParams.get("page") || "1");
@@ -179,10 +182,14 @@ export default function ProductListPage() {
     let alive = true;
     getClientPublicSettings()
       .then((settings) => {
-        if (alive) setProductRewriteMode(settings.cf_bbs_rewrite);
+        if (!alive) return;
+        setProductRewriteMode(settings.cf_bbs_rewrite);
+        setListDisplay(shopListDisplayOf(settings));
       })
       .catch(() => {
-        if (alive) setProductRewriteMode(0);
+        if (!alive) return;
+        setProductRewriteMode(0);
+        setListDisplay(DEFAULT_SHOP_LIST_DISPLAY);
       });
 
     return () => {
@@ -190,13 +197,18 @@ export default function ProductListPage() {
     };
   }, []);
 
+  // 히트 · 추천 · 최신 · 인기 · 할인 목록(/shop/type-N, 유형 칩)은 유형별 목록 설정, 나머지(검색 · 전체)는 검색결과 설정.
+  const grid = (listDisplay ?? DEFAULT_SHOP_LIST_DISPLAY)[effectiveTypeKey ? "listtype" : "search"];
+  const perPage = listDisplay ? grid.per_page : 0;
+
   useEffect(() => {
+    if (!perPage) return;
     const loadProducts = async () => {
       setLoading(true);
       try {
         const params: ShopProductParams = {
           page: String(currentPage),
-          per_page: "20",
+          per_page: String(perPage),
         };
         if (sort) params.sort = sort;
         if (sortodr) params.sortodr = sortodr;
@@ -231,7 +243,7 @@ export default function ProductListPage() {
     };
 
     loadProducts();
-  }, [currentPage, sort, sortodr, caId, query, priceFrom, priceTo, searchParams, effectiveTypeKey, explicitTypeKey]);
+  }, [currentPage, perPage, sort, sortodr, caId, query, priceFrom, priceTo, searchParams, effectiveTypeKey, explicitTypeKey]);
 
   const activeChip = TYPE_CHIPS.find((chip) => chip.key === effectiveTypeKey);
   const listTitle = query ? `상품 검색: ${query}` : activeChip ? `${activeChip.label} 상품` : "상품 목록";
@@ -359,8 +371,14 @@ export default function ProductListPage() {
           <p className="mt-1 text-sm text-muted-foreground">다른 검색어나 필터를 사용해보세요.</p>
         </div>
       ) : (
-        // 리스트/갤러리 모양은 data-view 를 보고 CSS 가 정한다. --all 은 넓은 화면에서 한 줄에 다섯(레퍼런스 listtype.php).
-        <div className="shop-product-list shop-product-list--all grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4" data-view={listView}>
+        // 리스트/갤러리 모양은 data-view 를 보고 CSS 가 정한다. 갤러리 칸 수는 진열 설정(PC · 모바일 1줄당 수)을
+        // solune-shop.display.css 가 단계별로 건다(기본 2 · 3 · 4 · 5 — 레퍼런스 listtype.php).
+        <div
+          className="shop-product-list shop-product-list--all shop-display-grid grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4"
+          data-view={listView}
+          data-shop-grid=""
+          style={shopGridStyle(grid.mobile_cols, grid.pc_cols)}
+        >
           {products.map((product, index) => (
             <SoluneProductCard
               key={product.it_id}

@@ -29,6 +29,7 @@ import {
   getShopProductReviewPage,
 } from "@/services/shop";
 import { getClientPublicSettings } from "@/services/settings";
+import { DEFAULT_SHOP_LIST_DISPLAY, shopListDisplayOf, type ShopRelatedDisplay } from "@/lib/shop-display";
 import { addProductToCart, toastAddedToCart } from "@/components/shop/addProductToCart";
 import {
   cartIdsFromAddResponse,
@@ -103,6 +104,7 @@ export default function ProductDetailClient({
   const [addingToCart, setAddingToCart] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [productRewriteMode, setProductRewriteMode] = useState<BbsRewriteMode>(0);
+  const [relatedDisplay, setRelatedDisplay] = useState<ShopRelatedDisplay>(DEFAULT_SHOP_LIST_DISPLAY.related);
   const addRecentProduct = useRecentProductsStore((s) => s.addProduct);
   const trackedViewItemIdRef = useRef<string | null>(null);
   const {
@@ -152,7 +154,9 @@ export default function ProductDetailClient({
     let alive = true;
     getClientPublicSettings()
       .then((settings) => {
-        if (alive) setProductRewriteMode(settings.cf_bbs_rewrite);
+        if (!alive) return;
+        setProductRewriteMode(settings.cf_bbs_rewrite);
+        setRelatedDisplay(shopListDisplayOf(settings).related);
       })
       .catch(() => {
         if (alive) setProductRewriteMode(0);
@@ -631,6 +635,7 @@ export default function ProductDetailClient({
       product={product}
       itId={it_id}
       productRewriteMode={productRewriteMode}
+      relatedDisplay={relatedDisplay}
       selectedImage={selectedImage}
       onSelectedImageChange={setSelectedImage}
       lightboxOpen={lightboxOpen}
