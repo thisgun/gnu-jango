@@ -1,7 +1,10 @@
 from gnu_jango.shop.admin._common import *  # noqa: F401,F403
+from functools import update_wrapper
+
 from django import forms
 from django.db import transaction
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
@@ -776,27 +779,26 @@ class ShopOrderAdmin(ModelAdmin):
     def _snapshot_panel(self, title, state, tone, description, cards):
         return snapshot_panel(title, state, tone, description, cards)
 
+    def order_report_view(self, view):
+        """An order report or export: it lists customers' names, phones and addresses, so it needs
+        the view permission on orders, not just a staff account."""
+
+        def guarded(request, *args, **kwargs):
+            if not self.has_view_permission(request):
+                raise PermissionDenied
+            return view(request, *args, **kwargs)
+
+        return self.admin_site.admin_view(update_wrapper(guarded, view))
+
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
-            path(
-                "reports/",
-                self.admin_site.admin_view(self.reports_view),
-                name="shop_shoporder_reports",
-            ),
-            path(
-                "sales-rank/",
-                self.admin_site.admin_view(self.sales_rank_view),
-                name="shop_shoporder_sales_rank",
-            ),
-            path(
-                "order-print/",
-                self.admin_site.admin_view(self.order_print_view),
-                name="shop_shoporder_print",
-            ),
+            path("reports/", self.order_report_view(self.reports_view), name="shop_shoporder_reports"),
+            path("sales-rank/", self.order_report_view(self.sales_rank_view), name="shop_shoporder_sales_rank"),
+            path("order-print/", self.order_report_view(self.order_print_view), name="shop_shoporder_print"),
             path(
                 "unresolved/",
-                self.admin_site.admin_view(self.unresolved_orders_view),
+                self.order_report_view(self.unresolved_orders_view),
                 name="shop_shoporder_unresolved",
             ),
         ]
