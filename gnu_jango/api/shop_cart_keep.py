@@ -94,3 +94,9 @@ def reset_guest_cart_session(request):
         return
     if session.pop(GUEST_CART_KEEP_FLAG, None) is not None:
         session.set_expiry(None)
+
+
+def reset_guest_cart_session_on_login(sender, request, user, **kwargs):
+    """user_logged_in receiver: a signed-in session keeps the default lifetime."""
+    if request is not None:
+        reset_guest_cart_session(request)

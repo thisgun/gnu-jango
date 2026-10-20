@@ -228,6 +228,18 @@ class GuestCartLifetimeTests(CartSettingsBase):
         self.assertNotIn(SHOP_CART_SESSION_KEY, session)
         self.assertEqual(len(self.member_rows()), 1)
 
+    def test_a_django_session_sign_in_also_resets_the_long_lifetime(self):
+        # e.g. a staff member who shopped as a guest and then signs in at /admin/login/
+        self.set_option("de_guest_cart_use", 1)
+        self.add(self.guest)
+        self.assertEqual(self.guest.session.get_expiry_age(), 15 * SECONDS_PER_DAY)
+
+        self.guest.force_login(get_user_model().objects.get(username="keeper"))
+
+        session = self.guest.session
+        self.assertEqual(session.get_expiry_age(), settings.SESSION_COOKIE_AGE)
+        self.assertNotIn(GUEST_CART_KEEP_FLAG, session)
+
 
 class LoginMergeKeepTermTests(CartSettingsBase):
     def test_expired_guest_and_member_lines_are_not_carried_over_at_sign_in(self):

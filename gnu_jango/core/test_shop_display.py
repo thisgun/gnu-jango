@@ -127,6 +127,13 @@ class PublicSettingsDisplayTests(DisplayBase):
         search = self.data("/api/v1/settings")["shop_display"]["search"]
         self.assertEqual(search, {"pc_cols": 8, "rows": 1, "per_page": 8, "mobile_cols": 2})
 
+    def test_page_size_never_exceeds_what_the_products_api_serves(self):
+        # rows are capped at 12 (8 x 12 = 96); a stored larger value is clamped as well
+        set_options(de_listtype_list_mod=8, de_listtype_list_row=20)
+        listtype = self.data("/api/v1/settings")["shop_display"]["listtype"]
+        self.assertEqual(listtype["rows"], 12)
+        self.assertLessEqual(listtype["per_page"], 100)
+
 
 class RelatedProductsSwitchTests(DisplayBase):
     def setUp(self):

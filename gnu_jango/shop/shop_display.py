@@ -10,6 +10,8 @@ The admin saves these as Config rows; this module only shapes them for the APIs:
 
 from .shop_options import HOME_LIST_TYPES, shop_logo_urls, shop_options
 
+MAX_PRODUCT_PAGE_SIZE = 100  # paginate_queryset's max_per_page in api/shop_common.py
+
 # Public API name -> Config row of the uploaded logo.
 PUBLIC_LOGO_FIELDS = {
     "shop_logo": "de_logo_img",
@@ -54,7 +56,8 @@ def _grid(values, prefix):
     return {
         "pc_cols": pc_cols,
         "rows": rows,
-        "per_page": pc_cols * rows,
+        # the products API serves at most MAX_PRODUCT_PAGE_SIZE per page
+        "per_page": min(MAX_PRODUCT_PAGE_SIZE, pc_cols * rows),
         "mobile_cols": values[f"de_mobile_{prefix}_list_mod"],
     }
 

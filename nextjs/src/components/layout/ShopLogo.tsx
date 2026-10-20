@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import type { PublicSettings } from "@/lib/schemas";
 
 /** 로고를 모바일 그림으로 바꾸는 폭 — 헤더 · 푸터가 폰 모양으로 바뀌는 폭과 같다. */
@@ -41,12 +44,18 @@ export function ShopLogoPicture({
   width?: number;
   height?: number;
 }) {
-  const main = sources.pc || fallbackSrc || sources.mobile;
+  // 올린 파일을 불러오지 못하면(지워졌으면) 기본 로고로 돌아간다.
+  const uploaded = sources.pc || sources.mobile;
+  const [failedSrc, setFailedSrc] = useState("");
+  const useFallback = Boolean(fallbackSrc) && failedSrc !== "" && failedSrc === uploaded;
+  const main = useFallback ? fallbackSrc : sources.pc || fallbackSrc || sources.mobile;
   if (!main) return null;
-  const usesUpload = Boolean(sources.pc || !fallbackSrc);
+  const usesUpload = !useFallback && Boolean(sources.pc || !fallbackSrc);
   return (
     <picture className="solune-brand-picture">
-      {sources.mobile && sources.mobile !== main ? <source media={SHOP_LOGO_MOBILE_MEDIA} srcSet={sources.mobile} /> : null}
+      {!useFallback && sources.mobile && sources.mobile !== main ? (
+        <source media={SHOP_LOGO_MOBILE_MEDIA} srcSet={sources.mobile} />
+      ) : null}
       <img
         className={[className, usesUpload ? "solune-brand-logo--uploaded" : ""].filter(Boolean).join(" ")}
         src={main}
@@ -54,6 +63,7 @@ export function ShopLogoPicture({
         width={usesUpload ? undefined : width}
         height={usesUpload ? undefined : height}
         decoding="async"
+        onError={() => setFailedSrc(uploaded)}
       />
     </picture>
   );

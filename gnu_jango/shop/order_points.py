@@ -136,10 +136,12 @@ def _award_line(pk):
 def save_order_points(now=None, *, limit=DEFAULT_BATCH_LIMIT, dry_run=False):
     """Pay the purchase points of lines that have been 완료 for de_point_days days.
 
-    While cf_use_point is off nothing is paid or marked, so the points the order promised are
-    paid once points are switched back on (youngcart instead marks those lines handled and the
-    member never gets them). A 완료 line without ct_complete_time (completed by a path that did
-    not stamp it) starts its clock now instead of being paid at once.
+    While cf_use_point is off nothing is paid or marked, so lines that already carry a point (ordered
+    while points were on) are paid once points are switched back on; youngcart instead marks them
+    handled and the member never gets them. Lines ordered while points were off carry ct_point 0
+    (as in youngcart's cartupdate.php) and never earn anything. A 완료 line without
+    ct_complete_time (completed by a path that did not stamp it) starts its clock now instead of
+    being paid at once.
     """
     now = now or timezone.now()
     summary = {"applied": not dry_run, "due": 0, "awarded": 0, "points": 0, "marked": 0, "stamped": 0}
