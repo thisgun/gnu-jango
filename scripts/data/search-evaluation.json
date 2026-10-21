@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "description": "2026-10-21 공개 데모 게시글·상품·핸드북을 기준으로 사람이 정한 검색 정답표. 고객 문의 로그가 아닙니다.",
+  "sites": {
+    "demo": "https://gnu-jango-demo.vercel.app",
+    "handbook": "https://gnu-jango-handbook.vercel.app"
+  },
+  "cases": [
+    {"id":"manual-board","site":"handbook","category":"document","query":"게시판은 어떻게 만드나요","expected":[{"type":"document","title":"게시판 만들기","bo_table":"hb_board"}]},
+    {"id":"manual-level","site":"handbook","category":"document","query":"회원 등급별로 접근 권한을 바꾸려면","expected":[{"type":"document","title":"회원 등급과 접근 권한","bo_table":"hb_member"}]},
+    {"id":"manual-guest","site":"handbook","category":"document","query":"비회원이 댓글을 쓰게 하려면","expected":[{"type":"document","title":"비회원 글쓰기와 댓글","bo_table":"hb_member"}]},
+    {"id":"manual-spam","site":"handbook","category":"document","query":"스팸을 막는 캡챠 설정","expected":[{"type":"document","title":"스팸과 자동등록방지","bo_table":"hb_member"}]},
+    {"id":"manual-category","site":"handbook","category":"document","query":"상품 분류를 등록하려면","expected":[{"type":"document","title":"상품과 분류 등록하기","bo_table":"hb_shop"}]},
+    {"id":"manual-shipping","site":"handbook","category":"document","query":"주문 배송 상태를 관리하려면","expected":[{"type":"document","title":"배송과 주문 상태 관리","bo_table":"hb_shop"}]},
+    {"id":"manual-payment","site":"handbook","category":"document","query":"결제를 테스트하려면","expected":[{"type":"document","title":"결제 설정과 테스트","bo_table":"hb_shop"}]},
+    {"id":"manual-vbank","site":"handbook","category":"document","query":"가상계좌가 만료되면 어떻게 처리하나요","expected":[{"type":"document","title":"가상계좌 운영 점검","bo_table":"hb_shop"}]},
+    {"id":"manual-pythonanywhere","site":"handbook","category":"document","query":"PythonAnywhere에 설치하는 방법","expected":[{"type":"document","title":"PythonAnywhere에 올리기","bo_table":"hb_deploy"}]},
+    {"id":"manual-env","site":"handbook","category":"document","query":"환경 변수는 어디에 넣나요","expected":[{"type":"document","title":"환경 변수","bo_table":"hb_deploy"}]},
+    {"id":"manual-search-error","site":"handbook","category":"document","query":"검색 결과가 안 나오면","expected":[{"type":"document","title":"검색 오류 해결하기","bo_table":"hb_search"}]},
+    {"id":"manual-search-clicks","site":"handbook","category":"document","query":"인기 검색어와 클릭 기록을 관리하려면","expected":[{"type":"document","title":"검색 순위와 클릭 기록 관리","bo_table":"hb_search"}]},
+    {"id":"post-photo","site":"demo","category":"post","query":"게시글에 사진을 올리려면","expected":[{"type":"post","title":"게시글에 사진을 올리려면 어떻게 하나요?","bo_table":"질문답변"}]},
+    {"id":"post-profile","site":"demo","category":"post","query":"계정 정보 변경","expected":[{"type":"post","title":"계정 정보를 바꾸고 싶어요","bo_table":"질문답변"}]},
+    {"id":"post-mobile","site":"demo","category":"post","query":"모바일로 게시판을 이용하려면","expected":[{"type":"post","title":"모바일에서도 게시판을 이용할 수 있나요?","bo_table":"질문답변"}]},
+    {"id":"post-howto","site":"demo","category":"post","query":"게시판 이용 방법","expected":[{"type":"post","title":"게시판 이용 방법","bo_table":"공지사항"}]},
+    {"id":"product-stand","site":"demo","category":"product","query":"노트북 높이를 올리는 스탠드","expected":[{"type":"product","title":"알루미늄 노트북 스탠드"}]},
+    {"id":"product-mat","site":"demo","category":"product","query":"나무 데스크 매트","expected":[{"type":"product","title":"내추럴 우드 데스크 매트"}]},
+    {"id":"product-mug","site":"demo","category":"product","query":"투명 유리 머그","expected":[{"type":"product","title":"데일리 글라스 머그"}]},
+    {"id":"product-pot","site":"demo","category":"product","query":"커피 드립 포트","expected":[{"type":"product","title":"스테인리스 드립 포트"}]}
+  ]
+}
