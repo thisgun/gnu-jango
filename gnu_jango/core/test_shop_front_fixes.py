@@ -232,6 +232,40 @@ class ItemInfoMigrationTests(TestCase):
         self.assertEqual(rows["M-3"], ("plain notice text", []))
         self.assertEqual(rows["M-4"], ("", []))
 
+    def test_one_unreadable_row_does_not_stop_the_migration(self):
+        migration = importlib.import_module("gnu_jango.shop.migrations.0031_shopproduct_it_info_value")
+        ShopProduct.objects.create(it_id="M-BAD", it_name="bad", it_info_title='a:1:{s:1:"k";s:1:"v";}')
+        ShopProduct.objects.create(it_id="M-OK", it_name="ok", it_info_gubun="wear", it_info_title=WEAR_NOTICE)
+        ShopProduct.objects.create(it_id="M-JSON", it_name="json", it_info_title='[{"key": "origin", "value": "KR"}]')
+        from django.apps import apps
+
+        real = migration.serialized_rows
+
+        def flaky(text):
+            if '"k"' in text:
+                raise ValueError("broken row")
+            return real(text)
+
+        with mock.patch.object(migration, "serialized_rows", side_effect=flaky):
+            migration.move_info_rows(apps, None)
+        products = {p.it_id: p for p in ShopProduct.objects.filter(it_id__startswith="M-")}
+        self.assertEqual(products["M-BAD"].it_info_title, 'a:1:{s:1:"k";s:1:"v";}')
+        self.assertEqual([row["value"] for row in products["M-OK"].it_info_value], ["면 100%", "검정", "M"])
+        self.assertEqual(products["M-JSON"].it_info_value, [{"key": "origin", "title": "", "value": "KR"}])
+
+    def test_the_reverse_step_writes_the_rows_back_as_serialized_text(self):
+        migration = importlib.import_module("gnu_jango.shop.migrations.0031_shopproduct_it_info_value")
+        ShopProduct.objects.create(it_id="M-R", it_name="r", it_info_gubun="wear", it_info_title=WEAR_NOTICE)
+        long_rows = [{"key": f"k{index}", "title": "", "value": "값" * 20} for index in range(10)]
+        ShopProduct.objects.create(it_id="M-LONG", it_name="long", it_info_value=long_rows)
+        from django.apps import apps
+
+        migration.move_info_rows(apps, None)
+        migration.restore_info_title(apps, None)
+        restored = ShopProduct.objects.get(pk="M-R").it_info_title
+        self.assertEqual(restored, WEAR_NOTICE)
+        self.assertEqual(len(ShopProduct.objects.get(pk="M-LONG").it_info_title), 255)
+
     def test_importer_parses_the_serialized_value(self):
         from gnu_jango.core.management.commands.migrate_gnuboard5 import Command
 
