@@ -4,9 +4,10 @@ youngcart overwrites the stock columns with whatever the list form posts. Here e
 new quantity on a locked product row and writes a ShopStockAdjustment entry with the before/after
 quantities, as the single stock adjustment screen does, so the stock history stays complete.
 
-The form also posts the quantity it showed. When the stored quantity no longer matches (an order
-reserved stock meanwhile) the row is left alone and reported, instead of silently overwriting a
-change the admin never saw.
+The form also posts the quantity it showed. When the admin left the quantity as shown, the live
+quantity is kept (an order may have reserved stock meanwhile) and only the switches are saved.
+When the admin typed a new quantity but the stored one no longer matches what was shown, the row
+is left alone and reported, instead of silently overwriting a change the admin never saw.
 """
 
 import re
@@ -86,6 +87,20 @@ def _log(product, scope, before, after, reason, actor, *, io_id="", io_type=None
     )
 
 
+def _resolve_stock(stock, stock_was, before):
+    """(quantity to store, conflict). An untouched field (``stock == stock_was``) keeps the live
+    ``before``; a typed quantity over a quantity that moved meanwhile is a conflict."""
+    if stock_was is not None and stock == stock_was:
+        return before, False
+    if stock != before and stock_was is not None and stock_was != before:
+        return before, True
+    return stock, False
+
+
+def _conflict_message(stock_was, before):
+    return f"화면을 연 뒤 재고가 {stock_was:,}에서 {before:,}(으)로 바뀌어 저장하지 않았습니다. 목록을 새로 고친 뒤 다시 입력하세요."
+
+
 def apply_product_rows(rows, *, actor, reason=DEFAULT_REASON):
     """Save product rows ``{"it_id", "stock", "stock_was", "it_use", "it_soldout",
     "it_stock_sms"}`` (flags are booleans; ``stock`` / ``stock_was`` as posted)."""
@@ -106,11 +121,9 @@ def apply_product_rows(rows, *, actor, reason=DEFAULT_REASON):
                 result.error(it_id, "상품이 없습니다.")
                 continue
             before = int(product.it_stock_qty)
-            if stock != before and stock_was is not None and stock_was != before:
-                result.error(
-                    it_id,
-                    f"화면을 연 뒤 재고가 {stock_was:,}에서 {before:,}(으)로 바뀌어 저장하지 않았습니다. 목록을 새로 고친 뒤 다시 입력하세요.",
-                )
+            stock, conflict = _resolve_stock(stock, stock_was, before)
+            if conflict:
+                result.error(it_id, _conflict_message(stock_was, before))
                 continue
             fields = []
             for name, off_value in FLAG_FIELDS:
@@ -178,11 +191,9 @@ def apply_option_rows(rows, *, actor, reason=DEFAULT_REASON):
                 record = records[position]
                 before = _int_or(record.get("io_stock_qty") or 0, 0)
                 stock_was = parse_quantity(row.get("stock_was"))
-                if stock != before and stock_was is not None and stock_was != before:
-                    result.error(
-                        label,
-                        f"화면을 연 뒤 재고가 {stock_was:,}에서 {before:,}(으)로 바뀌어 저장하지 않았습니다. 목록을 새로 고친 뒤 다시 입력하세요.",
-                    )
+                stock, conflict = _resolve_stock(stock, stock_was, before)
+                if conflict:
+                    result.error(label, _conflict_message(stock_was, before))
                     continue
                 use = 1 if row.get("use") else 0
                 current_use = 0 if _int_or(record.get("io_use", 1), 1) == 0 else 1

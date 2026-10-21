@@ -186,6 +186,14 @@ class StockListTests(SuperuserMixin, TestCase):
         self.assertFalse(ShopStockAdjustment.objects.exists())
         self.assertIn("바뀌어 저장하지 않았습니다", " ".join(str(m) for m in response.wsgi_request._messages))
 
+    def test_switches_still_save_when_only_the_live_stock_moved(self):
+        ShopProduct.objects.filter(pk="S1").update(it_stock_qty=4)  # an order reserved one
+        response = self.post_row(soldout_0="1")  # stock left at the 5 the list showed
+        self.product.refresh_from_db()
+        self.assertEqual((self.product.it_stock_qty, self.product.it_soldout), (4, "1"))
+        self.assertFalse(ShopStockAdjustment.objects.exists())
+        self.assertNotIn("바뀌어 저장하지 않았습니다", " ".join(str(m) for m in response.wsgi_request._messages))
+
     def test_invalid_quantity_is_reported(self):
         self.post_row(stock_0="-3")
         self.product.refresh_from_db()
@@ -235,6 +243,26 @@ class OptionStockListTests(SuperuserMixin, TestCase):
         self.assertEqual(second["io_use"], 0)
         log = ShopStockAdjustment.objects.get()
         self.assertEqual((log.scope, log.io_id, log.io_type, log.before_qty, log.after_qty), ("option", "빨강\x1eS", 0, 3, 8))
+
+    def test_option_switches_save_when_only_the_live_stock_moved(self):
+        options = self.product.options
+        options[0]["io_stock_qty"] = 2  # an order took one meanwhile
+        ShopProduct.objects.filter(pk="O1").update(options=options)
+        data = {
+            "row_count": "1",
+            "it_id_0": "O1", "io_type_0": "0", "io_key_0": quote("빨강\x1eS", safe=""), "stock_was_0": "3", "stock_0": "3", "noti_0": "1",
+        }
+        self.client.post(reverse(self.url), data)
+        self.product.refresh_from_db()
+        first = self.product.options[0]
+        self.assertEqual((first["io_stock_qty"], first["io_noti_qty"], first["io_use"]), (2, 1, 0))
+        self.assertFalse(ShopStockAdjustment.objects.exists())
+
+        # a typed quantity over the moved one is still refused
+        data.update({"stock_was_0": "3", "stock_0": "9", "use_0": "1"})
+        self.client.post(reverse(self.url), data)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.options[0]["io_stock_qty"], 2)
 
     def test_unknown_option_is_reported_not_created(self):
         data = {"row_count": "1", "it_id_0": "O1", "io_type_0": "0", "io_key_0": quote("파랑", safe=""), "stock_was_0": "1", "stock_0": "9", "use_0": "1"}
