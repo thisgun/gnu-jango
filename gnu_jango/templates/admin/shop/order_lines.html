@@ -19,6 +19,7 @@
       고른 상품만 취소(배송 전)·품절(배송 전)·반품(배송·완료 후)으로 바꿉니다. 재고를 되돌리고, 남은 상품으로 배송비와 쿠폰을 다시 계산하며,
       더 받은 결제금액은 토스페이먼츠 카드·계좌이체·간편결제면 PG에서 부분취소하고 그 밖의 결제는 직접 환불할 금액으로 기록합니다.
       모든 상품이 바뀌면 주문 전체가 취소(반품이 있으면 반품)됩니다.
+      수량이 2개 이상인 상품은 바꿀 수량을 줄여 일부만 처리할 수 있습니다(재고·구매포인트도 그 수량만큼만 되돌립니다).
     </p>
   </div>
   <div class="g5-admin-report-filter-actions">
@@ -53,7 +54,7 @@
             <th scope="col">선택</th>
             <th scope="col">상품</th>
             <th scope="col">상태</th>
-            <th scope="col">수량</th>
+            <th scope="col">수량 <small id="ct-qty-help">(바꿀 수량 · 일부만 바꾸면 상품 줄이 나뉩니다)</small></th>
             <th scope="col">금액</th>
             <th scope="col">재고 차감</th>
           </tr>
@@ -68,7 +69,14 @@
             </td>
             <td><label for="ct-chk-{{ line.pk }}">{{ line.label }}</label></td>
             <td><span class="badge g5-admin-badge g5-admin-badge-{{ line.tone }}">{{ line.status }}</span></td>
-            <td>{{ line.qty }}</td>
+            <td>
+              {% if line.selectable %}<input type="hidden" name="ct_cur_{{ line.pk }}" value="{{ line.qty }}">{% endif %}
+              {% if line.selectable and line.qty > 1 %}
+              <label class="sr-only" for="ct-qty-{{ line.pk }}">{{ line.label }} 바꿀 수량</label>
+              <input class="input" type="number" name="ct_qty_{{ line.pk }}" id="ct-qty-{{ line.pk }}" min="1" max="{{ line.qty }}" step="1" value="{{ line.change_qty }}" style="width: 5.5rem" aria-describedby="ct-qty-help">
+              <small>/ {{ line.qty }}</small>
+              {% else %}{{ line.qty }}{% endif %}
+            </td>
             <td>{{ line.amount|intcomma }}</td>
             <td>{% if line.stock_adjusted %}예{% else %}아니오{% endif %}</td>
           </tr>
@@ -110,6 +118,9 @@
   <div class="g5-admin-report-table-wrap">
     <table class="table g5-admin-mini-table">
       <tbody>
+        {% for split in plan.splits %}
+        <tr><th scope="row">수량 분할</th><td colspan="3">{{ split.label }}: {{ split.before }}개 중 {{ split.moved }}개를 {{ plan.target }} 처리하고 {{ split.kept }}개는 그대로 둡니다.{% if split.point_taken %} 이미 지급한 구매포인트 {{ split.point_taken|intcomma }}점을 회수합니다.{% endif %}</td></tr>
+        {% endfor %}
         <tr><th scope="row">남는 상품금액</th><td>{{ plan.cart_price|intcomma }}</td><th scope="row">취소·반품·품절 금액</th><td>{{ plan.cancel_price|intcomma }}</td></tr>
         <tr><th scope="row">배송비</th><td>{{ plan.send_cost|intcomma }} (추가 {{ plan.send_cost2|intcomma }})</td><th scope="row">상품·주문·배송 쿠폰</th><td>{{ plan.cart_coupon|intcomma }} · {{ plan.od_coupon|intcomma }} · {{ plan.send_coupon|intcomma }}</td></tr>
         <tr><th scope="row">주문 합계</th><td>{{ plan.total|intcomma }}</td><th scope="row">결제 · 이미 환불</th><td>{{ plan.paid|intcomma }} · {{ plan.refunded|intcomma }}</td></tr>

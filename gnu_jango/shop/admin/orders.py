@@ -35,8 +35,9 @@ from gnu_jango.shop.order_lines import (
     change_order_lines,
     line_amount,
     line_label,
-    plan_line_change,
+    preview_line_change,
 )
+from gnu_jango.shop.order_line_split import posted_line_quantities
 from gnu_jango.shop.order_points import run_save_order_points_safely, take_back_order_points
 from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES, STATUS_RETURNED
 
@@ -453,17 +454,20 @@ class ShopOrderAdmin(ModelAdmin):
         selected = request.POST.getlist("ct_chk") if request.method == "POST" else []
         reason = str(request.POST.get("reason") or "").strip()[:200]
         plan = None
-        error = ""
-        if request.method == "POST":
+        # 수량: change only some units of a line; the quantity shown guards against a resubmit
+        quantities, expected, error = posted_line_quantities(request.POST, selected)
+        if request.method == "POST" and not error:
             if request.POST.get("step") == "apply":
-                result = change_order_lines(order, selected, target, reason, actor=request.user.get_username())
+                result = change_order_lines(
+                    order, selected, target, reason, actor=request.user.get_username(), quantities=quantities, expected=expected
+                )
                 if result:
                     self.log_change(request, order, f"상품 {len(selected)}건 {target} 처리")
                     self.message_user(request, result.message, messages.WARNING if result.manual_refund else messages.SUCCESS)
                     return redirect(change_url)
                 error = result.message
             else:
-                plan, error = plan_line_change(order, selected, target)
+                plan, error = preview_line_change(order, selected, target, quantities=quantities, expected=expected)
         order.refresh_from_db()
         chosen = {str(value) for value in selected}
         lines = []
@@ -480,6 +484,7 @@ class ShopOrderAdmin(ModelAdmin):
                     "stock_adjusted": item.stock_adjusted,
                     "selectable": not inactive and any(item.ct_status in LINE_SOURCES[value] for value in LINE_TARGETS),
                     "checked": str(item.pk) in chosen,
+                    "change_qty": request.POST.get(f"ct_qty_{item.pk}") or item.ct_qty,
                 }
             )
         context = {

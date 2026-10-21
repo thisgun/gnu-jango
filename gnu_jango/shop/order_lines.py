@@ -8,8 +8,12 @@ are checked against their minimum again, and the shipping fee is worked out over
 lines. What was paid beyond the new total goes back: a Toss card / transfer / easy-pay payment is
 partially cancelled at Toss *before* anything changes here, any other payment is recorded as a
 refund the admin makes by hand. When every line ends up cancelled the order is closed through the
-shared cancel path (stock, coupons and points come back once)."""
+shared cancel path (stock, coupons and points come back once).
 
+Only some units of a line can change too: the line is split first (shop/order_line_split.py) and
+the split-off copy goes through the same change."""
+
+import copy
 import hashlib
 import logging
 from dataclasses import dataclass, field, replace
@@ -20,6 +24,7 @@ from django.db import transaction
 
 from gnu_jango.shop.models import ShopCouponLog, ShopOrder, ShopPersonalPay
 from gnu_jango.shop.order_coupons import order_coupon_totals
+from gnu_jango.shop.order_line_split import split_order_lines
 from gnu_jango.shop.order_flow import (
     StatusChange,
     canonical_status,
@@ -91,8 +96,10 @@ class LineChangePlan:
     pg_refund: int = 0
     full_pg_cancel: bool = False  # every line cancelled, nothing refunded yet: cancel the payment whole
     tax: dict = field(default_factory=dict)
-    # the order and shipping coupon logs whose discount changes: {log pk: new cp_price}
+    # the coupon logs whose discount changes: {log pk: new cp_price}
     coupon_log_prices: dict = field(default_factory=dict)
+    # partial quantities: the lines split so only some of their units change (LineSplit)
+    splits: tuple = ()
 
     @property
     def manual_refund(self):
@@ -182,6 +189,35 @@ def _order_coupons(order, logs, cart_price, cart_coupon, send_cost):
     return od_coupon, send_coupon, log_prices
 
 
+def _split_product_coupons(logs, items, splits, status_of):
+    """The product coupon logs again for lines that kept only some units: a coupon on a split line
+    stays on it (the line keeps the lower pk, so it stays its product's first line) but is judged
+    again on what is left of the product, like an order coupon's minimum. Unchanged logs are
+    returned as they are; changed ones as copies with the new cp_price."""
+    from gnu_jango.api.shop_coupons import coupon_discount
+    from gnu_jango.shop.order_coupons import cart_coupon_lines
+
+    split_lines = {split.original_pk for split in splits}
+    placed = cart_coupon_lines(logs, items)
+    adjusted = []
+    for log in logs:
+        line = placed.get(log.pk)
+        if line is None or line.pk not in split_lines:
+            adjusted.append(log)
+            continue
+        base = sum(
+            line_amount(item)
+            for item in items
+            if str(item.it_id) == str(line.it_id) and str(status_of(item) or "") not in INACTIVE_LINE_STATUSES
+        )
+        price = min(max(0, int(log.cp_price or 0)), coupon_discount(log.coupon, base))
+        if price != int(log.cp_price or 0):
+            log = copy.copy(log)
+            log.cp_price = price
+        adjusted.append(log)
+    return adjusted
+
+
 def _tax_amounts(order, active, coupon_by_line, *, send_cost, send_cost2, od_coupon, send_coupon, payable):
     from gnu_jango.shop.taxes import calculate_order_tax_amounts
 
@@ -232,9 +268,10 @@ def _selection_error(order, selected, target):
     return ""
 
 
-def plan_line_change(order, line_ids, target):
+def plan_line_change(order, line_ids, target, *, splits=()):
     """Work out what changing the lines ``line_ids`` of ``order`` to ``target`` does; returns
-    (plan, "") or (None, the reason in Korean). Nothing is saved."""
+    (plan, "") or (None, the reason in Korean). Nothing is saved. ``splits`` names the lines
+    split_order_lines split already (their product coupons are judged again)."""
     from gnu_jango.shop.shipping import items_shipping_cost
 
     items = list(order.items.select_related("product").order_by("pk"))
@@ -262,6 +299,9 @@ def plan_line_change(order, line_ids, target):
     cart_price = sum(line_amount(item) for item in active)
     cancel_price = sum(line_amount(item) for item in inactive)
     logs = list(order.coupon_logs.select_related("coupon"))
+    stored_prices = {log.pk: int(log.cp_price or 0) for log in logs}
+    if splits:
+        logs = _split_product_coupons(logs, items, splits, status_of)
     # the same product coupon rule as order_misu and the order page (shop/order_coupons.py)
     coupons = order_coupon_totals(order, logs, items=items, status_of=status_of)
     cart_coupon = min(cart_price, coupons.cart)
@@ -335,15 +375,22 @@ def plan_line_change(order, line_ids, target):
             full_pg_cancel=full_pg_cancel,
             tax=tax,
             coupon_log_prices={
-                log.pk: price for log in logs if (price := coupon_log_prices.get(log.pk)) is not None and price != log.cp_price
+                log.pk: price
+                for log in logs
+                if (price := coupon_log_prices.get(log.pk, int(log.cp_price or 0))) != stored_prices[log.pk]
             },
+            splits=tuple(splits),
         ),
         "",
     )
 
 
-def change_order_lines(order, line_ids, target, reason="", *, actor=""):
+def change_order_lines(order, line_ids, target, reason="", *, actor="", quantities=None, expected=None):
     """Change the lines ``line_ids`` of ``order`` to 취소, 반품 or 품절 from the admin.
+
+    ``quantities`` ({line pk: units}) changes only that many units of a line (the line is split);
+    ``expected`` ({line pk: the quantity the admin saw}) refuses a stale or resubmitted form, so a
+    double submit cannot split a line twice.
 
     Like admin_cancel_order the order row stays locked from the checks through the PG refund to the
     local change, in a durable transaction: once Toss has refunded, the change commits on its own.
@@ -353,7 +400,23 @@ def change_order_lines(order, line_ids, target, reason="", *, actor=""):
         locked = ShopOrder.objects.select_for_update().filter(pk=order.pk).first()
         if locked is None:
             return StatusChange(False, "주문을 찾을 수 없습니다.")
-        return change_locked_order_lines(locked, line_ids, target, reason, actor=actor)
+        return change_locked_order_lines(
+            locked, line_ids, target, reason, actor=actor, quantities=quantities, expected=expected
+        )
+
+
+def preview_line_change(order, line_ids, target, *, quantities=None, expected=None):
+    """plan_line_change for the admin preview, partial quantities included. Nothing is kept: a
+    split is made in a transaction that is rolled back."""
+    if not quantities and not expected:
+        return plan_line_change(order, line_ids, target)
+    with transaction.atomic():
+        try:
+            return _split_and_plan(order, line_ids, target, quantities, expected), ""
+        except _ChangeRefused as exc:
+            return None, str(exc)
+        finally:
+            transaction.set_rollback(True)
 
 
 def admin_return_order(order, reason="", *, actor=""):
@@ -373,34 +436,59 @@ def active_line_ids(order):
     return list(order.items.exclude(ct_status__in=INACTIVE_LINE_STATUSES).values_list("pk", flat=True))
 
 
-def change_locked_order_lines(order, line_ids, target, reason="", *, actor=""):
-    """change_order_lines for an order the caller has locked (select_for_update) already."""
+class _ChangeRefused(Exception):
+    """The change cannot go ahead; the savepoint around the split and the refund is rolled back."""
+
+
+def _split_and_plan(order, line_ids, target, quantities, expected):
+    splits = ()
+    if quantities or expected:
+        line_ids, splits, error = split_order_lines(order, line_ids, quantities or {}, expected)
+        if error:
+            raise _ChangeRefused(error)
+    plan, error = plan_line_change(order, line_ids, target, splits=splits)
+    if error:
+        raise _ChangeRefused(error)
+    return plan
+
+
+def _refund_at_toss(order, plan, reason):
+    """Refund the Toss part of ``plan`` before anything is applied; returns the plan to apply."""
     from gnu_jango.api.shop_payments import (
         PaymentCancelError,
         toss_api_cancel_payment,
         toss_api_partial_cancel_payment,
     )
 
-    plan, error = plan_line_change(order, line_ids, target)
-    if error:
-        return StatusChange(False, error)
+    cancel_reason = reason or f"쇼핑몰 운영자 {plan.target} 처리"
+    try:
+        if plan.full_pg_cancel:
+            answer = toss_api_cancel_payment(order, cancel_reason)
+        else:
+            answer = toss_api_partial_cancel_payment(
+                order, plan.pg_refund, cancel_reason, idempotency_key=plan.idempotency_key
+            )
+    except PaymentCancelError as exc:
+        raise _ChangeRefused(f"결제 환불에 실패해 아무것도 바꾸지 않았습니다. {exc}") from exc
+    if answer.get("already_canceled"):
+        # cancelled in the Toss dashboard already: the money went back there, record it here
+        plan = replace(plan, note=f"{plan.note} (토스페이먼츠에서 이미 취소된 결제 - 환불 기록만 반영, 확인 필요)")
+    _record_toss_answer(order, plan, answer)
+    return plan
+
+
+def change_locked_order_lines(order, line_ids, target, reason="", *, actor="", quantities=None, expected=None):
+    """change_order_lines for an order the caller has locked (select_for_update) already."""
     pg_refunded = False
-    if plan.method == REFUND_TOSS:
-        cancel_reason = reason or f"쇼핑몰 운영자 {target} 처리"
-        try:
-            if plan.full_pg_cancel:
-                answer = toss_api_cancel_payment(order, cancel_reason)
-            else:
-                answer = toss_api_partial_cancel_payment(
-                    order, plan.pg_refund, cancel_reason, idempotency_key=plan.idempotency_key
-                )
-        except PaymentCancelError as exc:
-            return StatusChange(False, f"결제 환불에 실패해 아무것도 바꾸지 않았습니다. {exc}")
-        pg_refunded = True
-        if answer.get("already_canceled"):
-            # cancelled in the Toss dashboard already: the money went back there, record it here
-            plan = replace(plan, note=f"{plan.note} (토스페이먼츠에서 이미 취소된 결제 - 환불 기록만 반영, 확인 필요)")
-        _record_toss_answer(order, plan, answer)
+    try:
+        # a savepoint: a split line is put back when the change is refused or Toss refuses the refund
+        with transaction.atomic():
+            plan = _split_and_plan(order, line_ids, target, quantities, expected)
+            if plan.method == REFUND_TOSS:
+                plan = _refund_at_toss(order, plan, reason)
+                pg_refunded = True
+    except _ChangeRefused as exc:
+        return StatusChange(False, str(exc))
     try:
         # a savepoint: should the local change fail after Toss refunded, the refund is still recorded
         with transaction.atomic():
@@ -449,7 +537,22 @@ def _record_refund_only(order, plan, actor):
 def _history_lines(plan, reason, actor):
     from gnu_jango.shop.inventory import order_history_line
 
-    lines = [order_history_line(f"{line_label(item)} {item.ct_status}→{plan.target}", actor) for item in plan.lines]
+    lines = [
+        order_history_line(
+            f"{split.label} 수량 {split.before}→{split.kept} ({split.moved}개 분리)"
+            + (f" 구매포인트 {split.point_taken:,}점 회수" if split.point_taken else ""),
+            actor,
+        )
+        for split in plan.splits
+    ]
+    moved = {split.new_pk: split.moved for split in plan.splits}
+    lines += [
+        order_history_line(
+            f"{line_label(item)}{f' {moved[item.pk]}개' if item.pk in moved else ''} {item.ct_status}→{plan.target}",
+            actor,
+        )
+        for item in plan.lines
+    ]
     note = plan.note
     if plan.point_excess:
         note += f" 포인트 {plan.point_excess:,}점 수동 조정 필요"
