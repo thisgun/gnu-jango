@@ -4,11 +4,13 @@
 Mail goes to Django's locmem outbox; nothing leaves the test run.
 """
 
+from datetime import timedelta
 from unittest.mock import patch
 
 from django.core import mail
 from django.core.cache import cache
 from django.test import override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from gnu_jango.api.shop_payments import confirm_order_payment, save_toss_vbank_authorization
@@ -16,6 +18,7 @@ from gnu_jango.config.models import Config
 from gnu_jango.core.test_shop_orders_more import API, ShopOrderBase
 from gnu_jango.shop.models import ShopOrder
 from gnu_jango.shop.order_flow import move_order_status
+from gnu_jango.users.models import Profile
 
 ADMIN = "shop-admin@example.test"
 SITE = "https://shop.example.test"
@@ -38,15 +41,23 @@ class ShopMailBase(ShopOrderBase):
 
 
 class ProductRecommendMailTests(ShopMailBase):
+    def setUp(self):
+        super().setUp()
+        # a member for more than a day (fresh accounts cannot send)
+        type(self.member).objects.filter(pk=self.member.pk).update(date_joined=timezone.now() - timedelta(days=2))
+        self.member.refresh_from_db()
+
     def recommend(self, client=None, it_id="MO001", **fields):
         body = {"to_email": "friend@example.test", "subject": "이거 봐", "content": "좋은 상품이야", **fields}
-        return (client or self.client).post(f"{API}/products/{it_id}/recommend", body, format="json")
+        # the mail leaves once the request's transaction commits (the test case holds one open)
+        with self.captureOnCommitCallbacks(execute=True):
+            return (client or self.client).post(f"{API}/products/{it_id}/recommend", body, format="json")
 
     def test_a_member_recommends_a_product_to_one_address(self):
         response = self.recommend(content="<script>alert(1)</script>\n두 번째 줄")
 
         self.assertEqual(response.status_code, 200, response.content[:300])
-        self.assertTrue(response.json()["data"]["sent"])
+        self.assertTrue(response.json()["data"]["queued"])
         self.assertEqual(len(mail.outbox), 1)
         message = mail.outbox[0]
         self.assertEqual(message.to, ["friend@example.test"])
@@ -76,7 +87,7 @@ class ProductRecommendMailTests(ShopMailBase):
             {"subject": ""},
             {"subject": "x" * 201},
             {"content": "   "},
-            {"content": "x" * 3001},
+            {"content": "x" * 1001},
         )
         for fields in cases:
             with self.subTest(fields=fields):
@@ -101,9 +112,57 @@ class ProductRecommendMailTests(ShopMailBase):
         self.assertEqual(self.recommend().status_code, 429)
         self.assertEqual(len(mail.outbox), 5)
 
-    def test_a_mail_server_failure_is_reported_not_raised(self):
+    def test_a_new_account_cannot_send_yet(self):
+        self.member.date_joined = timezone.now()
+        self.member.save(update_fields=["date_joined"])
+        response = self.recommend()
+        self.assertEqual((response.status_code, response.json()["code"]), (403, "recommend_account_too_new"))
+        self.assertEqual(mail.outbox, [])
+
+    def test_an_uncertified_address_cannot_send_while_certification_is_on(self):
+        Config.objects.update_or_create(name="cf_use_email_certify", defaults={"value": "1"})
+        Profile.objects.filter(user=self.member).update(email_certify=None)
+        response = self.recommend()
+        # the sign-in itself already refuses an uncertified member (401); the view checks it again (403)
+        self.assertIn(response.status_code, (401, 403))
+        self.assertEqual(mail.outbox, [])
+        Profile.objects.filter(user=self.member).update(email_certify=timezone.now())
+        self.assertEqual(self.recommend().status_code, 200)
+
+    def test_one_address_is_limited_across_accounts(self):
+        cache.clear()
+        senders = []
+        for index in range(3):
+            user = type(self.member).objects.create_user(username=f"sender{index}", email=f"sender{index}@example.test")
+            type(user).objects.filter(pk=user.pk).update(date_joined=timezone.now() - timedelta(days=2))
+            client = APIClient()
+            client.force_authenticate(user=type(user).objects.get(pk=user.pk))
+            senders.append(client)
+        with patch("gnu_jango.api.shop_recommend._configured_rate", side_effect=lambda scope, default: "2/hour" if scope == "shop-recommend-ip" else default):
+            codes = [self.recommend(client).status_code for client in senders]
+        self.assertEqual(codes, [200, 200, 429])
+
+    def test_a_mail_server_failure_is_logged_not_raised(self):
         with patch("django.core.mail.EmailMultiAlternatives.send", side_effect=OSError("smtp down")):
             response = self.recommend()
+        # sent after the response was built (on_commit): the failure is logged, the request still ends
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mail.outbox, [])
+
+    def test_outside_a_transaction_the_send_result_is_answered(self):
+        from gnu_jango.api import shop_recommend
+
+        def run_now(callback, using=None, robust=False):
+            callback()
+
+        with patch.object(shop_recommend.transaction, "on_commit", side_effect=run_now), patch(
+            "django.core.mail.EmailMultiAlternatives.send", side_effect=OSError("smtp down")
+        ):
+            response = self.client.post(
+                f"{API}/products/MO001/recommend",
+                {"to_email": "friend@example.test", "subject": "이거 봐", "content": "좋은 상품이야"},
+                format="json",
+            )
         self.assertEqual((response.status_code, response.json()["code"]), (502, "mail_send_failed"))
 
 
