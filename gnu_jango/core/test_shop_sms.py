@@ -480,7 +480,7 @@ class ShopSettingsSmsTests(ShopSmsFixture, TestCase):
     def test_missing_credentials_disable_the_test_button(self):
         page = self.client.get(self.url).content.decode()
         self.assertIn("<dd>미등록", page)
-        self.assertRegex(page, r'value="test_sms">\s*<button class="btn" type="submit" disabled>')
+        self.assertIn('<button class="btn" type="submit" form="shop-sms-test-form" disabled>', page)
 
     def test_saving_sms_settings_stores_config_rows_and_validates_the_admin_phone(self):
         response = self.client.post(self.url, self.form_data(

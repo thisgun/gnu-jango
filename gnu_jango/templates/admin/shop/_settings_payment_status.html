@@ -1,0 +1,52 @@
+<section id="payment-status" class="card card-border" aria-labelledby="payment-status-title">
+  <div class="card-body">
+    <h3 id="payment-status-title" class="card-title">결제 연결 상태</h3>
+    <p>{{ section.description }}</p>
+    <p class="shop-payment-mode{% if gateway.is_test_mode %} is-test{% endif %}" role="status">
+      {% if gateway.enabled %}현재 결제 모드: <strong>{{ gateway.effective_mode_label }}</strong>{% else %}현재 온라인 결제를 받을 수 없습니다 ({{ gateway.mode }}){% endif %}
+      · 키 출처: {{ gateway.source_label }} · 결제 테스트 설정: {{ gateway.card_test_label }}
+    </p>
+    {% for warning in gateway.warnings %}
+    <div class="alert shop-payment-warning" role="alert">{{ warning }}</div>
+    {% endfor %}
+    <div class="overflow-x-auto">
+      <table class="table">
+        <caption class="sr-only">현재 결제수단 사용 가능 여부</caption>
+        <thead><tr><th scope="col">결제수단</th><th scope="col">주문 화면 상태</th></tr></thead>
+        <tbody>
+          {% for method in payment_status %}
+          <tr><th scope="row">{{ method.name }}</th><td><span class="shop-payment-state{% if method.enabled %} is-ready{% endif %}">{% if method.enabled %}사용 가능{% else %}사용 불가{% endif %}</span> <small>{{ method.detail }}</small></td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <dl>
+      <div><dt>주문 결제 연동</dt><dd>{{ payment_provider_label }}{% if gateway.provider_locked %} · 서버 환경 변수로 설정됨{% endif %}</dd></div>
+      <div><dt>토스페이먼츠 키 상태</dt><dd>{{ gateway.mode }}{% if gateway.enabled and not gateway.native_checkout %} · 주문 화면의 PG로 선택되지 않음{% endif %}</dd></div>
+      <div><dt>클라이언트 키</dt><dd>{% if gateway.has_client_key %}등록됨{% else %}미등록{% endif %}</dd></div>
+      <div><dt>시크릿 키</dt><dd>{% if gateway.has_secret_key %}등록됨{% else %}미등록{% endif %}</dd></div>
+      <div><dt>에스크로</dt><dd>{% if gateway.escrow_enabled %}에스크로결제 사용 (계좌이체·가상계좌) · 배송 등록은 토스페이먼츠 상점관리자에서{% else %}일반결제{% endif %}</dd></div>
+      <div><dt>가상계좌 서버 설정</dt><dd>{% if gateway.vbank_enabled %}플래그 켜짐 · 웹훅 등록은 별도 확인{% else %}비활성{% endif %}</dd></div>
+      <div><dt>현금영수증 신청</dt><dd>{% if cash_receipt.enabled %}허용 · {{ cash_receipt.methods|join:" · " }}{% else %}중지{% endif %}</dd></div>
+    </dl>
+    <p>무통장입금의 현금영수증 요청은 주문에 기록되며 관리자가 수동 발급합니다. 토스 가상계좌·계좌이체는 고객이 요청한 경우에만 발급 옵션을 보내고, PG 응답의 발급 정보가 있으면 주문에 저장합니다.</p>
+    <div class="shop-pg-check-form">
+      <button class="btn" type="submit" form="shop-pg-check-form"{% if not gateway.enabled %} disabled{% endif %}>토스 서버 인증 확인</button>
+      <small>읽기 전용 API 조회만 수행하며 결제나 취소는 실행하지 않습니다.</small>
+    </div>
+    {% if gateway.adapter_enabled %}
+    <p>외부 PG 어댑터가 설정되어 있습니다. 현재 주문 화면에서 직접 시작할 수 있는 온라인 결제는 토스페이먼츠입니다.</p>
+    {% endif %}
+    <details>
+      <summary>서버 환경 변수로 PG 연결하기</summary>
+      <p>아래 결제대행사 항목에 키를 등록하는 대신 호스팅 서비스의 환경 변수로 등록할 수도 있습니다. 환경 변수가 있으면 관리자 화면의 키보다 우선합니다. Vercel에서는 프로젝트의 Settings → Environment Variables에서 등록한 뒤 다시 배포하세요.</p>
+      <ul>
+        <li><code>SHOP_TOSS_CLIENT_KEY</code>: 토스페이먼츠 클라이언트 키</li>
+        <li><code>SHOP_TOSS_SECRET_KEY</code>: 토스페이먼츠 시크릿 키</li>
+        <li><code>SHOP_PAYMENT_PROVIDER=toss</code>: 토스페이먼츠 선택 (설정하면 아래 결제대행사 선택보다 우선)</li>
+      </ul>
+      <p>테스트 키끼리 또는 실결제 키끼리 등록하세요. 클라이언트 키와 시크릿 키의 모드가 다르거나 키 형식이 맞지 않으면 결제 수단을 사용할 수 없습니다.</p>
+      <p>가상계좌는 아래 가상계좌 입금통보 URL을 토스페이먼츠 웹훅에 등록하고 입금 통지를 확인한 후 <code>SHOP_TOSS_VBANK_ENABLED=True</code>도 설정해야 합니다.</p>
+    </details>
+  </div>
+</section>

@@ -1,0 +1,87 @@
+<section id="shop-{{ section.id }}" class="card card-border" aria-labelledby="shop-{{ section.id }}-title">
+  <div class="card-body">
+    <h3 id="shop-{{ section.id }}-title" class="card-title">{{ section.title }}</h3>
+    {% if section.description %}<p>{{ section.description }}</p>{% endif %}
+    {% if section.id == "shipping" %}
+    <div class="shop-shipping-preview" data-shipping-preview aria-live="polite">
+      <h4>기본 배송비 미리보기</h4>
+      <p>아래 예시는 장바구니 공통 배송비만 계산합니다. 상품별 배송비와 지역별 추가 배송비는 제외됩니다.</p>
+      <p class="shop-shipping-preview-error" data-preview-error hidden>구간별 금액과 배송비 형식을 확인해 주세요.</p>
+      <table class="table">
+        <thead><tr><th scope="col">상품 금액</th><th scope="col">기본 배송비</th></tr></thead>
+        <tbody data-preview-rows>
+          <tr><td>10,000원</td><td>3,000원</td></tr>
+          <tr><td>30,000원</td><td>3,000원</td></tr>
+          <tr><td>50,000원</td><td>0원</td></tr>
+          <tr><td>100,000원</td><td>0원</td></tr>
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% if section.table %}
+    <div class="overflow-x-auto">
+      <table class="table shop-settings-grid">
+        <caption class="sr-only">{{ section.title }}</caption>
+        <thead><tr><th scope="col">상품 묶음</th>{% for column in section.table.columns %}<th scope="col">{{ column }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in section.table.rows %}
+          <tr>
+            <th scope="row">{{ row.label }}</th>
+            {% for field in row.fields %}
+            <td>
+              <label class="sr-only" for="{{ field.id_for_label }}">{{ field.label }}</label>
+              {{ field }}
+              {% if field.errors %}<div id="{{ field.id_for_label }}_errors">{{ field.errors }}</div>{% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+    {% for item in section.fields %}
+    {% with field=item.bound %}
+    {% if item.radio %}
+    <fieldset class="fieldset shop-radio-group" aria-describedby="id_{{ field.name }}_help id_{{ field.name }}_errors">
+      <legend class="fieldset-legend">{{ field.label }}</legend>
+      <div class="shop-radio-options">
+        {% for choice in field %}<label class="label" for="{{ choice.id_for_label }}">{{ choice.tag }} <span>{{ choice.choice_label }}</span></label>{% endfor %}
+      </div>
+      <div id="id_{{ field.name }}_help">{% if field.help_text %}<p>{{ field.help_text }}</p>{% endif %}</div>
+      <div id="id_{{ field.name }}_errors">{{ field.errors }}</div>
+    </fieldset>
+    {% else %}
+    <div class="fieldset">
+      {% if item.checkbox %}
+      <label class="label" for="{{ field.id_for_label }}">{{ field }} <span>{{ field.label }}</span></label>
+      {% else %}
+      <label class="fieldset-legend" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} (필수){% endif %}</label>
+      {% if item.current_url %}<p class="shop-logo-preview"><img src="{{ item.current_url }}" alt="현재 {{ field.label }}"></p>{% endif %}
+      {{ field }}
+      {% endif %}
+      <div id="{{ field.id_for_label }}_help">{% if field.help_text %}<p>{{ field.help_text }}</p>{% endif %}</div>
+      <div id="{{ field.id_for_label }}_errors">{{ field.errors }}</div>
+    </div>
+    {% endif %}
+    {% endwith %}
+    {% endfor %}
+    {% if section.id == "online" %}
+    <div class="fieldset shop-webhook-url">
+      <span class="fieldset-legend" id="shop-webhook-url-label">토스페이먼츠 가상계좌 입금통보 URL</span>
+      <div class="shop-copy-row">
+        <code id="shop-webhook-url" aria-labelledby="shop-webhook-url-label">{{ webhook_url }}</code>
+        <button class="btn" type="button" data-copy-target="shop-webhook-url" data-copied-label="복사했습니다">URL 복사</button>
+      </div>
+      <p>토스페이먼츠 가상계좌 사용시 이 주소를 <a href="https://app.tosspayments.com/" target="_blank" rel="noopener">토스페이먼츠 상점관리자</a> &gt; 개발자센터 &gt; 웹훅 &gt; 웹훅 등록하기의 URL에 넣으시고, 구독할 이벤트를 [DEPOSIT_CALLBACK]으로 선택하셔야 상점에 자동으로 입금 통보됩니다.</p>
+    </div>
+    {% endif %}
+    {% if section.id == "pg" %}
+    <dl class="shop-unsupported-rows" aria-label="영카트에서 제공하지만 이 쇼핑몰에서 지원하지 않는 결제설정">
+      {% for label, text in unsupported_rows %}
+      <div><dt>{{ label }}</dt><dd>{{ text }}</dd></div>
+      {% endfor %}
+    </dl>
+    {% endif %}
+  </div>
+</section>

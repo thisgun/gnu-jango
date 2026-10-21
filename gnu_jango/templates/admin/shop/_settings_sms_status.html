@@ -1,0 +1,28 @@
+<section id="sms-status" class="card card-border" aria-labelledby="sms-status-title">
+  <div class="card-body">
+    <h3 id="sms-status-title" class="card-title">SMS 연결 상태</h3>
+    <dl>
+      <div><dt>SMS 사용</dt><dd>{% if sms.enabled %}아이코드 · {{ sms.type_label }}{% else %}사용안함{% endif %}</dd></div>
+      <div><dt>아이코드 인증 정보</dt><dd>{% if sms.credentials_registered %}등록됨 · {{ sms.mode_label }}{% else %}미등록{% endif %}{% if not sms.provider_enabled %} · 서버에서 비활성화됨{% endif %}</dd></div>
+      <div><dt>관리자 휴대폰번호</dt><dd>{% if sms.has_admin_hp %}등록됨{% else %}미등록{% endif %}</dd></div>
+      <div><dt>회신번호 (고객센터 전화번호)</dt><dd>{% if sms.has_callback %}등록됨{% else %}미등록{% endif %}</dd></div>
+    </dl>
+    {% if sms.lms_unsupported %}
+    <p>구버전 아이디·비밀번호 방식은 LMS를 지원하지 않아 긴 문자는 80바이트까지 SMS로 잘라 보냅니다. LMS는 토큰키를 등록하세요.</p>
+    {% endif %}
+    <div class="shop-pg-check-form">
+      <button class="btn" type="submit" form="shop-sms-test-form"{% if not sms.can_test %} disabled{% endif %}>테스트 발송</button>
+      <small>저장된 관리자 휴대폰번호로 문자 한 건을 보냅니다. 건당 요금이 부과되며 1분에 한 번만 보낼 수 있습니다.</small>
+    </div>
+    <details>
+      <summary>아이코드 연결 설정 방법</summary>
+      <p>아이코드 인증 정보는 이 화면에 입력하거나 저장하지 않습니다. 호스팅 서비스의 환경 변수에 등록한 뒤 서버를 재시작하거나 다시 배포하세요.</p>
+      <ul>
+        <li><code>G5_ICODE_TOKEN_KEY</code>: 아이코드 사이트의 토큰키관리에서 만든 토큰키 (권장, SMS·LMS)</li>
+        <li><code>G5_ICODE_ID</code>, <code>G5_ICODE_PASSWORD</code>, <code>G5_ICODE_SERVER</code>, <code>G5_ICODE_PORT</code>: 구버전 아이디·비밀번호 방식 (SMS만)</li>
+        <li><code>G5_SMS_PROVIDER=disabled</code>: 이 서버에서 문자 발송을 막습니다 (미리보기·스테이징용)</li>
+      </ul>
+      <p>회신번호는 아이코드에 발신번호로 등록된 번호여야 합니다. 서버리스 호스팅처럼 서버 IP가 바뀌는 환경에서는 아이코드의 허용 IP 설정도 확인하세요.</p>
+    </details>
+  </div>
+</section>
