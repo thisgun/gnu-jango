@@ -165,3 +165,9 @@ export function shopProductHref(
 ): string {
   return g5ShortHref(shopProductPath(product, rewriteMode));
 }
+
+/** 영카트 쇼핑몰 머리 검색(shop.head.php → shop/search.php): 쇼핑몰 안의 검색은 상품 검색 결과로 보낸다. */
+export function shopSearchHref(query: string): string {
+  const q = query.trim();
+  return q ? `/shop/search?q=${encodeURIComponent(q)}` : "/shop/search";
+}

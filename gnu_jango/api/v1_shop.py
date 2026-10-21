@@ -72,6 +72,7 @@ from gnu_jango.utils.lib import get_client_ip
 
 from .response import api_error, api_response
 from .search import any_icontains, apply_text_search
+from .shop_search import search_products
 from .shop_common import (
     fit_to_columns,
     on_sale_products,
@@ -1068,11 +1069,8 @@ def products_response(request, *, limit=None):
     if ca_id:
         queryset = queryset.filter(category_tree_member_q(ca_id))
     if q:
-        queryset = apply_text_search(
-            queryset,
-            q,
-            any_icontains(("it_name", "it_id", "it_basic"), q),
-        )
+        # search.php: the ticked name / description / code / summary columns, all when none is ticked
+        queryset = search_products(queryset, q, request.query_params)
     if product_type in {"1", "2", "3", "4", "5"}:
         queryset = queryset.filter(**{f"it_type{product_type}": "1"})
     for type_index in range(1, 6):
