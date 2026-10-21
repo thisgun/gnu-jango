@@ -186,7 +186,8 @@ class ShopStockNotificationAdmin(ModelAdmin):
         for notification_id in selected_ids:
             with transaction.atomic():
                 notification = (
-                    ShopStockNotification.objects.select_for_update()
+                    # PostgreSQL refuses FOR UPDATE on the nullable side of the product join
+                    ShopStockNotification.objects.select_for_update(of=("self",))
                     .select_related("product")
                     .filter(pk=notification_id)
                     .first()
