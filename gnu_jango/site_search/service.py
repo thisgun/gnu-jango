@@ -8,7 +8,7 @@ from urllib.parse import quote
 from django.conf import settings
 from django.core.cache import cache
 from django.db import connections
-from django.db.models import BigIntegerField, BooleanField, Case, Exists, F, FloatField, OuterRef, Q, Subquery, Sum, TextField, Value, When
+from django.db.models import BigIntegerField, BooleanField, Case, Exists, F, FilteredRelation, FloatField, OuterRef, Q, Subquery, Sum, TextField, Value, When
 from django.db.models.functions import Coalesce, Concat, Lower, Substr
 from django.utils import timezone
 
@@ -120,7 +120,60 @@ def _matching_tokens(docs, query, *, allowed_body, fields=("title", "body"), sna
     return docs.filter(matches).annotate(_search_rank=title_rank * 4.0 + body_rank).order_by("-_search_rank", "-pk")
 
 
+def _active_snapshot_documents(docs, query, *, allowed_body, fields):
+    """Join the active row once instead of repeating correlated rank subqueries."""
+    generations = SearchIndexState.objects.using(docs.db).exclude(active_generation="").values("active_generation")
+    docs = docs.alias(_live=FilteredRelation("snapshots", condition=Q(
+        snapshots__generation__in=Subquery(generations),
+    ))).filter(_live__isnull=False).annotate(
+        _body_allowed=Case(When(allowed_body, then=True), default=False, output_field=BooleanField()),
+        _search_title_tokens=F("_live__title_tokens"), _search_body_tokens=F("_live__body_tokens"),
+    )
+    query_terms = terms(query, MAX_QUERY_TERMS)
+    if not query_terms:
+        return docs.none().annotate(_search_rank=Value(0.0))
+    title_rank, body_rank = Value(0.0), Value(0.0)
+    if connections[docs.db].vendor == "postgresql":
+        from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+        search = reduce(or_, [SearchQuery(encoded(term), config="simple", search_type="plain") for term in set(query_terms)])
+        branches = []
+        for field in fields:
+            hits = SearchSnapshot.objects.using(docs.db).alias(_vector=SearchVector(f"{field}_tokens", config="simple")).filter(
+                _vector=search,
+            )
+            if field == "body":
+                hits = hits.filter(document_id__in=docs.filter(allowed_body).values("pk"))
+            branches.append(hits.order_by().values("pk"))
+        if not branches:
+            return docs.none().annotate(_search_rank=Value(0.0))
+        ids = branches[0].union(*branches[1:]) if len(branches) > 1 else branches[0]
+        docs = docs.filter(_live__pk__in=ids)
+        if "title" in fields:
+            title_rank = SearchRank(SearchVector("_live__title_tokens", config="simple"), search)
+        if "body" in fields:
+            body_rank = Case(When(allowed_body, then=SearchRank(SearchVector("_live__body_tokens", config="simple"), search)),
+                             default=Value(0.0), output_field=FloatField())
+    else:
+        matches = Q(pk__in=[])
+        ranks = {}
+        for field in fields:
+            postings = SearchSnapshotPosting.objects.using(docs.db).filter(field=field, term__in=set(query_terms))
+            ids = postings.filter(snapshot__generation__in=Subquery(generations)).values("snapshot__document_id")
+            matches |= Q(pk__in=ids) & (allowed_body if field == "body" else Q())
+            frequency = postings.filter(snapshot_id=OuterRef("_live__pk")).order_by().values("snapshot_id").annotate(n=Sum("frequency"))
+            ranks[field] = Coalesce(Subquery(frequency.values("n")[:1]), 0) * 1.0
+        docs = docs.filter(matches)
+        title_rank = ranks.get("title", title_rank)
+        if "body" in ranks:
+            body_rank = Case(When(allowed_body, then=ranks["body"]), default=Value(0.0), output_field=FloatField())
+    return docs.annotate(_search_rank=title_rank * 4.0 + body_rank).order_by("-_search_rank", "-pk")
+
+
 def matching_documents(docs, query, *, allowed_body, fields=("title", "body")):
+    active_kinds = set(SearchIndexState.objects.using(docs.db).exclude(active_generation="").values_list("kind", flat=True))
+    if {"post", "product", "page"} <= active_kinds:
+        return _active_snapshot_documents(docs, query, allowed_body=allowed_body, fields=fields)
+    # Bootstrap and a partially upgraded index retain the compatibility path.
     active = SearchSnapshot.objects.filter(generation__in=SearchIndexState.objects.exclude(
         active_generation="",
     ).values("active_generation"))
@@ -190,10 +243,10 @@ def ranked_results(request, query, *, result_type="all", bo_table="", page=None,
         When(post__board__group__gr_id=group, then=True), default=False, output_field=BooleanField(),
     )).only("pk", "kind", "title", "post_id", "product_id", "page_id")[:CANDIDATE_LIMIT])
     query_terms = terms(query, MAX_QUERY_TERMS)
-    scores = bm25_scores([
-        doc._search_title_tokens.split() * 4 + (doc._search_body_tokens.split() if doc._body_allowed else [])
-        for doc in candidates
-    ], [encoded(term) for term in query_terms])
+    encoded_query = [encoded(term) for term in query_terms]
+    title_scores = bm25_scores([doc._search_title_tokens.split() for doc in candidates], encoded_query)
+    body_scores = bm25_scores([doc._search_body_tokens.split() if doc._body_allowed else [] for doc in candidates], encoded_query)
+    scores = [title * 4.0 + body for title, body in zip(title_scores, body_scores)]
     clicks = dict(SearchClickDaily.objects.filter(
         query_hash=query_hash(query), document__in=candidates,
         day__gte=timezone.localdate() - timedelta(days=29),
