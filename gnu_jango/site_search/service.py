@@ -226,7 +226,7 @@ def hydrate_results(request, ranked, query, query_terms):
         for field in fields:
             if parts:
                 parts.append(Value(" "))
-            parts.append(Coalesce(F(f"{prefix}__{field}"), Value(""), output_field=TextField()))
+            parts.append(Substr(Coalesce(F(f"{prefix}__{field}"), Value(""), output_field=TextField()), 1, MAX_TEXT_CHARS))
         return Concat(*parts, output_field=TextField())
     body = Case(
         When(kind="post", then=F("post__wr_content")),

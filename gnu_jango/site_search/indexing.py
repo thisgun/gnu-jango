@@ -51,6 +51,18 @@ def source_text(instance, kind):
     return instance.co_subject, plain_text(f"{instance.co_content} {instance.co_mobile_content}")
 
 
+def locked_state(kind, using):
+    states = SearchIndexState.objects.using(using)
+    states.get_or_create(kind=kind)
+    if connections[using].vendor == "postgresql":
+        # Writers to different source rows may coexist. FOR UPDATE here would
+        # deadlock a multi-save transaction against another source's post_save.
+        # Rebuild claim/publish use FOR UPDATE and wait for these shared locks.
+        table = connections[using].ops.quote_name(SearchIndexState._meta.db_table)
+        return next(iter(states.raw(f"SELECT * FROM {table} WHERE kind=%s FOR SHARE", [kind])))
+    return states.select_for_update().get(kind=kind)
+
+
 def index_instance(instance, kind, *, using="default", build_generation=None):
     version = tokenizer_version()
     lookup = {f"{kind}_id": instance.pk}
@@ -59,8 +71,7 @@ def index_instance(instance, kind, *, using="default", build_generation=None):
         source = type(instance).objects.using(using).select_for_update().filter(pk=instance.pk).first()
         if source is None:
             return
-        SearchIndexState.objects.using(using).get_or_create(kind=kind)
-        state = SearchIndexState.objects.using(using).select_for_update().get(kind=kind)
+        state = locked_state(kind, using)
         if build_generation is not None and state.building_generation != build_generation:
             raise RuntimeError("Search index build ownership changed; stopping this rebuild")
         # Always use the latest committed source, rather than a stale iterator snapshot.

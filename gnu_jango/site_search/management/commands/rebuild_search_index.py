@@ -1,8 +1,9 @@
 from datetime import timedelta
+import time
 import uuid
 
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
+from django.db import connections, OperationalError, transaction
 from django.utils import timezone
 
 from gnu_jango.bbs.models import Post
@@ -29,16 +30,25 @@ class Command(BaseCommand):
 
     def rebuild(self, kind, model, database, batch_size):
         version, generation = tokenizer_version(), uuid.uuid4().hex
-        states = SearchIndexState.objects.using(database)
-        with transaction.atomic(using=database):
-            states.get_or_create(kind=kind)
-            state = states.select_for_update().get(kind=kind)
+        def heartbeat(state):
+            if state.building_generation != generation:
+                raise CommandError(f"{kind}: rebuild ownership changed")
+            state.build_updated_at = timezone.now()
+            state.save(update_fields=["build_updated_at"], using=database)
+
+        def release(state):
+            if state.building_generation == generation:
+                state.building_generation, state.build_updated_at = "", None
+                state.save(update_fields=["building_generation", "build_updated_at"], using=database)
+
+        def claim(state):
             if (state.building_generation and state.build_updated_at
                     and state.build_updated_at > timezone.now() - timedelta(minutes=30)):
                 raise CommandError(f"{kind}: another rebuild is running")
             state.building_generation, state.build_updated_at = generation, timezone.now()
             state.save(update_fields=["building_generation", "build_updated_at"], using=database)
-            last = model.objects.using(database).order_by("-pk").values_list("pk", flat=True).first()
+            return model.objects.using(database).order_by("-pk").values_list("pk", flat=True).first()
+        last = self.change_state(kind, database, claim)
         count, cursor = 0, None
         try:
             while last is not None:
@@ -52,10 +62,9 @@ class Command(BaseCommand):
                 # lock while acquiring the next source row can deadlock live saves.
                 for source_id in ids:
                     index_instance(model(pk=source_id), kind, using=database, build_generation=generation)
-                states.filter(kind=kind, building_generation=generation).update(build_updated_at=timezone.now())
+                self.change_state(kind, database, heartbeat)
                 cursor, count = ids[-1], count + len(ids)
-            with transaction.atomic(using=database):
-                state = states.select_for_update().get(kind=kind)
+            def activate(state):
                 if state.building_generation != generation:
                     raise CommandError(f"{kind}: rebuild ownership changed")
                 if tokenizer_version() != version:
@@ -63,12 +72,37 @@ class Command(BaseCommand):
                 state.active_generation, state.building_generation = generation, ""
                 state.ready, state.tokenizer, state.build_updated_at = True, version, None
                 state.save(using=database)
+            self.change_state(kind, database, activate)
         except BaseException:
-            states.filter(kind=kind, building_generation=generation).update(building_generation="", build_updated_at=None)
-            self.prune(kind, database, batch_size)
+            try:
+                self.change_state(kind, database, release)
+                self.prune(kind, database, batch_size)
+            except Exception:
+                self.stderr.write(f"{kind}: cleanup deferred; the build lease expires after 30 minutes")
             raise
         self.prune(kind, database, batch_size)
         self.stdout.write(self.style.SUCCESS(f"{kind}: {count} documents indexed ({version})"))
+
+    def change_state(self, kind, database, operation):
+        # Never queue an exclusive lock ahead of a live multi-save transaction's
+        # next shared lock: that transaction may need a source row held by a
+        # writer behind us. Retry outside the transaction instead.
+        deadline = time.monotonic() + 30
+        states = SearchIndexState.objects.using(database)
+        while True:
+            try:
+                with transaction.atomic(using=database):
+                    states.get_or_create(kind=kind)
+                    state = states.select_for_update(nowait=connections[database].vendor == "postgresql").get(kind=kind)
+                    return operation(state)
+            except OperationalError as exc:
+                cause = exc.__cause__
+                code = getattr(cause, "sqlstate", None) or getattr(cause, "pgcode", None)
+                if code != "55P03":
+                    raise
+                if time.monotonic() >= deadline:
+                    raise CommandError(f"{kind}: index state is busy; retry the rebuild later") from exc
+                time.sleep(0.05)
 
     def prune(self, kind, database, batch_size):
         states = SearchIndexState.objects.using(database)
