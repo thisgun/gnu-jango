@@ -8,7 +8,7 @@ rather than status codes alone.
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -883,6 +883,7 @@ class RecentAndSearchTests(CommunityApiBase):
             keyword=keyword, count=count, source=source, day=timezone.localdate() - timedelta(days=days_ago)
         )
 
+    @override_settings(G5_SEARCH_PUBLIC_KEYWORDS=["alpha", "beta", "gamma"], G5_SEARCH_PUBLIC_MIN_COUNT=1)
     def test_popular_searches_are_summed_over_the_window_and_ranked(self):
         self.add_keyword("alpha", 3)
         self.add_keyword("alpha", 4, days_ago=1, source="shop")
@@ -894,6 +895,7 @@ class RecentAndSearchTests(CommunityApiBase):
         data = self.visitor.get("/api/v1/search/popular").json()["data"]
         self.assertEqual(data, [{"pp_word": "alpha", "cnt": 7}, {"pp_word": "beta", "cnt": 5}, {"pp_word": "gamma", "cnt": 1}])
 
+    @override_settings(G5_SEARCH_PUBLIC_KEYWORDS=["recent", "older", "third"], G5_SEARCH_PUBLIC_MIN_COUNT=1)
     def test_popular_searches_honour_limit_and_days(self):
         self.add_keyword("recent", 1)
         self.add_keyword("older", 9, days_ago=5)

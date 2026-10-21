@@ -5,7 +5,7 @@
  * export 결과 해시 또는 G5_SW_CACHE_VERSION 값으로 치환.
  * Dev 모드에서는 자리표 그대로 동작해도 해 없음.
  */
-const CACHE_VERSION = 'static-5830bd885cfcb876'; // build-time replace
+const CACHE_VERSION = 'static-a1b3f1a21b4e4bde'; // build-time replace
 const CACHE_NAME = `gnuboard-${CACHE_VERSION}`;
 const CACHEABLE_PUBLIC_ASSET_RE = /^\/(?:favicon\.ico|icon-[0-9]+\.png|og-default\.png|manifest\.json|manifest\.webmanifest|robots\.txt|sitemap(?:-posts)?\.xml|kcp-bridge\.html)$/;
 

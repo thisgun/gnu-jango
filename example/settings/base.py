@@ -727,6 +727,9 @@ G5_SEARCH_ENABLED = bool_config("G5_SEARCH_ENABLED", default=True)
 # Install pg_trgm first with configure_search_postgres before opting in.
 G5_SEARCH_TRIGRAM = bool_config("G5_SEARCH_TRIGRAM", default=False)
 G5_SEARCH_CLICK_LOG_ENABLED = bool_config("G5_SEARCH_CLICK_LOG_ENABLED", default=True)
+# Only operator-approved terms can be public; arbitrary questions remain private.
+G5_SEARCH_PUBLIC_KEYWORDS = de_config("G5_SEARCH_PUBLIC_KEYWORDS", default="", cast=csv_config)
+G5_SEARCH_PUBLIC_MIN_COUNT = max(1, de_config("G5_SEARCH_PUBLIC_MIN_COUNT", default=5, cast=int))
 
 # Optional OAuth provider credentials for the Django social-login bridge.
 # Values in the imported Gnuboard config table are still used as fallback.

@@ -8,7 +8,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import EmailMessage
-from django.db.models import Case, Count, IntegerField, Q, Sum, Value, When
+from django.db.models import Case, Count, IntegerField, Q, Value, When
 from django.db.models.functions import TruncDate
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
@@ -36,7 +36,6 @@ from gnu_jango.core.models import (
     ContentPage,
     FAQItem,
     FAQMaster,
-    SearchKeywordDaily,
     VisitLog,
 )
 from gnu_jango.users import point_ledger
@@ -509,17 +508,10 @@ def popular_search_view(request):
 
 
 def popular_search_response(request):
+    from gnu_jango.core.search_privacy import popular_keyword_rows
     limit = min(max(_safe_int(request.query_params.get("limit"), 5), 1), 20)
     days = min(max(_safe_int(request.query_params.get("days"), 3), 1), 90)
-    cutoff = timezone.localdate() - timedelta(days=days - 1)
-
-    keywords = (
-        SearchKeywordDaily.objects.filter(day__gte=cutoff, source__in=("site", "shop", "api"))
-        .exclude(keyword="")
-        .values("keyword")
-        .annotate(cnt=Sum("count"))
-        .order_by("-cnt", "keyword")[:limit]
-    )
+    keywords = popular_keyword_rows(days=days, limit=limit)
     return api_response(
         data=[{"pp_word": row["keyword"], "cnt": row["cnt"] or 0} for row in keywords]
     )

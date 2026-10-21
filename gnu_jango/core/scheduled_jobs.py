@@ -41,6 +41,7 @@ SCHEDULED_JOBS: tuple[ScheduledJob, ...] = (
     ScheduledJob("expire_toss_vbank_orders", ("--apply", "--json"), ("--json",)),
     # This one applies by default and takes --dry-run instead of --apply.
     ScheduledJob("cleanup_admin_privacy", (), ("--dry-run",)),
+    ScheduledJob("cleanup_search_clicks", ("--json",), ("--dry-run", "--json")),
     ScheduledJob("save_order_points", ("--apply", "--json"), ("--json",)),
 )
 JOB_NAMES = tuple(job.name for job in SCHEDULED_JOBS)

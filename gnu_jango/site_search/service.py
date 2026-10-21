@@ -8,23 +8,23 @@ from urllib.parse import quote
 from django.conf import settings
 from django.core.cache import cache
 from django.db import connections
-from django.db.models import BigIntegerField, BooleanField, Case, Exists, FloatField, OuterRef, Q, Subquery, Sum, Value, When
-from django.db.models.functions import Coalesce, Lower
+from django.db.models import BigIntegerField, BooleanField, Case, Exists, F, FloatField, OuterRef, Q, Subquery, Sum, TextField, Value, When
+from django.db.models.functions import Coalesce, Concat, Lower, Substr
 from django.utils import timezone
 
 from gnu_jango.api.access import readable_post_queryset
 from gnu_jango.api.shop_common import on_sale_products
 from gnu_jango.bbs.models import Post
 from gnu_jango.bbs.utils import get_pretty_url
-from gnu_jango.core.models import ContentPage, SearchKeywordDaily
+from gnu_jango.core.models import ContentPage
 from gnu_jango.docs_search.ranking import bm25_scores
 from gnu_jango.docs_search.service import _snippet, docs_group_id
 from gnu_jango.users import point_ledger
 from gnu_jango.users.models import User_Point
 from gnu_jango.utils.users import is_admin
 
-from .indexing import encoded, source_text, terms, unready_kinds
-from .models import SearchClickDaily, SearchDocument, SearchPosting
+from .indexing import MAX_TEXT_CHARS, encoded, plain_text, terms, unready_kinds
+from .models import SearchClickDaily, SearchDocument, SearchIndexState, SearchPosting, SearchSnapshot, SearchSnapshotPosting
 
 CANDIDATE_LIMIT = 200
 MAX_QUERY_TERMS = 24
@@ -71,7 +71,7 @@ def visible_documents(request, *, result_type="all", bo_table=""):
     return docs, allowed_body
 
 
-def matching_documents(docs, query, *, allowed_body, fields=("title", "body")):
+def _matching_tokens(docs, query, *, allowed_body, fields=("title", "body"), snapshots=False):
     query_terms = terms(query, MAX_QUERY_TERMS)
     if not query_terms:
         return docs.none().annotate(_search_rank=Value(0.0), _body_allowed=Value(False))
@@ -82,24 +82,33 @@ def matching_documents(docs, query, *, allowed_body, fields=("title", "body")):
         search = reduce(or_, [SearchQuery(encoded(term), config="simple", search_type="plain") for term in set(query_terms)])
         docs = docs.alias(_title_vector=SearchVector("title_tokens", config="simple"),
                           _body_vector=SearchVector("body_tokens", config="simple"))
-        matches = Q(pk__in=[])
+        # Keep title/body retrieval in separate branches. An OR containing the
+        # permission subquery can force PostgreSQL to scan every token row.
+        indexed = docs.model.objects.using(docs.db)
+        branches = []
         title_rank, body_rank = Value(0.0), Value(0.0)
         if "title" in fields:
-            matches |= Q(_title_vector=search)
+            branches.append(indexed.alias(_vector=SearchVector("title_tokens", config="simple")).filter(
+                _vector=search).order_by().values("pk"))
             title_rank = SearchRank(SearchVector("title_tokens", config="simple"), search)
         if "body" in fields:
-            matches |= allowed_body & Q(_body_vector=search)
+            branches.append(docs.filter(allowed_body, _body_vector=search).order_by().values("pk"))
             body_rank = Case(When(allowed_body, then=SearchRank(SearchVector("body_tokens", config="simple"), search)),
                              default=Value(0.0), output_field=FloatField())
-        return docs.filter(matches).annotate(_search_rank=title_rank * 4.0 + body_rank).order_by("-_search_rank", "-pk")
+        if not branches:
+            return docs.none().annotate(_search_rank=Value(0.0))
+        ids = branches[0].union(*branches[1:]) if len(branches) > 1 else branches[0]
+        return docs.filter(pk__in=ids).annotate(_search_rank=title_rank * 4.0 + body_rank).order_by("-_search_rank", "-pk")
 
     def frequency(field):
-        match = SearchPosting.objects.filter(document_id=OuterRef("pk"), field=field, term__in=set(query_terms))
-        return Coalesce(Subquery(match.order_by().values("document_id").annotate(n=Sum("frequency")).values("n")[:1]), 0)
+        model, relation = (SearchSnapshotPosting, "snapshot_id") if snapshots else (SearchPosting, "document_id")
+        match = model.objects.filter(**{relation: OuterRef("pk")}, field=field, term__in=set(query_terms))
+        return Coalesce(Subquery(match.order_by().values(relation).annotate(n=Sum("frequency")).values("n")[:1]), 0)
 
     # IN subqueries start at the term/field B-tree index instead of scanning source bodies.
-    title_ids = SearchPosting.objects.filter(field="title", term__in=set(query_terms)).values("document_id")
-    body_ids = SearchPosting.objects.filter(field="body", term__in=set(query_terms)).values("document_id")
+    model, relation = (SearchSnapshotPosting, "snapshot_id") if snapshots else (SearchPosting, "document_id")
+    title_ids = model.objects.filter(field="title", term__in=set(query_terms)).values(relation)
+    body_ids = model.objects.filter(field="body", term__in=set(query_terms)).values(relation)
     matches = Q(pk__in=[])
     title_rank, body_rank = Value(0.0), Value(0.0)
     if "title" in fields:
@@ -109,6 +118,28 @@ def matching_documents(docs, query, *, allowed_body, fields=("title", "body")):
         matches |= allowed_body & Q(pk__in=body_ids)
         body_rank = Case(When(allowed_body, then=frequency("body") * 1.0), default=Value(0.0), output_field=FloatField())
     return docs.filter(matches).annotate(_search_rank=title_rank * 4.0 + body_rank).order_by("-_search_rank", "-pk")
+
+
+def matching_documents(docs, query, *, allowed_body, fields=("title", "body")):
+    active = SearchSnapshot.objects.filter(generation__in=SearchIndexState.objects.exclude(
+        active_generation="",
+    ).values("active_generation"))
+    mode = Exists(SearchIndexState.objects.filter(kind=OuterRef("kind")).exclude(active_generation=""))
+    docs = docs.alias(_uses_snapshot=mode)
+    legacy = _matching_tokens(docs.filter(_uses_snapshot=False), query, allowed_body=allowed_body, fields=fields)
+    snapshots = _matching_tokens(active.filter(document_id__in=docs.values("pk")), query,
+        allowed_body=Q(document_id__in=docs.filter(allowed_body).values("pk")), fields=fields, snapshots=True)
+    snapshot = active.filter(document_id=OuterRef("pk"))
+    return docs.filter(Q(pk__in=legacy.values("pk")) | Q(pk__in=snapshots.values("document_id"))).annotate(
+        _body_allowed=Case(When(allowed_body, then=True), default=False, output_field=BooleanField()),
+        _search_rank=Case(When(_uses_snapshot=True, then=Subquery(snapshots.filter(
+            document_id=OuterRef("pk")).values("_search_rank")[:1])),
+            default=Subquery(legacy.filter(pk=OuterRef("pk")).values("_search_rank")[:1]), output_field=FloatField()),
+        _search_title_tokens=Case(When(_uses_snapshot=True, then=Subquery(snapshot.values("title_tokens")[:1])),
+                                 default=F("title_tokens"), output_field=TextField()),
+        _search_body_tokens=Case(When(_uses_snapshot=True, then=Subquery(snapshot.values("body_tokens")[:1])),
+                                default=F("body_tokens"), output_field=TextField()),
+    ).order_by("-_search_rank", "-pk")
 
 
 def indexed_queryset(queryset, query, *, kind, fields=("title", "body"), request=None):
@@ -131,15 +162,14 @@ def popular_terms():
     key = "site-search:popular:v1"
     words = cache.get(key)
     if words is None:
-        rows = (SearchKeywordDaily.objects.filter(day__gte=timezone.localdate() - timedelta(days=6), source__in=("site", "shop", "api"))
-                .exclude(keyword="").values("keyword").annotate(n=Sum("count")).order_by("-n", "keyword")[:50])
-        words = [(row["keyword"], row["n"]) for row in rows]
+        from gnu_jango.core.search_privacy import popular_keyword_rows
+        words = [(row["keyword"], row["cnt"]) for row in popular_keyword_rows(days=7, limit=50)]
         cache.set(key, words, 60)
     return words
 
 
-def ranked_results(request, query, *, result_type="all", bo_table=""):
-    from .feedback import click_token, query_hash
+def ranked_results(request, query, *, result_type="all", bo_table="", page=None, limit=20):
+    from .feedback import query_hash
 
     docs, body = visible_documents(request, result_type=result_type, bo_table=bo_table)
     hits = matching_documents(docs, query, allowed_body=body)
@@ -152,12 +182,16 @@ def ranked_results(request, query, *, result_type="all", bo_table=""):
         hits = docs.filter(TrigramSimilar(Lower("title"), Value(query.lower()))).annotate(
             _search_rank=TrigramSimilarity(Lower("title"), Value(query.lower())),
             _body_allowed=Case(When(body, then=True), default=False, output_field=BooleanField()),
+            _search_title_tokens=F("title_tokens"), _search_body_tokens=F("body_tokens"),
         ).order_by("-_search_rank", "-pk")
         total, fuzzy = hits.count(), True
-    candidates = list(hits.select_related("post__board__group", "product", "page")[:CANDIDATE_LIMIT])
+    group = docs_group_id()
+    candidates = list(hits.annotate(_manual=Case(
+        When(post__board__group__gr_id=group, then=True), default=False, output_field=BooleanField(),
+    )).only("pk", "kind", "title", "post_id", "product_id", "page_id")[:CANDIDATE_LIMIT])
     query_terms = terms(query, MAX_QUERY_TERMS)
     scores = bm25_scores([
-        doc.title_tokens.split() * 4 + (doc.body_tokens.split() if doc._body_allowed else [])
+        doc._search_title_tokens.split() * 4 + (doc._search_body_tokens.split() if doc._body_allowed else [])
         for doc in candidates
     ], [encoded(term) for term in query_terms])
     clicks = dict(SearchClickDaily.objects.filter(
@@ -166,8 +200,7 @@ def ranked_results(request, query, *, result_type="all", bo_table=""):
     ).values("document_id").annotate(n=Sum("count")).values_list("document_id", "n")) if candidates else {}
     popular = [(set(terms(word, MAX_QUERY_TERMS)), count) for word, count in popular_terms()]
     query_set = set(query_terms)
-    group = docs_group_id()
-    results = []
+    ranked = []
     for doc, score in zip(candidates, scores):
         if fuzzy:
             score = float(doc._search_rank)
@@ -176,23 +209,58 @@ def ranked_results(request, query, *, result_type="all", bo_table=""):
         title_terms = set(terms(doc.title, 256))
         popularity = sum(count for word, count in popular if word & query_set and word & title_terms)
         multiplier = 1 + min(0.05, log1p(popularity) * 0.005) + min(0.1, log1p(clicks.get(doc.pk, 0)) * 0.02)
-        source = getattr(doc, doc.kind)
-        _, text = source_text(source, doc.kind)
-        snippet = _snippet(text, query_terms) if doc._body_allowed else ""
+        kind = "document" if doc.kind == "page" or doc._manual else doc.kind
+        ranked.append((doc, round(score * multiplier, 6), kind))
+    ranked.sort(key=lambda item: (-item[1], item[2], str(getattr(item[0], f"{item[0].kind}_id"))))
+    meta = {"engine": "postgresql-fts" if connections[docs.db].vendor == "postgresql" else "inverted-index",
+            "total": total, "candidate_limit": CANDIDATE_LIMIT, "truncated": total > CANDIDATE_LIMIT, "fuzzy": fuzzy}
+    if page is not None:
+        pages = max(1, (len(ranked) + limit - 1) // limit)
+        page = min(max(page, 1), pages)
+        meta.update(current_page=page, per_page=limit, total_pages=pages)
+        ranked = ranked[(page - 1) * limit:page * limit]
+    return hydrate_results(request, ranked, query, query_terms), meta
+
+
+def hydrate_results(request, ranked, query, query_terms):
+    from .feedback import click_token
+
+    if not ranked:
+        return []
+    docs, body_allowed = visible_documents(request)
+    def joined(prefix, fields):
+        parts = []
+        for field in fields:
+            if parts:
+                parts.append(Value(" "))
+            parts.append(Substr(Coalesce(F(f"{prefix}__{field}"), Value(""), output_field=TextField()), 1, MAX_TEXT_CHARS))
+        return Concat(*parts, output_field=TextField())
+    body = Case(
+        When(kind="post", then=F("post__wr_content")),
+        When(kind="product", then=joined("product", (
+            "it_id", "it_basic", "it_content", "it_explan", "it_brand", "it_model", "it_maker"))),
+        default=joined("page", ("co_content", "co_mobile_content")), output_field=TextField(),
+    )
+    rows = docs.filter(pk__in=[doc.pk for doc, _, _ in ranked]).annotate(
+        _preview=Case(When(body_allowed, then=Substr(body, 1, MAX_TEXT_CHARS)), default=Value(""), output_field=TextField()),
+        _title=Case(When(kind="post", then=F("post__wr_subject")), When(kind="product", then=F("product__it_name")),
+                    default=F("page__co_subject"), output_field=TextField()),
+    ).values("pk", "_preview", "_title", "post__legacy_wr_id", "post__board__bo_table", "post__board__bo_subject", "product__it_price")
+    details = {row["pk"]: row for row in rows}
+    results = []
+    for doc, score, result_type_name in ranked:
+        row = details.get(doc.pk)
+        if row is None:
+            continue
+        source_id = getattr(doc, f"{doc.kind}_id")
         if doc.kind == "post":
-            result_type_name = "document" if group and source.board.group and source.board.group.gr_id == group else "post"
-            url = get_pretty_url(source.board.bo_table, source.legacy_wr_id or source.pk)
-            extra = {"bo_table": source.board.bo_table, "bo_subject": source.board.bo_subject}
+            url = get_pretty_url(row["post__board__bo_table"], row["post__legacy_wr_id"] or source_id)
+            extra = {"bo_table": row["post__board__bo_table"], "bo_subject": row["post__board__bo_subject"]}
         elif doc.kind == "product":
-            result_type_name, url = "product", f"/shop/products/{quote(str(source.pk), safe='')}"
-            extra = {"price": source.it_price}
+            url, extra = f"/shop/products/{quote(str(source_id), safe='')}", {"price": row["product__it_price"]}
         else:
-            result_type_name, url = "document", f"/content/{quote(str(source.pk), safe='')}"
-            extra = {}
-        results.append({"type": result_type_name, "id": str(source.pk), "title": doc.title,
-                        "url": url, "snippet": snippet, "score": round(score * multiplier, 6),
+            url, extra = f"/content/{quote(str(source_id), safe='')}", {}
+        results.append({"type": result_type_name, "id": str(source_id), "title": row["_title"],
+                        "url": url, "snippet": _snippet(plain_text(row["_preview"]), query_terms), "score": score,
                         "click_token": click_token(query, doc.pk), **extra})
-    results.sort(key=lambda row: (-row["score"], row["type"], row["id"]))
-    return results, {"engine": "postgresql-fts" if connections[docs.db].vendor == "postgresql" else "inverted-index",
-                     "total": total, "candidate_limit": CANDIDATE_LIMIT, "truncated": total > CANDIDATE_LIMIT,
-                     "fuzzy": fuzzy}
+    return results

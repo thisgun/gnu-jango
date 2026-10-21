@@ -233,6 +233,15 @@ class VisitTrackingMiddleware:
     def __call__(self, request):
         response = self.get_response(request)
         path = unquote(getattr(request, "path", "") or "/")
+        if request.headers.get("DNT") == "1":
+            return response
+        is_search = any(marker in path for marker in self.SEARCH_PATH_MARKERS)
+        if is_search and (
+            not 200 <= response.status_code < 300
+            or (any(name in request.GET for name in self.SEARCH_PARAM_NAMES)
+                and not self._search_keyword(request.GET, path))
+        ):
+            return response
         logged_values = (
             path,
             request.META.get("QUERY_STRING") or "",
@@ -304,7 +313,8 @@ class VisitTrackingMiddleware:
             if "\x00" in value:
                 return ""
             if value:
-                return " ".join(value.split())[:255]
+                from .search_privacy import analytics_keyword
+                return analytics_keyword(value)
         return ""
 
     def _searched_today_already(self, visit, source, keyword):

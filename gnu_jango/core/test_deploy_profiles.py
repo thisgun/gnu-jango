@@ -394,11 +394,12 @@ class ScheduledJobsRunnerTests(TestCase):
                 "expire_pending_email_members",
                 "expire_toss_vbank_orders",
                 "cleanup_admin_privacy",
+                "cleanup_search_clicks",
                 "save_order_points",
             ],
         )
         for name, args in runner.calls:
-            if name == "cleanup_admin_privacy":
+            if name in {"cleanup_admin_privacy", "cleanup_search_clicks"}:
                 self.assertNotIn("--dry-run", args)
             else:
                 self.assertIn("--apply", args)
@@ -416,7 +417,7 @@ class ScheduledJobsRunnerTests(TestCase):
         self.assertTrue(report["dry_run"])
         for name, args in runner.calls:
             self.assertNotIn("--apply", args)
-            if name == "cleanup_admin_privacy":
+            if name in {"cleanup_admin_privacy", "cleanup_search_clicks"}:
                 self.assertIn("--dry-run", args)
 
     def test_one_failing_job_does_not_stop_the_others(self):
@@ -427,8 +428,8 @@ class ScheduledJobsRunnerTests(TestCase):
 
         self.assertFalse(report["ok"])
         self.assertEqual(report["failed"], 1)
-        self.assertEqual(report["succeeded"], 4)
-        self.assertEqual(len(runner.calls), 5)
+        self.assertEqual(report["succeeded"], len(scheduled_jobs.SCHEDULED_JOBS) - 1)
+        self.assertEqual(len(runner.calls), len(scheduled_jobs.SCHEDULED_JOBS))
         failed = report["jobs"][1]
         self.assertEqual(failed["status"], "failed")
         self.assertIn("exploded", failed["error"])
@@ -459,7 +460,7 @@ class RunScheduledJobsCommandTests(TestCase):
 
         output = stdout.getvalue()
         self.assertIn("expire_pending_payment_orders: ok", output)
-        self.assertIn("5 ok, 0 failed", output)
+        self.assertIn(f"{len(scheduled_jobs.SCHEDULED_JOBS)} ok, 0 failed", output)
 
     def test_exits_non_zero_when_any_job_failed(self):
         stdout = StringIO()
@@ -520,9 +521,10 @@ class CronEndpointTests(TestCase):
         body = response.json()
         self.assertTrue(body["ok"])
         self.assertEqual(body["data"]["failed"], 0)
-        self.assertEqual(len(body["data"]["jobs"]), 5)
+        self.assertEqual(len(body["data"]["jobs"]), len(scheduled_jobs.SCHEDULED_JOBS))
         self.assertIn("no-store", response["Cache-Control"])
-        self.assertTrue(all("--apply" in args for name, args in runner.calls if name != "cleanup_admin_privacy"))
+        self.assertTrue(all("--apply" in args for name, args in runner.calls
+                            if name not in {"cleanup_admin_privacy", "cleanup_search_clicks"}))
 
     @override_settings(CRON_SECRET="s" * 32)
     def test_post_and_dry_run_query(self):

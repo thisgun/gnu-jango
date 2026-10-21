@@ -46,6 +46,33 @@ class SearchIndexState(models.Model):
     kind = models.CharField(primary_key=True, max_length=10, choices=SearchDocument.KIND_CHOICES)
     ready = models.BooleanField(default=False)
     tokenizer = models.CharField(max_length=40, blank=True)
+    active_generation = models.CharField(max_length=32, blank=True, default="")
+    building_generation = models.CharField(max_length=32, blank=True, default="")
+    build_updated_at = models.DateTimeField(null=True, blank=True)
+
+
+class SearchSnapshot(models.Model):
+    """A replaceable index generation; source identities and click FKs stay stable."""
+    document = models.ForeignKey(SearchDocument, on_delete=models.CASCADE, related_name="snapshots")
+    generation = models.CharField(max_length=32, db_index=True)
+    title_tokens = models.TextField(blank=True)
+    body_tokens = models.TextField(blank=True)
+    fingerprint = models.CharField(max_length=64)
+    tokenizer = models.CharField(max_length=40)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["document", "generation"], name="search_snapshot_unique")]
+
+
+class SearchSnapshotPosting(models.Model):
+    snapshot = models.ForeignKey(SearchSnapshot, on_delete=models.CASCADE, related_name="postings")
+    field = models.CharField(max_length=5)
+    term = models.CharField(max_length=128)
+    frequency = models.PositiveIntegerField()
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["snapshot", "field", "term"], name="search_snap_posting_unique")]
+        indexes = [models.Index(fields=["term", "field", "snapshot"], name="search_snap_term_field")]
 
 
 class SearchClickDaily(models.Model):
