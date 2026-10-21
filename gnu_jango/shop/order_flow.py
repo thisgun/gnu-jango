@@ -31,7 +31,6 @@ NEXT_STATUS = {
     STATUS_SHIPPING: STATUS_COMPLETED,
 }
 CANCELLABLE_STATUSES = {STATUS_ORDERED, STATUS_PAID, STATUS_READY}
-CART_COUPON_METHODS = {0, 1}  # product and category coupons (cp_method 2 order, 3 shipping)
 
 # Older rows (and the API's own aliases) spell the statuses in English.
 STATUS_ALIASES = {
@@ -130,11 +129,9 @@ def allowed_targets(order):
 
 def order_cart_coupon(order):
     """The product coupons of the order (youngcart od_cart_coupon), from its coupon logs."""
-    return sum(
-        int(log.cp_price or 0)
-        for log in order.coupon_logs.select_related("coupon")
-        if log.coupon_id and log.coupon and log.coupon.cp_method in CART_COUPON_METHODS
-    )
+    from gnu_jango.shop.order_coupons import order_coupon_totals
+
+    return order_coupon_totals(order).cart
 
 
 def order_misu(order):

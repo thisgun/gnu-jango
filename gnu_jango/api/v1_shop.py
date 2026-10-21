@@ -58,6 +58,7 @@ from gnu_jango.shop.payment_options import (
     cash_receipt_preferences,
     online_payment_method_enabled,
 )
+from gnu_jango.shop.order_coupons import order_coupon_totals
 from gnu_jango.shop.shipping import (
     allowed_point_use,
     current_shipping_policy,
@@ -561,10 +562,8 @@ def order_item_payload(item):
 def order_payload(order, *, detail=False):
     items = list(order.items.select_related("product").all()) if detail else []
     status_value = normalize_order_status(order.od_status)
-    coupon_logs = list(order.coupon_logs.select_related("coupon").all())
-    cart_coupon = sum(log.cp_price for log in coupon_logs if log.coupon and log.coupon.cp_method in {0, 1})
-    order_coupon = order.od_coupon or sum(log.cp_price for log in coupon_logs if log.coupon and log.coupon.cp_method == 2)
-    send_coupon = order.od_send_coupon or sum(log.cp_price for log in coupon_logs if log.coupon and log.coupon.cp_method == 3)
+    coupons = order_coupon_totals(order)
+    cart_coupon, order_coupon, send_coupon = coupons.cart, coupons.order, coupons.send
     if status_value == ORDER_STATUS_CANCELLED:
         cart_coupon = 0
         order_coupon = 0

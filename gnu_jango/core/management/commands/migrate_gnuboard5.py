@@ -1671,7 +1671,10 @@ class Command(BaseCommand):
                     "od_tax_mny": integer(row, "od_tax_mny", 0),
                     "od_vat_mny": integer(row, "od_vat_mny", 0),
                     "od_free_mny": integer(row, "od_free_mny", 0),
-                    "od_coupon": integer(row, "od_coupon", 0) + integer(row, "od_cart_coupon", 0),
+                    # od_coupon is the order coupon only: the product coupons (od_cart_coupon) come
+                    # back from the imported coupon logs (order_coupon_totals), so folding them in
+                    # here subtracted them twice from the order total
+                    "od_coupon": integer(row, "od_coupon", 0),
                     "od_send_coupon": integer(row, "od_send_coupon", 0),
                     "od_point": integer(row, "od_receipt_point", 0),
                     "od_cash_no": text(row, "od_cash_no", max_length=255),
