@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { addressFromMember } from "../src/app/shop/order/orderDataHelpers";
-import { normalizeOrderStatus, orderStatusLabel } from "../src/lib/order-status";
+import { isClosedOrderStatus, normalizeOrderStatus, orderStatusLabel } from "../src/lib/order-status";
 import { shopSearchHref } from "../src/lib/product-url";
 import { formatDateTime } from "../src/lib/utils";
 
@@ -32,6 +32,10 @@ test.describe("shop front fixes", () => {
     // orderinquiry.sub.php: anything else reads as a cancelled order
     expect(orderStatusLabel("알수없음")).toEqual({ label: "주문취소", tone: "error" });
     expect(normalizeOrderStatus(" 배송중 ")).toBe("배송");
+    // admin line changes (orderformcartupdate.php) close an order as 반품, a line also as 품절
+    expect(orderStatusLabel("반품").label).toBe("반품");
+    expect(orderStatusLabel("품절").label).toBe("품절취소");
+    expect(["취소", "반품", "품절", "배송"].map(isClosedOrderStatus)).toEqual([true, true, true, false]);
   });
 
   test("the order form prefills the member contact returned by /auth/me", () => {
