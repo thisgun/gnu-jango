@@ -1116,9 +1116,9 @@ class ShopOrderItemAdmin(ModelAdmin):
 
     @admin.display(description=_("Price"), ordering="ct_price")
     def price_display(self, obj):
-        return money_html(obj.ct_price + obj.io_price)
+        return money_html(order_line_unit_price(obj))
 
     @admin.display(description=_("Line total"))
     def line_total_display(self, obj):
-        return money_html((obj.ct_price + obj.io_price) * obj.ct_qty)
+        return money_html(order_line_unit_price(obj) * obj.ct_qty)
 

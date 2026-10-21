@@ -958,8 +958,10 @@ class ShopOrderAdmin(ModelAdmin):
         if export_type == "csv":
             return self.sales_rank_csv(rows)
 
-        total_sales = order_items.aggregate(value=Sum(order_line_sales_expression()))["value"] or 0
-        total_points = order_items.aggregate(value=Sum(order_line_point_expression()))["value"] or 0
+        # cancelled, returned and sold-out lines are not sales (youngcart itemsellrank.php status split)
+        sold_items = order_items.filter(sold_line_q())
+        total_sales = sold_items.aggregate(value=Sum(order_line_sales_expression()))["value"] or 0
+        total_points = sold_items.aggregate(value=Sum(order_line_point_expression()))["value"] or 0
         metrics = [
             {
                 "label": _("Ranked products"),
@@ -968,8 +970,8 @@ class ShopOrderAdmin(ModelAdmin):
             },
             {
                 "label": _("Sold quantity"),
-                "value": format_number(order_items.aggregate(value=Sum("ct_qty"))["value"]),
-                "hint": _("%(count)s order lines") % {"count": format_number(order_items.count())},
+                "value": format_number(sold_items.aggregate(value=Sum("ct_qty"))["value"]),
+                "hint": _("%(count)s order lines") % {"count": format_number(sold_items.count())},
             },
             {
                 "label": _("Product sales"),
@@ -995,19 +997,22 @@ class ShopOrderAdmin(ModelAdmin):
             },
             "metrics": metrics,
             "rank_rows": rows,
+            "rank_statuses": [status for status, _ in SALES_RANK_STATUS_GROUPS],
         }
         request.current_app = self.admin_site.name
         return TemplateResponse(request, "admin/shop/sales_rank.html", context)
 
     def product_sales_rank_rows(self, order_items, limit=100):
+        sold = sold_line_q()
         ranked_queryset = (
             order_items.values("product_id", "it_id", "it_name")
             .annotate(
-                line_count=Count("pk"),
-                order_count=Count("order_id", distinct=True),
-                quantity=Sum("ct_qty"),
-                gross_sales=Sum(order_line_sales_expression()),
-                reward_points=Sum(order_line_point_expression()),
+                line_count=Count("pk", filter=sold),
+                order_count=Count("order_id", distinct=True, filter=sold),
+                quantity=Coalesce(Sum("ct_qty", filter=sold), 0),
+                gross_sales=Coalesce(Sum(order_line_sales_expression(), filter=sold), 0),
+                reward_points=Coalesce(Sum(order_line_point_expression(), filter=sold), 0),
+                **sales_rank_status_annotations(),
             )
             .order_by("-gross_sales", "-quantity", "it_name")
         )
@@ -1032,6 +1037,10 @@ class ShopOrderAdmin(ModelAdmin):
                     "gross_sales": format_number(gross_sales),
                     "reward_points": format_number(row["reward_points"]),
                     "share": round((gross_sales / max_sales) * 100) if max_sales else 0,
+                    "status_quantities": [
+                        format_number(row[f"status_{status_index}"])
+                        for status_index in range(len(SALES_RANK_STATUS_GROUPS))
+                    ],
                 }
             )
         return rows
@@ -1562,6 +1571,7 @@ class ShopOrderAdmin(ModelAdmin):
                 "gross_sales",
                 "reward_points",
                 "share_percent",
+                *(f"qty_{status}" for status, _ in SALES_RANK_STATUS_GROUPS),
             ],
             (
                 [
@@ -1574,6 +1584,7 @@ class ShopOrderAdmin(ModelAdmin):
                     str(row["gross_sales"]).replace(",", ""),
                     str(row["reward_points"]).replace(",", ""),
                     row["share"],
+                    *(str(quantity).replace(",", "") for quantity in row["status_quantities"]),
                 ]
                 for row in rows
             ),

@@ -2,7 +2,8 @@ import csv
 from datetime import timedelta
 
 from django.contrib import admin
-from django.db.models import Count, ExpressionWrapper, F, IntegerField, Q, Sum
+from django.db.models import Case, Count, ExpressionWrapper, F, IntegerField, Q, Sum, When
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.urls import path
@@ -252,8 +253,52 @@ def brief_personal_pay_rows(queryset):
     ]
 
 
+def order_line_unit_price(line):
+    """youngcart: a supplement line (io_type 1) sells at its own io_price, an option line at the
+    product price plus the option's price."""
+    return line.io_price if line.io_type == 1 else line.ct_price + line.io_price
+
+
 def order_line_sales_expression():
-    return ExpressionWrapper((F("ct_price") + F("io_price")) * F("ct_qty"), output_field=IntegerField())
+    """The amount of an order line in SQL, youngcart's
+    ``IF(io_type = 1, io_price * ct_qty, (ct_price + io_price) * ct_qty)``."""
+    return Case(
+        When(io_type=1, then=F("io_price") * F("ct_qty")),
+        default=(F("ct_price") + F("io_price")) * F("ct_qty"),
+        output_field=IntegerField(),
+    )
+
+
+def _status_spellings(status):
+    from gnu_jango.shop.order_flow import STATUS_ALIASES
+
+    return (status, *sorted(alias for alias, canonical in STATUS_ALIASES.items() if canonical == status))
+
+
+# youngcart itemsellrank.php: the quantity of each product per line status (the cart state 쇼핑
+# never reaches an order here), with the older English spellings of the same status
+SALES_RANK_STATUS_GROUPS = tuple(
+    (status, _status_spellings(status)) for status in ("주문", "입금", "준비", "배송", "완료", "취소", "반품", "품절")
+)
+# lines that did not end up sold: they stay out of the sales quantity and amount
+UNSOLD_LINE_STATUSES = frozenset(
+    spelling
+    for status, spellings in SALES_RANK_STATUS_GROUPS
+    if status in {"취소", "반품", "품절"}
+    for spelling in spellings
+)
+
+
+def sold_line_q():
+    return ~Q(ct_status__in=UNSOLD_LINE_STATUSES)
+
+
+def sales_rank_status_annotations():
+    """``status_<n>``: the quantity of the lines in the n-th SALES_RANK_STATUS_GROUPS status."""
+    return {
+        f"status_{index}": Coalesce(Sum("ct_qty", filter=Q(ct_status__in=spellings)), 0)
+        for index, (_, spellings) in enumerate(SALES_RANK_STATUS_GROUPS)
+    }
 
 
 def order_line_point_expression():
@@ -497,8 +542,7 @@ class ShopOrderItemInline(TabularInline):
 
     @admin.display(description=_("Line total"))
     def line_total(self, obj):
-        unit_price = obj.io_price if obj.io_type == 1 else obj.ct_price + obj.io_price
-        return money_html(max(0, unit_price) * obj.ct_qty)
+        return money_html(max(0, order_line_unit_price(obj)) * obj.ct_qty)
 
 
 class ShopOrderDataInline(TabularInline):

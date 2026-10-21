@@ -67,6 +67,7 @@
           <th scope="col">{% translate 'Lines' %}</th>
           <th scope="col">{% translate 'Sales' %}</th>
           <th scope="col">{% translate 'Points' %}</th>
+          {% for status in rank_statuses %}<th scope="col">{{ status }}</th>{% endfor %}
         </tr>
       </thead>
       <tbody>
@@ -93,9 +94,10 @@
           <td>{{ row.line_count }}</td>
           <td>{{ row.gross_sales }}</td>
           <td>{{ row.reward_points }}</td>
+          {% for quantity in row.status_quantities %}<td>{{ quantity }}</td>{% endfor %}
         </tr>
         {% empty %}
-        <tr><td colspan="8" class="g5-admin-empty">{% translate 'No product sales rows match the selected period.' %}</td></tr>
+        <tr><td colspan="16" class="g5-admin-empty">{% translate 'No product sales rows match the selected period.' %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
