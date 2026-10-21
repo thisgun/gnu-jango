@@ -2,7 +2,7 @@
   "generated_at": "2026-10-21T11:15:05.897957+09:00",
   "http_baseline_measured_at": "2026-10-21T10:56:10.108628+09:00",
   "baseline_commit": "efa8f50bfb12c25660898bfcd1a0e04271ea91ea",
-  "candidate_deployed": false,
+  "candidate_deployed": true,
   "cold_start_verified": false,
   "http_baseline": {
     "quality": {
@@ -79,7 +79,12 @@
         }
       ],
       "baseline_rank": 18,
-      "candidate_service_rank": 3
+      "candidate_service_rank": 3,
+      "production_http_ranks": [
+        3,
+        3,
+        3
+      ]
     },
     {
       "id": "manual-level",
@@ -92,7 +97,12 @@
         }
       ],
       "baseline_rank": 1,
-      "candidate_service_rank": 1
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
     },
     {
       "id": "manual-guest",
@@ -105,7 +115,12 @@
         }
       ],
       "baseline_rank": 1,
-      "candidate_service_rank": 1
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
     },
     {
       "id": "manual-spam",
@@ -118,7 +133,12 @@
         }
       ],
       "baseline_rank": 2,
-      "candidate_service_rank": 1
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
     },
     {
       "id": "manual-category",
@@ -131,7 +151,12 @@
         }
       ],
       "baseline_rank": 1,
-      "candidate_service_rank": 1
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
     },
     {
       "id": "manual-shipping",
@@ -144,7 +169,12 @@
         }
       ],
       "baseline_rank": 1,
-      "candidate_service_rank": 1
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
     },
     {
       "id": "manual-payment",
@@ -157,7 +187,12 @@
         }
       ],
       "baseline_rank": 2,
-      "candidate_service_rank": 1
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
     },
     {
       "id": "manual-vbank",
@@ -170,7 +205,12 @@
         }
       ],
       "baseline_rank": 1,
-      "candidate_service_rank": 1
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
     },
     {
       "id": "manual-pythonanywhere",
@@ -183,7 +223,12 @@
         }
       ],
       "baseline_rank": 1,
-      "candidate_service_rank": 2
+      "candidate_service_rank": 2,
+      "production_http_ranks": [
+        2,
+        2,
+        2
+      ]
     },
     {
       "id": "manual-env",
@@ -196,7 +241,12 @@
         }
       ],
       "baseline_rank": 2,
-      "candidate_service_rank": 1
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
     },
     {
       "id": "manual-search-error",
@@ -209,7 +259,12 @@
         }
       ],
       "baseline_rank": 2,
-      "candidate_service_rank": 3
+      "candidate_service_rank": 3,
+      "production_http_ranks": [
+        3,
+        3,
+        3
+      ]
     },
     {
       "id": "manual-search-clicks",
@@ -222,7 +277,12 @@
         }
       ],
       "baseline_rank": 1,
-      "candidate_service_rank": 1
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
     },
     {
       "id": "post-photo",
@@ -235,7 +295,12 @@
         }
       ],
       "baseline_rank": 1,
-      "candidate_service_rank": 1
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
     },
     {
       "id": "post-profile",
@@ -248,7 +313,12 @@
         }
       ],
       "baseline_rank": 1,
-      "candidate_service_rank": 1
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
     },
     {
       "id": "post-mobile",
@@ -261,7 +331,12 @@
         }
       ],
       "baseline_rank": 1,
-      "candidate_service_rank": 1
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
     },
     {
       "id": "post-howto",
@@ -274,7 +349,12 @@
         }
       ],
       "baseline_rank": 1,
-      "candidate_service_rank": 1
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
     },
     {
       "id": "product-stand",
@@ -286,7 +366,12 @@
         }
       ],
       "baseline_rank": 2,
-      "candidate_service_rank": 2
+      "candidate_service_rank": 2,
+      "production_http_ranks": [
+        2,
+        2,
+        2
+      ]
     },
     {
       "id": "product-mat",
@@ -298,7 +383,12 @@
         }
       ],
       "baseline_rank": 2,
-      "candidate_service_rank": 2
+      "candidate_service_rank": 2,
+      "production_http_ranks": [
+        2,
+        2,
+        2
+      ]
     },
     {
       "id": "product-mug",
@@ -310,7 +400,12 @@
         }
       ],
       "baseline_rank": 2,
-      "candidate_service_rank": 2
+      "candidate_service_rank": 2,
+      "production_http_ranks": [
+        2,
+        2,
+        2
+      ]
     },
     {
       "id": "product-pot",
@@ -322,7 +417,12 @@
         }
       ],
       "baseline_rank": 1,
-      "candidate_service_rank": 1
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
     }
   ],
   "controlled_service_ab": [
@@ -372,5 +472,108 @@
         "current": 292.79
       }
     }
-  ]
+  ],
+  "rollout": {
+    "code_commit": "b199b6d5e6c221c7a748c9f7863b61b613920a07",
+    "merge_commit": "6987fdca0f239deb7dd134d807a20b78d8adb4a9",
+    "pr": "https://github.com/thisgun/gnu-jango/pull/48",
+    "ci_run": "https://github.com/thisgun/gnu-jango/actions/runs/39533441565",
+    "tests": 2341,
+    "skips": 9,
+    "coverage_percent": 75,
+    "deployments": {
+      "demo": {
+        "id": "dpl_34d2Who5u64CNLcnDQbnz94M4sCQ",
+        "url": "https://gnu-jango-demo.vercel.app",
+        "region": [
+          "icn1"
+        ],
+        "state": "READY"
+      },
+      "handbook": {
+        "id": "dpl_7NYLMHV6V9cCGEsLvmQVfEvdf95M",
+        "url": "https://gnu-jango-handbook.vercel.app",
+        "region": [
+          "icn1"
+        ],
+        "state": "READY"
+      }
+    },
+    "handbook_ranking_chapter": {
+      "post_id": 43,
+      "updated": true,
+      "baseline_matched": true,
+      "other_chapters_changed": false
+    },
+    "http_after": {
+      "measured_at": "2026-10-21T11:41:32.142985+09:00",
+      "quality": {
+        "all": {
+          "cases": 20,
+          "hits_top3": 20,
+          "top3_rate": 1.0
+        },
+        "document": {
+          "cases": 12,
+          "hits_top3": 12,
+          "top3_rate": 1.0
+        },
+        "post": {
+          "cases": 4,
+          "hits_top3": 4,
+          "top3_rate": 1.0
+        },
+        "product": {
+          "cases": 4,
+          "hits_top3": 4,
+          "top3_rate": 1.0
+        }
+      },
+      "latency": {
+        "demo": {
+          "first_pass": {
+            "count": 8,
+            "mean_ms": 298.03,
+            "p50_ms": 178.28,
+            "p95_ms": 739.84,
+            "max_ms": 739.84
+          },
+          "repeated": {
+            "count": 16,
+            "mean_ms": 207.39,
+            "p50_ms": 186.86,
+            "p95_ms": 319.72,
+            "max_ms": 319.72
+          }
+        },
+        "handbook": {
+          "first_pass": {
+            "count": 12,
+            "mean_ms": 405.36,
+            "p50_ms": 349.28,
+            "p95_ms": 674.99,
+            "max_ms": 674.99
+          },
+          "repeated": {
+            "count": 24,
+            "mean_ms": 317.28,
+            "p50_ms": 319.62,
+            "p95_ms": 365.49,
+            "max_ms": 390.06
+          }
+        }
+      },
+      "errors": 0,
+      "requests": 60,
+      "regions": [
+        "icn1"
+      ]
+    },
+    "smoke": {
+      "requests": 46,
+      "errors": 0,
+      "scope": "roots, shop, static assets, unique Top-3 result links, ranking chapter API"
+    },
+    "cold_start_verified": false
+  }
 }
