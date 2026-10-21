@@ -572,6 +572,10 @@ REST_FRAMEWORK = {
         "stock-notify": "10/min",
         # product recommendation mails a member may send (itemrecommendmail.php)
         "shop-recommend": "5/hour",
+        # the same, per address (any account, so several accounts cannot multiply it)
+        "shop-recommend-ip": "10/hour",
+        # personal pay lookups, payer checks and payments, per address (pp_id can be guessed)
+        "shop-personalpay": "30/min",
         "order-lookup": "10/min",
         "guest-password": "10/min",
         "docs-ask": "30/min",

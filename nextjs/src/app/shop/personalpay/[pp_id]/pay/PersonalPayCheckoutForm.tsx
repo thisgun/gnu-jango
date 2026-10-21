@@ -33,7 +33,10 @@ export function PersonalPayCheckoutForm({ pp, paymentConfig, onBankSaved }: Prop
   const bankAccounts = useMemo(() => paymentConfig?.bank_accounts ?? [], [paymentConfig]);
   const [paymentMethod, setPaymentMethod] = useState(() => firstEnabledMethod(paymentConfig));
   const [bankAccount, setBankAccount] = useState("");
-  const [depositName, setDepositName] = useState(pp.pp_deposit_name || pp.pp_name || "");
+  // 가려진 입금자명(홍*동)은 채워 넣지 않는다
+  const [depositName, setDepositName] = useState((pp.pii_masked ? "" : pp.pp_deposit_name) || pp.pp_name || "");
+  const payerCheck = pp.payer_check ?? "";
+  const [payerProof, setPayerProof] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -69,10 +72,24 @@ export function PersonalPayCheckoutForm({ pp, paymentConfig, onBankSaved }: Prop
       setError("입금 계좌와 입금자명을 입력해 주세요.");
       return;
     }
+    if (payerCheck === "hp" && !/^\d{4}$/.test(payerProof.trim())) {
+      setError("개인결제를 요청받은 휴대폰 번호 끝 4자리를 입력해 주세요.");
+      return;
+    }
+    if (payerCheck === "email" && !payerProof.trim()) {
+      setError("개인결제를 요청받은 이메일 주소를 입력해 주세요.");
+      return;
+    }
     if (!agreed) {
       setError("결제 진행에 동의해 주세요.");
       return;
     }
+    const proof =
+      payerCheck === "hp"
+        ? { payer_hp_last4: payerProof.trim() }
+        : payerCheck === "email"
+          ? { payer_email: payerProof.trim() }
+          : {};
 
     setSubmitting(true);
     try {
@@ -82,6 +99,7 @@ export function PersonalPayCheckoutForm({ pp, paymentConfig, onBankSaved }: Prop
           bank_account: bankAccount,
           deposit_name: depositName.trim(),
           agree: true,
+          ...proof,
         });
         if (res.data) onBankSaved(res.data);
         setSubmitting(false);
@@ -93,6 +111,7 @@ export function PersonalPayCheckoutForm({ pp, paymentConfig, onBankSaved }: Prop
       const res = await api.post<PersonalPayTossPrepared>(`${base}/toss/prepare`, {
         method: paymentMethod,
         agree: true,
+        ...proof,
       });
       if (!res.data) throw new Error("결제 준비에 실패했습니다.");
       // 결제창이 결과 주소(?result=success|fail)로 이동한다
@@ -130,6 +149,26 @@ export function PersonalPayCheckoutForm({ pp, paymentConfig, onBankSaved }: Prop
             </p>
           </div>
         </div>
+
+        {payerCheck ? (
+          <label className="mt-5 block text-sm">
+            <span className="font-medium">
+              {payerCheck === "hp" ? "결제자 확인 — 휴대폰 번호 끝 4자리" : "결제자 확인 — 요청받은 이메일 주소"}
+            </span>
+            <input
+              className={`${ORDER_INPUT_CLASS_NAME} mt-1.5`}
+              type={payerCheck === "hp" ? "text" : "email"}
+              inputMode={payerCheck === "hp" ? "numeric" : "email"}
+              autoComplete="off"
+              maxLength={payerCheck === "hp" ? 4 : 254}
+              value={payerProof}
+              onChange={(event) => setPayerProof(event.target.value)}
+            />
+            <span className="mt-1 block text-xs text-muted-foreground">
+              쇼핑몰이 개인결제를 보낸 연락처로 본인 여부를 확인합니다.
+            </span>
+          </label>
+        ) : null}
 
         <label className="mt-5 flex cursor-pointer items-start gap-2 text-sm">
           <input

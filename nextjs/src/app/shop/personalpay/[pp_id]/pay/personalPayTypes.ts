@@ -21,6 +21,10 @@ export interface PersonalPay {
   can_pay?: boolean;
   can_change_deposit?: boolean;
   payment_block_reason?: string;
+  /** 회원 본인·관리자가 아니면 연락처를 숨기고 입금자명은 가린다. */
+  pii_masked?: boolean;
+  /** 비회원 개인결제의 결제자 확인 — 휴대폰 끝 4자리(hp), 없으면 이메일(email). 빈 값이면 확인하지 않는다. */
+  payer_check?: "" | "hp" | "email";
 }
 
 /**

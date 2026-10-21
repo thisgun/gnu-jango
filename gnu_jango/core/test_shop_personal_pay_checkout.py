@@ -293,3 +293,117 @@ class TossPersonalPayTests(PersonalPayCheckoutBase):
         self.assertEqual(response.status_code, 200, response.content[:300])
         order.refresh_from_db()
         self.assertEqual((order.od_status, order.od_misu), ("입금", 0))
+
+
+class GuestPersonalPayAccessTests(PersonalPayCheckoutBase):
+    """A request issued without a member is public by its link (youngcart), but its contact details
+    are hidden and changing it needs the payer check."""
+
+    def guest_pay(self, pp_id=PP_ID, **fields):
+        return self.make_pay(pp_id, user=None, pp_name="홍길동", pp_hp="010-1234-5678", **fields)
+
+    def test_a_visitor_sees_the_request_without_its_contact_details(self):
+        self.guest_pay()
+        data = self.guest.get(f"{API}/personalpay/{PP_ID}").json()["data"]
+        self.assertEqual((data["pp_name"], data["pp_email"], data["pp_hp"]), ("홍길동", "", ""))
+        self.assertEqual((data["pii_masked"], data["payer_check"]), (True, "hp"))
+        staff_view = self.staff_client.get(f"{API}/personalpay/{PP_ID}").json()["data"]
+        self.assertEqual((staff_view["pp_hp"], staff_view["pii_masked"]), ("010-1234-5678", False))
+
+    def test_the_bank_choice_needs_the_phone_digits(self):
+        self.guest_pay()
+        missing = self.bank(self.guest)
+        self.assertEqual((missing.status_code, self.code(missing)), (403, "payer_check_failed"))
+        self.assertIn("끝 4자리", missing.json()["message"])
+        wrong = self.bank(self.guest, payer_hp_last4="0000")
+        self.assertEqual(wrong.status_code, 403)
+        self.assertIn("맞지 않습니다", wrong.json()["message"])
+        self.assertEqual(ShopPersonalPay.objects.get(pk=PP_ID).pp_deposit_name, "")
+
+        ok = self.bank(self.guest, payer_hp_last4="5678", deposit_name="홍길동")
+        self.assertEqual(ok.status_code, 200)
+        self.assertEqual(ok.json()["data"]["pp_deposit_name"], "홍*동")
+        self.assertEqual(ShopPersonalPay.objects.get(pk=PP_ID).pp_deposit_name, "홍길동")
+        # changing the depositor of the waiting request needs the same check
+        self.assertEqual(self.bank(self.guest, deposit_name="Someone").status_code, 403)
+        self.assertEqual(ShopPersonalPay.objects.get(pk=PP_ID).pp_deposit_name, "홍길동")
+
+    def test_the_email_is_the_check_when_there_is_no_phone(self):
+        self.make_pay(user=None, pp_name="Guest", pp_hp="", pp_email="Payer@Example.test")
+        self.assertEqual(self.guest.get(f"{API}/personalpay/{PP_ID}").json()["data"]["payer_check"], "email")
+        self.assertEqual(self.bank(self.guest, payer_email="other@example.test").status_code, 403)
+        self.assertEqual(self.bank(self.guest, payer_email="payer@example.test").status_code, 200)
+
+    def test_a_request_without_contact_details_keeps_its_first_depositor(self):
+        self.make_pay(user=None, pp_name="Guest", pp_hp="", pp_email="")
+        self.assertEqual(self.bank(self.guest).status_code, 200)
+        locked = self.bank(self.guest, deposit_name="Someone else")
+        self.assertEqual((locked.status_code, self.code(locked)), (403, "personalpay_deposit_locked"))
+        self.assertEqual(ShopPersonalPay.objects.get(pk=PP_ID).pp_deposit_name, "Depositor")
+        self.assertFalse(self.guest.get(f"{API}/personalpay/{PP_ID}").json()["data"]["can_change_deposit"])
+
+    @override_settings(**FAKE_TOSS)
+    def test_the_toss_prepare_needs_the_check_and_keeps_the_contact_details(self):
+        self.guest_pay()
+        url = f"{API}/personalpay/{PP_ID}/toss/prepare"
+        self.assertEqual(self.guest.post(url, {"method": "card", "agree": True}, format="json").status_code, 403)
+        response = self.guest.post(url, {"method": "card", "agree": True, "payer_hp_last4": "5678"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual((data["buyer_name"], data["buyer_email"], data["buyer_tel"]), ("홍길동", "", ""))
+
+    def test_lookups_are_throttled_per_address(self):
+        from rest_framework.throttling import ScopedRateThrottle
+
+        self.guest_pay()
+        with patch.dict(ScopedRateThrottle.THROTTLE_RATES, {"shop-personalpay": "2/min"}):
+            codes = [self.guest.get(f"{API}/personalpay/{PP_ID}").status_code for _ in range(3)]
+        self.assertEqual(codes, [200, 200, 429])
+
+
+@override_settings(**FAKE_TOSS)
+class PersonalPayRefundFailureTests(PersonalPayCheckoutBase):
+    def test_a_payment_that_can_neither_be_recorded_nor_cancelled_is_logged_and_reported(self):
+        from gnu_jango.api.shop_payments import PaymentCancelError
+
+        self.make_pay()
+
+        def approve_after_admin_confirmed(*_args):
+            ShopPersonalPay.objects.filter(pk=PP_ID).update(pp_receipt_price=5000)
+            return toss_done(), None
+
+        with (
+            patch("gnu_jango.api.shop_payments.toss_api_confirm", side_effect=approve_after_admin_confirmed),
+            patch("gnu_jango.api.shop_payments.toss_api_cancel_payment", side_effect=PaymentCancelError("down")),
+        ):
+            response = self.client.post(
+                f"{API}/personalpay/{PP_ID}/toss/confirm",
+                {"paymentKey": "pay-key-1", "orderId": TOSS_ORDER_ID, "amount": 5000},
+                format="json",
+            )
+
+        self.assertEqual((response.status_code, self.code(response)), (502, "personalpay_refund_failed"))
+        self.assertIn(f"쇼핑몰에 결제번호 {PP_ID}로 문의", response.json()["message"])
+        log = ShopOrderData.objects.get(log_id__startswith="pp-refund-failed-")
+        self.assertEqual(log.od_id, TOSS_ORDER_ID)
+        self.assertIn('"pp_id": "2026102100000001"', log.dt_data)
+        self.assertIn('"amount": 5000', log.dt_data)
+
+        request = RequestFactory().get("/admin/shop/shoppersonalpay/")
+        request.user = self.staff
+        request.session = {}
+        request._messages = FallbackStorage(request)
+        ShopPersonalPayAdmin(ShopPersonalPay, AdminSite()).warn_failed_refunds(request)
+        messages = [str(message) for message in request._messages]
+        self.assertTrue(any("자동 취소도 하지 못한" in message and TOSS_ORDER_ID in message for message in messages))
+
+    def test_a_returned_order_is_not_credited_by_a_late_deposit(self):
+        order = ShopOrder.objects.create(od_id="PP-RETURNED", od_status="반품", od_receipt_price=0, od_misu=0)
+        self.make_pay(order=order)
+        self.bank()
+        from gnu_jango.shop.personal_pay import confirm_bank_deposit
+
+        pay, reason = confirm_bank_deposit(PP_ID, actor="staff")
+        self.assertEqual(reason, "")
+        order.refresh_from_db()
+        self.assertEqual((order.od_status, order.od_receipt_price, order.od_shop_memo), ("반품", 0, ""))

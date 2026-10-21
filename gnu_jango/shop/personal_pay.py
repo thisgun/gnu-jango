@@ -197,7 +197,6 @@ def apply_receipt_to_order(item, receipt, *, actor=""):
     memo and a bank-deposit order that no longer owes anything moves to 입금."""
     from gnu_jango.api.shop_payments import settle_case_is_bank
     from gnu_jango.shop.order_flow import (
-        STATUS_CANCELLED,
         STATUS_ORDERED,
         STATUS_PAID,
         canonical_status,
@@ -205,8 +204,11 @@ def apply_receipt_to_order(item, receipt, *, actor=""):
         order_misu,
     )
 
+    from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES
+
     order = ShopOrder.objects.select_for_update().filter(pk=item.order_id).first()
-    if order is None or canonical_status(order.od_status) == STATUS_CANCELLED:
+    # a cancelled, returned or sold-out order is closed: its amounts are not reopened
+    if order is None or canonical_status(order.od_status) in INACTIVE_LINE_STATUSES:
         return
     note = f"개인결제 {item.pp_id} 로 결제완료 - {receipt.receipt_time}"
     order.od_receipt_price = int(order.od_receipt_price or 0) + receipt.amount

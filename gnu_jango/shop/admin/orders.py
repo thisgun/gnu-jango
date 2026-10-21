@@ -40,6 +40,8 @@ from gnu_jango.shop.order_lines import (
 from gnu_jango.shop.order_points import run_save_order_points_safely, take_back_order_points
 from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES, STATUS_RETURNED
 
+FAILED_REFUND_WARN_DAYS = 30
+
 LINE_TARGET_HELP = {
     "취소": "배송 전 상품 취소",
     "품절": "배송 전 상품 품절",
@@ -2051,8 +2053,39 @@ class ShopPersonalPayAdmin(ModelAdmin):
             shown = ", ".join(pay_ids[:5]) + (f" 외 {len(pay_ids) - 5}건" if len(pay_ids) > 5 else "")
             self.message_user(request, f"개인결제 {len(pay_ids)}건은 처리하지 않았습니다 ({shown}): {message}", messages.WARNING)
 
+    def changelist_view(self, request, extra_context=None):
+        if request.method == "GET":
+            self.warn_failed_refunds(request)
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def warn_failed_refunds(self, request, pp_id=None):
+        """A Toss payment the checkout could neither record nor cancel (api/shop_personal_pay.py
+        refund_toss_payment): the card is charged and only its payment log knows. Payment logs
+        are evidence and cannot be edited, so the warning covers the last 30 days."""
+        from gnu_jango.api.shop_personal_pay import REFUND_FAILED_PREFIX
+
+        since = timezone.now() - timedelta(days=FAILED_REFUND_WARN_DAYS)
+        logs = ShopOrderData.objects.filter(
+            log_id__startswith=f"{REFUND_FAILED_PREFIX}-", dt_time__gte=since
+        ).order_by("-dt_time")
+        if pp_id:
+            logs = logs.filter(od_id=f"pp-{pp_id}")
+        count = logs.count()
+        if not count:
+            return
+        shown = ", ".join(log.od_id or log.log_id for log in logs[:5]) + (f" 외 {count - 5}건" if count > 5 else "")
+        self.message_user(
+            request,
+            f"최근 {FAILED_REFUND_WARN_DAYS}일 동안 결제 승인 뒤 반영도 자동 취소도 하지 못한 개인결제 토스 결제가 "
+            f"{count}건 있습니다 ({shown}). 토스페이먼츠 상점관리자에서 결제를 취소하거나 개인결제에 직접 반영하세요 "
+            "(결제 로그 pp-refund-failed).",
+            messages.ERROR,
+        )
+
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
+        if request.method == "GET":
+            self.warn_failed_refunds(request, unquote(object_id))
         personal_pay = self.get_object(request, object_id)
         if personal_pay:
             extra_context["personal_pay_detail_ops"] = self.personal_pay_detail_context(personal_pay)
