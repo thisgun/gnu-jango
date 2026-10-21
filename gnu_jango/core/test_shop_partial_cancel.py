@@ -178,9 +178,29 @@ class BankPaidPartialCancelTests(PartialCancelBase):
         # the shirt alone (40,000) misses the 45,000 minimum: youngcart sets od_coupon to 0
         self.assertEqual((order.od_coupon, order.od_send_cost, order.od_refund_price, order.od_misu), (0, 3000, 1000, 0))
         self.assertEqual(order_misu(order), 0)
-        # youngcart keeps the coupons used on a partial cancel
+        # youngcart keeps the coupons used on a partial cancel; the log follows the discount
         self.assertEqual(order_coupon.cp_used, "1")
         self.assertEqual(ShopCouponLog.objects.filter(order=order).count(), 2)
+        self.assertEqual(ShopCouponLog.objects.get(cl_id=1).cp_price, 0)
+
+    def test_a_dropped_order_coupon_does_not_come_back_on_the_order_page(self):
+        order = self.make_order("주문", paid=0, od_coupon=5000, od_misu=45000)
+        coupon = ShopCoupon.objects.create(
+            user=self.member, cp_subject="5천원", cp_method=2, cp_price=5000, cp_minimum=45000, cp_used="1"
+        )
+        ShopCouponLog.objects.create(cl_id=1, coupon=coupon, cp_id=coupon.cp_id, user=self.member, order=order, od_id=order.od_id, cp_price=5000)
+        self.assertTrue(change_order_lines(order, [self.cap_line.pk], "취소"))
+        self.reload(order)
+        api = APIClient()
+        api.force_authenticate(self.member)
+        payload = api.get(f"/api/v1/shop/orders/{order.od_id}").json()["data"]
+        # 40,000 + 3,000 shipping, no order coupon: the page, the stored misu and order_misu agree
+        self.assertEqual((payload["od_coupon"], payload["od_total_price"], payload["od_misu_price"]), (0, 43000, 43000))
+        self.assertEqual((order.od_coupon, order.od_misu, order_misu(order)), (0, 43000, 43000))
+        # a later deposit records what the customer was shown
+        self.assertTrue(set_order_status(order, "입금"))
+        self.reload(order)
+        self.assertEqual((order.od_receipt_price, order.od_misu), (43000, 0))
 
     def test_points_paid_beyond_the_new_total_are_left_for_a_manual_adjustment(self):
         # 10,000 cash + 40,000 points; after the shirts go only 13,000 is owed

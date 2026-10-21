@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 
 from django.db import transaction
 
-from gnu_jango.shop.models import ShopOrder
+from gnu_jango.shop.models import ShopCouponLog, ShopOrder
 from gnu_jango.shop.order_coupons import order_coupon_totals
 from gnu_jango.shop.order_flow import (
     StatusChange,
@@ -85,6 +85,8 @@ class LineChangePlan:
     method: str
     note: str
     tax: dict = field(default_factory=dict)
+    # the order and shipping coupon logs whose discount changes: {log pk: new cp_price}
+    coupon_log_prices: dict = field(default_factory=dict)
 
     @property
     def full_pg_cancel(self):
@@ -113,27 +115,43 @@ def _refund_method(order, refund):
     return REFUND_MANUAL, f" PG({order.od_pg or '-'}) 부분취소 필요 (수동) {refund:,}원"
 
 
+def _capped_log_prices(logs, discounts, cap):
+    """{log pk: discount} for ``logs``, the discounts taken in order until ``cap`` is used up."""
+    prices = {}
+    left = max(0, cap)
+    for log, discount in zip(logs, discounts):
+        prices[log.pk] = min(max(0, discount), left)
+        left -= prices[log.pk]
+    return prices
+
+
 def _order_coupons(order, logs, cart_price, cart_coupon, send_cost):
     """get_order_info: the order coupon (cp_method 2) on goods after product coupons, and the
     shipping coupon (3) on the shipping fee, each only while its minimum still holds. Without a
-    coupon record the stored discount is kept (capped by what it discounts)."""
+    coupon record the stored discount is kept (capped by what it discounts).
+
+    Returns (od_coupon, od_send_coupon, {coupon log pk: its new discount}): the logs are kept in
+    step with the order (order_coupons.order_coupon_totals reads them when nothing is stored), so a
+    dropped coupon cannot come back through its log."""
     from gnu_jango.api.shop_coupons import coupon_discount
 
     base = max(0, cart_price - cart_coupon)
+    log_prices = {}
     order_logs = [log for log in logs if log.coupon_id and log.coupon and log.coupon.cp_method == 2]
     if order_logs:
-        od_coupon = sum(coupon_discount(log.coupon, base) for log in order_logs)
+        discounts = [coupon_discount(log.coupon, base) for log in order_logs]
+        log_prices.update(_capped_log_prices(order_logs, discounts, base))
+        od_coupon = sum(log_prices[log.pk] for log in order_logs)
     else:
-        od_coupon = int(order.od_coupon or 0)
-    od_coupon = min(max(0, od_coupon), base)
+        od_coupon = min(max(0, int(order.od_coupon or 0)), base)
     send_logs = [log for log in logs if log.coupon_id and log.coupon and log.coupon.cp_method == 3]
     if send_logs:
-        send_coupon = sum(
-            coupon_discount(log.coupon, send_cost, minimum_base=base - od_coupon) for log in send_logs
-        )
+        discounts = [coupon_discount(log.coupon, send_cost, minimum_base=base - od_coupon) for log in send_logs]
+        log_prices.update(_capped_log_prices(send_logs, discounts, send_cost))
+        send_coupon = sum(log_prices[log.pk] for log in send_logs)
     else:
-        send_coupon = int(order.od_send_coupon or 0)
-    return od_coupon, min(max(0, send_coupon), send_cost)
+        send_coupon = min(max(0, int(order.od_send_coupon or 0)), send_cost)
+    return od_coupon, send_coupon, log_prices
 
 
 def _tax_amounts(order, active, coupon_by_line, *, send_cost, send_cost2, od_coupon, send_coupon, payable):
@@ -229,7 +247,9 @@ def plan_line_change(order, line_ids, target):
         else 0
     )
     send_cost2 = int(order.od_send_cost2 or 0) if active else 0
-    od_coupon, send_coupon = _order_coupons(order, logs, cart_price, cart_coupon, send_cost) if active else (0, 0)
+    od_coupon, send_coupon, coupon_log_prices = (
+        _order_coupons(order, logs, cart_price, cart_coupon, send_cost) if active else (0, 0, {})
+    )
     total = max(0, cart_price + send_cost + send_cost2 - cart_coupon - od_coupon - send_coupon)
 
     paid = paid_amount(order)
@@ -284,6 +304,9 @@ def plan_line_change(order, line_ids, target):
             method=method,
             note=note,
             tax=tax,
+            coupon_log_prices={
+                log.pk: price for log in logs if (price := coupon_log_prices.get(log.pk)) is not None and price != log.cp_price
+            },
         ),
         "",
     )
@@ -430,6 +453,8 @@ def _apply_plan(order, plan, reason, actor):
     else:
         # youngcart orderformcartupdate.php: a paid purchase point of a line that leaves 완료 goes back
         take_back_order_points(order)
+        for log_pk, price in plan.coupon_log_prices.items():
+            ShopCouponLog.objects.filter(pk=log_pk, order_id=order.pk).update(cp_price=price)
         locked = ShopOrder.objects.select_for_update().get(pk=order.pk)
         locked.od_cart_price = plan.cart_price + plan.cancel_price
         locked.od_cancel_price = plan.cancel_price
