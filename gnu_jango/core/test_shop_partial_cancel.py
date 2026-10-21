@@ -19,6 +19,7 @@ from gnu_jango.shop.models import (
     ShopOrder,
     ShopOrderData,
     ShopOrderItem,
+    ShopPersonalPay,
     ShopProduct,
     ShopShippingPolicy,
 )
@@ -318,6 +319,52 @@ class TossPartialCancelTests(PartialCancelBase):
         self.assertEqual(order.od_refund_price, 37000)
         self.assertEqual(self.shirt_line.ct_status, "입금")
         self.assertIn("확인 필요", order.od_mod_history)
+
+    def test_a_payment_cancelled_in_the_toss_dashboard_does_not_block_the_change(self):
+        order = self.toss_order()
+        already = http_error(400, b'{"code":"ALREADY_CANCELED_PAYMENT","message":"already"}')
+        with patch(URLOPEN, side_effect=already):
+            result = change_order_lines(order, [self.shirt_line.pk], "취소")
+        self.assertTrue(result, result.message)
+        self.assertIn("이미 취소된 결제여서 환불 기록만 반영", result.message)
+        self.reload(order, self.shirt_line)
+        self.assertEqual((self.shirt_line.ct_status, order.od_refund_price), ("취소", 37000))
+        self.assertIn("토스페이먼츠에서 이미 취소된 결제 - 환불 기록만 반영, 확인 필요", order.od_mod_history)
+
+    def test_personal_pay_receipts_are_refunded_by_hand_not_through_the_order_payment(self):
+        # 40,000 paid on the order's Toss payment, 10,000 by a personal pay credited to it
+        order = self.toss_order()
+        ShopPersonalPay.objects.create(
+            pp_id="PP-CREDIT", order=order, pp_name="Buyer", pp_price=10000, pp_receipt_price=10000,
+            pp_settle_case="신용카드", pp_pg="toss", pp_tno="tpk_pp_other",
+        )
+        reply = fake_http_response({"orderId": order.od_id, "paymentKey": order.od_tno, "status": "CANCELED"})
+        with patch(URLOPEN, return_value=reply) as urlopen:
+            result = set_order_status(order, "취소", actor="order-admin")
+        self.assertTrue(result, result.message)
+        self.assertTrue(result.manual_refund)
+        request = urlopen.call_args.args[0]
+        # the order's own payment (40,000) is cancelled whole at Toss, nothing more
+        self.assertEqual(request.full_url, f"https://api.tosspayments.com/v1/payments/{order.od_tno}/cancel")
+        self.assertNotIn("cancelAmount", json.loads(request.data))
+        self.reload(order)
+        self.assertEqual((order.od_status, order.od_refund_price), ("취소", 50000))
+        self.assertIn("PG 신용카드 승인취소 40,000원 환불 필요 (수동, 개인결제분) 10,000원", order.od_mod_history)
+        self.assertIn("개인결제로 받은 10,000원은 직접 환불", result.message)
+
+    def test_a_partial_refund_through_toss_stops_at_the_order_payment(self):
+        order = self.toss_order()
+        ShopPersonalPay.objects.create(
+            pp_id="PP-CREDIT", order=order, pp_name="Buyer", pp_price=45000, pp_receipt_price=45000, pp_tno="tpk_pp_other",
+        )
+        # the order's own Toss payment holds 5,000; cancelling the shirts owes 37,000 back
+        plan, _ = plan_line_change(order, [self.shirt_line.pk], "취소")
+        self.assertEqual((plan.refund, plan.pg_refund, plan.manual_refund, plan.full_pg_cancel), (37000, 5000, 32000, False))
+        with patch(URLOPEN, return_value=self.partial_reply(order)) as urlopen:
+            self.assertTrue(change_order_lines(order, [self.shirt_line.pk], "취소"))
+        self.assertEqual(json.loads(urlopen.call_args.args[0].data)["cancelAmount"], 5000)
+        self.reload(order)
+        self.assertEqual(order.od_refund_price, 37000)
 
     def test_cancelling_the_rest_after_a_partial_refund_refunds_only_the_rest(self):
         order = self.toss_order()

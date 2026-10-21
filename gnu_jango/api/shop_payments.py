@@ -782,8 +782,9 @@ def toss_api_partial_cancel_payment(order, amount, reason, *, idempotency_key):
     """Refund ``amount`` of the Toss payment of ``order`` (cancelAmount, youngcart
     orderpartcancelupdate.php). ``idempotency_key`` names this one refund, so a retried request
     never refunds twice. Returns Toss's payment object (PARTIAL_CANCELED, or CANCELED when the
-    whole balance went back); raises PaymentCancelError when Toss did not confirm it - a payment
-    that is cancelled already is an error here, since the refund amount cannot be checked."""
+    whole balance went back); raises PaymentCancelError when Toss did not confirm it. A payment
+    already cancelled in full (in the Toss dashboard) comes back with "already_canceled": the
+    money went back there, so the caller records the refund instead of refusing the change."""
     amount = int(amount)
     if amount <= 0:
         raise PaymentCancelError("환불할 금액이 없습니다.")
@@ -792,7 +793,9 @@ def toss_api_partial_cancel_payment(order, amount, reason, *, idempotency_key):
         ensure_ascii=False,
     ).encode("utf-8")
     canceled = _toss_cancel_request(order, body, idempotency_key)
-    if canceled.get("already_canceled") or str(canceled.get("status") or "").upper() not in {"PARTIAL_CANCELED", "CANCELED"}:
+    if canceled.get("already_canceled"):
+        return canceled
+    if str(canceled.get("status") or "").upper() not in {"PARTIAL_CANCELED", "CANCELED"}:
         raise PaymentCancelError(
             "토스페이먼츠가 부분취소를 확인하지 않았습니다. 토스페이먼츠 상점관리자에서 결제 상태를 확인하세요."
         )

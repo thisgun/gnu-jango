@@ -12,11 +12,13 @@ shared cancel path (stock, coupons and points come back once)."""
 
 import hashlib
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+
+from django.db.models import Sum
 
 from django.db import transaction
 
-from gnu_jango.shop.models import ShopCouponLog, ShopOrder
+from gnu_jango.shop.models import ShopCouponLog, ShopOrder, ShopPersonalPay
 from gnu_jango.shop.order_coupons import order_coupon_totals
 from gnu_jango.shop.order_flow import (
     StatusChange,
@@ -84,35 +86,61 @@ class LineChangePlan:
     misu: int
     method: str
     note: str
+    # the part of ``refund`` Toss gives back on the order's own payment (od_tno); the rest is a
+    # manual refund (a non-Toss payment, or personal pay receipts credited to the order)
+    pg_refund: int = 0
+    full_pg_cancel: bool = False  # every line cancelled, nothing refunded yet: cancel the payment whole
     tax: dict = field(default_factory=dict)
     # the order and shipping coupon logs whose discount changes: {log pk: new cp_price}
     coupon_log_prices: dict = field(default_factory=dict)
 
     @property
-    def full_pg_cancel(self):
-        """Every line is cancelled and nothing was refunded yet: Toss cancels the whole payment."""
-        return self.all_inactive and self.refunded == 0 and self.refund == self.paid
+    def manual_refund(self):
+        """What the admin pays back by hand."""
+        return max(0, self.refund - self.pg_refund)
 
     @property
     def idempotency_key(self):
         """One refund: the same lines, target and amount never refund twice at Toss."""
         line_ids = ",".join(str(item.pk) for item in sorted(self.lines, key=lambda item: item.pk))
-        digest = hashlib.sha256(f"{self.target}|{line_ids}|{self.refund}|{self.refunded}".encode()).hexdigest()[:24]
+        digest = hashlib.sha256(
+            f"{self.target}|{line_ids}|{self.pg_refund}|{self.refund}|{self.refunded}".encode()
+        ).hexdigest()[:24]
         return f"admin-part-{self.lines[0].order_id}-{digest}"
 
 
-def _refund_method(order, refund):
+def personal_pay_receipts(order):
+    """What personal pay requests linked to the order paid into it (youngcart personalpayformupdate.php
+    adds them to od_receipt_price). They were paid with their own transaction, never the order's."""
+    return int(ShopPersonalPay.objects.filter(order_id=order.pk).aggregate(total=Sum("pp_receipt_price"))["total"] or 0)
+
+
+def _refund_method(order, refund, *, paid, refunded, all_inactive):
+    """(method, history note, Toss part, full cancel) of a refund of ``refund`` won.
+
+    Through Toss goes at most what the order's own Toss payment still holds: personal pay
+    receipts credited to the order were paid on other transactions, so that part is refunded by
+    hand ("환불 필요 (수동, 개인결제분)")."""
     from gnu_jango.api.shop_payments import order_paid_through_toss, settle_case_is_bank, settle_case_is_vbank
 
     if refund <= 0:
-        return REFUND_NONE, ""
+        return REFUND_NONE, "", 0, False
     if order_paid_through_toss(order):
-        return REFUND_TOSS, f" PG {order.od_settle_case or '결제'} 부분취소 {refund:,}원"
+        own_payment = max(0, paid - personal_pay_receipts(order))
+        pg_refund = min(refund, max(0, own_payment - refunded))
+        manual = refund - pg_refund
+        full = all_inactive and refunded == 0 and pg_refund == own_payment
+        note = ""
+        if pg_refund:
+            note += f" PG {order.od_settle_case or '결제'} {'승인취소' if full else '부분취소'} {pg_refund:,}원"
+        if manual:
+            note += f" 환불 필요 (수동, 개인결제분) {manual:,}원"
+        return (REFUND_TOSS if pg_refund else REFUND_MANUAL), note, pg_refund, full and pg_refund > 0
     if settle_case_is_bank(order.od_settle_case):
-        return REFUND_MANUAL, f" 무통장 환불 필요 (수동) {refund:,}원"
+        return REFUND_MANUAL, f" 무통장 환불 필요 (수동) {refund:,}원", 0, False
     if settle_case_is_vbank(order.od_settle_case):
-        return REFUND_MANUAL, f" 가상계좌 환불 필요 (수동) {refund:,}원"
-    return REFUND_MANUAL, f" PG({order.od_pg or '-'}) 부분취소 필요 (수동) {refund:,}원"
+        return REFUND_MANUAL, f" 가상계좌 환불 필요 (수동) {refund:,}원", 0, False
+    return REFUND_MANUAL, f" PG({order.od_pg or '-'}) 부분취소 필요 (수동) {refund:,}원", 0, False
 
 
 def _capped_log_prices(logs, discounts, cap):
@@ -264,9 +292,9 @@ def plan_line_change(order, line_ids, target):
         refund = max(0, min(overpaid, refundable))
         point_excess = max(0, overpaid - refund)
     misu = 0 if all_inactive else max(0, total - (paid + point - refunded - refund))
-    method, note = _refund_method(order, refund)
-    if method == REFUND_TOSS and all_inactive and refunded == 0:
-        note = f" PG {order.od_settle_case or '결제'} 승인취소 {refund:,}원"
+    method, note, pg_refund, full_pg_cancel = _refund_method(
+        order, refund, paid=paid, refunded=refunded, all_inactive=all_inactive
+    )
     tax = (
         {"od_tax_mny": 0, "od_vat_mny": 0, "od_free_mny": 0}
         if all_inactive
@@ -303,6 +331,8 @@ def plan_line_change(order, line_ids, target):
             misu=misu,
             method=method,
             note=note,
+            pg_refund=pg_refund,
+            full_pg_cancel=full_pg_cancel,
             tax=tax,
             coupon_log_prices={
                 log.pk: price for log in logs if (price := coupon_log_prices.get(log.pk)) is not None and price != log.cp_price
@@ -362,11 +392,14 @@ def change_locked_order_lines(order, line_ids, target, reason="", *, actor=""):
                 answer = toss_api_cancel_payment(order, cancel_reason)
             else:
                 answer = toss_api_partial_cancel_payment(
-                    order, plan.refund, cancel_reason, idempotency_key=plan.idempotency_key
+                    order, plan.pg_refund, cancel_reason, idempotency_key=plan.idempotency_key
                 )
         except PaymentCancelError as exc:
             return StatusChange(False, f"결제 환불에 실패해 아무것도 바꾸지 않았습니다. {exc}")
         pg_refunded = True
+        if answer.get("already_canceled"):
+            # cancelled in the Toss dashboard already: the money went back there, record it here
+            plan = replace(plan, note=f"{plan.note} (토스페이먼츠에서 이미 취소된 결제 - 환불 기록만 반영, 확인 필요)")
         _record_toss_answer(order, plan, answer)
     try:
         # a savepoint: should the local change fail after Toss refunded, the refund is still recorded
@@ -379,9 +412,9 @@ def change_locked_order_lines(order, line_ids, target, reason="", *, actor=""):
         _record_refund_only(order, plan, actor)
         return StatusChange(
             False,
-            f"PG에서 {plan.refund:,}원을 환불했지만 상품 상태를 바꾸지 못했습니다. 환불은 주문에 기록했으니 주문을 확인해 주세요.",
+            f"PG에서 {plan.pg_refund:,}원을 환불했지만 상품 상태를 바꾸지 못했습니다. 환불은 주문에 기록했으니 주문을 확인해 주세요.",
         )
-    return StatusChange(True, _success_message(order, plan), manual_refund=plan.method == REFUND_MANUAL)
+    return StatusChange(True, _success_message(order, plan), manual_refund=plan.manual_refund > 0)
 
 
 def _record_toss_answer(order, plan, answer):
@@ -394,7 +427,7 @@ def _record_toss_answer(order, plan, answer):
                 order.od_id,
                 "toss",
                 plan.idempotency_key.rsplit("-", 1)[-1][:12],
-                {"toss_partial_cancel": answer, "cancelAmount": plan.refund},
+                {"toss_partial_cancel": answer, "cancelAmount": plan.pg_refund},
                 prefix="tpc",
             )
     except Exception:  # noqa: BLE001 - Toss refunded already; the change must still be applied
@@ -405,10 +438,10 @@ def _record_refund_only(order, plan, actor):
     from gnu_jango.shop.inventory import append_order_history, order_history_line
 
     locked = ShopOrder.objects.select_for_update().get(pk=order.pk)
-    locked.od_refund_price = plan.refunded + plan.refund
+    locked.od_refund_price = plan.refunded + plan.pg_refund
     locked.od_mod_history = append_order_history(
         locked.od_mod_history,
-        order_history_line(f"PG 부분취소 {plan.refund:,}원 완료 - 상품 {plan.target} 처리 실패, 확인 필요", actor),
+        order_history_line(f"PG 부분취소 {plan.pg_refund:,}원 완료 - 상품 {plan.target} 처리 실패, 확인 필요", actor),
     )
     locked.save(update_fields=["od_refund_price", "od_mod_history"])
 
@@ -490,7 +523,11 @@ def _success_message(order, plan):
     else:
         head = f"주문 {order.od_id}의 상품 {count}건을 {plan.target} 처리했습니다."
     if plan.method == REFUND_TOSS:
-        tail = f" {plan.refund:,}원을 PG에서 환불(승인취소)했습니다."
+        tail = f" {plan.pg_refund:,}원을 PG에서 환불(승인취소)했습니다."
+        if plan.manual_refund:
+            tail += f" 개인결제로 받은 {plan.manual_refund:,}원은 직접 환불해야 합니다."
+        if "이미 취소된 결제" in plan.note:
+            tail += " 토스페이먼츠에서 이미 취소된 결제여서 환불 기록만 반영했습니다. 상점관리자에서 확인하세요."
     elif plan.method == REFUND_MANUAL:
         tail = f" {plan.refund:,}원은 직접 환불해야 합니다.{plan.note}"
     elif plan.misu:

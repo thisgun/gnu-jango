@@ -268,11 +268,12 @@ def _cancel_locked_order(current, reason, actor):
     error = transition_error(current, STATUS_CANCELLED)
     if error:
         return StatusChange(False, error)
-    if int(current.od_refund_price or 0) > 0:
-        # part of the payment went back with an earlier line cancel: only the rest is refunded
-        # (youngcart orderformcartupdate.php cancels the remaining amount)
-        from gnu_jango.shop.order_lines import active_line_ids, change_locked_order_lines
+    from gnu_jango.shop.order_lines import active_line_ids, change_locked_order_lines, personal_pay_receipts
 
+    if int(current.od_refund_price or 0) > 0 or personal_pay_receipts(current) > 0:
+        # part of the payment went back with an earlier line cancel (only the rest is refunded,
+        # youngcart orderformcartupdate.php), or personal pay receipts were credited to the order
+        # (paid on their own transactions: refunded by hand, not through the order's od_tno)
         return change_locked_order_lines(current, active_line_ids(current), STATUS_CANCELLED, reason, actor=actor)
 
     paid = paid_amount(current)

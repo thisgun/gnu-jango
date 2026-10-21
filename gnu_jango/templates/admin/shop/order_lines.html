@@ -115,7 +115,7 @@
         <tr><th scope="row">주문 합계</th><td>{{ plan.total|intcomma }}</td><th scope="row">결제 · 이미 환불</th><td>{{ plan.paid|intcomma }} · {{ plan.refunded|intcomma }}</td></tr>
         <tr>
           <th scope="row">이번 환불</th>
-          <td><strong>{{ plan.refund|intcomma }}</strong> {% if plan.method == "toss" %}(토스페이먼츠 {% if plan.full_pg_cancel %}전체취소{% else %}부분취소{% endif %}){% elif plan.method == "manual" %}(직접 환불){% endif %}</td>
+          <td><strong>{{ plan.refund|intcomma }}</strong> {% if plan.method == "toss" %}(토스페이먼츠 {% if plan.full_pg_cancel %}전체취소{% else %}부분취소{% endif %} {{ plan.pg_refund|intcomma }}{% if plan.manual_refund %} · 개인결제분 직접 환불 {{ plan.manual_refund|intcomma }}{% endif %}){% elif plan.method == "manual" %}(직접 환불){% endif %}</td>
           <th scope="row">변경 후 미수금</th><td>{{ plan.misu|intcomma }}</td>
         </tr>
         {% if plan.point_excess %}
