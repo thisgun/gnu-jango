@@ -1,0 +1,93 @@
+{% extends "admin/shop/tools/_layout.html" %}
+
+{% block hero_form %}
+<form class="g5-admin-report-filter g5-admin-report-filter-compact" method="get" action="{{ report_path }}">
+  <label>
+    <span>구분</span>
+    <select class="select" name="period">
+      {% for value, label in periods %}<option value="{{ value }}"{% if filters.period == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+  </label>
+  <label><span>시작일</span><input class="input" type="date" name="date_from" value="{{ filters.date_from }}"></label>
+  <label><span>종료일 (일일은 시작일만)</span><input class="input" type="date" name="date_to" value="{{ filters.date_to }}"></label>
+  <div class="g5-admin-report-filter-actions">
+    <button class="button btn" type="submit">조회</button>
+    <a class="button btn g5-admin-button-secondary" href="{{ report_path }}?period=today">오늘</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block tool_body %}
+<section class="g5-admin-report-metrics" aria-label="합계">
+  <article class="card g5-admin-report-metric"><span>주문수</span><strong>{{ table.total.display.order_count }}</strong><em>{{ filters.date_from }} ~ {{ filters.date_to }}</em></article>
+  <article class="card g5-admin-report-metric"><span>주문합계</span><strong>{{ table.total.display.order_price }}</strong><em>상품 + 배송비</em></article>
+  <article class="card g5-admin-report-metric"><span>입금합계</span><strong>{{ table.total.display.receipt }}</strong><em>환불 제외, 포인트 별도</em></article>
+  <article class="card g5-admin-report-metric"><span>미수금</span><strong>{{ table.total.display.misu }}</strong><em>취소 {{ table.total.display.cancel }} · 환불 {{ table.total.display.refund }}</em></article>
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% for value, label in periods %}{% if value == filters.period %}{{ label }}{% endif %}{% endfor %} 매출</p>
+      <h2>결제수단별 입금</h2>
+    </div>
+    <a class="button btn g5-admin-button-secondary" href="{{ report_path }}?{{ export_query }}">CSV 내려받기</a>
+  </div>
+  {% if is_today %}<p class="g5-admin-empty">하루 주문을 주문별로 보여 줍니다 (최대 {{ today_limit }}건).</p>{% endif %}
+  <div class="g5-admin-report-table-wrap">
+    <table class="table g5-admin-mini-table">
+      <thead>
+        <tr>
+          <th scope="col">{% if is_today %}주문번호{% else %}기간{% endif %}</th>
+          {% if is_today %}<th scope="col">주문자</th><th scope="col">결제수단</th>{% endif %}
+          <th scope="col">주문수</th>
+          <th scope="col">주문합계</th>
+          <th scope="col">쿠폰</th>
+          {% for label in method_labels %}<th scope="col">{{ label }}</th>{% endfor %}
+          <th scope="col">포인트</th>
+          <th scope="col">입금합계</th>
+          <th scope="col">주문취소</th>
+          <th scope="col">환불</th>
+          <th scope="col">미수금</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in table.rows %}
+        <tr>
+          <td>{% if row.order_url %}<a href="{{ row.order_url }}">{{ row.label }}</a>{% elif row.drill_url %}<a href="{{ row.drill_url }}">{{ row.label }}</a>{% else %}{{ row.label }}{% endif %}</td>
+          {% if is_today %}<td>{{ row.name|default:"-" }}</td><td>{{ row.settle_case|default:"-" }}</td>{% endif %}
+          <td>{{ row.display.order_count }}</td>
+          <td>{{ row.display.order_price }}</td>
+          <td>{{ row.display.coupon }}</td>
+          {% for cell in row.method_cells %}<td>{{ cell.display }}</td>{% endfor %}
+          <td>{{ row.display.point }}</td>
+          <td><strong>{{ row.display.receipt }}</strong></td>
+          <td>{{ row.display.cancel }}</td>
+          <td>{{ row.display.refund }}</td>
+          <td>{{ row.display.misu }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="20" class="g5-admin-empty">자료가 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if table.rows %}
+      <tfoot>
+        <tr>
+          <th scope="row">합계</th>
+          {% if is_today %}<td></td><td></td>{% endif %}
+          <td>{{ table.total.display.order_count }}</td>
+          <td>{{ table.total.display.order_price }}</td>
+          <td>{{ table.total.display.coupon }}</td>
+          {% for cell in table.total.method_cells %}<td>{{ cell.display }}</td>{% endfor %}
+          <td>{{ table.total.display.point }}</td>
+          <td><strong>{{ table.total.display.receipt }}</strong></td>
+          <td>{{ table.total.display.cancel }}</td>
+          <td>{{ table.total.display.refund }}</td>
+          <td>{{ table.total.display.misu }}</td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</section>
+{% endblock %}

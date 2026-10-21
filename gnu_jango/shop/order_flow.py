@@ -181,14 +181,16 @@ def update_product_sales_quantity(order):
     recount_product_sales(order.items.filter(product__isnull=False).values_list("product_id", flat=True))
 
 
-def move_order_status(order, target, *, actor=""):
+def move_order_status(order, target, *, actor="", send_sms=True):
     """Move ``order`` one step along 주문→입금→준비→배송→완료 (not a cancellation), with the
     youngcart side effects: 입금 records the deposit (order_update_receipt), 배송 stamps the
     invoice time, 완료 updates the products' sales quantity. Lines follow the order and a paid
-    line that leaves 완료 gives its purchase point back."""
+    line that leaves 완료 gives its purchase point back. ``send_sms=False`` keeps the 입금/배송
+    text back (bulk paths, where the operator did not ask for texts)."""
     from gnu_jango.api.shop_common import CANCELLED_STATUSES
     from gnu_jango.shop.inventory import append_order_history, order_history_line
     from gnu_jango.shop.notifications import queue_order_status_mail
+    from gnu_jango.shop.sms.notifications import queue_order_status_sms
     from gnu_jango.shop.order_points import item_status_update, take_back_order_points
 
     with transaction.atomic():
@@ -224,6 +226,8 @@ def move_order_status(order, target, *, actor=""):
             update_product_sales_quantity(locked)
         # adm/shop_admin/ordermail.inc.php: 입금 / 배송 mail the customer once this commits
         queue_order_status_mail(locked, target)
+        if send_sms:
+            queue_order_status_sms(locked, target)
     if target == STATUS_PAID:
         return StatusChange(True, f"주문 {locked.od_id}의 입금 {locked.od_receipt_price:,}원을 기록했습니다.")
     return StatusChange(True)

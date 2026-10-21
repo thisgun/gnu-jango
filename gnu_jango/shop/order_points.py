@@ -16,6 +16,7 @@ from django.utils import timezone
 from gnu_jango.shop.models import ORDER_ITEM_STATUS_COMPLETED, ShopOrderItem
 from gnu_jango.shop.shop_options import shop_options
 from gnu_jango.users import point_ledger
+from gnu_jango.users.models import User_Point
 
 logger = logging.getLogger(__name__)
 
@@ -212,6 +213,38 @@ def _take_back_line(pk):
         item.ct_complete_time = None
         item.save(update_fields=["ct_point_use", "ct_complete_time"])
         return taken
+
+
+def _delivery_point_total(user, rel_id, rel_action):
+    rows = User_Point.objects.filter(
+        user=user, po_rel_table=DELIVERY_POINT_TABLE, po_rel_id=rel_id, po_rel_action=rel_action
+    ).values_list("po_point", flat=True)
+    return sum(rows)
+
+
+def resettle_split_line_points(item, order):
+    """A paid line (``ct_point_use``) was split by a partial quantity cancel and now holds fewer
+    units: its @delivery point is paid again for the units it kept, so the units that left take
+    their share back (ct_point per unit × the cancelled quantity) and a later take-back of the
+    line removes exactly what it still earns. The caller has saved the reduced ``ct_qty``.
+    Returns the points taken back."""
+    if not item.ct_point_use or not order.user_id:
+        return 0
+    user = order.user
+    keys = (item.pk, str(order.od_id))
+    paid = _delivery_point_total(user, *keys)
+    if not paid:
+        keys = (_legacy_rel_id(user), f"{order.od_id},{item.ct_id}")
+        paid = _delivery_point_total(user, *keys)
+    if not paid:
+        return 0  # nothing on record to adjust
+    point_ledger.delete_point(user, DELIVERY_POINT_TABLE, *keys)
+    kept = int(item.ct_point or 0) * int(item.ct_qty or 0)
+    if kept > 0:
+        point_ledger.insert_point(
+            user, kept, _award_content(item, order), DELIVERY_POINT_TABLE, item.pk, str(order.od_id), force=True
+        )
+    return max(0, paid - kept)
 
 
 def take_back_order_points(order):

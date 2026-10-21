@@ -53,3 +53,42 @@
   [mode, limits, costs].forEach((input) => input?.addEventListener("change", render));
   render();
 })();
+
+(() => {
+  "use strict";
+
+  // youngcart configform.php byte_check: 1 byte for ASCII, 2 for anything else (iCode billing)
+  const texts = document.querySelectorAll("textarea[data-sms-bytes]");
+  if (!texts.length) return;
+  const smsType = document.getElementById("id_cf_sms_type");
+
+  function byteLength(value) {
+    let total = 0;
+    for (const character of String(value || "")) total += character.charCodeAt(0) < 128 ? 1 : 2;
+    return total;
+  }
+
+  const counters = Array.from(texts, (textarea) => {
+    const counter = document.createElement("p");
+    counter.className = "shop-sms-bytes";
+    counter.id = `${textarea.id}_bytes`;
+    counter.setAttribute("aria-live", "polite");
+    textarea.insertAdjacentElement("afterend", counter);
+    textarea.setAttribute("aria-describedby", `${textarea.getAttribute("aria-describedby") || ""} ${counter.id}`.trim());
+    return { textarea, counter };
+  });
+
+  function render() {
+    const isLms = smsType?.value === "LMS";
+    counters.forEach(({ textarea, counter }) => {
+      const limit = Number(isLms ? textarea.dataset.lmsLimit : textarea.dataset.smsLimit) || 90;
+      const bytes = byteLength(textarea.value);
+      counter.textContent = `${bytes} / ${limit} 바이트${bytes > limit ? " · 초과한 내용은 잘려서 발송됩니다" : ""}`;
+      counter.classList.toggle("is-over", bytes > limit);
+    });
+  }
+
+  texts.forEach((textarea) => textarea.addEventListener("input", render));
+  smsType?.addEventListener("change", render);
+  render();
+})();

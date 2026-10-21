@@ -1,6 +1,28 @@
 from gnu_jango.shop.admin._common import *  # noqa: F401,F403
 from django.utils.translation import gettext_lazy as _
 
+from gnu_jango.shop.admin.coupon_forms import (
+    COUPON_METHOD_CHOICES,
+    COUPON_METHOD_LABELS,
+    CategoryTargetAutocompleteView,
+    ProductTargetAutocompleteView,
+    ShopCouponAdminForm,
+)
+
+
+class CouponMethodFilter(admin.SimpleListFilter):
+    title = "쿠폰종류"
+    parameter_name = "cp_method"
+
+    def lookups(self, request, model_admin):
+        return [(str(value), label) for value, label in COUPON_METHOD_CHOICES]
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if value is not None and value.isdigit():
+            return queryset.filter(cp_method=int(value))
+        return queryset
+
 
 @admin.register(ShopCouponZone)
 class ShopCouponZoneAdmin(ModelAdmin):
@@ -91,10 +113,25 @@ class ShopCouponZoneAdmin(ModelAdmin):
 
 @admin.register(ShopCoupon)
 class ShopCouponAdmin(ModelAdmin):
-    list_display = ("cp_id", "user", "cp_subject", "coupon_status", "coupon_benefit", "coupon_period", "created_at")
+    form = ShopCouponAdminForm
+    list_display = (
+        "cp_id", "coupon_recipient", "cp_subject", "coupon_scope", "coupon_status", "coupon_benefit",
+        "coupon_period", "created_at",
+    )
+    list_select_related = ("user",)
     search_fields = ("cp_id", "cp_subject", "user__username", "cp_target")
-    list_filter = ("cp_method", "cp_type", "cp_used")
+    list_filter = (CouponMethodFilter, "cp_type", "cp_all_members", "cp_used")
     readonly_fields = ("coupon_snapshot",)
+    autocomplete_fields = ("user", "coupon_zone")
+    # youngcart couponform.php: the target row only for product / category coupons, and the
+    # rate-only fields only for a percentage coupon
+    conditional_fields = {
+        "target_product": "cp_method == '0'",
+        "target_category": "cp_method == '1'",
+        "user": "!cp_all_members",
+        "cp_maximum": "cp_type == '1'",
+        "cp_trunc": "cp_type == '1'",
+    }
     fieldsets = (
         (
             _("Coupon snapshot"),
@@ -108,8 +145,9 @@ class ShopCouponAdmin(ModelAdmin):
             {
                 "classes": ("tab",),
                 "fields": (
-                    ("cp_id", "user", "coupon_zone"),
+                    ("cp_id", "coupon_zone"),
                     ("cp_subject", "cp_used"),
+                    ("cp_all_members", "user"),
                     "created_at",
                 ),
             },
@@ -119,7 +157,8 @@ class ShopCouponAdmin(ModelAdmin):
             {
                 "classes": ("tab",),
                 "fields": (
-                    ("cp_method", "cp_target"),
+                    "cp_method",
+                    ("target_product", "target_category"),
                     ("cp_type", "cp_price"),
                     ("cp_minimum", "cp_maximum", "cp_trunc"),
                     ("cp_start", "cp_end"),
@@ -127,6 +166,38 @@ class ShopCouponAdmin(ModelAdmin):
             },
         ),
     )
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = super().get_readonly_fields(request, obj)
+        # the coupon code is the primary key: editing it would copy the coupon to a new row
+        return (*readonly, "cp_id") if obj else readonly
+
+    def get_urls(self):
+        info = (self.opts.app_label, self.opts.model_name)
+        return [
+            path(
+                "target-products/",
+                self.admin_site.admin_view(ProductTargetAutocompleteView.as_view(model_admin=self)),
+                name="%s_%s_target_products" % info,
+            ),
+            path(
+                "target-categories/",
+                self.admin_site.admin_view(CategoryTargetAutocompleteView.as_view(model_admin=self)),
+                name="%s_%s_target_categories" % info,
+            ),
+            *super().get_urls(),
+        ]
+
+    @admin.display(description="발행 대상")
+    def coupon_recipient(self, obj):
+        if obj.cp_all_members:
+            return badge("전체회원", "info")
+        return getattr(obj.user, "username", "") or "-"
+
+    @admin.display(description="쿠폰종류")
+    def coupon_scope(self, obj):
+        label = COUPON_METHOD_LABELS.get(obj.cp_method, str(obj.cp_method))
+        return compact_text(label, obj.cp_target) if obj.cp_target else label
 
     @admin.display(description=_("Status"))
     def coupon_status(self, obj):
@@ -170,7 +241,11 @@ class ShopCouponAdmin(ModelAdmin):
             _("Review recipient, benefit, target, period, and usage state together."),
             (
                 (_("Coupon title"), obj.cp_subject, obj.cp_id),
-                (_("Recipient"), getattr(obj.user, "username", "") or "-", getattr(obj.user, "email", "") or "-"),
+                (
+                    _("Recipient"),
+                    "전체회원" if obj.cp_all_members else getattr(obj.user, "username", "") or "-",
+                    "-" if obj.cp_all_members else getattr(obj.user, "email", "") or "-",
+                ),
                 (_("Benefit"), format_number(obj.cp_price), compact_text(obj.cp_target, _("Minimum %(amount)s") % {"amount": format_number(obj.cp_minimum)})),
                 (_("Period"), f"{date_value(obj.cp_start)} - {date_value(obj.cp_end)}", _("Created %(date)s") % {"date": datetime_value(obj.created_at)}),
                 (_("Limit"), _("Maximum %(amount)s") % {"amount": format_number(obj.cp_maximum)}, _("Truncation %(value)s") % {"value": format_number(obj.cp_trunc)}),

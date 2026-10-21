@@ -1,5 +1,5 @@
 from gnu_jango.shop.admin._common import *  # noqa: F401,F403
-from functools import update_wrapper
+from functools import partial, update_wrapper
 
 from django import forms
 from django.contrib import messages
@@ -16,6 +16,9 @@ from unfold.forms import ActionForm
 from unfold.widgets import UnfoldAdminSelectWidget
 
 from gnu_jango.api.shop_common import CANCELLED_STATUSES
+from gnu_jango.shop.admin.bulk import copy_selected_personal_pays, create_personal_pay_for_balance, order_tool_urls
+from gnu_jango.shop.admin.cash_receipts import order_cash_receipt_page
+from gnu_jango.shop.cash_receipts import admin_risk as cash_receipt_admin_risk
 from gnu_jango.shop.delivery import delivery_company_form_field
 from gnu_jango.shop.models import ORDER_ITEM_STATUS_COMPLETED
 from gnu_jango.shop.order_flow import (
@@ -35,8 +38,9 @@ from gnu_jango.shop.order_lines import (
     change_order_lines,
     line_amount,
     line_label,
-    plan_line_change,
+    preview_line_change,
 )
+from gnu_jango.shop.order_line_split import posted_line_quantities
 from gnu_jango.shop.order_points import run_save_order_points_safely, take_back_order_points
 from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES, STATUS_RETURNED
 
@@ -160,7 +164,11 @@ class ShopOrderAdmin(ModelAdmin):
         "ordered_at_display",
     )
     list_display_links = ("order_id_display", "customer_display")
-    search_fields = ("od_id", "od_name", "od_email", "od_hp", "od_tno", "od_app_no", "od_cash_no", "od_invoice")
+    # youngcart orderlist.php search fields: also the recipient, the depositor, the member id and phones
+    search_fields = (
+        "od_id", "od_name", "od_email", "od_hp", "od_tel", "od_b_name", "od_b_hp", "od_b_tel", "od_deposit_name",
+        "user__username", "od_tno", "od_app_no", "od_cash_no", "od_invoice",
+    )
     list_filter = (
         OrderStatusFilter,
         SettleCaseFilter,
@@ -174,7 +182,12 @@ class ShopOrderAdmin(ModelAdmin):
     list_fullwidth = True
     list_horizontal_scrollbar_top = True
     list_filter_submit = True
-    actions = ("change_selected_order_status", "export_selected_orders_csv", "export_selected_receipts_csv")
+    actions = (
+        "change_selected_order_status",
+        "export_selected_orders_csv",
+        "export_selected_receipts_csv",
+        create_personal_pay_for_balance,
+    )
     action_form = OrderStatusActionForm
     form = ShopOrderAdminForm
     # a member picker, not a select listing every member
@@ -453,17 +466,20 @@ class ShopOrderAdmin(ModelAdmin):
         selected = request.POST.getlist("ct_chk") if request.method == "POST" else []
         reason = str(request.POST.get("reason") or "").strip()[:200]
         plan = None
-        error = ""
-        if request.method == "POST":
+        # 수량: change only some units of a line; the quantity shown guards against a resubmit
+        quantities, expected, error = posted_line_quantities(request.POST, selected)
+        if request.method == "POST" and not error:
             if request.POST.get("step") == "apply":
-                result = change_order_lines(order, selected, target, reason, actor=request.user.get_username())
+                result = change_order_lines(
+                    order, selected, target, reason, actor=request.user.get_username(), quantities=quantities, expected=expected
+                )
                 if result:
                     self.log_change(request, order, f"상품 {len(selected)}건 {target} 처리")
                     self.message_user(request, result.message, messages.WARNING if result.manual_refund else messages.SUCCESS)
                     return redirect(change_url)
                 error = result.message
             else:
-                plan, error = plan_line_change(order, selected, target)
+                plan, error = preview_line_change(order, selected, target, quantities=quantities, expected=expected)
         order.refresh_from_db()
         chosen = {str(value) for value in selected}
         lines = []
@@ -480,6 +496,7 @@ class ShopOrderAdmin(ModelAdmin):
                     "stock_adjusted": item.stock_adjusted,
                     "selectable": not inactive and any(item.ct_status in LINE_SOURCES[value] for value in LINE_TARGETS),
                     "checked": str(item.pk) in chosen,
+                    "change_qty": request.POST.get(f"ct_qty_{item.pk}") or item.ct_qty,
                 }
             )
         context = {
@@ -732,6 +749,8 @@ class ShopOrderAdmin(ModelAdmin):
                     "hint": _("Cash receipt number is registered."),
                 }
             )
+        if receipt_risk := cash_receipt_admin_risk(order):
+            risks.append(receipt_risk)
         if not risks:
             risks.append(
                 {
@@ -779,6 +798,11 @@ class ShopOrderAdmin(ModelAdmin):
                 *(
                     [{"label": "상품 취소·반품·품절", "url": reverse("admin:shop_shoporder_lines", args=[order.pk]), "icon": "remove_shopping_cart"}]
                     if self.has_change_permission(request, order) and order.od_status not in INACTIVE_LINE_STATUSES
+                    else []
+                ),
+                *(
+                    [{"label": "현금영수증", "url": reverse("admin:shop_shoporder_cash_receipt", args=[order.pk]), "icon": "receipt_long"}]
+                    if self.has_change_permission(request, order)
                     else []
                 ),
                 {"label": _("Settlement report"), "url": "../../reports/", "icon": "monitoring"},
@@ -1027,6 +1051,7 @@ class ShopOrderAdmin(ModelAdmin):
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
+            *order_tool_urls(self),
             path("reports/", self.order_report_view(self.reports_view), name="shop_shoporder_reports"),
             path("sales-rank/", self.order_report_view(self.sales_rank_view), name="shop_shoporder_sales_rank"),
             path("order-print/", self.order_report_view(self.order_print_view), name="shop_shoporder_print"),
@@ -1039,6 +1064,11 @@ class ShopOrderAdmin(ModelAdmin):
                 "<path:object_id>/lines/",
                 self.admin_site.admin_view(self.order_lines_view),
                 name="shop_shoporder_lines",
+            ),
+            path(
+                "<path:object_id>/cash-receipt/",
+                self.admin_site.admin_view(partial(order_cash_receipt_page, self)),
+                name="shop_shoporder_cash_receipt",
             ),
         ]
         return custom_urls + urls
@@ -1978,7 +2008,7 @@ class ShopPersonalPayAdmin(ModelAdmin):
     search_fields = ("pp_id", "pp_name", "pp_email", "pp_hp", "user__username", "pp_tno", "pp_app_no", "pp_cash_no")
     list_filter = (PersonalPayStateFilter, PersonalPaySettleCaseFilter, PersonalPayActiveFilter, PersonalPayDateFilter)
     readonly_fields = ("personal_pay_snapshot",)
-    actions = ("confirm_selected_bank_deposits",)
+    actions = ("confirm_selected_bank_deposits", copy_selected_personal_pays)
     fieldsets = (
         (
             _("Personal pay snapshot"),
@@ -2030,6 +2060,14 @@ class ShopPersonalPayAdmin(ModelAdmin):
         ),
     )
     list_fullwidth = True
+
+    def save_model(self, request, obj, form, change):
+        # the form has no pp_id field: a request added by hand gets one like the bulk actions'
+        if not change and not obj.pp_id:
+            from gnu_jango.shop.personal_pay import new_personal_pay_id
+
+            obj.pp_id = new_personal_pay_id()
+        super().save_model(request, obj, form, change)
 
     @admin.action(description="선택한 개인결제 입금 확인", permissions=["change"])
     def confirm_selected_bank_deposits(self, request, queryset):

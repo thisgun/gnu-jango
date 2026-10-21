@@ -1,0 +1,149 @@
+{% extends "admin/base_site.html" %}
+{% load i18n humanize %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:shop_shoporder_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; <a href="{{ change_url }}">{{ order.od_id }}</a>
+  &rsaquo; 현금영수증
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">주문 {{ order.od_id }} · {{ order.od_status }} · {{ order.od_settle_case|default:"-" }}</p>
+    <h1>현금영수증</h1>
+    <p class="g5-admin-hero-copy">
+      무통장입금·가상계좌·계좌이체로 결제를 마친 주문에 현금영수증을 발급합니다. 토스페이먼츠 키가 있고 토스페이먼츠 결제 또는 무통장입금 주문이면
+      토스페이먼츠 현금영수증 API로 바로 발급하고, 그 밖의 주문은 직접 발급한 뒤 승인번호를 등록합니다. 발급 금액은 현금 결제액에서 환불액을 뺀 금액입니다.
+      주문을 취소·반품하면 토스페이먼츠로 발급한 현금영수증은 자동으로 취소되고, 그 밖의 현금영수증은 '취소 필요'로 표시됩니다.
+    </p>
+  </div>
+  <div class="g5-admin-report-filter-actions">
+    <a class="button btn g5-admin-button-secondary" href="{{ change_url }}">주문으로 돌아가기</a>
+  </div>
+</section>
+
+{% if error %}
+<div role="alert" class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<section class="g5-admin-report-metrics" aria-label="현금영수증 상태">
+  <article class="card g5-admin-report-metric">
+    <span>상태</span>
+    <strong><span class="badge g5-admin-badge g5-admin-badge-{{ summary.tone }}">{{ summary.label }}</span></strong>
+    <em>{{ summary.kind_label|default:"-" }}</em>
+  </article>
+  <article class="card g5-admin-report-metric"><span>승인번호</span><strong>{{ summary.number|default:"-" }}</strong><em>{{ summary.type_label|default:"-" }}</em></article>
+  <article class="card g5-admin-report-metric"><span>발급 금액</span><strong>{{ summary.amount|intcomma }}</strong><em>면세 {{ summary.tax_free|intcomma }} · 환불 {{ order.od_refund_price|intcomma }}</em></article>
+  <article class="card g5-admin-report-metric"><span>발급 방법</span><strong>{% if summary.through_toss %}토스페이먼츠 API{% else %}수동 발급{% endif %}</strong><em>{{ order.od_pg|default:"PG 없음" }}</em></article>
+</section>
+
+{% if summary.number %}
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide" aria-labelledby="cash-cancel-title">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">발급된 현금영수증</p>
+      <h2 id="cash-cancel-title">승인번호 {{ summary.number }}</h2>
+    </div>
+    {% if summary.url %}<a class="button btn g5-admin-button-secondary" href="{{ summary.url }}" target="_blank" rel="noopener noreferrer">영수증 보기</a>{% endif %}
+  </div>
+  {% if summary.needs_correction %}
+  <div role="alert" class="alert alert-warning">발급 금액 {{ summary.issued_amount|intcomma }}원이 지금 현금 결제액 {{ summary.amount|intcomma }}원보다 큽니다(부분 환불). 취소한 뒤 남은 금액으로 다시 발급하세요.</div>
+  {% endif %}
+  <form method="post" action="" class="g5-admin-report-filter">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="cancel">
+    <label>
+      <span>취소 사유 (관리자 이력)</span>
+      <input class="input" type="text" name="reason" maxlength="200" value="{{ posted.reason|default:'' }}">
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button btn btn-danger" type="submit">
+        {% if summary.kind == "toss" %}토스페이먼츠에서 현금영수증 취소{% else %}현금영수증 취소로 기록{% endif %}
+      </button>
+    </div>
+    {% if summary.kind != "toss" %}<p class="g5-admin-help">{% if summary.kind == "payment" %}결제와 함께 발급된 토스페이먼츠 현금영수증은 토스페이먼츠 상점관리자에서 취소한 뒤 기록하세요.{% else %}직접 발급한 곳(홈택스 등)에서 취소한 뒤 기록하세요.{% endif %}</p>{% endif %}
+  </form>
+</section>
+{% else %}
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide" aria-labelledby="cash-issue-title">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% if summary.request %}고객 요청 {{ summary.request.requested_at|slice:":16" }}{% elif summary.checkout_request_without_number %}주문서에서 신청 (식별번호 없음){% else %}관리자 발급{% endif %}</p>
+      <h2 id="cash-issue-title">현금영수증 발급</h2>
+    </div>
+  </div>
+  {% if summary.issue_error %}
+  <p class="g5-admin-help">{{ summary.issue_error }}</p>
+  {% else %}
+  <form method="post" action="" class="g5-admin-report-filter">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="issue">
+    <label>
+      <span>종류</span>
+      <select class="select" name="cash_type" required>
+        {% for value, label in types %}
+        <option value="{{ value }}"{% if value == summary.request_type %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>식별번호 (휴대폰번호 · 현금영수증카드 · 사업자등록번호)</span>
+      <input class="input" type="text" name="identity" inputmode="numeric" autocomplete="off" maxlength="40" required value="{{ posted.identity|default:summary.request_identity }}">
+      {% if summary.request_identity_unreadable and not posted.identity %}<span role="alert" class="g5-admin-help">식별번호를 읽을 수 없습니다 — 고객에게 다시 받아 주세요.</span>{% endif %}
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button btn btn-primary" type="submit">{% if summary.through_toss %}토스페이먼츠로 발급{% else %}수동 발급 요청으로 기록{% endif %} ({{ summary.amount|intcomma }}원)</button>
+    </div>
+  </form>
+  {% endif %}
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide" aria-labelledby="cash-manual-title">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">홈택스·다른 PG에서 발급한 경우</p>
+      <h2 id="cash-manual-title">발급 완료로 등록</h2>
+    </div>
+  </div>
+  <form method="post" action="" class="g5-admin-report-filter">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="mark_issued">
+    <label>
+      <span>승인번호</span>
+      <input class="input" type="text" name="cash_no" maxlength="100" required value="{{ posted.cash_no|default:'' }}">
+    </label>
+    <label>
+      <span>영수증 주소 (선택)</span>
+      <input class="input" type="url" name="receipt_url" maxlength="255" value="{{ posted.receipt_url|default:'' }}" placeholder="https://">
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button btn g5-admin-button-secondary" type="submit">발급 완료로 등록</button>
+    </div>
+  </form>
+  {% if summary.request or order.od_cash_request %}
+  <form method="post" action="" class="g5-admin-report-filter">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="withdraw">
+    <label>
+      <span>요청 취소 사유</span>
+      <input class="input" type="text" name="reason" maxlength="200">
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button btn g5-admin-button-secondary" type="submit">요청 취소</button>
+    </div>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if history %}
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide" aria-label="현금영수증 이력">
+  <div class="g5-admin-panel-header"><div><p class="g5-admin-eyebrow">주문 변경 이력</p><h2>현금영수증 이력</h2></div></div>
+  <ul>{% for line in history %}<li>{{ line }}</li>{% endfor %}</ul>
+</section>
+{% endif %}
+{% endblock %}

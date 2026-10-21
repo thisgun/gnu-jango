@@ -51,6 +51,11 @@ MESSAGE_ALREADY_PAID = "이미 결제하신 개인결제 내역입니다."
 MESSAGE_INACTIVE = "사용하지 않는 개인결제입니다."
 MESSAGE_AWAITING_DEPOSIT = "무통장입금 확인을 기다리는 개인결제입니다. 입금이 확인되면 결제가 완료됩니다."
 MESSAGE_AMOUNT_CHANGED = "개인결제 금액이 바뀌었습니다. 결제 화면을 다시 열어 주세요."
+MESSAGE_ORDER_BALANCE = (
+    "연결된 주문의 남은 결제금액({owed:,}원)이 개인결제 금액({due:,}원)보다 적어 결제할 수 없습니다. "
+    "쇼핑몰에 문의해 주세요."
+)
+EXCESS_NOTE = "환불 필요 (수동, 개인결제 초과)"
 
 
 def is_paid(item):
@@ -87,11 +92,30 @@ def payment_state(item):
     return STATE_READY
 
 
-def checkout_block_reason(item, method):
+def linked_order_block_reason(item):
+    """A request linked to an order (미수금 개인결제) must not pay more than that order still owes:
+    the order may have been paid another way since the request was made. "" when it may."""
+    from gnu_jango.shop.order_flow import canonical_status, order_misu
+    from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES
+
+    if not item.order_id:
+        return ""
+    order = ShopOrder.objects.filter(pk=item.order_id).first()
+    # a closed order is not credited at all (apply_receipt_to_order), as before
+    if order is None or canonical_status(order.od_status) in INACTIVE_LINE_STATUSES:
+        return ""
+    owed, due = order_misu(order), amount_due(item)
+    return MESSAGE_ORDER_BALANCE.format(owed=owed, due=due) if owed < due else ""
+
+
+def checkout_block_reason(item, method, *, check_order=True):
     """Why ``item`` cannot be paid with ``method`` ("bank" or an online method), "" when it can.
 
     A bank deposit can be re-entered (another account or depositor) while it waits for the shop;
-    an online payment then is refused so the same request is not paid twice."""
+    an online payment then is refused so the same request is not paid twice. With
+    ``check_order`` a request worth more than its linked order still owes is refused too, before
+    any money is taken; recording a payment already taken skips that check and credits the order
+    only up to its balance instead (apply_receipt_to_order)."""
     if not item.active:
         return MESSAGE_INACTIVE
     if item.pp_price <= 0:
@@ -102,7 +126,18 @@ def checkout_block_reason(item, method):
         return MESSAGE_ALREADY_PAID
     if state == STATE_AWAITING_DEPOSIT and method != METHOD_BANK:
         return MESSAGE_AWAITING_DEPOSIT
-    return ""
+    return linked_order_block_reason(item) if check_order else ""
+
+
+def new_personal_pay_id():
+    """A free pp_id, numeric like youngcart's (personalpayform.php uses get_uniqid())."""
+    from gnu_jango.api.shop_common import generate_numeric_order_id
+
+    for _attempt in range(5):
+        pp_id = generate_numeric_order_id()
+        if not ShopPersonalPay.objects.filter(pk=pp_id).exists():
+            return pp_id
+    raise RuntimeError("Could not allocate a personal pay id.")
 
 
 def toss_order_id(item):
@@ -162,7 +197,9 @@ def record_receipt(pp_id, receipt, *, method, actor=""):
         return None, MESSAGE_INACTIVE
     if receipt.tno and item.pp_tno == receipt.tno and is_paid(item):
         return item, ""
-    reason = checkout_block_reason(item, method)
+    # the money is already taken (Toss confirmed, or the deposit arrived): a linked order whose
+    # balance shrank meanwhile is handled when crediting it, not by refusing the receipt
+    reason = checkout_block_reason(item, method, check_order=False)
     if reason:
         return item, reason
     if receipt.amount != amount_due(item):
@@ -194,7 +231,11 @@ def record_receipt(pp_id, receipt, *, method, actor=""):
 
 def apply_receipt_to_order(item, receipt, *, actor=""):
     """personalpayformupdate.php: the payment is added to the linked order, a note goes in its shop
-    memo and a bank-deposit order that no longer owes anything moves to 입금."""
+    memo and a bank-deposit order that no longer owes anything moves to 입금.
+
+    The order is credited at most what it still owes (it may have been paid another way since the
+    request was made); the rest stays recorded on the personal pay and is flagged in the order's
+    memo and change history for a manual refund."""
     from gnu_jango.api.shop_payments import settle_case_is_bank
     from gnu_jango.shop.order_flow import (
         STATUS_ORDERED,
@@ -204,18 +245,30 @@ def apply_receipt_to_order(item, receipt, *, actor=""):
         order_misu,
     )
 
+    from gnu_jango.shop.inventory import append_order_history, order_history_line
     from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES
 
     order = ShopOrder.objects.select_for_update().filter(pk=item.order_id).first()
     # a cancelled, returned or sold-out order is closed: its amounts are not reopened
     if order is None or canonical_status(order.od_status) in INACTIVE_LINE_STATUSES:
         return
+    credit = min(int(receipt.amount), order_misu(order))
+    excess = int(receipt.amount) - credit
     note = f"개인결제 {item.pp_id} 로 결제완료 - {receipt.receipt_time}"
-    order.od_receipt_price = int(order.od_receipt_price or 0) + receipt.amount
+    fields = ["od_receipt_price", "od_receipt_time", "od_shop_memo", "od_misu"]
+    if excess > 0:
+        warning = (
+            f"{EXCESS_NOTE}: 개인결제 {item.pp_id} {int(receipt.amount):,}원 중 {excess:,}원은 "
+            "주문 미수금을 넘어 주문에 반영하지 않았습니다."
+        )
+        note = f"{note}\n{warning}"
+        order.od_mod_history = append_order_history(order.od_mod_history, order_history_line(warning, actor))
+        fields.append("od_mod_history")
+    order.od_receipt_price = int(order.od_receipt_price or 0) + credit
     order.od_receipt_time = receipt.receipt_time
     order.od_shop_memo = f"{order.od_shop_memo}\n{note}" if order.od_shop_memo else note
     order.od_misu = order_misu(order)
-    order.save(update_fields=["od_receipt_price", "od_receipt_time", "od_shop_memo", "od_misu"])
+    order.save(update_fields=fields)
     if (
         order.od_misu == 0
         and canonical_status(order.od_status) == STATUS_ORDERED

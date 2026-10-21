@@ -36,6 +36,8 @@ from .payment_options import (
 from .settings_sync import sync_shop_phone_from_policy
 from .shipping import current_shipping_policy
 from .logo_uploads import delete_logo_file, logo_form_fields, store_logo
+from .sms import icode as sms_gateway
+from .sms.service import reserve_test_send, send_test_message, sms_settings
 from .shop_options import (
     COMPANY_OPTIONS,
     HOME_LIST_TYPES,
@@ -44,6 +46,7 @@ from .shop_options import (
     POINT_OPTIONS,
     SHOP_CONFIG_OPTIONS,
     SHOP_LOGO_FIELDS,
+    SMS_OPTIONS,
     shop_logo_urls,
     to_python,
     to_stored,
@@ -69,7 +72,20 @@ def option_form_field(option):
         return forms.EmailField(max_length=option.max_length, **common)
     if option.kind == "html":
         return forms.CharField(max_length=option.max_length, widget=forms.Textarea(attrs={"rows": 5}), **common)
+    if option.kind == "textarea":
+        return forms.CharField(
+            max_length=option.max_length, strip=False, widget=forms.Textarea(attrs={"rows": 5}), **common
+        )
+    if option.kind == "choice":
+        return forms.ChoiceField(choices=option.choices, **common)
     return forms.CharField(max_length=option.max_length, **common)
+
+
+def sms_byte_limits():
+    """The byte limits the SMS text counters show: (SMS, LMS). LMS needs the token API."""
+    if sms_gateway.credential_status()["mode"] == "legacy":
+        return sms_gateway.LEGACY_SMS_MAX_BYTES, sms_gateway.LEGACY_SMS_MAX_BYTES
+    return sms_gateway.SMS_MAX_BYTES, sms_gateway.LMS_MAX_BYTES
 
 
 class ShopSettingsForm(forms.ModelForm):
@@ -179,6 +195,18 @@ class ShopSettingsForm(forms.ModelForm):
             else:
                 field.widget.attrs["class"] = "input w-full"
             field.widget.attrs["aria-describedby"] = f"id_{name}_help id_{name}_errors"
+        sms_limit, lms_limit = sms_byte_limits()
+        for option in SMS_OPTIONS:
+            if option.kind == "textarea":
+                self.fields[option.name].widget.attrs.update(
+                    {"data-sms-bytes": "", "data-sms-limit": sms_limit, "data-lms-limit": lms_limit}
+                )
+
+    def clean_de_sms_hp(self):
+        value = self.cleaned_data.get("de_sms_hp", "").strip()
+        if value and not sms_gateway.normalize_mobile(value):
+            raise forms.ValidationError("관리자 휴대폰번호는 010-1234-5678 형식의 휴대폰번호로 입력하세요.")
+        return value
 
     def clean_de_bank_account(self):
         lines = [line.strip() for line in self.cleaned_data["de_bank_account"].splitlines() if line.strip()]
@@ -237,6 +265,10 @@ class ShopSettingsForm(forms.ModelForm):
             ("lists", "상품 목록·관련상품 진열",
              "검색결과와 유형별 상품 목록, 상품 상세의 관련상품 진열입니다.",
              [option.name for option in LIST_OPTIONS]),
+            ("sms", "SMS 설정",
+             "주문·입금·배송 등 쇼핑몰 이벤트에 맞춰 아이코드로 문자를 보냅니다. 회신번호는 사업자정보의 "
+             "쇼핑몰 고객센터 전화번호이며 아이코드에 발신번호로 등록되어 있어야 합니다.",
+             [option.name for option in SMS_OPTIONS]),
             ("logos", "쇼핑몰 로고", "올린 로고가 테마 기본 로고 대신 표시됩니다.",
              [field for name in SHOP_LOGO_FIELDS for field in (name, f"{name}_delete")]),
         ]
@@ -245,7 +277,8 @@ class ShopSettingsForm(forms.ModelForm):
              "fields": [self._section_field(name) for name in names]}
             for key, title, description, names in groups
         ]
-        sections.insert(len(sections) - 2, self._home_list_section())
+        lists_index = next(index for index, section in enumerate(sections) if section["id"] == "lists")
+        sections.insert(lists_index, self._home_list_section())
         return sections
 
     def _section_field(self, name):
@@ -332,6 +365,9 @@ def shop_settings(request):
         else:
             messages.error(request, "토스페이먼츠에 연결하지 못했습니다. 네트워크와 API 응답을 확인하세요.")
         return HttpResponseRedirect(reverse("admin-shop-settings"))
+    if request.method == "POST" and request.POST.get("action") == "test_sms":
+        test_sms(request)
+        return HttpResponseRedirect(reverse("admin-shop-settings") + "#sms-status")
     is_post = request.method == "POST"
     form = ShopSettingsForm(
         request.POST if is_post else None, request.FILES if is_post else None, instance=current_shipping_policy()
@@ -407,5 +443,56 @@ def shop_settings(request):
             "adapter_enabled": adapter["enabled"],
         },
     }
+    context["sms"] = sms_status_context()
     request.current_app = admin.site.name
     return TemplateResponse(request, "admin/shop/settings.html", context)
+
+
+SMS_MODE_LABELS = {"token": "토큰키 (JSON 방식)", "legacy": "아이디·비밀번호 (구버전)", "missing": "미등록"}
+
+
+def sms_status_context():
+    """Only whether the iCode credentials are present, never their values."""
+    status = sms_gateway.credential_status()
+    current = sms_settings()
+    return {
+        "enabled": current.enabled,
+        "type_label": "LMS" if current.allow_lms else "SMS",
+        "credentials_registered": status["mode"] != "missing",
+        "mode_label": SMS_MODE_LABELS[status["mode"]],
+        "provider_enabled": status["provider_enabled"],
+        "ready": status["ready"],
+        "has_admin_hp": bool(sms_gateway.normalize_mobile(current.admin_hp)),
+        "has_callback": bool(current.callback),
+        "lms_unsupported": current.allow_lms and status["mode"] == "legacy",
+        "can_test": status["ready"] and bool(sms_gateway.normalize_mobile(current.admin_hp)) and bool(current.callback),
+    }
+
+
+def test_sms(request):
+    """테스트 발송: one text to de_sms_hp, at most once a minute (the view is superuser-only)."""
+    status = sms_status_context()
+    if not status["ready"]:
+        messages.error(request, "아이코드 인증 정보가 서버 환경 변수에 등록되지 않았거나 서버에서 SMS가 꺼져 있습니다.")
+        return
+    if not status["has_admin_hp"] or not status["has_callback"]:
+        messages.error(request, "관리자 휴대폰번호와 쇼핑몰 고객센터 전화번호(회신번호)를 먼저 저장하세요.")
+        return
+    if not reserve_test_send():
+        messages.error(request, "테스트 발송은 1분에 한 번만 할 수 있습니다. 잠시 후 다시 시도하세요.")
+        return
+    result = send_test_message()
+    LogEntry.objects.create(
+        user_id=request.user.pk,
+        content_type=ContentType.objects.get_for_model(ShopShippingPolicy),
+        object_id="1",
+        object_repr="쇼핑몰 설정",
+        action_flag=CHANGE,
+        change_message=f"SMS 테스트 발송 ({result.status}, {result.provider_code})"[:200],
+    )
+    if result.status == "accepted":
+        messages.success(request, f"테스트 문자를 관리자 휴대폰번호로 보냈습니다. (아이코드 접수번호 {result.provider_code})")
+    elif result.status == "unknown":
+        messages.warning(request, "아이코드 응답을 확인하지 못했습니다. 문자가 도착했는지 휴대폰에서 확인하세요.")
+    else:
+        messages.error(request, f"아이코드가 테스트 문자를 거부했습니다. (코드 {result.provider_code or '-'})")

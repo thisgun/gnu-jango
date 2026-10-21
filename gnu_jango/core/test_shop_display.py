@@ -1,6 +1,5 @@
 """Shop display settings reach the home snapshot, the public settings and the product detail."""
 
-import json
 
 from django.core.cache import cache
 from django.core.files.storage import default_storage
@@ -10,7 +9,7 @@ from rest_framework.test import APIClient
 from gnu_jango.api import page_bootstrap
 from gnu_jango.config import config as site_config
 from gnu_jango.config.models import Config
-from gnu_jango.shop.models import ShopCategory, ShopProduct
+from gnu_jango.shop.models import ShopCategory, ShopProduct, ShopProductRelation
 
 API = "/api/v1/shop"
 LOCMEM = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "shop-display-tests"}}
@@ -139,7 +138,8 @@ class RelatedProductsSwitchTests(DisplayBase):
     def setUp(self):
         super().setUp()
         self.make_products("REL", 3)
-        set_options(nextjs_smoke_rel_REL00=json.dumps({"related_csv": "REL01,REL02"}))
+        ShopProductRelation.objects.create(product_id="REL00", related_id="REL01", ir_no=1)
+        ShopProductRelation.objects.create(product_id="REL00", related_id="REL02", ir_no=2)
 
     def test_related_items_are_listed_while_switched_on(self):
         data = self.data(f"{API}/products/REL00")

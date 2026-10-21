@@ -23,6 +23,7 @@ from gnu_jango.shop.models import (
     ShopOrderData,
 )
 from gnu_jango.shop.notifications import STATUS_PAID as MAIL_STATUS_PAID, queue_order_placed_mails, queue_order_status_mail
+from gnu_jango.shop.sms.notifications import queue_order_placed_sms, queue_order_status_sms
 from gnu_jango.shop.order_points import item_status_update, take_back_order_points
 from gnu_jango.shop.payment_options import online_payment_preferences
 
@@ -851,6 +852,7 @@ def save_toss_vbank_authorization(order, toss_payment):
         if newly_issued:
             # youngcart orderformupdate.php mails the order once the virtual account is issued
             queue_order_placed_mails(locked)
+            queue_order_placed_sms(locked)
         return locked, None
 
 
@@ -1056,6 +1058,8 @@ def confirm_order_payment(order_id, amount, pg_service, transaction_id, raw_data
         # issued, so its deposit gets the 입금 확인 mail
         if settle_case_is_vbank(order.od_settle_case):
             queue_order_status_mail(order, MAIL_STATUS_PAID)
+            queue_order_status_sms(order, MAIL_STATUS_PAID)
         else:
             queue_order_placed_mails(order)
+            queue_order_placed_sms(order)
     return order, None

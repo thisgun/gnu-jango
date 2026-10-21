@@ -269,6 +269,56 @@ UNFOLD = {
                 ],
             },
             {
+                # youngcart bulk tools and reports (gnu_jango/shop/admin/bulk.py, reports.py)
+                "title": "쇼핑몰 일괄작업·통계",
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": "매출현황",
+                        "icon": "query_stats",
+                        "link": reverse_lazy("admin:shop_shoporder_sales"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shoporder"),
+                    },
+                    {
+                        "title": "송장 일괄등록",
+                        "icon": "local_shipping",
+                        "link": reverse_lazy("admin:shop_shoporder_delivery_upload"),
+                        "permission": lambda request: request.user.has_perm("shop.change_shoporder"),
+                    },
+                    {
+                        "title": "상품 일괄등록",
+                        "icon": "upload_file",
+                        "link": reverse_lazy("admin:shop_shopproduct_bulk_upload"),
+                        "permission": lambda request: request.user.has_perm("shop.add_shopproduct"),
+                    },
+                    {
+                        "title": "재고 일괄수정",
+                        "icon": "inventory",
+                        "link": reverse_lazy("admin:shop_shopproduct_stock_list"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopproduct"),
+                    },
+                    {
+                        "title": "옵션 재고 관리",
+                        "icon": "tune",
+                        "link": reverse_lazy("admin:shop_shopproduct_option_stock_list"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopproduct"),
+                    },
+                    {
+                        "title": "보관함 현황",
+                        "icon": "favorite",
+                        "link": reverse_lazy("admin:shop_shopproduct_wishlist_report"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopwishlist"),
+                    },
+                    {
+                        "title": "가격비교사이트",
+                        "icon": "price_check",
+                        "link": reverse_lazy("admin:shop_shopproduct_price_compare"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopproduct"),
+                    },
+                ],
+            },
+            {
                 "title": _("Community"),
                 "separator": True,
                 "collapsible": True,
@@ -577,6 +627,10 @@ REST_FRAMEWORK = {
         # personal pay lookups, payer checks and payments, per address (pp_id can be guessed)
         "shop-personalpay": "30/min",
         "order-lookup": "10/min",
+        # guest checkouts per address (each may text the phone number it was given)
+        "shop-guest-order": "20/hour",
+        # cash receipt requests after the order (each try may reach the Toss cash receipt API)
+        "shop-cash-receipt": "10/hour",
         "guest-password": "10/min",
         "docs-ask": "30/min",
         "docs-ask-answer": "5/min",
@@ -710,11 +764,24 @@ SHOP_PAYMENT_ADAPTER_PROVIDERS = de_config("SHOP_PAYMENT_ADAPTER_PROVIDERS", def
 SHOP_PAYMENT_ADAPTER_TIMEOUT = de_config("SHOP_PAYMENT_ADAPTER_TIMEOUT", default=10, cast=int)
 
 # SMS credentials live in environment variables and are never stored in admin Config rows.
+# G5_SMS_PROVIDER: empty or "icode" lets iCode send, "disabled" stops every text on this server.
+# G5_ICODE_TOKEN_KEY is the current iCode token ("JSON") API key (SMS + LMS); the ID/password
+# pair is the legacy SMS-only protocol, used only when no token key is set.
 G5_SMS_PROVIDER = de_config("G5_SMS_PROVIDER", default="").strip().lower()
+G5_ICODE_TOKEN_KEY = de_config("G5_ICODE_TOKEN_KEY", default="").strip()
+G5_ICODE_JSON_SERVER = de_config("G5_ICODE_JSON_SERVER", default="211.172.232.124").strip()
+G5_ICODE_JSON_PORT = de_config("G5_ICODE_JSON_PORT", default=9201, cast=int)
 G5_ICODE_ID = de_config("G5_ICODE_ID", default="").strip()
 G5_ICODE_PASSWORD = de_config("G5_ICODE_PASSWORD", default="")
 G5_ICODE_SERVER = de_config("G5_ICODE_SERVER", default="").strip()
 G5_ICODE_PORT = de_config("G5_ICODE_PORT", default=7295, cast=int)
+# Send limits of every shop text (signup, order, payment, status, restock): a recipient gets at
+# most G5_SMS_RECIPIENT_HOURLY_LIMIT texts an hour (the admin's de_sms_hp is exempt), the whole
+# site at most G5_SMS_HOURLY_LIMIT, and after a connect/read timeout or socket error the gateway
+# is skipped for G5_SMS_BREAKER_SECONDS so a dead iCode server cannot stall every checkout.
+G5_SMS_RECIPIENT_HOURLY_LIMIT = de_config("G5_SMS_RECIPIENT_HOURLY_LIMIT", default=5, cast=int)
+G5_SMS_HOURLY_LIMIT = de_config("G5_SMS_HOURLY_LIMIT", default=300, cast=int)
+G5_SMS_BREAKER_SECONDS = de_config("G5_SMS_BREAKER_SECONDS", default=300, cast=int)
 
 # Starting theme and manual board group of a deployment. They are only the defaults of cf_theme and
 # cf_docs_group, so a value saved in admin still wins; a second site (the handbook demo) can start

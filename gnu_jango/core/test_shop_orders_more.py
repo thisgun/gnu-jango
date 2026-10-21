@@ -29,6 +29,7 @@ from gnu_jango.shop.models import (
     ShopOrderItem,
     ShopPersonalPay,
     ShopProduct,
+    ShopProductRelation,
     ShopShippingCost,
     ShopShippingPolicy,
     ShopStockNotification,
@@ -896,13 +897,14 @@ class ProductDetailTests(CatalogBase):
         self.assertEqual(data["prev_item"]["it_id"], "DET-1")
         self.assertEqual(data["next_item"]["it_id"], "DET-4")
 
-    def test_related_items_are_listed_in_order_and_skip_unsold_and_unknown_ids(self):
-        Config.objects.update_or_create(name="nextjs_smoke_rel_DET-2", defaults={"value": json.dumps({"related_csv": "DET-4, DET-3,NOPE,DET-1"})})
+    def test_related_items_are_listed_in_order_and_skip_unsold_ones(self):
+        for number, it_id in enumerate(("DET-4", "DET-3", "DET-1"), 1):
+            ShopProductRelation.objects.create(product_id="DET-2", related_id=it_id, ir_no=number)
         data = self.client.get(f"{API}/products/DET-2").json()["data"]
         self.assertEqual([row["it_id"] for row in data["related_items"]], ["DET-4", "DET-1"])
 
-    def test_a_broken_related_setting_is_ignored(self):
-        Config.objects.update_or_create(name="nextjs_smoke_rel_DET-2", defaults={"value": "{not json"})
+    def test_the_legacy_smoke_relation_setting_is_no_longer_read(self):
+        Config.objects.update_or_create(name="nextjs_smoke_rel_DET-2", defaults={"value": json.dumps({"related_csv": "DET-4"})})
         self.assertEqual(self.client.get(f"{API}/products/DET-2").json()["data"]["related_items"], [])
 
     def test_an_unsold_or_unknown_product_is_not_found_by_id_and_by_slug(self):

@@ -54,6 +54,19 @@ class ShopCategory(models.Model):
     ca_order = models.IntegerField(default=0)
     ca_skin = models.CharField(max_length=100, blank=True, default="")
     ca_use = models.BooleanField(default=True)
+    # youngcart categoryform.php 출력설정: images per row / rows (PC and mobile). 0 (the install
+    # default) means "not set" and the storefront keeps its standard grid; the admin add form
+    # starts a new category at youngcart's 3 x 5.
+    ca_list_mod = models.PositiveSmallIntegerField("1줄당 이미지 수", default=0)
+    ca_list_row = models.PositiveSmallIntegerField("이미지 줄 수", default=0)
+    ca_mobile_list_mod = models.PositiveSmallIntegerField("모바일 1줄당 이미지 수", default=0)
+    ca_mobile_list_row = models.PositiveSmallIntegerField("모바일 이미지 줄 수", default=0)
+    # youngcart ca_nocoupon: category coupons may not target this category.
+    ca_nocoupon = models.BooleanField(
+        "쿠폰적용안함",
+        default=False,
+        help_text="체크하면 이 분류를 대상으로 하는 분류 쿠폰을 쓸 수 없습니다.",
+    )
 
     class Meta:
         ordering = ["ca_order", "ca_id"]
@@ -302,6 +315,12 @@ class ShopProduct(models.Model):
     it_info_value = models.JSONField(default=list, blank=True)
     it_option_subject = models.CharField(max_length=255, blank=True, default="")
     it_supply_subject = models.CharField(max_length=255, blank=True, default="")
+    # youngcart it_nocoupon: product and category coupons do not apply to this product.
+    it_nocoupon = models.BooleanField(
+        "쿠폰적용안함",
+        default=False,
+        help_text="체크하면 개별상품 · 분류 쿠폰을 이 상품에 쓸 수 없습니다. 주문 · 배송비 쿠폰은 그대로 적용됩니다.",
+    )
     image_url = models.CharField(max_length=1000, blank=True, default="")
     images = models.JSONField(default=list, blank=True)
     options = models.JSONField(default=list, blank=True)
@@ -321,6 +340,32 @@ class ShopProduct(models.Model):
         """Distinct assigned category ids in ca_id, ca_id2, ca_id3 order."""
         ids = (self.category_id, self.category2_id, self.category3_id)
         return tuple(dict.fromkeys(ca_id for ca_id in ids if ca_id))
+
+
+class ShopProductRelation(models.Model):
+    """youngcart g5_shop_item_relation: one row per (product, related product), listed by ir_no.
+
+    The admin keeps both directions like itemformupdate.php (adding B to A also lists A on B)."""
+
+    product = models.ForeignKey(ShopProduct, on_delete=models.CASCADE, related_name="relations")
+    related = models.ForeignKey(
+        ShopProduct, on_delete=models.CASCADE, related_name="related_from", verbose_name="관련상품"
+    )
+    ir_no = models.IntegerField("순서", default=0)
+
+    class Meta:
+        ordering = ["ir_no", "pk"]
+        verbose_name = "관련상품"
+        verbose_name_plural = "관련상품"
+        constraints = [
+            models.UniqueConstraint(fields=["product", "related"], name="shop_product_relation_unique_pair"),
+            models.CheckConstraint(
+                condition=~models.Q(product=models.F("related")), name="shop_product_relation_not_self"
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.product_id} → {self.related_id}"
 
 
 class ShopStockAdjustment(models.Model):
@@ -475,6 +520,18 @@ class ShopWishlist(models.Model):
         ]
 
 
+def validate_coupon_target(cp_method, cp_target):
+    """youngcart couponformupdate.php / couponzoneformupdate.php: a product or category coupon may
+    not target a product or category marked 쿠폰적용안함 (it_nocoupon / ca_nocoupon)."""
+    target = str(cp_target or "").strip()
+    if not target:
+        return
+    if cp_method == 0 and ShopProduct.objects.filter(pk=target, it_nocoupon=True).exists():
+        raise ValidationError({"cp_target": "쿠폰적용안함으로 설정된 상품입니다. 이 상품에는 쿠폰을 만들 수 없습니다."})
+    if cp_method == 1 and ShopCategory.objects.filter(pk=target, ca_nocoupon=True).exists():
+        raise ValidationError({"cp_target": "쿠폰적용안함으로 설정된 분류입니다. 이 분류에는 쿠폰을 만들 수 없습니다."})
+
+
 class ShopCouponZone(models.Model):
     cz_type = models.PositiveSmallIntegerField(default=0)
     cz_point = models.IntegerField(default=0)
@@ -501,6 +558,10 @@ class ShopCouponZone(models.Model):
 
     def __str__(self):
         return self.cz_subject
+
+    def clean(self):
+        super().clean()
+        validate_coupon_target(self.cp_method, self.cp_target)
 
 
 class ShopCoupon(models.Model):
@@ -546,6 +607,10 @@ class ShopCoupon(models.Model):
 
     def __str__(self):
         return f"{self.cp_id}: {self.cp_subject}"
+
+    def clean(self):
+        super().clean()
+        validate_coupon_target(self.cp_method, self.cp_target)
 
 
 class ShopCouponLog(models.Model):

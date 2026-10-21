@@ -33,6 +33,7 @@ from gnu_jango.shop.models import (
     ShopOrderItem,
     ShopPersonalPay,
     ShopProduct,
+    ShopProductRelation,
     ShopQA,
     ShopReview,
     ShopStockNotification,
@@ -67,6 +68,7 @@ TABLE_KEYS = {
     "g5_shop_default_table": "shop_default",
     "g5_shop_sendcost_table": "shop_sendcost",
     "g5_shop_item_option_table": "shop_item_option",
+    "g5_shop_item_relation_table": "shop_item_relation",
     "g5_shop_order_table": "shop_order",
     "g5_shop_order_data_table": "shop_order_data",
     "g5_shop_cart_table": "shop_cart",
@@ -100,6 +102,7 @@ DEFAULT_TABLE_SUFFIXES = {
     "g5_shop_default_table": "default",
     "g5_shop_sendcost_table": "sendcost",
     "g5_shop_item_option_table": "item_option",
+    "g5_shop_item_relation_table": "item_relation",
     "g5_shop_order_table": "order",
     "g5_shop_order_data_table": "order_data",
     "g5_shop_cart_table": "cart",
@@ -484,6 +487,7 @@ class Command(BaseCommand):
             "shop_default": self.import_shop_default,
             "shop_sendcost": self.import_shop_sendcosts,
             "shop_item_option": self.import_shop_item_options,
+            "shop_item_relation": self.import_shop_item_relations,
             "shop_order": self.import_shop_orders,
             "shop_order_data": self.import_shop_order_data,
             "shop_cart": self.import_shop_cart_items,
@@ -557,9 +561,13 @@ class Command(BaseCommand):
         )
 
         # Import only values needed for public branding and shop support. Payment
-        # credentials, OAuth secrets, SMS keys, and other private settings are excluded.
+        # credentials, OAuth secrets, SMS keys (cf_icode_id / cf_icode_pw / cf_icode_token_key),
+        # and other private settings are excluded.
         mappings = (
             (config_row, "cf_title", "cf_title", 255),
+            # SMS 사용 / 전송유형; de_sms_hp, de_sms_use1..5 and de_sms_cont1..5 come with the shop options
+            (config_row, "cf_sms_use", "cf_sms_use", 16),
+            (config_row, "cf_sms_type", "cf_sms_type", 8),
             (shop_row, "de_admin_company_name", "cf_company_name", 255),
             (shop_row, "de_admin_company_owner", "cf_company_owner", 255),
             (shop_row, "de_admin_company_addr", "cf_company_addr", 255),
@@ -1272,6 +1280,12 @@ class Command(BaseCommand):
                     "ca_order": integer(row, "ca_order", 0),
                     "ca_skin": scalar(row, "ca_skin"),
                     "ca_use": bool_char(row, "ca_use", True),
+                    # categoryform.php 출력설정 and 쿠폰적용안함
+                    "ca_list_mod": max(0, integer(row, "ca_list_mod", 0)),
+                    "ca_list_row": max(0, integer(row, "ca_list_row", 0)),
+                    "ca_mobile_list_mod": max(0, integer(row, "ca_mobile_list_mod", 0)),
+                    "ca_mobile_list_row": max(0, integer(row, "ca_mobile_list_row", 0)),
+                    "ca_nocoupon": bool(integer(row, "ca_nocoupon", 0)),
                 },
             )
             count += 1
@@ -1351,6 +1365,7 @@ class Command(BaseCommand):
                     "it_sc_minimum": integer(row, "it_sc_minimum", 50000),
                     "it_sc_qty": integer(row, "it_sc_qty", 0),
                     "it_notax": integer(row, "it_notax", 0),
+                    "it_nocoupon": bool(integer(row, "it_nocoupon", 0)),
                     "it_type1": scalar(row, "it_type1"),
                     "it_type2": scalar(row, "it_type2"),
                     "it_type3": scalar(row, "it_type3"),
@@ -1631,6 +1646,25 @@ class Command(BaseCommand):
             product.options = sorted(options, key=lambda item: (item["io_type"], item["io_no"], item["io_id"]))
             product.save(update_fields=["options", "updated_at"])
             count += len(options)
+        return count
+
+    def import_shop_item_relations(self, rows):
+        """g5_shop_item_relation (it_id, it_id2, ir_no): both directions are already rows there."""
+        known = set(ShopProduct.objects.values_list("it_id", flat=True))
+        count = 0
+        for row in rows:
+            it_id = text(row, "it_id", max_length=40).strip()
+            related_id = text(row, "it_id2", max_length=40).strip()
+            if not it_id or not related_id or it_id == related_id:
+                continue
+            if it_id not in known or related_id not in known:
+                continue
+            ShopProductRelation.objects.update_or_create(
+                product_id=it_id,
+                related_id=related_id,
+                defaults={"ir_no": integer(row, "ir_no", 0)},
+            )
+            count += 1
         return count
 
     def import_shop_orders(self, rows):

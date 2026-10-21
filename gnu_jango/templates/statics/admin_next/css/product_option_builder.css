@@ -1,0 +1,71 @@
+/* 상품 옵션 생성 도구(product_option_builder.js). Unfold 의 밝은 · 어두운 화면 모두에서 읽히도록 색은 변수로 둔다. */
+.g5-option-builder {
+  --ob-border: #d4d4d8;
+  --ob-muted: #6b7280;
+  --ob-surface: #ffffff;
+  --ob-subtle: #f4f4f5;
+  --ob-accent: #2563eb;
+  --ob-danger: #dc2626;
+  display: grid;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 64rem;
+}
+.dark .g5-option-builder {
+  --ob-border: #3f3f46;
+  --ob-muted: #a1a1aa;
+  --ob-surface: #18181b;
+  --ob-subtle: #27272a;
+  --ob-accent: #60a5fa;
+  --ob-danger: #f87171;
+}
+.g5-option-builder [hidden] { display: none !important; }
+.g5-option-builder__toolbar { display: flex; justify-content: flex-end; }
+.g5-option-builder__toggle { display: inline-flex; gap: 0.4rem; align-items: center; font-size: 0.8125rem; color: var(--ob-muted); cursor: pointer; }
+.g5-option-builder__message { min-height: 1.25rem; margin: 0; font-size: 0.8125rem; color: var(--ob-accent); }
+.g5-option-builder__message.is-error { color: var(--ob-danger); }
+.g5-option-builder__note { margin: 0 0 0.5rem; font-size: 0.8125rem; color: var(--ob-muted); }
+.g5-option-builder__section { padding: 1rem; border: 1px solid var(--ob-border); border-radius: 0.5rem; background: var(--ob-surface); }
+.g5-option-builder__section + .g5-option-builder__section { margin-top: 0.75rem; }
+.g5-option-builder__section h3 { margin: 0 0 0.25rem; font-size: 0.9375rem; font-weight: 600; }
+.g5-option-builder__levels { display: grid; gap: 0.5rem; }
+.g5-option-builder__level { display: grid; grid-template-columns: 3.5rem minmax(7rem, 12rem) minmax(10rem, 1fr) auto; gap: 0.5rem; align-items: center; }
+.g5-option-builder__label { font-size: 0.8125rem; font-weight: 600; color: var(--ob-muted); white-space: nowrap; }
+.g5-option-builder__input {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--ob-border);
+  border-radius: 0.375rem;
+  background: var(--ob-surface);
+  color: inherit;
+  font-size: 0.875rem;
+}
+.g5-option-builder__input:focus { outline: 2px solid var(--ob-accent); outline-offset: 1px; }
+.g5-option-builder__input--num { width: 7rem; text-align: right; }
+.g5-option-builder__actions, .g5-option-builder__bulk { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0.75rem 0; }
+.g5-option-builder__bulk { padding: 0.5rem; border-radius: 0.375rem; background: var(--ob-subtle); }
+.g5-option-builder__btn {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.85rem;
+  border: 1px solid var(--ob-accent);
+  border-radius: 0.375rem;
+  background: var(--ob-accent);
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.g5-option-builder__btn:hover { filter: brightness(1.08); }
+.g5-option-builder__btn:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 2px; }
+.g5-option-builder__btn--ghost { background: transparent; color: var(--ob-accent); }
+.g5-option-builder__btn--danger { border-color: var(--ob-danger); background: transparent; color: var(--ob-danger); }
+.g5-option-builder__table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.g5-option-builder__table th, .g5-option-builder__table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--ob-border); text-align: left; }
+.g5-option-builder__table th { font-size: 0.75rem; font-weight: 600; color: var(--ob-muted); background: var(--ob-subtle); }
+.g5-option-builder__name { font-weight: 500; word-break: keep-all; }
+.g5-option-builder__empty { color: var(--ob-muted); text-align: center !important; }
+.g5-option-builder__raw textarea { width: 100%; min-height: 12rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8125rem; }
+@media (max-width: 767px) {
+  .g5-option-builder__level { grid-template-columns: 1fr; }
+  .g5-option-builder__table { display: block; overflow-x: auto; }
+}

@@ -208,9 +208,22 @@ def valid_coupons_queryset(user):
 
 
 def coupon_matches_cart_item(coupon, item):
-    product = ShopProduct.objects.filter(pk=item.get("it_id")).select_related("category").first()
+    """Whether a product (0) or category (1) coupon fits the cart line; order (2) and shipping (3)
+    coupons fit every line.
+
+    youngcart refuses to aim product/category coupons at an it_nocoupon product or a ca_nocoupon
+    category (couponformupdate.php, coupontarget.php); the flags are also honoured here so a
+    coupon issued before the flag was set does not apply either."""
+    if coupon.cp_method not in {0, 1}:
+        return coupon.cp_method in {2, 3}
+    product = ShopProduct.objects.filter(pk=item.get("it_id")).only(
+        "it_id", "it_nocoupon", "category", "category2", "category3"
+    ).first()
+    if product is not None and product.it_nocoupon:
+        return False
     if coupon.cp_method == 0:
         return str(coupon.cp_target) == str(item.get("it_id"))
-    if coupon.cp_method == 1:
-        return bool(product and str(coupon.cp_target) in product.category_ids)
-    return coupon.cp_method in {2, 3}
+    target = str(coupon.cp_target)
+    if not product or target not in product.category_ids:
+        return False
+    return not ShopCategory.objects.filter(pk=target, ca_nocoupon=True).exists()
