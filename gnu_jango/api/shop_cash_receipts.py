@@ -39,7 +39,7 @@ def owned_order(request, od_id, uid):
     if order.user_id is not None:
         return order if user and user.is_authenticated and user.pk == order.user_id else None
     uid = str(uid or "")
-    return order if uid and hmac.compare_digest(uid, str(order.uid)) else None
+    return order if uid and hmac.compare_digest(uid.encode("utf-8"), str(order.uid).encode("utf-8")) else None
 
 
 @api_view(["POST"])

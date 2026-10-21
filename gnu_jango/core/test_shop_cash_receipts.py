@@ -169,6 +169,36 @@ class ManualRequestTests(CashReceiptBase):
         again = self.ask(order)
         self.assertEqual(again.status_code, 400)
         self.assertIn("이미 현금영수증 발급을 신청", again.json()["message"])
+        # kept for the admin, but sealed: payment log screens and searches never show it
+        raw = ShopOrderData.objects.get(log_id="crq-YC-C").dt_data
+        self.assertNotIn("01012345678", raw)
+        self.assertFalse(ShopOrderData.objects.filter(dt_data__contains="5678").exists())
+        request = cash_receipts.pending_request(order)
+        self.assertEqual((request["identity"], request["identity_masked"]), ("01012345678", "010****5678"))
+
+    def test_a_sealed_number_opens_only_unchanged_and_under_its_key(self):
+        from gnu_jango.shop.sealed_values import seal, unseal
+
+        token = seal("1234567890", salt="t")
+        self.assertEqual(unseal(token, salt="t"), "1234567890")
+        self.assertNotEqual(seal("1234567890", salt="t"), token)  # a fresh nonce each time
+        self.assertEqual(unseal(token, salt="other"), "")
+        self.assertEqual(unseal(token[:-2] + ("AA" if not token.endswith("AA") else "BB"), salt="t"), "")
+        self.assertEqual(unseal("plain", salt="t"), "")
+        with self.settings(SECRET_KEY="rotated-" + "x" * 50):
+            self.assertEqual(unseal(token, salt="t"), "")
+
+    def test_card_payments_credited_by_personal_pay_are_not_cash(self):
+        from gnu_jango.shop.models import ShopPersonalPay
+
+        order = self.make_order()
+        ShopPersonalPay.objects.create(
+            pp_id="PP-CARD", order=order, pp_name="Buyer", pp_price=20000, pp_receipt_price=20000, pp_settle_case="신용카드"
+        )
+        ShopPersonalPay.objects.create(
+            pp_id="PP-BANK", order=order, pp_name="Buyer", pp_price=5000, pp_receipt_price=5000, pp_settle_case="무통장"
+        )
+        self.assertEqual(cash_receipts.receipt_amounts(order), (30000, 0))
 
     def test_the_order_page_offers_the_request_only_where_youngcart_does(self):
         eligible = self.make_order()
@@ -219,6 +249,7 @@ class ManualRequestTests(CashReceiptBase):
         self.assertEqual(response.status_code, 200, response.content[:300])
         self.assertTrue(ShopOrder.objects.get(pk=guest.pk).od_cash_request)
         self.assertEqual(self.ask(ShopOrder(od_id="NOPE")).status_code, 404)
+        self.assertEqual(self.ask(guest, client=anonymous, uid="주문번호").status_code, 404)  # not a 500
 
     def test_requests_are_throttled(self):
         order = self.make_order(status="주문", paid=0)
@@ -349,6 +380,18 @@ class CancelledOrderReceiptTests(CashReceiptBase):
         self.assertEqual(manual.od_cash_no, "HT-1")
         self.assertIsNone(cash_receipts.pending_request(pending))
         self.assertIsNone(cash_receipts.admin_risk(pending))
+
+    @override_settings(**FAKE_TOSS)
+    def test_a_receipt_above_the_cash_left_after_a_refund_is_flagged(self):
+        order = self.issued_order()
+        self.assertIsNone(cash_receipts.admin_risk(order))
+        ShopOrder.objects.filter(pk=order.pk).update(od_cancel_price=10000, od_refund_price=10000)
+        order.refresh_from_db()
+        self.assertTrue(cash_receipts.needs_amount_correction(order))
+        self.assertEqual(cash_receipts.admin_risk(order)["label"], "현금영수증 금액 조정 필요")
+        self.client.force_login(get_user_model().objects.create_superuser(username="fix-admin", email="f@example.test", password="pw"))
+        page = self.client.get(reverse("admin:shop_shoporder_cash_receipt", args=[order.pk]))
+        self.assertContains(page, "발급 금액 50,000원이 지금 현금 결제액 40,000원보다 큽니다")
 
     @override_settings(**FAKE_TOSS)
     def test_a_partial_refund_notes_that_the_receipt_needs_a_correction(self):

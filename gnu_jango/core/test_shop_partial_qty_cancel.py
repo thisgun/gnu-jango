@@ -5,6 +5,7 @@ follow the cancelled quantity only."""
 
 import json
 from unittest.mock import patch
+from urllib import error as urllib_error
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -240,6 +241,18 @@ class TossPartialQtyTests(PartialQtyBase):
         self.assertEqual(order.items.count(), 2)
         self.reload(self.shirt_line, self.shirt, order)
         self.assertEqual((self.shirt_line.ct_qty, self.shirt.it_stock_qty, order.od_refund_price), (3, 5, 0))
+
+    def test_a_retry_after_a_lost_toss_answer_reuses_the_idempotency_key(self):
+        # Toss may have refunded although its answer never came back: the retry must not refund again
+        order = self.toss_order()
+        form = {"quantities": {self.shirt_line.pk: 1}, "expected": {self.shirt_line.pk: 3}}
+        with patch(URLOPEN, side_effect=urllib_error.URLError("timed out")) as lost:
+            self.assertFalse(change_order_lines(order, [self.shirt_line.pk], "취소", **form))
+        self.assertEqual(order.items.count(), 2)
+        with patch(URLOPEN, return_value=self.partial_reply(order)) as retried:
+            self.assertTrue(change_order_lines(order, [self.shirt_line.pk], "취소", **form))
+        first_key = lost.call_args.args[0].get_header("Idempotency-key")
+        self.assertEqual(retried.call_args.args[0].get_header("Idempotency-key"), first_key)
 
     def test_a_double_submit_of_the_same_form_splits_and_refunds_once(self):
         order = self.toss_order()

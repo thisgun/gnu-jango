@@ -10,8 +10,9 @@ recorded as a request the admin issues by hand (현금영수증 요청 (수동 �
 Storage (no new columns): od_cash_request / od_cash_type say a receipt was asked for, od_cash_no is
 the approval number once issued and od_cash_res its receipt link. Toss's answer, with the
 receiptKey needed to cancel it, is a ShopOrderData log ("tcr-"). The identification number of a
-manual request is kept in its own ShopOrderData row ("crq-") only until the receipt is issued or
-the request ends, because the admin needs it to issue; a Toss request never stores it.
+manual request is kept, sealed (shop/sealed_values.py), in its own ShopOrderData row ("crq-")
+only until the receipt is issued or the request ends, because the admin needs it to issue; a Toss
+request never stores it.
 """
 
 import json
@@ -30,6 +31,7 @@ from gnu_jango.shop.cash_receipt_toss import (
     toss_cash_receipts_enabled,
 )
 from gnu_jango.shop.models import ShopOrder, ShopOrderData
+from gnu_jango.shop.sealed_values import seal, unseal
 from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES
 
 logger = logging.getLogger(__name__)
@@ -39,6 +41,7 @@ REQUEST_LOG_PREFIX = "crq-"
 TOSS_ISSUE_LOG_PREFIX = "tcr"  # record_payment_raw_log names it "tcr-pay-<od_id>-<receiptKey>"
 TOSS_CANCEL_LOG_PREFIX = "tcrc"
 REQUEST_LOG_PG = "cash_receipt"
+IDENTITY_SEAL_SALT = "cash_receipt_identity"
 
 STATE_ISSUED = "issued"
 STATE_CANCEL_NEEDED = "cancel_needed"
@@ -99,10 +102,18 @@ def mask_identity(value):
 def receipt_amounts(order):
     """(amount, tax-free part): the cash paid minus refunds (youngcart taxsave.php
     od_receipt_price - od_refund_price), held to the order's tax split when it has one
-    (od_tax_mny + od_vat_mny + od_free_mny, which leaves out points)."""
+    (od_tax_mny + od_vat_mny + od_free_mny, which leaves out points). Personal pay receipts
+    credited to the order (od_receipt_price) were paid on their own transactions; those paid by
+    card, phone or easy pay are not cash and are left out."""
+    from gnu_jango.api.shop_payments import settle_case_supports_cash_receipt
     from gnu_jango.shop.order_flow import paid_amount
 
-    net = max(0, paid_amount(order) - max(0, int(order.od_refund_price or 0)))
+    non_cash = sum(
+        max(0, int(price or 0))
+        for settle_case, price in order.personal_pays.values_list("pp_settle_case", "pp_receipt_price")
+        if not settle_case_supports_cash_receipt(settle_case)
+    )
+    net = max(0, paid_amount(order) - non_cash - max(0, int(order.od_refund_price or 0)))
     split = sum(max(0, int(value or 0)) for value in (order.od_tax_mny, order.od_vat_mny, order.od_free_mny))
     amount = min(net, split) if split > 0 else net
     return amount, min(amount, max(0, int(order.od_free_mny or 0)))
@@ -117,7 +128,8 @@ def order_name(order):
 
 
 def pending_request(order):
-    """The manual request row ({"cash_type", "identity", ...}) or None."""
+    """The manual request row ({"cash_type", "identity", "identity_masked", ...}) or None. The
+    identification number is stored sealed (shop/sealed_values.py) and opened only here."""
     row = ShopOrderData.objects.filter(log_id=f"{REQUEST_LOG_PREFIX}{order.od_id}"[:40]).first()
     if row is None:
         return None
@@ -125,7 +137,10 @@ def pending_request(order):
         data = json.loads(row.dt_data or "{}")
     except ValueError:
         data = {}
-    return data if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        return {}
+    identity = unseal(data.pop("identity_sealed", ""), salt=IDENTITY_SEAL_SALT)
+    return {**data, "identity": identity, "identity_masked": mask_identity(identity)}
 
 
 def _drop_pending_request(order):
@@ -285,7 +300,11 @@ def _record_manual_request(order, cash_type, identity, actor, *, by_admin):
             "mb_id": order.user.get_username() if order.user_id else "",
             "dt_pg": REQUEST_LOG_PG,
             "dt_data": json.dumps(
-                {"cash_type": cash_type, "identity": identity, "requested_at": timezone.now().isoformat()},
+                {
+                    "cash_type": cash_type,
+                    "identity_sealed": seal(identity, salt=IDENTITY_SEAL_SALT),
+                    "requested_at": timezone.now().isoformat(),
+                },
                 ensure_ascii=False,
             ),
             "dt_time": timezone.now(),
@@ -467,7 +486,8 @@ def admin_summary(order):
         STATE_AVAILABLE: ("현금영수증 발급 가능", "info"),
         STATE_UNAVAILABLE: ("현금영수증 대상 아님", "neutral"),
     }
-    label, tone = labels[state]
+    # a checkout request without a number (bank deposit) waits for the admin like a manual one
+    label, tone = labels[STATE_REQUESTED if state == STATE_AVAILABLE and order.od_cash_request else state]
     amount, tax_free = receipt_amounts(order)
     return {
         "state": state,
@@ -486,13 +506,35 @@ def admin_summary(order):
         "tax_free": tax_free,
         "issue_error": eligibility_error(order, by_admin=True),
         "through_toss": issues_through_toss(order),
+        "issued_amount": issued_amount(order),
+        "needs_correction": needs_amount_correction(order),
     }
+
+
+def issued_amount(order):
+    """What a receipt issued through the Toss API here was issued for (None when unknown)."""
+    receipt = toss_issued_receipt(order)
+    try:
+        return int(receipt["amount"]) if receipt and receipt.get("amount") is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def needs_amount_correction(order):
+    """True when a refund after issuance left the receipt above what was paid in cash: it has to
+    be cancelled and issued again for the rest (the number is not kept, so not automatically)."""
+    if not order.od_cash_no or _closed(order):
+        return False
+    issued = issued_amount(order)
+    return issued is not None and issued > receipt_amounts(order)[0]
 
 
 def admin_risk(order):
     """A risk card for the order page when the receipt needs the admin, else None."""
     if order.od_cash_no and _closed(order):
         return {"label": "현금영수증 취소 필요", "value": order.od_cash_no, "tone": "danger", "hint": "취소·반품된 주문에 발급된 현금영수증이 남아 있습니다."}
+    if needs_amount_correction(order):
+        return {"label": "현금영수증 금액 조정 필요", "value": order.od_cash_no, "tone": "warning", "hint": "부분 환불 뒤 현금영수증 금액이 현금 결제액보다 큽니다. 취소한 뒤 남은 금액으로 다시 발급하세요."}
     if not order.od_cash_no and (order.od_cash_request or pending_request(order) is not None) and not _closed(order):
         return {"label": "현금영수증 요청 (수동 발급)", "value": CASH_RECEIPT_TYPE_LABELS.get(order.od_cash_type, "-"), "tone": "warning", "hint": "고객이 요청한 현금영수증을 발급하거나 승인번호를 등록하세요."}
     return None

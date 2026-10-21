@@ -108,8 +108,14 @@ class LineChangePlan:
 
     @property
     def idempotency_key(self):
-        """One refund: the same lines, target and amount never refund twice at Toss."""
-        line_ids = ",".join(str(item.pk) for item in sorted(self.lines, key=lambda item: item.pk))
+        """One refund: the same lines, target and amount never refund twice at Toss. A split-off
+        line is named by the line it came from and its quantities: its own pk is new on every try
+        (a refused try rolls the split back), so a retry after a lost Toss answer keeps the key."""
+        splits = {split.new_pk: split for split in self.splits}
+        line_ids = ",".join(
+            f"s{split.original_pk}:{split.before}:{split.moved}" if (split := splits.get(item.pk)) else str(item.pk)
+            for item in sorted(self.lines, key=lambda item: item.pk)
+        )
         digest = hashlib.sha256(
             f"{self.target}|{line_ids}|{self.pg_refund}|{self.refund}|{self.refunded}".encode()
         ).hexdigest()[:24]

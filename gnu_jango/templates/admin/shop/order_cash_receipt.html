@@ -50,6 +50,9 @@
     </div>
     {% if summary.url %}<a class="button btn g5-admin-button-secondary" href="{{ summary.url }}" target="_blank" rel="noopener noreferrer">영수증 보기</a>{% endif %}
   </div>
+  {% if summary.needs_correction %}
+  <div role="alert" class="alert alert-warning">발급 금액 {{ summary.issued_amount|intcomma }}원이 지금 현금 결제액 {{ summary.amount|intcomma }}원보다 큽니다(부분 환불). 취소한 뒤 남은 금액으로 다시 발급하세요.</div>
+  {% endif %}
   <form method="post" action="" class="g5-admin-report-filter">
     {% csrf_token %}
     <input type="hidden" name="action" value="cancel">
