@@ -6,6 +6,7 @@ import type { BbsRewriteMode } from "@/lib/board-url";
 import { shouldBypassImageOptimization } from "@/lib/image";
 import { shopProductHref } from "@/lib/product-url";
 import { getShopCartShippingPaymentLabel } from "@/lib/shop-shipping-label";
+import { isClosedOrderStatus } from "@/lib/order-status";
 import { formatCartOption, formatPrice } from "@/lib/utils";
 import { ProductImageFallback } from "@/components/shop/ProductImageFallback";
 
@@ -36,14 +37,12 @@ function groupOrderLines(lines: ShopOrderItem[]): OrderProduct[] {
   });
 }
 
-/** 관리자가 줄마다 바꾼 취소 · 반품 · 품절(영카트 orderinquiryview.php 의 상태 칸). */
-const CLOSED_LINE_STATUSES = new Set(["취소", "반품", "품절"]);
-
 /** 옵션 줄 — "옵션 수량개 (+옵션금액)"(영카트 print_item_options). 옵션 없는 줄은 상품명. */
 function lineLabel(line: ShopOrderItem): string {
   const label = formatCartOption(line.ct_option) || line.it_name;
   const ioPrice = Number(line.io_price ?? 0);
-  const closed = CLOSED_LINE_STATUSES.has(line.ct_status) ? ` [${line.ct_status}]` : "";
+  // 관리자가 줄마다 바꾼 취소 · 반품 · 품절(영카트 orderinquiryview.php 의 상태 칸)
+  const closed = isClosedOrderStatus(line.ct_status) ? ` [${line.ct_status}]` : "";
   return `${label} ${line.ct_qty}개 (${ioPrice >= 0 ? "+" : ""}${formatPrice(ioPrice)})${closed}`;
 }
 

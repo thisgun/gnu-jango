@@ -28,6 +28,23 @@ export function formatDate(date?: string | null) {
 }
 
 /**
+ * 주문일시처럼 연도와 시각까지 보여야 하는 값 — "YYYY-MM-DD HH:mm"(영카트 orderinquiry 의 od_time).
+ * 백엔드는 쇼핑몰 현지 시각(+09:00)의 ISO 문자열을 보내므로, 보는 사람의 시간대로 옮기지 않고 그 숫자를 그대로 쓴다.
+ */
+export function formatDateTime(value?: string | null): string {
+  if (!value || /^0{4}-0{2}-0{2}/.test(value)) return "";
+  const match = String(value).match(/^(\d{4})-(\d{2})-(\d{2})(?:[T ](\d{2}):(\d{2}))?/);
+  if (match) {
+    const [, year, month, day, hour, minute] = match;
+    return hour ? `${year}-${month}-${day} ${hour}:${minute}` : `${year}-${month}-${day}`;
+  }
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
  * 통화 표시 — 기본 ko-KR/KRW. NEXT_PUBLIC_SHOP_LOCALE / NEXT_PUBLIC_SHOP_CURRENCY
  * 환경변수로 운영자가 다른 로케일/통화 전환 가능.
  *   예: en-US / USD → '$1,234'

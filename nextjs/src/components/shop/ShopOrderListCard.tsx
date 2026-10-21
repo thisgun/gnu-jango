@@ -5,39 +5,22 @@ import { G5Link as Link } from "@/components/ui/g5-link";
 import { ProductImageFallback } from "@/components/shop/ProductImageFallback";
 import type { ShopOrder } from "@/lib/api";
 import { shouldBypassImageOptimization } from "@/lib/image";
-import { cn, formatDate, formatPrice } from "@/lib/utils";
+import { ORDER_STATUS_BADGE_CLASS, orderStatusLabel } from "@/lib/order-status";
+import { cn, formatDateTime, formatPrice } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
 
-const STATUS_MAP: Record<string, { label: string; variant: string }> = {
-  "주문": { label: "입금확인중", variant: "bg-amber-100 text-amber-700" },
-  "입금": { label: "입금완료", variant: "bg-blue-100 text-blue-700" },
-  "준비": { label: "상품준비중", variant: "bg-gray-100 text-gray-700" },
-  "배송": { label: "상품배송", variant: "bg-indigo-100 text-indigo-700" },
-  "완료": { label: "배송완료", variant: "bg-green-100 text-green-700" },
-  "취소": { label: "주문취소", variant: "bg-red-100 text-red-700" },
-  "반품": { label: "반품", variant: "bg-red-100 text-red-700" },
-  "품절": { label: "품절취소", variant: "bg-red-100 text-red-700" },
-  "입금대기": { label: "입금확인중", variant: "bg-amber-100 text-amber-700" },
-  "결제완료": { label: "입금완료", variant: "bg-blue-100 text-blue-700" },
-  "배송준비": { label: "상품준비중", variant: "bg-gray-100 text-gray-700" },
-  "배송중": { label: "상품배송", variant: "bg-indigo-100 text-indigo-700" },
-  "배송완료": { label: "배송완료", variant: "bg-green-100 text-green-700" },
-};
-
+// 상태 라벨은 주문 상세·마이페이지와 같은 표(영카트 orderinquiry.sub.php)를 쓴다.
 function StatusBadge({ status }: { status: string }) {
-  const config = STATUS_MAP[status] ?? {
-    label: status || "주문취소",
-    variant: "bg-red-100 text-red-700",
-  };
+  const { label, tone } = orderStatusLabel(status);
 
   return (
     <span
       className={cn(
         "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-        config.variant
+        ORDER_STATUS_BADGE_CLASS[tone]
       )}
     >
-      {config.label}
+      {label}
     </span>
   );
 }
@@ -103,7 +86,7 @@ export function ShopOrderListCard({ order }: { order: ShopOrder }) {
         <div className="space-y-1">
           <p className="truncate text-sm font-medium">{itemTitle}</p>
           <p className="text-xs text-muted-foreground">
-            주문일시: {dateText ? formatDate(dateText) : "-"}
+            주문일시: {formatDateTime(dateText) || "-"}
           </p>
         </div>
 
