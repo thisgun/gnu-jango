@@ -234,6 +234,24 @@ class RelatedProductTests(AdminBase):
         self.assertEqual(related_product_ids("REL-A"), ["REL-C"])
         self.assertEqual(related_product_ids("REL-B"), [])
 
+    def test_saving_without_touching_the_related_list_keeps_one_way_relations(self):
+        main, other, third = self.product("REL-A"), self.product("REL-B"), self.product("REL-C")
+        # imported from youngcart: REL-B lists REL-A, REL-A does not list it back
+        ShopProductRelation.objects.create(product=other, related=main, ir_no=1)
+        data = change_form_data(self.client.get(self.change_url(main)))
+        data["it_name"] = "이름만 변경"
+        self.assertEqual(self.client.post(self.change_url(main), data).status_code, 302)
+        self.assertEqual(related_product_ids("REL-B"), ["REL-A"])
+
+        # editing the list mirrors it (and logs what it drops)
+        data = change_form_data(self.client.get(self.change_url(main)))
+        data.update({"relations-TOTAL_FORMS": "1", "relations-0-related": third.it_id, "relations-0-ir_no": "0"})
+        with self.assertLogs("gnu_jango.shop.product_relations", "INFO") as logs:
+            self.assertEqual(self.client.post(self.change_url(main), data).status_code, 302)
+        self.assertEqual(related_product_ids("REL-B"), [])
+        self.assertEqual(related_product_ids("REL-C"), ["REL-A"])
+        self.assertIn("REL-B", logs.output[0])
+
     def test_a_product_cannot_relate_to_itself(self):
         main = self.product("REL-A")
         data = change_form_data(self.client.get(self.change_url(main)))

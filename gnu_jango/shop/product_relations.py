@@ -1,9 +1,13 @@
 """Related products (youngcart g5_shop_item_relation)."""
 
+import logging
+
 from django.db import transaction
 from django.db.models import Max
 
 from gnu_jango.shop.models import ShopProductRelation
+
+logger = logging.getLogger(__name__)
 
 
 def related_product_ids(it_id):
@@ -20,7 +24,11 @@ def mirror_product_relations(product):
     Every product listed on ``product`` lists it back (added after its own related products), and a
     product no longer listed stops listing it."""
     listed = set(ShopProductRelation.objects.filter(product=product).values_list("related_id", flat=True))
-    ShopProductRelation.objects.filter(related=product).exclude(product_id__in=listed).delete()
+    stale = ShopProductRelation.objects.filter(related=product).exclude(product_id__in=listed)
+    dropped = sorted(stale.values_list("product_id", flat=True))
+    if dropped:
+        stale.delete()
+        logger.info("Related products of %s: %s no longer list it (mirrored)", product.pk, ", ".join(dropped))
     present = set(ShopProductRelation.objects.filter(related=product).values_list("product_id", flat=True))
     missing = sorted(listed - present)
     if not missing:

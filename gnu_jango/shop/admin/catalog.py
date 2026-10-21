@@ -36,7 +36,7 @@ from gnu_jango.shop.admin.catalog_tools import (
 from gnu_jango.shop.admin.item_info_form import ItemInfoTextField, clean_item_info, item_info_kind_field
 from gnu_jango.shop.product_copy import copy_product, next_product_id
 from gnu_jango.shop.product_relations import mirror_product_relations
-from gnu_jango.shop.models import ShopProduct, ShopStockAdjustment
+from gnu_jango.shop.models import ShopProduct, ShopProductRelation, ShopStockAdjustment
 
 
 PRODUCT_TYPE_FIELDS = (
@@ -424,8 +424,11 @@ class ShopProductAdmin(ModelAdmin):
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)
-        # itemformupdate.php lists the product back on each related product
-        mirror_product_relations(form.instance)
+        # itemformupdate.php lists the product back on each related product. Only when the related
+        # list was edited: a list_editable save (no formsets) or an untouched inline must not drop
+        # the one-way relations an import brought in.
+        if any(formset.model is ShopProductRelation and formset.has_changed() for formset in formsets):
+            mirror_product_relations(form.instance)
 
     def product_copy_view(self, request, it_id):
         """itemcopy.php: copy one product under a new code (default: the current unix time)."""
