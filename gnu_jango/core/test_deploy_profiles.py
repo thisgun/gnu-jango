@@ -460,7 +460,7 @@ class RunScheduledJobsCommandTests(TestCase):
 
         output = stdout.getvalue()
         self.assertIn("expire_pending_payment_orders: ok", output)
-        self.assertIn("5 ok, 0 failed", output)
+        self.assertIn(f"{len(scheduled_jobs.SCHEDULED_JOBS)} ok, 0 failed", output)
 
     def test_exits_non_zero_when_any_job_failed(self):
         stdout = StringIO()
