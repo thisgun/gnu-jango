@@ -182,6 +182,7 @@ class UnifiedSearchTests(BoardApiTestCase):
         type(self.board).objects.filter(pk=self.board.pk).update(bo_use_search=False)
         self.assertEqual(client.post(f"{API}/click", {"token": token}, format="json").status_code, 404)
 
+    @override_settings(G5_SEARCH_PUBLIC_KEYWORDS=["입금 확인"], G5_SEARCH_PUBLIC_MIN_COUNT=1)
     def test_clicks_and_popularity_only_give_bounded_boosts(self):
         before = {row["id"]: row["score"] for row in self.search(type="post")["data"]["results"]}
         doc = SearchDocument.objects.get(post=self.target)
@@ -239,7 +240,9 @@ class UnifiedSearchTests(BoardApiTestCase):
         with connection.cursor() as cursor:
             cursor.execute("SET LOCAL enable_seqscan = off")
         plan = matching_documents(docs, "입금 확인", allowed_body=body).explain()
-        self.assertTrue("search_title_fts" in plan or "search_body_fts" in plan, plan)
+        self.assertTrue(any(name in plan for name in (
+            "search_title_fts", "search_body_fts", "search_snap_title_fts", "search_snap_body_fts",
+        )), plan)
 
     def test_postgresql_optional_trigram_finds_a_misspelled_title(self):
         from django.db import connection
@@ -289,4 +292,4 @@ class UnifiedSearchTests(BoardApiTestCase):
         request = mock.Mock(user=None, session={})
         docs, body = visible_documents(request)
         plan = matching_documents(docs, "입금 확인", allowed_body=body).explain()
-        self.assertIn("search_term_field_doc", plan)
+        self.assertTrue("search_term_field_doc" in plan or "search_snap_term_field" in plan, plan)

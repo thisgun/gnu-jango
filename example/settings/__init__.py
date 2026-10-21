@@ -14,5 +14,7 @@ import os
 
 if os.environ.get("ENVIRONMENT") == 'Production':
     from .production import *
+elif os.environ.get("ENVIRONMENT") == 'Preview':
+    from .preview import *
 else:
     from .development import *

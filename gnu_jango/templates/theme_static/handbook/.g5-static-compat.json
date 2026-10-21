@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "generation": 22,
+  "generation": 23,
   "keepBuilds": 2,
   "files": [
     {
@@ -9,9 +9,14 @@
       "retiredAt": 22
     },
     {
-      "path": "_next/static/chunks/2eusqz82_egem.js",
-      "sha256": "e5ee5c71a8ff9d705561e1e4067f216d99808f5a3c9731f63caa7a0045e8ca08",
-      "retiredAt": 21
+      "path": "_next/static/chunks/1bbdgxmdl-cxo.js",
+      "sha256": "4640c07d39a8dc5eac8da20f7b1362783ea80d7bf6e765b3f1fb69c702c08621",
+      "retiredAt": 23
+    },
+    {
+      "path": "_next/static/chunks/1w8awrmse7gtl.js",
+      "sha256": "9c3e91251b4e442b7175cd834016505574a13cde7d86f52e5d28f6be2dfd45b8",
+      "retiredAt": 23
     }
   ]
 }

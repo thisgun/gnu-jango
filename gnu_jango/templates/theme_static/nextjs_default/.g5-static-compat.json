@@ -1,17 +1,22 @@
 {
   "version": 2,
-  "generation": 38,
+  "generation": 40,
   "keepBuilds": 2,
   "files": [
     {
-      "path": "_next/static/chunks/1o_uc2l6ou9pb.js",
-      "sha256": "6d6087a6e2b97fef6da21cb2d4d591f792e90079ddfe27d9c56d3e403b633f5f",
-      "retiredAt": 38
+      "path": "_next/static/chunks/28q1fgnk_mpo-.js",
+      "sha256": "c98ab74f59d6c25a37c434f644de155444cd3a299a214d0eef16de58b8360a47",
+      "retiredAt": 40
     },
     {
-      "path": "_next/static/chunks/3wba-wwg7kdu7.js",
-      "sha256": "629a5ae7817621fe45b53a14caa95f0209c5621b56582c387c92174bfe67df8d",
-      "retiredAt": 37
+      "path": "_next/static/chunks/2_ahfbpx09odo.js",
+      "sha256": "0b769072003e7935941383ed0be56e3bd971870a13a86bdfd737d58bf435813c",
+      "retiredAt": 39
+    },
+    {
+      "path": "_next/static/chunks/2cy406yhwjdkv.js",
+      "sha256": "a658f45002a7487148e4fc748242bb707a70a0424b91f620e33dde11777d9636",
+      "retiredAt": 39
     }
   ]
 }

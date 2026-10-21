@@ -28,6 +28,7 @@ export default function UnifiedResults() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notReady, setNotReady] = useState(false);
+  const currentPage = data?.meta?.current_page ?? page;
 
   useEffect(() => {
     let cancelled = false;
@@ -102,9 +103,9 @@ export default function UnifiedResults() {
           ))}
           {data.meta?.truncated && <p className="text-sm text-base-content/70">관련도가 높은 200건까지 표시합니다. 자료 종류를 좁히거나 특징적인 단어로 다시 검색해 보세요.</p>}
           <nav aria-label="검색 결과 페이지" className="flex items-center justify-center gap-3 pt-4">
-            {page > 1 && <button className="btn btn-sm" onClick={() => navigate(query, kind, page - 1)}>이전</button>}
-            <span className="text-sm">{page} / {data.meta?.total_pages ?? 1}</span>
-            {page < (data.meta?.total_pages ?? 1) && <button className="btn btn-sm" onClick={() => navigate(query, kind, page + 1)}>다음</button>}
+            {currentPage > 1 && <button className="btn btn-sm" onClick={() => navigate(query, kind, currentPage - 1)}>이전</button>}
+            <span className="text-sm">{currentPage} / {data.meta?.total_pages ?? 1}</span>
+            {currentPage < (data.meta?.total_pages ?? 1) && <button className="btn btn-sm" onClick={() => navigate(query, kind, currentPage + 1)}>다음</button>}
           </nav>
         </section>
       )}

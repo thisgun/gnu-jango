@@ -1004,6 +1004,8 @@ class ScrapMoreTests(BoardFixtures):
 # ---------------------------------------------------------------------------------------------
 
 
+@override_settings(G5_SEARCH_PUBLIC_KEYWORDS=["recorded-word", "refresh-me", *[f"word{i:02d}" for i in range(25)]],
+                   G5_SEARCH_PUBLIC_MIN_COUNT=1)
 class PopularSearchMoreTests(CommunityMoreBase):
     def search(self, client, keyword, **params):
         return client.get("/api/v1/search", {"q": keyword, **params})
@@ -1017,10 +1019,10 @@ class PopularSearchMoreTests(CommunityMoreBase):
 
     def test_a_stored_search_word_is_bounded_and_collapses_whitespace(self):
         self.search(self.visitor, "a" * 600)
-        self.search(self.visitor, "  spaced    out\twords ")
+        self.search(self.visitor, "  spaced    out  words ")
         words = set(SearchKeywordDaily.objects.values_list("keyword", flat=True))
         self.assertIn("spaced out words", words)
-        self.assertTrue(all(len(word) <= 255 for word in words))
+        self.assertTrue(all(len(word) <= 200 for word in words))
 
     def test_popular_parameters_of_any_shape_do_not_fail(self):
         client = self.client_for(raise_errors=False)

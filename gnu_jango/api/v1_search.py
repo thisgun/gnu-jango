@@ -56,12 +56,8 @@ def unified_search_view(request):
                          status=503, code="search_index_not_ready", details={"kinds": missing})
     limit = _integer(request.query_params.get("limit"), 20, 50)
     page = _integer(request.query_params.get("page"), 1, CANDIDATE_LIMIT)
-    results, meta = ranked_results(request, query, result_type=result_type, bo_table=bo_table)
-    start = (page - 1) * limit
-    response = api_response(data={"query": query, "results": results[start:start + limit]}, meta={
-        **meta, "current_page": page, "per_page": limit,
-        "total_pages": max(1, (len(results) + limit - 1) // limit),
-    })
+    results, meta = ranked_results(request, query, result_type=result_type, bo_table=bo_table, page=page, limit=limit)
+    response = api_response(data={"query": query, "results": results}, meta=meta)
     patch_cache_control(response, private=True, no_store=True)
     return response
 
