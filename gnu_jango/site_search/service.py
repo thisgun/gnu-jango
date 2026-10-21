@@ -82,16 +82,23 @@ def _matching_tokens(docs, query, *, allowed_body, fields=("title", "body"), sna
         search = reduce(or_, [SearchQuery(encoded(term), config="simple", search_type="plain") for term in set(query_terms)])
         docs = docs.alias(_title_vector=SearchVector("title_tokens", config="simple"),
                           _body_vector=SearchVector("body_tokens", config="simple"))
-        matches = Q(pk__in=[])
+        # Keep title/body retrieval in separate branches. An OR containing the
+        # permission subquery can force PostgreSQL to scan every token row.
+        indexed = docs.model.objects.using(docs.db)
+        branches = []
         title_rank, body_rank = Value(0.0), Value(0.0)
         if "title" in fields:
-            matches |= Q(_title_vector=search)
+            branches.append(indexed.alias(_vector=SearchVector("title_tokens", config="simple")).filter(
+                _vector=search).order_by().values("pk"))
             title_rank = SearchRank(SearchVector("title_tokens", config="simple"), search)
         if "body" in fields:
-            matches |= allowed_body & Q(_body_vector=search)
+            branches.append(docs.filter(allowed_body, _body_vector=search).order_by().values("pk"))
             body_rank = Case(When(allowed_body, then=SearchRank(SearchVector("body_tokens", config="simple"), search)),
                              default=Value(0.0), output_field=FloatField())
-        return docs.filter(matches).annotate(_search_rank=title_rank * 4.0 + body_rank).order_by("-_search_rank", "-pk")
+        if not branches:
+            return docs.none().annotate(_search_rank=Value(0.0))
+        ids = branches[0].union(*branches[1:]) if len(branches) > 1 else branches[0]
+        return docs.filter(pk__in=ids).annotate(_search_rank=title_rank * 4.0 + body_rank).order_by("-_search_rank", "-pk")
 
     def frequency(field):
         model, relation = (SearchSnapshotPosting, "snapshot_id") if snapshots else (SearchPosting, "document_id")

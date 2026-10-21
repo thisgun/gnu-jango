@@ -26,5 +26,6 @@ Preview는 기존 Supabase 프로젝트의 자원을 공유한다. 역할에 운
 - PostgreSQL Preview와 격리 SQLite에서 검색 응답 및 page=200의 유효 페이지 보정을 확인했다.
 - Preview 두 프로젝트는 icn1에서 배포되었고 핸드북 검색 API가 200을 반환했다.
 - 기존 예약 작업의 개수를 5개로 고정한 검증이 새 클릭 정리 작업 때문에 실패해 작업 목록 길이를 기준으로 수정했다.
+- 세대 색인의 권한 조건과 FTS 조건을 OR로 합친 쿼리가 GIN 실행 계획 검증에 실패했다. 제목/본문 후보를 UNION으로 나누어 수정했고 Preview PostgreSQL 실행 계획에서 GIN 사용 가능 여부를 확인했다. 검증 기준을 낮추지 않았다.
 
 최종 CI·배포 내역은 [PR #47](https://github.com/thisgun/gnu-jango/pull/47)에 기록한다. 이전 기능 보고서의 테스트 수치는 이번 후속 변경에 대한 결과가 아니다.
