@@ -458,6 +458,16 @@ def _split_and_plan(order, line_ids, target, quantities, expected):
     return plan
 
 
+def refund_tax_free(order, plan):
+    """The tax-free part of ``plan``'s refund: what the order's 면세 amount (od_free_mny) drops
+    by, held to the PG refund (youngcart orderpartcancel.inc.php free_mny). 0 for an order not
+    placed under 복합과세 결제."""
+    if not int(order.od_tax_flag or 0):
+        return 0
+    dropped = max(0, int(order.od_free_mny or 0) - int(plan.tax.get("od_free_mny", 0) or 0))
+    return min(dropped, max(0, int(plan.pg_refund or 0)))
+
+
 def _refund_at_toss(order, plan, reason):
     """Refund the Toss part of ``plan`` before anything is applied; returns the plan to apply."""
     from gnu_jango.api.shop_payments import (
@@ -472,7 +482,11 @@ def _refund_at_toss(order, plan, reason):
             answer = toss_api_cancel_payment(order, cancel_reason)
         else:
             answer = toss_api_partial_cancel_payment(
-                order, plan.pg_refund, cancel_reason, idempotency_key=plan.idempotency_key
+                order,
+                plan.pg_refund,
+                cancel_reason,
+                idempotency_key=plan.idempotency_key,
+                tax_free_amount=refund_tax_free(order, plan),
             )
     except PaymentCancelError as exc:
         raise _ChangeRefused(f"결제 환불에 실패해 아무것도 바꾸지 않았습니다. {exc}") from exc

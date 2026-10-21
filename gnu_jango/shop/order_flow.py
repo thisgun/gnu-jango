@@ -71,6 +71,8 @@ class StatusChange:
     ok: bool
     message: str = ""
     manual_refund: bool = False
+    # the change went through but the admin has something to do (shown as a warning)
+    warning: bool = False
 
     def __bool__(self):
         return self.ok
@@ -188,6 +190,7 @@ def move_order_status(order, target, *, actor="", send_sms=True):
     line that leaves 완료 gives its purchase point back. ``send_sms=False`` keeps the 입금/배송
     text back (bulk paths, where the operator did not ask for texts)."""
     from gnu_jango.api.shop_common import CANCELLED_STATUSES
+    from gnu_jango.api.shop_payments import ESCROW_DELIVERY_NOTICE, order_paid_with_escrow
     from gnu_jango.shop.inventory import append_order_history, order_history_line
     from gnu_jango.shop.notifications import queue_order_status_mail
     from gnu_jango.shop.sms.notifications import queue_order_status_sms
@@ -218,6 +221,13 @@ def move_order_status(order, target, *, actor="", send_sms=True):
         locked.od_mod_history = append_order_history(
             locked.od_mod_history, order_history_line(f"주문상태 {previous}→{target} 처리", actor)
         )
+        # youngcart: "에스크로 사용시 배송과의 연동은 되지 않으며" - the Toss escrow delivery is
+        # registered by hand in the Toss dashboard, so the order history and the admin say so
+        escrow_delivery = target == STATUS_SHIPPING and order_paid_with_escrow(locked)
+        if escrow_delivery:
+            locked.od_mod_history = append_order_history(
+                locked.od_mod_history, order_history_line(ESCROW_DELIVERY_NOTICE, actor)
+            )
         locked.save(update_fields=fields)
         locked.items.exclude(ct_status__in=CANCELLED_STATUSES).update(**item_status_update(target))
         # youngcart orderformcartupdate.php: a paid line that leaves 완료 gives its point back
@@ -230,6 +240,12 @@ def move_order_status(order, target, *, actor="", send_sms=True):
             queue_order_status_sms(locked, target)
     if target == STATUS_PAID:
         return StatusChange(True, f"주문 {locked.od_id}의 입금 {locked.od_receipt_price:,}원을 기록했습니다.")
+    if escrow_delivery:
+        return StatusChange(
+            True,
+            f"주문 {locked.od_id}은(는) 에스크로 결제입니다. 토스페이먼츠 상점관리자에서 배송 정보를 등록하세요.",
+            warning=True,
+        )
     return StatusChange(True)
 
 

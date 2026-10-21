@@ -68,6 +68,15 @@ export interface NicepayExtra {
   registration_error?: string;
 }
 
+/** Toss escrowProducts entry (youngcart orderform.sub.php $escrow_products), built by the server. */
+export interface TossEscrowProduct {
+  id: string;
+  name: string;
+  code: string;
+  unitPrice: number;
+  quantity: number;
+}
+
 export interface PreparedOrder {
   order_id: string;
   order_name: string;
@@ -82,6 +91,9 @@ export interface PreparedOrder {
   cash_receipt_request?: boolean;
   cash_receipt_type?: "income" | "expense";
   cash_receipt_registration_number?: string;
+  /** 에스크로 사용 (de_escrow_use): the server sets it for Toss transfers and virtual accounts. */
+  use_escrow?: boolean;
+  escrow_products?: TossEscrowProduct[];
   pg_extra?: {
     inicis?: InicisExtra;
     kcp?: KcpExtra;

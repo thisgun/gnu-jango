@@ -5,16 +5,14 @@ POST /v1/cash-receipts with amount, orderId, orderName, customerIdentityNumber a
 (소득공제 or 지출증빙), and POST /v1/cash-receipts/{receiptKey}/cancel. Toss answers with a
 CashReceipt object (receiptKey, issueNumber, receiptUrl, issueStatus, ...)."""
 
-import base64
 import hashlib
 import json
 import logging
-import socket
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from urllib.parse import quote
 
-from django.conf import settings
+from django.views.decorators.debug import sensitive_variables
 
 logger = logging.getLogger(__name__)
 
@@ -32,20 +30,21 @@ def toss_cash_receipts_enabled():
     return bool(toss_payment_config()["enabled"])
 
 
-def _post(path, body, idempotency_key, *, action):
-    from gnu_jango.api.shop_payments import toss_payment_config
+@sensitive_variables("authorization", "body")
+def _post(path, body, idempotency_key, *, action, order=None):
+    """POST to the Toss cash receipt API with ``order``'s key pair (od_test): a receipt is
+    cancelled with the keys it was issued with."""
+    from gnu_jango.api.shop_payments import NETWORK_ERRORS, toss_api_context, toss_keys_missing_message
 
-    config = toss_payment_config()
-    secret_key = str(getattr(settings, "SHOP_TOSS_SECRET_KEY", "") or "").strip()
-    if not config["enabled"] or not secret_key:
-        raise CashReceiptApiError("토스페이먼츠 키가 설정되지 않았습니다.")
-    credentials = base64.b64encode(f"{secret_key}:".encode("utf-8")).decode("ascii")
+    config, authorization = toss_api_context(order)
+    if not authorization:
+        raise CashReceiptApiError(toss_keys_missing_message(config))
     request = urllib_request.Request(
         f"{config['api_base_url']}{path}",
         data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
         method="POST",
         headers={
-            "Authorization": f"Basic {credentials}",
+            "Authorization": authorization,
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Idempotency-Key": idempotency_key[:300],
@@ -68,7 +67,7 @@ def _post(path, body, idempotency_key, *, action):
         detail = f"{message} ({code})" if message and code else message or code or f"HTTP {exc.code}"
         verb = "발급" if action == "issue" else "취소"
         raise CashReceiptApiError(f"토스페이먼츠가 현금영수증 {verb}을 거절했습니다: {detail}") from exc
-    except (urllib_error.URLError, TimeoutError, socket.timeout) as exc:
+    except NETWORK_ERRORS as exc:
         logger.warning("Toss cash receipt %s request failed: %s", action, exc)
         raise CashReceiptApiError("토스페이먼츠에 연결하지 못했습니다. 잠시 후 다시 시도하세요.") from exc
     except ValueError as exc:
@@ -78,7 +77,8 @@ def _post(path, body, idempotency_key, *, action):
     return payload
 
 
-def issue_toss_cash_receipt(*, order_id, order_name, amount, cash_type, identity, tax_free=0):
+@sensitive_variables("identity", "body")
+def issue_toss_cash_receipt(*, order_id, order_name, amount, cash_type, identity, tax_free=0, order=None):
     """Issue a cash receipt; returns Toss's CashReceipt (with receiptKey) or raises
     CashReceiptApiError. The identity number goes to Toss only and is never logged."""
     body = {
@@ -91,7 +91,7 @@ def issue_toss_cash_receipt(*, order_id, order_name, amount, cash_type, identity
     if int(tax_free or 0) > 0:
         body["taxFreeAmount"] = int(tax_free)
     digest = hashlib.sha256(f"{order_id}|{amount}|{tax_free}|{cash_type}|{identity}".encode()).hexdigest()[:24]
-    receipt = _post("/v1/cash-receipts", body, f"cash-receipt-{order_id}-{digest}", action="issue")
+    receipt = _post("/v1/cash-receipts", body, f"cash-receipt-{order_id}-{digest}", action="issue", order=order)
     if not str(receipt.get("receiptKey") or "").strip():
         raise CashReceiptApiError("토스페이먼츠가 현금영수증 발급을 확인하지 않았습니다.")
     if str(receipt.get("orderId") or order_id) != str(order_id):
@@ -101,12 +101,12 @@ def issue_toss_cash_receipt(*, order_id, order_name, amount, cash_type, identity
     return receipt
 
 
-def cancel_toss_cash_receipt(receipt_key):
+def cancel_toss_cash_receipt(receipt_key, *, order=None):
     """Cancel a cash receipt issued through issue_toss_cash_receipt; returns Toss's answer
     ("already_canceled" when Toss had cancelled it before) or raises CashReceiptApiError."""
     key = str(receipt_key or "").strip()
     if not key:
         raise CashReceiptApiError("취소할 현금영수증 키가 없습니다.")
     return _post(
-        f"/v1/cash-receipts/{quote(key, safe='')}/cancel", {}, f"cash-receipt-cancel-{key}", action="cancel"
+        f"/v1/cash-receipts/{quote(key, safe='')}/cancel", {}, f"cash-receipt-cancel-{key}", action="cancel", order=order
     )

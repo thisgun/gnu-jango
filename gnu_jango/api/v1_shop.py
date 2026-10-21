@@ -174,6 +174,7 @@ from .shop_payments import (
     confirm_adapter_payment,
     confirm_order_payment,
     confirm_toss_payment,
+    current_toss_mode_flag,
     payment_adapter_config,
     payment_adapter_enabled,
     payment_adapter_request,  # noqa: F401 - re-exported for existing importers
@@ -193,9 +194,17 @@ from .shop_payments import (
     settle_case_supports_cash_receipt,
     toss_api_confirm,  # noqa: F401 - re-exported for existing importers
     toss_api_get_payment_by_order,
+    toss_escrow_applies,
+    toss_escrow_products,
     toss_method_is_vbank,
     toss_payment_config,
+    toss_tax_free_amount,
+    TOSS_ESCROW_METHODS,
 )
+from gnu_jango.shop.pg_settings import escrow_enabled as pg_escrow_enabled
+from gnu_jango.shop.pg_settings import stored_rows as pg_stored_rows
+
+
 def category_payload(category, *, include_children=False):
     data = {
         "ca_id": category.ca_id,
@@ -1639,9 +1648,11 @@ def restore_order_cart_snapshot(request, order):
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def payment_config_view(request):
-    toss_config = toss_payment_config()
+    # one Config read and one unseal per key for the whole (public, frequently hit) response
+    pg_rows = pg_stored_rows()
+    toss_config = toss_payment_config(rows=pg_rows)
     adapter_config = payment_adapter_config()
-    pg_service = configured_payment_provider()
+    pg_service = configured_payment_provider(rows=pg_rows, toss_config=toss_config)
     # The external adapter can confirm a payment, but this checkout flow does
     # not yet prepare the provider-specific client payload needed to start one.
     # Only advertise the native Toss flow while its client and server keys exist.
@@ -1649,6 +1660,7 @@ def payment_config_view(request):
     bank_accounts = configured_bank_accounts()
     methods = checkout_payment_methods(toss_config=toss_config, pg_service=pg_service, bank_accounts=bank_accounts)
     cash_receipt = cash_receipt_preferences()
+    escrow_on = bool(pg_enabled and pg_escrow_enabled(pg_rows))
     return api_response(
         data={
             "pg_service": pg_service,
@@ -1660,6 +1672,8 @@ def payment_config_view(request):
             "hope_date": hope_date_range(),
             "guest_privacy": guest_privacy_html(),
             "is_test_mode": toss_config["is_test_mode"],
+            # youngcart de_escrow_use: Toss transfers and virtual accounts are escrow payments
+            "escrow": {"enabled": escrow_on, "methods": list(TOSS_ESCROW_METHODS) if escrow_on else []},
             "purchase_point": purchase_point_notice(),
             "providers": {
                 "toss": {
@@ -1720,18 +1734,41 @@ def payment_prepare_view(request):
                 status=drf_status.HTTP_400_BAD_REQUEST,
                 code="payment_provider_unsupported",
             )
+    if pg_service == "toss" and configured_payment_provider() == "bank":
+        # 결제대행사 "사용안함" (or no usable keys): a client asking for Toss is refused here too
+        return api_error(
+            "Toss Payments is not configured.",
+            status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="toss_payment_unconfigured",
+        )
     order_id = generate_numeric_order_id()
     try:
         order = create_order_from_request(request, data, order_id=order_id, force_status="order")
     except StockAdjustmentError as exc:
         return api_error(str(exc), status=drf_status.HTTP_400_BAD_REQUEST, code=exc.code, details=exc.details)
     amount = order.od_receipt_price
+    if pg_service == "toss":
+        # youngcart od_test: the key pair (테스트 / 실결제) this payment is made with, so its
+        # confirm, cancel and refunds use that pair even after 결제 테스트 changes
+        order.od_test = current_toss_mode_flag()
+        ShopOrder.objects.filter(pk=order.pk).update(od_test=order.od_test)
+    escrow_products = toss_escrow_products(order) if pg_service == "toss" and toss_escrow_applies(order.od_settle_case) else []
+    use_escrow = bool(escrow_products)
+    tax_flag = 1 if order.od_tax_flag else 0
     return api_response(
         data={
             "order_id": order.od_id,
             "uid": order.uid,
             "order_name": str(data.get("order_name") or "Shop order"),
             "amount": amount,
+            # 복합과세 결제 (de_tax_flag_use): the checkout sends comm_free_mny as taxFreeAmount
+            "tax_flag": tax_flag,
+            "comm_tax_mny": order.od_tax_mny if tax_flag else 0,
+            "comm_vat_mny": order.od_vat_mny if tax_flag else 0,
+            "comm_free_mny": toss_tax_free_amount(order) if tax_flag else 0,
+            # 에스크로 사용 (de_escrow_use): Toss transfer / virtual account with escrowProducts
+            "use_escrow": use_escrow,
+            "escrow_products": escrow_products,
             "buyer_name": order.od_name,
             "buyer_email": order.od_email or "noemail@example.com",
             "buyer_tel": order.od_hp or order.od_tel,
@@ -1886,7 +1923,7 @@ def toss_vbank_webhook_view(request):
             code="toss_vbank_webhook_forbidden",
         )
 
-    toss_payment, error = toss_api_get_payment_by_order(order_id)
+    toss_payment, error = toss_api_get_payment_by_order(order_id, order=order)
     if error:
         record_payment_raw_log(order, order_id, "toss-vbank", event_data.get("transactionKey"), event, prefix="toss-vbank-retry")
         return error

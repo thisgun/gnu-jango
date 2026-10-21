@@ -208,7 +208,7 @@ class ShopOrderAdmin(ModelAdmin):
             if result:
                 self.log_change(request, order, f"주문 상태를 '{status}'(으)로 변경")
                 changed += 1
-                if result.manual_refund:
+                if result.manual_refund or result.warning:
                     self.message_user(request, result.message, messages.WARNING)
             else:
                 skipped.setdefault(result.message, []).append(order.od_id)
@@ -314,7 +314,8 @@ class ShopOrderAdmin(ModelAdmin):
         if result:
             order.refresh_from_db()
             if result.message:
-                self.message_user(request, result.message, messages.WARNING if result.manual_refund else messages.SUCCESS)
+                level = messages.WARNING if result.manual_refund or result.warning else messages.SUCCESS
+                self.message_user(request, result.message, level)
         else:
             self.message_user(request, result.message, messages.ERROR)
     readonly_fields = (

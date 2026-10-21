@@ -285,6 +285,45 @@ test.describe("order submit actions", () => {
     });
   });
 
+  test("passes the server's tax split and escrow products to the payment request", async () => {
+    const escrowProducts = [
+      { id: "7", name: "Shirt", code: "P-1", unitPrice: 9000, quantity: 1 },
+    ];
+    const deps = buildDeps({
+      order_id: "order-tax",
+      order_name: "Mixed tax order",
+      amount: 12000,
+      buyer_name: "Buyer",
+      buyer_email: "buyer@example.com",
+      buyer_tel: "010-0000-0000",
+      tax_flag: 1,
+      comm_tax_mny: 8182,
+      comm_vat_mny: 818,
+      comm_free_mny: 3000,
+      use_escrow: true,
+      escrow_products: escrowProducts,
+    });
+
+    await requestPreparedOrderPayment({
+      orderBody: { od_name: "Buyer" },
+      paymentConfig: paymentConfig(),
+      methodDef: paymentMethod({ pg_method: "iche" }),
+      origin: "https://shop.example.com",
+      onPaymentProgress: () => undefined,
+      deps,
+    });
+
+    expect(deps.paymentRequests[0]).toMatchObject({
+      method: "iche",
+      order: {
+        tax_flag: 1,
+        comm_free_mny: 3000,
+        use_escrow: true,
+        escrow_products: escrowProducts,
+      },
+    });
+  });
+
   test("refuses a prepared payment for a PG this checkout cannot start", async () => {
     const deps = buildDeps({
       order_id: "order-3",

@@ -26,6 +26,7 @@ export type {
   NicepayExtra,
   PreparedOrder,
   PaymentRequest,
+  TossEscrowProduct,
 } from "./payment.types";
 
 /**

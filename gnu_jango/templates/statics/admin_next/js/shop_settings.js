@@ -92,3 +92,25 @@
   smsType?.addEventListener("change", render);
   render();
 })();
+
+(() => {
+  "use strict";
+
+  // 가상계좌 입금통보 URL: copy the shown address for the Toss webhook form
+  document.querySelectorAll("[data-copy-target]").forEach((button) => {
+    const source = document.getElementById(button.dataset.copyTarget || "");
+    if (!source || !navigator.clipboard) return;
+    const label = button.textContent;
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(source.textContent.trim());
+        button.textContent = button.dataset.copiedLabel || label;
+      } catch {
+        button.textContent = "복사하지 못했습니다";
+      }
+      window.setTimeout(() => {
+        button.textContent = label;
+      }, 2000);
+    });
+  });
+})();
