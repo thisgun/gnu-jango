@@ -127,7 +127,8 @@ class CouponTestBase(TestCase):
         )
         ShopShippingPolicy.objects.update_or_create(
             pk=1,
-            defaults={"de_delivery_company": "Courier", "de_settle_min_point": 1000, "de_settle_max_point": 100000, "de_settle_point_unit": 100},
+            # 3,000 below 50,000 (youngcart get_sendcost charges a shared fee only for 차등)
+            defaults={"de_send_cost_case": "차등", "de_send_cost_limit": "50000", "de_send_cost_list": "3000", "de_delivery_company": "Courier", "de_settle_min_point": 1000, "de_settle_max_point": 100000, "de_settle_point_unit": 100},
         )
         Config.objects.update_or_create(name="de_bank_use", defaults={"value": "1"})
         Config.objects.update_or_create(name="de_bank_account", defaults={"value": "Test Bank 000-00 Holder"})
@@ -877,7 +878,7 @@ class OrderCouponOrderTests(CouponTestBase):
 
 
 class ShippingCouponOrderTests(CouponTestBase):
-    """Shipping of 3000 applies below the free threshold (default policy)."""
+    """Shipping of 3000 applies below the free threshold (the test policy: 차등 3,000 under 50,000)."""
 
     def test_fixed_shipping_coupon_is_capped_at_the_shipping_cost(self):
         coupon = self.coupon(cp_method=3, cp_price=5000)

@@ -470,7 +470,8 @@ class CartSelectionTests(ShopApiTestCase):
         above = self.get("cart").json()["data"]
 
         self.assertEqual(below["total_price"], 1000)
-        self.assertEqual(below["shipping_cost"], 3000)
+        # no saved policy: youngcart's install default (차등, 4,000 under 20,000, free from 40,000)
+        self.assertEqual(below["shipping_cost"], 4000)
         self.assertEqual(below["send_cost"], below["shipping_cost"])
         self.assertEqual(above["total_price"], 61000)
         self.assertEqual(above["shipping_cost"], 0)

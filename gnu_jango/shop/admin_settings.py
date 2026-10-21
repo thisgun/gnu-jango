@@ -93,7 +93,8 @@ class ShopSettingsForm(forms.ModelForm):
     de_send_cost_case = forms.ChoiceField(
         label="배송비 방식",
         required=False,
-        choices=[("", "기본값 (5만원 미만 3,000원)"), *ShopShippingPolicy.SEND_COST_CASE_CHOICES],
+        choices=[("", "배송비 없음 (공통 배송비 미부과)"), *ShopShippingPolicy.SEND_COST_CASE_CHOICES],
+        help_text="영카트와 같이 금액별 차등일 때만 공통 배송비를 받습니다. 상품별 배송비는 그대로 적용됩니다.",
     )
     de_item_use_write = forms.BooleanField(label="구매 완료한 회원만 후기 작성", required=False)
     de_item_use_use = forms.BooleanField(label="관리자 승인 후 후기 공개", required=False)

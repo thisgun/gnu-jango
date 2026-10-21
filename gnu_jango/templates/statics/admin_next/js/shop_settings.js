@@ -38,14 +38,11 @@
     if (invalid) return;
 
     const previewRows = examples.map((total) => {
+      // youngcart get_sendcost: only 금액별 차등 charges the shared fee; other cases charge 0
       let charge = 0;
-      if (shippingMode === "무료") {
-        charge = 0;
-      } else if (shippingMode === "차등") {
+      if (shippingMode === "차등") {
         const index = tierLimits.findIndex((limit) => total < limit);
         charge = index >= 0 ? tierCosts[index] : 0;
-      } else {
-        charge = total < 50000 ? 3000 : 0;
       }
       return `<tr><td>${money.format(total)}원</td><td>${money.format(charge)}원</td></tr>`;
     });
