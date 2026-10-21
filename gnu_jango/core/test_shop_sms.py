@@ -383,6 +383,14 @@ class SmsLimitTests(ShopSmsFixture, TestCase):
         with patch(TRANSPORT, side_effect=accepted):
             self.assertEqual(service.send_message("01033334444", "hi").status, "accepted")
 
+    def test_the_operator_test_text_probes_a_paused_gateway_and_closes_it(self):
+        cache.set(service.BREAKER_CACHE_KEY, "1", 300)
+        with patch(TRANSPORT, side_effect=accepted) as send:
+            self.assertEqual(service.send_message("01011112222", "hi").provider_code, "circuit_open")
+            self.assertEqual(service.send_message("01011112222", "test", purpose="test").status, "accepted")
+            self.assertEqual(service.send_message("01011112222", "hi").status, "accepted")
+        self.assertEqual(send.call_count, 2)
+
     def test_a_refusal_does_not_open_the_breaker(self):
         refused = ICodeSendResult("rejected", "99", "iCode rejected the message.")
         with patch(TRANSPORT, return_value=refused) as send:

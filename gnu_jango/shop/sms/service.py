@@ -129,9 +129,9 @@ def _count_send(key, limit):
     return count <= limit
 
 
-def _send_guard(recipient, current):
+def _send_guard(recipient, current, *, check_breaker=True):
     """A rejected result when this text must not go out (breaker open, a cap reached), else None."""
-    if cache.get(BREAKER_CACHE_KEY):
+    if check_breaker and cache.get(BREAKER_CACHE_KEY):
         return ICodeSendResult("rejected", "circuit_open", "SMS gateway paused after a recent timeout.")
     bucket = int(time.time() // WINDOW_SECONDS)
     digits = _phone_key(recipient)
@@ -148,6 +148,10 @@ def _send_guard(recipient, current):
 
 
 def _trip_breaker(result):
+    if result.status == "accepted":
+        # the gateway answers again (e.g. the operator's test text): stop skipping texts
+        cache.delete(BREAKER_CACHE_KEY)
+        return
     if result.provider_code not in BREAKER_CODES:
         return
     seconds = _int_setting("G5_SMS_BREAKER_SECONDS", DEFAULT_BREAKER_SECONDS)
@@ -161,7 +165,8 @@ def send_message(recipient, message, *, current=None, subject="", purpose="sms")
     """Send one text to ``recipient`` with the shop's callback number. Never raises."""
     current = current or sms_settings()
     try:
-        blocked = _send_guard(recipient, current)
+        # the operator's test text goes through a paused gateway, to see whether it is back
+        blocked = _send_guard(recipient, current, check_breaker=purpose != "test")
     except Exception:  # noqa: BLE001 - a cache outage must not stop the shop's texts
         logger.exception("Shop SMS limits could not be checked; sending %s anyway", purpose)
         blocked = None
