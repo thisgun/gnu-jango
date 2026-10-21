@@ -309,6 +309,7 @@ export default function OrderDetailPage() {
     order.cash_receipt_issue_url || order.od_cash_receipt_issue_url || "";
   const deliveryInquiryUrl =
     order.delivery_inquiry_url || order.od_delivery_inquiry_url || "";
+  const deliveryInquiryTel = deliveryInquiryUrl ? order.delivery_inquiry_tel || "" : "";
   const hasInvoice =
     !!order.od_invoice &&
     !!order.od_delivery_company &&
@@ -481,6 +482,11 @@ export default function OrderDetailPage() {
                     </a>
                   )}
                 </dd>
+                {deliveryInquiryTel && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    문의전화: {deliveryInquiryTel}
+                  </p>
+                )}
                 {order.od_invoice_time &&
                   order.od_invoice_time !== "0000-00-00 00:00:00" && (
                     <p className="mt-1 text-xs text-muted-foreground">

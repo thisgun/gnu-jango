@@ -1294,7 +1294,7 @@ class OrderBadInputTests(OrderDirectCreateMixin, ShopOrderBase):
         self.assertEqual(self.profile.user_point, 50000)
 
     def test_payment_links_show_for_toss_and_shipped_orders(self):
-        order = self.make_order("주문", user=self.member, od_id="MORE-LINK", od_tno="PAYKEY1", od_pg="toss", od_invoice="INV123", od_cash_no="C77")
+        order = self.make_order("주문", user=self.member, od_id="MORE-LINK", od_tno="PAYKEY1", od_pg="toss", od_delivery_company="CJ대한통운", od_invoice="INV123", od_cash_no="C77")
         data = self.client.get(f"{API}/orders/{order.od_id}").json()["data"]
         self.assertIn("PAYKEY1", data["receipt_url"])
         self.assertIn("INV123", data["delivery_inquiry_url"])

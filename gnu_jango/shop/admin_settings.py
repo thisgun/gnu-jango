@@ -24,6 +24,7 @@ from gnu_jango.api.shop_payments import (
 from gnu_jango.config import signals
 from gnu_jango.config.models import Config
 
+from .delivery import delivery_company_form_field
 from .models import ShopShippingPolicy
 from .payment_options import (
     CASH_RECEIPT_ENABLED_FIELD,
@@ -164,6 +165,10 @@ class ShopSettingsForm(forms.ModelForm):
         for method, name in PAYMENT_OPTION_FIELDS.items():
             self.fields[name] = forms.BooleanField(label=f"{PAYMENT_LABELS[method]} 허용", required=False)
             self.initial[name] = config_flag(self.config_values.get(name, "1"))
+        # configform.php get_delivery_company: the default courier is picked from the courier list
+        self.fields["de_delivery_company"] = delivery_company_form_field(
+            self.instance.de_delivery_company, label="기본 택배사", widget=forms.Select
+        )
         for name, field in self.fields.items():
             if isinstance(field.widget, forms.CheckboxInput):
                 field.widget.attrs["class"] = "checkbox"

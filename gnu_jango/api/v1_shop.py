@@ -44,6 +44,7 @@ from gnu_jango.shop.models import (
 )
 from gnu_jango.shop.coupon_dates import coupon_end_date
 from gnu_jango.shop.inventory import StockAdjustmentError, cancel_order_with_stock_restore, reserve_product_stock
+from gnu_jango.shop.delivery import delivery_inquiry
 from gnu_jango.shop.images import upload_product_images
 from gnu_jango.shop.notifications import queue_order_placed_mails
 from gnu_jango.shop.order_points import (
@@ -527,9 +528,9 @@ def order_payload(order, *, detail=False):
     receipt_url = ""
     if order.od_tno and str(order.od_pg or "").lower() == "toss":
         receipt_url = f"https://dashboard.tosspayments.com/receipt/redirection?transactionId={order.od_tno}"
-    delivery_inquiry_url = ""
-    if order.od_invoice:
-        delivery_inquiry_url = f"https://trace.cjlogistics.com/next/tracking.html?wblNo={order.od_invoice}"
+    # get_delivery_inquiry: the link and phone follow the order's courier; unknown ones get neither
+    inquiry = delivery_inquiry(order.od_delivery_company, order.od_invoice)
+    delivery_inquiry_url = inquiry["url"]
     cash_receipt_url = safe_receipt_url(order.od_cash_res)
     bank_account = str(order.od_bank_account or "").strip()
     if not bank_account and settle_case_is_bank(order.od_settle_case):
@@ -610,6 +611,7 @@ def order_payload(order, *, detail=False):
         "od_invoice_time": order.od_invoice_time,
         "delivery_inquiry_url": delivery_inquiry_url,
         "od_delivery_inquiry_url": delivery_inquiry_url,
+        "delivery_inquiry_tel": inquiry["tel"],
         "receipt_url": receipt_url,
         "od_payment_receipt_url": receipt_url,
         "od_payment_app_label": "승인번호" if order.od_app_no else "거래번호" if order.od_tno else "",

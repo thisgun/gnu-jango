@@ -16,6 +16,7 @@ from unfold.forms import ActionForm
 from unfold.widgets import UnfoldAdminSelectWidget
 
 from gnu_jango.api.shop_common import CANCELLED_STATUSES
+from gnu_jango.shop.delivery import delivery_company_form_field
 from gnu_jango.shop.models import ORDER_ITEM_STATUS_COMPLETED
 from gnu_jango.shop.order_flow import (
     ADMIN_ORDER_STATUSES,
@@ -97,6 +98,11 @@ class ShopOrderAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "od_delivery_company" in self.fields:
+            # orderform.php: the courier comes from the list the tracking links are built from
+            self.fields["od_delivery_company"] = delivery_company_form_field(
+                self.instance.od_delivery_company, label="배송회사", widget=UnfoldAdminSelectWidget
+            )
         if "od_status" not in self.fields:
             return
         if self.instance.pk:
