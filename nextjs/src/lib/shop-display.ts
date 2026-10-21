@@ -137,3 +137,22 @@ export function shopGridStyle(mobileCols: number, pcCols: number): CustomPropert
     "--shop-grid-cols-lg": lg,
   };
 }
+
+const categoryGridSchema = z.object({
+  configured: z.boolean().catch(false),
+  pc_cols: columns(4),
+  rows: z.coerce.number().int().min(1).catch(5),
+  per_page: z.coerce.number().int().min(1).max(100).catch(20),
+  mobile_cols: columns(2),
+});
+
+export type ShopCategoryGridDisplay = z.infer<typeof categoryGridSchema>;
+
+/**
+ * 분류 목록 격자(관리자 > 분류 출력설정의 1줄당 이미지 수 · 줄 수). 값을 정한 분류만 돌려준다 —
+ * 정하지 않은 분류 · 예전 서버 응답은 null 이고 화면은 기본 격자(2 · 3 · 4칸, 20개)를 그대로 쓴다.
+ */
+export function shopCategoryGridOf(category: { list_display?: unknown } | null | undefined): ShopCategoryGridDisplay | null {
+  const parsed = categoryGridSchema.safeParse(category?.list_display);
+  return parsed.success && parsed.data.configured ? parsed.data : null;
+}

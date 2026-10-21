@@ -474,6 +474,14 @@ export interface ShopCategory {
   ca_skin?: string;
   item_count?: number;
   children?: ShopCategory[];
+  /** 분류 출력설정(1줄당 이미지 수 · 줄 수, PC · 모바일). 0 은 기본 진열. */
+  ca_list_mod?: number;
+  ca_list_row?: number;
+  ca_mobile_list_mod?: number;
+  ca_mobile_list_row?: number;
+  ca_nocoupon?: boolean;
+  /** 서버가 출력설정으로 정한 목록 격자 — lib/shop-display.ts shopCategoryGridOf 가 읽는다. */
+  list_display?: unknown;
 }
 
 export interface ShopBanner {

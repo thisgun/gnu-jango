@@ -15,6 +15,7 @@ import { useRuntimeRouteParam } from "@/hooks/use-runtime-route-param";
 import { useShopListView } from "@/hooks/useShopListView";
 import { getShopCategoryProductPage } from "@/services/shop";
 import { getClientPublicSettings } from "@/services/settings";
+import { shopCategoryGridOf, shopGridStyle } from "@/lib/shop-display";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 function ProductGridSkeleton({ viewMode }: { viewMode: "grid" | "list" }) {
@@ -140,9 +141,9 @@ export default function CategoryPage() {
       setLoading(true);
       setErrorMessage("");
       try {
+        // 한 쪽 상품 수는 서버가 분류 출력설정(1줄당 이미지 수 × 줄 수, 기본 20)으로 정한다.
         const params = {
           page: String(currentPage),
-          per_page: "20",
           ...(sort ? { sort } : {}),
           ...(sortodr ? { sortodr } : {}),
         };
@@ -226,6 +227,7 @@ export default function CategoryPage() {
     );
   }
 
+  const grid = shopCategoryGridOf(category);
   const pages: number[] = [];
   const start = Math.max(1, meta.current_page - 2);
   const end = Math.min(meta.last_page, meta.current_page + 2);
@@ -251,7 +253,13 @@ export default function CategoryPage() {
         </div>
       ) : (
         // 리스트/갤러리 모양은 data-view 를 보고 solune-shop.list.css 가 정한다(카드는 같은 한 장).
-        <div className="shop-product-list grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4" data-view={listView}>
+        // 분류 출력설정이 있으면 갤러리 칸 수(PC · 모바일 1줄당 수)를 solune-shop.display.css 가 단계별로 건다.
+        <div
+          className={`shop-product-list grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4${grid ? " shop-display-grid" : ""}`}
+          data-view={listView}
+          data-shop-grid={grid ? "" : undefined}
+          style={grid ? shopGridStyle(grid.mobile_cols, grid.pc_cols) : undefined}
+        >
           {products.map((product, index) => (
             <SoluneProductCard
               key={product.it_id}
