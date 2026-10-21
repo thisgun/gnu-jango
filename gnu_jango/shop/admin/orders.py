@@ -2061,6 +2061,14 @@ class ShopPersonalPayAdmin(ModelAdmin):
     )
     list_fullwidth = True
 
+    def save_model(self, request, obj, form, change):
+        # the form has no pp_id field: a request added by hand gets one like the bulk actions'
+        if not change and not obj.pp_id:
+            from gnu_jango.shop.personal_pay import new_personal_pay_id
+
+            obj.pp_id = new_personal_pay_id()
+        super().save_model(request, obj, form, change)
+
     @admin.action(description="선택한 개인결제 입금 확인", permissions=["change"])
     def confirm_selected_bank_deposits(self, request, queryset):
         """youngcart adm/shop_admin/personalpayformupdate.php: the shop records the 무통장입금 of a

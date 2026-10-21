@@ -13,6 +13,7 @@ from urllib.parse import quote, unquote, urlencode
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -458,13 +459,9 @@ def hide_selected_reviews(modeladmin, request, queryset):
 
 
 def _new_personal_pay_id():
-    from gnu_jango.api.shop_common import generate_numeric_order_id
+    from gnu_jango.shop.personal_pay import new_personal_pay_id
 
-    for _attempt in range(5):
-        pp_id = generate_numeric_order_id()
-        if not ShopPersonalPay.objects.filter(pk=pp_id).exists():
-            return pp_id
-    raise RuntimeError("Could not allocate a personal pay id.")
+    return new_personal_pay_id()
 
 
 def _finish_personal_pay_action(modeladmin, request, created, verb):
@@ -518,32 +515,32 @@ def create_personal_pay_for_balance(modeladmin, request, queryset):
     skipped = []
     pending = []
     pay_admin = modeladmin.admin_site.get_model_admin(ShopPersonalPay)
-    for order in queryset.prefetch_related("personal_pays")[:50]:
-        owed = order_misu(order)
-        if owed <= 0 or canonical_status(order.od_status) in INACTIVE_LINE_STATUSES:
-            skipped.append(order.od_id)
-            continue
-        if any(pay.active and not is_paid(pay) for pay in order.personal_pays.all()):
-            pending.append(order.od_id)
-            continue
-        if any(pay.active and not is_paid(pay) for pay in order.personal_pays.all()):
-            pending.append(order.od_id)
-            continue
-        created.append(
-            ShopPersonalPay.objects.create(
-                pp_id=_new_personal_pay_id(),
-                user=order.user,
-                order=order,
-                pp_name=order.od_name or order.od_b_name or order.od_id,
-                pp_email=order.od_email,
-                pp_hp=order.od_hp,
-                pp_content=f"주문번호 {order.od_id} 미수금",
-                pp_price=owed,
+    for order_id in list(queryset.values_list("pk", flat=True)[:50]):
+        # the order row stays locked while its requests are checked, so two admins (or a double
+        # submit) cannot both create a request for the same balance
+        with transaction.atomic():
+            order = ShopOrder.objects.select_for_update().filter(pk=order_id).first()
+            if order is None:
+                continue
+            owed = order_misu(order)
+            if owed <= 0 or canonical_status(order.od_status) in INACTIVE_LINE_STATUSES:
+                skipped.append(order.od_id)
+                continue
+            if any(pay.active and not is_paid(pay) for pay in ShopPersonalPay.objects.filter(order=order)):
+                pending.append(order.od_id)
+                continue
+            created.append(
+                ShopPersonalPay.objects.create(
+                    pp_id=_new_personal_pay_id(),
+                    user_id=order.user_id,
+                    order=order,
+                    pp_name=order.od_name or order.od_b_name or order.od_id,
+                    pp_email=order.od_email,
+                    pp_hp=order.od_hp,
+                    pp_content=f"주문번호 {order.od_id} 미수금",
+                    pp_price=owed,
+                )
             )
-        )
-    if pending:
-        shown = ", ".join(pending[:5]) + (f" 외 {len(pending) - 5}건" if len(pending) > 5 else "")
-        modeladmin.message_user(request, f"결제 전인 개인결제가 이미 있는 주문은 건너뛰었습니다 ({shown}).", messages.WARNING)
     if pending:
         shown = ", ".join(pending[:5]) + (f" 외 {len(pending) - 5}건" if len(pending) > 5 else "")
         modeladmin.message_user(request, f"결제 전인 개인결제가 이미 있는 주문은 건너뛰었습니다 ({shown}).", messages.WARNING)

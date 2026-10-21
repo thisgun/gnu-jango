@@ -411,12 +411,14 @@ class PersonalPayActionTests(SuperuserMixin, TestCase):
         pay = ShopPersonalPay.objects.get()
         self.assertEqual((pay.order_id, pay.pp_name, pay.pp_price, pay.active), ("M1", "미수 고객", 20000, True))
         self.assertIn("M1", pay.pp_content)
-        # a second run does not ask for the same balance twice
-        self.client.post(
+        # a second run does not ask for the same balance twice, and says so once
+        response = self.client.post(
             reverse("admin:shop_shoporder_changelist"),
             {"action": "create_personal_pay_for_balance", "_selected_action": [order.pk]},
         )
         self.assertEqual(ShopPersonalPay.objects.count(), 1)
+        notes = [str(m) for m in response.wsgi_request._messages if "결제 전인 개인결제" in str(m)]
+        self.assertEqual(len(notes), 1)
 
     def test_balance_action_needs_the_personal_pay_add_permission(self):
         staff = self.staff_with("view_shoporder", "change_shoporder")

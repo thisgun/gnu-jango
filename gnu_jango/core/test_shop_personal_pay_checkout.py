@@ -407,3 +407,69 @@ class PersonalPayRefundFailureTests(PersonalPayCheckoutBase):
         self.assertEqual(reason, "")
         order.refresh_from_db()
         self.assertEqual((order.od_status, order.od_receipt_price, order.od_shop_memo), ("반품", 0, ""))
+
+
+@override_settings(**FAKE_TOSS)
+class LinkedOrderBalanceTests(PersonalPayCheckoutBase):
+    """A 미수금 request must not pay (or credit) more than its order still owes."""
+
+    def linked_pay(self, extra=0):
+        self.add(self.client)
+        order = ShopOrder.objects.get(pk=self.place().json()["data"]["od_id"])
+        self.make_pay(order=order, pp_price=order.od_misu + extra)
+        return order
+
+    def test_bank_choice_and_toss_are_refused_when_the_order_owes_less(self):
+        order = self.linked_pay(extra=1000)
+        response = self.bank()
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("남은 결제금액", response.json()["message"])
+        self.assertFalse(self.detail()["can_pay"])
+        prepare = self.client.post(f"{API}/personalpay/{PP_ID}/toss/prepare", {"method": "card", "agree": True}, format="json")
+        self.assertEqual(prepare.status_code, 409)
+        with patch("gnu_jango.api.shop_payments.toss_api_confirm") as toss_confirm:
+            confirm = self.client.post(
+                f"{API}/personalpay/{PP_ID}/toss/confirm",
+                {"paymentKey": "pay-key-1", "orderId": TOSS_ORDER_ID, "amount": order.od_misu + 1000},
+                format="json",
+            )
+        self.assertEqual(confirm.status_code, 409)
+        toss_confirm.assert_not_called()
+
+    def test_a_deposit_over_the_balance_credits_only_the_balance_and_flags_the_rest(self):
+        order = self.linked_pay()
+        owed = order.od_misu
+        self.assertEqual(self.bank().status_code, 200)
+        # the order is partly paid another way while the deposit is on its way
+        ShopOrder.objects.filter(pk=order.pk).update(od_receipt_price=order.od_receipt_price + 1000)
+        from gnu_jango.shop.personal_pay import confirm_bank_deposit
+
+        with self.captureOnCommitCallbacks(execute=True):
+            pay, reason = confirm_bank_deposit(PP_ID, actor="staff")
+        self.assertEqual(reason, "")
+        self.assertEqual(pay.pp_receipt_price, owed)
+        order.refresh_from_db()
+        self.assertEqual(order.od_receipt_price, owed)  # 1000 + (owed - 1000), not 1000 + owed
+        self.assertEqual(order.od_misu, 0)
+        self.assertIn("환불 필요 (수동, 개인결제 초과)", order.od_shop_memo)
+        self.assertIn("1,000원", order.od_shop_memo)
+        self.assertIn("환불 필요 (수동, 개인결제 초과)", order.od_mod_history)
+
+
+class PersonalPayAdminAddTests(PersonalPayCheckoutBase):
+    def test_a_request_added_by_hand_gets_a_pp_id(self):
+        from django.test import Client
+        from django.urls import reverse
+
+        admin_client = Client()
+        admin_client.force_login(self.staff)
+        response = admin_client.post(
+            reverse("admin:shop_shoppersonalpay_add"),
+            {"pp_name": "수기 고객", "pp_price": "3000", "pp_receipt_price": "0", "active": "on", "pp_cash": "0",
+             "pp_time_0": "2026-10-21", "pp_time_1": "10:00:00", "pp_content": "추가 결제"},
+        )
+        errors = response.context["adminform"].form.errors if response.status_code == 200 else {}
+        self.assertIn(response.status_code, {302, 303}, errors)
+        pay = ShopPersonalPay.objects.get(pp_name="수기 고객")
+        self.assertRegex(pay.pp_id, r"^\d{20}$")
+        self.assertFalse(ShopPersonalPay.objects.filter(pk="").exists())
