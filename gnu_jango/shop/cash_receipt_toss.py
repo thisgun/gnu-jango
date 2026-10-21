@@ -5,7 +5,6 @@ POST /v1/cash-receipts with amount, orderId, orderName, customerIdentityNumber a
 (소득공제 or 지출증빙), and POST /v1/cash-receipts/{receiptKey}/cancel. Toss answers with a
 CashReceipt object (receiptKey, issueNumber, receiptUrl, issueStatus, ...)."""
 
-import base64
 import hashlib
 import json
 import logging
@@ -13,8 +12,6 @@ import socket
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from urllib.parse import quote
-
-from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -33,19 +30,17 @@ def toss_cash_receipts_enabled():
 
 
 def _post(path, body, idempotency_key, *, action):
-    from gnu_jango.api.shop_payments import toss_payment_config
+    from gnu_jango.api.shop_payments import toss_api_context
 
-    config = toss_payment_config()
-    secret_key = str(getattr(settings, "SHOP_TOSS_SECRET_KEY", "") or "").strip()
-    if not config["enabled"] or not secret_key:
+    config, authorization = toss_api_context()
+    if not authorization:
         raise CashReceiptApiError("토스페이먼츠 키가 설정되지 않았습니다.")
-    credentials = base64.b64encode(f"{secret_key}:".encode("utf-8")).decode("ascii")
     request = urllib_request.Request(
         f"{config['api_base_url']}{path}",
         data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
         method="POST",
         headers={
-            "Authorization": f"Basic {credentials}",
+            "Authorization": authorization,
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Idempotency-Key": idempotency_key[:300],

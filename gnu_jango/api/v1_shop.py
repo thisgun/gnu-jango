@@ -193,8 +193,12 @@ from .shop_payments import (
     settle_case_supports_cash_receipt,
     toss_api_confirm,  # noqa: F401 - re-exported for existing importers
     toss_api_get_payment_by_order,
+    toss_escrow_applies,
+    toss_escrow_products,
     toss_method_is_vbank,
     toss_payment_config,
+    toss_tax_free_amount,
+    TOSS_ESCROW_METHODS,
 )
 def category_payload(category, *, include_children=False):
     data = {
@@ -1649,6 +1653,7 @@ def payment_config_view(request):
     bank_accounts = configured_bank_accounts()
     methods = checkout_payment_methods(toss_config=toss_config, pg_service=pg_service, bank_accounts=bank_accounts)
     cash_receipt = cash_receipt_preferences()
+    escrow_on = bool(pg_enabled and toss_escrow_applies("vbank"))
     return api_response(
         data={
             "pg_service": pg_service,
@@ -1660,6 +1665,8 @@ def payment_config_view(request):
             "hope_date": hope_date_range(),
             "guest_privacy": guest_privacy_html(),
             "is_test_mode": toss_config["is_test_mode"],
+            # youngcart de_escrow_use: Toss transfers and virtual accounts are escrow payments
+            "escrow": {"enabled": escrow_on, "methods": list(TOSS_ESCROW_METHODS) if escrow_on else []},
             "purchase_point": purchase_point_notice(),
             "providers": {
                 "toss": {
@@ -1720,18 +1727,35 @@ def payment_prepare_view(request):
                 status=drf_status.HTTP_400_BAD_REQUEST,
                 code="payment_provider_unsupported",
             )
+    if pg_service == "toss" and configured_payment_provider() == "bank":
+        # 결제대행사 "사용안함" (or no usable keys): a client asking for Toss is refused here too
+        return api_error(
+            "Toss Payments is not configured.",
+            status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="toss_payment_unconfigured",
+        )
     order_id = generate_numeric_order_id()
     try:
         order = create_order_from_request(request, data, order_id=order_id, force_status="order")
     except StockAdjustmentError as exc:
         return api_error(str(exc), status=drf_status.HTTP_400_BAD_REQUEST, code=exc.code, details=exc.details)
     amount = order.od_receipt_price
+    use_escrow = pg_service == "toss" and toss_escrow_applies(order.od_settle_case)
+    tax_flag = 1 if order.od_tax_flag else 0
     return api_response(
         data={
             "order_id": order.od_id,
             "uid": order.uid,
             "order_name": str(data.get("order_name") or "Shop order"),
             "amount": amount,
+            # 복합과세 결제 (de_tax_flag_use): the checkout sends comm_free_mny as taxFreeAmount
+            "tax_flag": tax_flag,
+            "comm_tax_mny": order.od_tax_mny if tax_flag else 0,
+            "comm_vat_mny": order.od_vat_mny if tax_flag else 0,
+            "comm_free_mny": toss_tax_free_amount(order) if tax_flag else 0,
+            # 에스크로 사용 (de_escrow_use): Toss transfer / virtual account with escrowProducts
+            "use_escrow": use_escrow,
+            "escrow_products": toss_escrow_products(order) if use_escrow else [],
             "buyer_name": order.od_name,
             "buyer_email": order.od_email or "noemail@example.com",
             "buyer_tel": order.od_hp or order.od_tel,

@@ -757,6 +757,9 @@ SHOP_TOSS_CLIENT_KEY = de_config("SHOP_TOSS_CLIENT_KEY", default="")
 SHOP_TOSS_SECRET_KEY = de_config("SHOP_TOSS_SECRET_KEY", default="")
 SHOP_TOSS_API_BASE_URL = de_config("SHOP_TOSS_API_BASE_URL", default="https://api.tosspayments.com")
 SHOP_TOSS_VBANK_ENABLED = bool_config("SHOP_TOSS_VBANK_ENABLED", default=False)
+# The admin shop settings can hold a Toss key pair (sealed in Config). The two env keys above win
+# when either is set; False ignores the admin pair (disposable previews).
+SHOP_TOSS_ADMIN_KEYS_ENABLED = bool_config("SHOP_TOSS_ADMIN_KEYS_ENABLED", default=True)
 SHOP_PAYMENT_PROVIDER = de_config("SHOP_PAYMENT_PROVIDER", default="")
 SHOP_PAYMENT_ADAPTER_BASE_URL = de_config("SHOP_PAYMENT_ADAPTER_BASE_URL", default="")
 SHOP_PAYMENT_ADAPTER_SECRET = de_config("SHOP_PAYMENT_ADAPTER_SECRET", default="")

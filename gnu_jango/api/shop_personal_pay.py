@@ -367,12 +367,22 @@ def personalpay_toss_prepare_view(request, pp_id):
             status=drf_status.HTTP_409_CONFLICT,
             code="personalpay_online_unavailable",
         )
+    amount = pp_service.amount_due(item)
+    order_name = f"개인결제 {item.pp_name}"[:100]
+    # youngcart personalpayform.sub.php: 에스크로 사용 sends the personal pay as one escrow product
+    use_escrow = shop_payments.toss_escrow_applies(method)
     return api_response(
         data={
             "pp_id": item.pp_id,
             "order_id": order_id,
-            "order_name": f"개인결제 {item.pp_name}"[:100],
-            "amount": pp_service.amount_due(item),
+            "order_name": order_name,
+            "amount": amount,
+            "use_escrow": use_escrow,
+            "escrow_products": (
+                [{"id": str(item.pp_id), "name": order_name, "code": str(item.pp_id), "unitPrice": amount, "quantity": 1}]
+                if use_escrow
+                else []
+            ),
             "buyer_name": item.pp_name,
             # a guest who passed the check proved only part of them: Toss asks the payer instead
             "buyer_email": (item.pp_email or "") if trusted else "",
