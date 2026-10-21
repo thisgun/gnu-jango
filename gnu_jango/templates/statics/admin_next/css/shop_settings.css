@@ -62,4 +62,6 @@
 #shop-settings .shop-settings-grid td, #shop-settings .shop-settings-grid th { vertical-align: middle; }
 #shop-settings .shop-settings-grid th { white-space: nowrap; }
 #shop-settings .shop-logo-preview img { max-width: 240px; max-height: 80px; padding: 8px; border: 1px solid var(--color-base-300); border-radius: 8px; background: var(--color-base-200); }
+#shop-settings .shop-sms-bytes { margin: 6px 0 0; color: var(--g5-admin-muted); font-size: 13px; font-variant-numeric: tabular-nums; }
+#shop-settings .shop-sms-bytes.is-over { color: var(--g5-admin-danger); font-weight: 650; }
 @media (max-width: 640px) { #shop-settings footer .btn { width: 100%; } }

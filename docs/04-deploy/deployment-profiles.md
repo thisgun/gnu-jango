@@ -78,6 +78,25 @@ path-style 주소(`S3_ADDRESSING_STYLE`로 변경 가능), SigV4. boto3 1.36 이
 | `SPLIT_AUTH_MODE` | 분리형 점검용: `proxy`(기본, 권장) 또는 `direct`. |
 | `GUNICORN_WORKERS` / `WEB_CONCURRENCY` | VPS 점검에서 locmem 캐시 경고 판단에 씁니다(Dockerfile 기본 3). |
 
+### SMS (아이코드)
+
+쇼핑몰 설정 → SMS 설정의 사용 여부·전송유형·관리자 휴대폰번호·문구는 관리자 화면에서 저장하지만 아이코드
+인증 정보는 환경 변수로만 받습니다. 관리자 화면에는 등록됨/미등록과 테스트 발송 버튼만 보입니다.
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `G5_ICODE_TOKEN_KEY` | (없음) | 아이코드 사이트의 토큰키관리에서 만든 토큰키. 설정하면 토큰(JSON) 방식으로 SMS·LMS를 보냅니다(권장). |
+| `G5_ICODE_JSON_SERVER`, `G5_ICODE_JSON_PORT` | `211.172.232.124`, `9201` | 토큰 방식 접속 주소. 영카트 `extend/sms5.extend.php`와 같은 값이며 보통 바꾸지 않습니다. |
+| `G5_ICODE_ID`, `G5_ICODE_PASSWORD`, `G5_ICODE_SERVER`, `G5_ICODE_PORT` | 포트 `7295` | 구버전 아이디·비밀번호 방식(SMS 80바이트만). 토큰키가 없을 때만 씁니다. |
+| `G5_SMS_PROVIDER` | (없음) | 비우거나 `icode`면 발송, `disabled`면 이 서버에서 모든 문자를 막습니다. 미리보기 설정은 항상 `disabled`입니다. |
+
+- 두 방식 모두 HTTP가 아닌 TCP 소켓으로 아이코드 서버에 접속합니다. 나가는 연결이 HTTP 프록시 허용 목록으로
+  제한된 호스팅(예: PythonAnywhere 무료 계정)에서는 발송할 수 없습니다. VPS·Vercel 함수는 바깥 TCP 연결이 됩니다.
+- 회신번호는 쇼핑몰 고객센터 전화번호이며 아이코드에 발신번호로 등록되어 있어야 합니다. 서버 IP가 바뀌는
+  서버리스 환경에서는 아이코드의 허용 IP 설정도 확인하세요.
+- 설정 후 `python manage.py send_test_sms 010-0000-0000 --confirm`(또는 쇼핑몰 설정의 테스트 발송)으로 한 건을
+  보내 확인합니다. `--confirm` 없이 실행하면 보내지 않고 보낼 내용만 보여 줍니다.
+
 ## 2. 프로필 1 — Vercel + Supabase (무료 데모)
 
 Django 전체가 하나의 Vercel Python 함수(Fluid compute)로 실행됩니다. Vercel은 `manage.py`를 찾아

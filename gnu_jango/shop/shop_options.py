@@ -20,12 +20,13 @@ logger = logging.getLogger(__name__)
 class ConfigOption:
     name: str
     label: str
-    kind: str = "text"  # text | email | bool | int | html
+    kind: str = "text"  # text | email | bool | int | html | textarea | choice
     default: str = ""
     help_text: str = ""
     max_length: int = 255
     min_value: int = 0
     max_value: int | None = None
+    choices: tuple = ()  # (value, label) pairs of a "choice" option
 
 
 COMPANY_OPTIONS = (
@@ -121,6 +122,50 @@ SHOP_CONFIG_OPTIONS = {
     for option in (*COMPANY_OPTIONS, *ORDER_OPTIONS, *POINT_OPTIONS, *HOME_LIST_OPTIONS, *LIST_OPTIONS)
 }
 
+# adm/shop_admin/configform.php SMS 설정 (cf_sms_use, cf_sms_type, de_sms_hp, de_sms_use1..5 and
+# de_sms_cont1..5 with youngcart's install texts). The iCode credentials are never a Config row:
+# they come from the server environment (G5_ICODE_TOKEN_KEY or G5_ICODE_ID / G5_ICODE_PASSWORD).
+SMS_SLOTS = (
+    (1, "회원가입시 고객님께 발송", "{이름}님의 회원가입을 축하드립니다.\nID:{회원아이디}\n{회사명}"),
+    (2, "주문시 고객님께 발송", "{이름}님 주문해주셔서 고맙습니다.\n{주문번호}\n{주문금액}원\n{회사명}"),
+    (3, "주문시 관리자에게 발송", "{이름}님께서 주문하셨습니다.\n{주문번호}\n{주문금액}원\n{회사명}"),
+    (4, "입금확인시 고객님께 발송", "{이름}님 입금 감사합니다.\n{입금액}원\n주문번호:\n{주문번호}\n{회사명}"),
+    (5, "상품배송시 고객님께 발송", "{이름}님 배송합니다.\n택배:{택배회사}\n운송장번호:\n{운송장번호}\n{회사명}"),
+)
+SMS_SLOT_VARIABLES = {
+    1: "{이름} {회원아이디} {회사명}",
+    2: "{이름} {보낸분} {받는분} {주문번호} {주문금액} {회원아이디} {회사명}",
+    3: "{이름} {보낸분} {받는분} {주문번호} {주문금액} {회원아이디} {회사명}",
+    4: "{이름} {입금액} {주문번호} {회사명}",
+    5: "{이름} {택배회사} {운송장번호} {주문번호} {회사명}",
+}
+SMS_USE_ICODE = "icode"
+SMS_TYPE_LMS = "LMS"
+
+
+def _sms_options():
+    options = [
+        ConfigOption("cf_sms_use", "SMS 사용", kind="choice", choices=(("", "사용안함"), (SMS_USE_ICODE, "아이코드")),
+                     help_text="아이코드를 고르면 아래에서 켠 항목의 문자를 보냅니다. 아이코드 인증 정보는 서버 환경 변수로만 등록합니다."),
+        ConfigOption("cf_sms_type", "SMS 전송유형", kind="choice", choices=(("", "SMS"), (SMS_TYPE_LMS, "LMS")),
+                     help_text="SMS는 90바이트(구버전 아이디·비밀번호 방식은 80바이트)까지 보내고 나머지는 잘립니다. "
+                               "LMS는 90바이트 이하는 SMS로, 그보다 길면 2,000바이트까지 LMS로 보냅니다(토큰키 방식만 지원). "
+                               "요금은 건당 SMS 16원, LMS 48원입니다."),
+        ConfigOption("de_sms_hp", "관리자 휴대폰번호", max_length=20,
+                     help_text="주문서 작성시 쇼핑몰 관리자가 문자를 받을 휴대폰번호입니다. 테스트 발송도 이 번호로 보냅니다."),
+    ]
+    for number, title, default in SMS_SLOTS:
+        options += [
+            ConfigOption(f"de_sms_use{number}", f"{title} 사용", kind="bool", default="0"),
+            ConfigOption(f"de_sms_cont{number}", f"{title} 내용", kind="textarea", default=default, max_length=2000,
+                         help_text=f"사용 가능한 변수: {SMS_SLOT_VARIABLES[number]}"),
+        ]
+    return tuple(options)
+
+
+SMS_OPTIONS = _sms_options()
+SHOP_CONFIG_OPTIONS.update((option.name, option) for option in SMS_OPTIONS)
+
 # Uploaded shop logos: Config row name -> label. The row holds the storage name.
 SHOP_LOGO_FIELDS = {
     "de_logo_img": "상단 로고",
@@ -142,6 +187,9 @@ def to_python(option, raw):
             number = int(option.default or 0)
         number = max(option.min_value, number)
         return number if option.max_value is None else min(option.max_value, number)
+    if option.kind == "choice":
+        value = str(value or "")
+        return value if value in {key for key, _ in option.choices} else option.default
     return str(value or "")
 
 

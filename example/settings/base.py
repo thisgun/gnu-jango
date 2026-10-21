@@ -710,7 +710,13 @@ SHOP_PAYMENT_ADAPTER_PROVIDERS = de_config("SHOP_PAYMENT_ADAPTER_PROVIDERS", def
 SHOP_PAYMENT_ADAPTER_TIMEOUT = de_config("SHOP_PAYMENT_ADAPTER_TIMEOUT", default=10, cast=int)
 
 # SMS credentials live in environment variables and are never stored in admin Config rows.
+# G5_SMS_PROVIDER: empty or "icode" lets iCode send, "disabled" stops every text on this server.
+# G5_ICODE_TOKEN_KEY is the current iCode token ("JSON") API key (SMS + LMS); the ID/password
+# pair is the legacy SMS-only protocol, used only when no token key is set.
 G5_SMS_PROVIDER = de_config("G5_SMS_PROVIDER", default="").strip().lower()
+G5_ICODE_TOKEN_KEY = de_config("G5_ICODE_TOKEN_KEY", default="").strip()
+G5_ICODE_JSON_SERVER = de_config("G5_ICODE_JSON_SERVER", default="211.172.232.124").strip()
+G5_ICODE_JSON_PORT = de_config("G5_ICODE_JSON_PORT", default=9201, cast=int)
 G5_ICODE_ID = de_config("G5_ICODE_ID", default="").strip()
 G5_ICODE_PASSWORD = de_config("G5_ICODE_PASSWORD", default="")
 G5_ICODE_SERVER = de_config("G5_ICODE_SERVER", default="").strip()

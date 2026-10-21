@@ -561,9 +561,13 @@ class Command(BaseCommand):
         )
 
         # Import only values needed for public branding and shop support. Payment
-        # credentials, OAuth secrets, SMS keys, and other private settings are excluded.
+        # credentials, OAuth secrets, SMS keys (cf_icode_id / cf_icode_pw / cf_icode_token_key),
+        # and other private settings are excluded.
         mappings = (
             (config_row, "cf_title", "cf_title", 255),
+            # SMS 사용 / 전송유형; de_sms_hp, de_sms_use1..5 and de_sms_cont1..5 come with the shop options
+            (config_row, "cf_sms_use", "cf_sms_use", 16),
+            (config_row, "cf_sms_type", "cf_sms_type", 8),
             (shop_row, "de_admin_company_name", "cf_company_name", 255),
             (shop_row, "de_admin_company_owner", "cf_company_owner", 255),
             (shop_row, "de_admin_company_addr", "cf_company_addr", 255),
