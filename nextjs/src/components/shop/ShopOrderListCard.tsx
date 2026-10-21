@@ -15,6 +15,8 @@ const STATUS_MAP: Record<string, { label: string; variant: string }> = {
   "배송": { label: "상품배송", variant: "bg-indigo-100 text-indigo-700" },
   "완료": { label: "배송완료", variant: "bg-green-100 text-green-700" },
   "취소": { label: "주문취소", variant: "bg-red-100 text-red-700" },
+  "반품": { label: "반품", variant: "bg-red-100 text-red-700" },
+  "품절": { label: "품절취소", variant: "bg-red-100 text-red-700" },
   "입금대기": { label: "입금확인중", variant: "bg-amber-100 text-amber-700" },
   "결제완료": { label: "입금완료", variant: "bg-blue-100 text-blue-700" },
   "배송준비": { label: "상품준비중", variant: "bg-gray-100 text-gray-700" },

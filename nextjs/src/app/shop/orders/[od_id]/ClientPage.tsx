@@ -26,12 +26,16 @@ const STATUS_MAP: Record<string, { label: string; variant: string }> = {
   "배송": { label: "배송중", variant: "bg-indigo-100 text-indigo-700" },
   "완료": { label: "배송완료", variant: "bg-green-100 text-green-700" },
   "취소": { label: "취소", variant: "bg-red-100 text-red-700" },
+  "반품": { label: "반품", variant: "bg-red-100 text-red-700" },
+  "품절": { label: "품절취소", variant: "bg-red-100 text-red-700" },
 };
 
 const TIMELINE_STEPS = ["주문", "입금", "배송", "완료"];
+/** 영카트 $status_cancel — 취소 · 반품 · 품절은 모두 끝난(취소된) 주문이다. */
+const CLOSED_STATUSES = new Set(["취소", "반품", "품절"]);
 
 function OrderTimeline({ currentStatus }: { currentStatus: string }) {
-  const isCancelled = currentStatus === "취소";
+  const isCancelled = CLOSED_STATUSES.has(currentStatus);
   const currentIdx = TIMELINE_STEPS.indexOf(currentStatus);
 
   return (
@@ -101,7 +105,7 @@ function OrderTimeline({ currentStatus }: { currentStatus: string }) {
 
       {isCancelled && (
         <p className="mt-3 text-center text-sm font-medium text-red-700">
-          주문이 취소되었습니다
+          {currentStatus === "반품" ? "주문이 반품되었습니다" : "주문이 취소되었습니다"}
         </p>
       )}
     </div>
