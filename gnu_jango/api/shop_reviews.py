@@ -145,10 +145,11 @@ def _review_score(value):
 
 
 def _has_received_product(user, product):
-    """YoungCart lets only buyers review when de_item_use_write is on: a shipped or completed item."""
-    return ShopOrderItem.objects.filter(
-        order__user=user, it_id=product.it_id, ct_status__in=("배송", "완료")
-    ).exists()
+    """YoungCart check_itemuse_write: with de_item_use_write on, only a member whose line of this
+    product is 완료 (delivered) may review it; the super administrator is exempt."""
+    if user.is_superuser:
+        return True
+    return ShopOrderItem.objects.filter(order__user=user, it_id=product.it_id, ct_status="완료").exists()
 
 
 def reviews_response(request):
@@ -204,7 +205,7 @@ def reviews_view(request):
         return api_error("평점은 1점에서 5점 사이로 선택해 주세요.", status=drf_status.HTTP_422_UNPROCESSABLE_ENTITY, code="invalid_score")
     policy = current_shipping_policy()
     if int(policy.de_item_use_write or 0) == 1 and not _has_received_product(user, product):
-        return api_error("구매하신 상품에 대해서만 사용후기를 작성할 수 있습니다.", status=drf_status.HTTP_403_FORBIDDEN, code="review_requires_purchase")
+        return api_error("사용후기는 주문이 완료된 경우에만 작성하실 수 있습니다.", status=drf_status.HTTP_403_FORBIDDEN, code="review_requires_purchase")
     review = ShopReview.objects.create(
         product=product,
         user=user,

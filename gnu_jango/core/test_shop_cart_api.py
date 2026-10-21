@@ -1574,7 +1574,10 @@ class ShopDefectFixTests(ShopApiTestCase):
         refused = self.post("reviews", {"it_id": "P001", "is_subject": "s"}, user=self.user)
         self.assertEqual(refused.status_code, 403)
         order = ShopOrder.objects.create(od_id="RV1", user=self.user, od_name="b", od_status="배송")
-        ShopOrderItem.objects.create(order=order, product=self.product, ct_id="ct-rv1", it_id="P001", it_name="Plain", ct_price=1000, ct_qty=1, ct_status="배송")
+        line = ShopOrderItem.objects.create(order=order, product=self.product, ct_id="ct-rv1", it_id="P001", it_name="Plain", ct_price=1000, ct_qty=1, ct_status="배송")
+        # check_itemuse_write: a line still on its way (배송) is not enough, it must be 완료
+        self.assertEqual(self.post("reviews", {"it_id": "P001", "is_subject": "s"}, user=self.user).status_code, 403)
+        ShopOrderItem.objects.filter(pk=line.pk).update(ct_status="완료")
         self.assertEqual(self.post("reviews", {"it_id": "P001", "is_subject": "s"}, user=self.user).status_code, 201)
 
     def test_new_reviews_wait_for_approval_when_moderation_is_on(self):
