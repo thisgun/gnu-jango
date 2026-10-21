@@ -302,6 +302,19 @@ def _validate_row(line, row, mapping, *, mode, categories, existing, seen):
         else:
             values[name] = number
 
+    # youngcart would store a blank 판매가격 as 0 and sell the product for free; a new product on
+    # sale needs a price unless it is a 전화문의 product (or is added as not on sale)
+    if (
+        not is_update
+        and not values.get("it_price")
+        and values.get("it_tel_inq") != "1"
+        and values.get("it_use", "1") == "1"
+        and not any("it_price" in error for error in item.errors)
+    ):
+        item.errors.append(
+            "판매가격이 없습니다. 가격을 넣거나, 가격 없이 올리려면 전화문의를 1 또는 판매가능을 0으로 두세요."
+        )
+
     images = []
     image_given = False
     for number in range(1, IMAGE_COUNT + 1):

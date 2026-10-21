@@ -107,7 +107,7 @@ class ProductUploadTests(SuperuserMixin, TestCase):
             product_row(it_id="P102", ca_id="10", it_name="가격 오류", it_price="abc"),
             product_row(it_id="P100", ca_id="10", it_name="중복"),
             product_row(it_id="P103", ca_id="10", it_name="이미지 오류", it_img1="javascript:alert(1)"),
-            product_row(it_id="1.7E+09", ca_id="10", it_name="지수 코드"),
+            product_row(it_id="1.7E+09", ca_id="10", it_name="지수 코드", it_price="500"),
         ]
         response = self.post(rows, step="preview")
         self.assertContains(response, "미리보기")
@@ -133,6 +133,22 @@ class ProductUploadTests(SuperuserMixin, TestCase):
         self.assertEqual((product.it_name, product.it_stock_qty, product.it_brand, product.it_price), ("새 이름", 10, "B", 1000))
         log = ShopStockAdjustment.objects.get(it_id="P200")
         self.assertEqual((log.before_qty, log.after_qty, log.actor), (3, 10, self.admin))
+
+    def test_a_new_product_on_sale_needs_a_price_unless_it_is_a_phone_inquiry(self):
+        rows = [
+            product_row(it_id="F1", ca_id="10", it_name="가격 없음"),
+            product_row(it_id="F2", ca_id="10", it_name="0원", it_price="0"),
+            product_row(it_id="F3", ca_id="10", it_name="전화문의", it_tel_inq="1"),
+            product_row(it_id="F4", ca_id="10", it_name="판매 안 함", it_use="0"),
+        ]
+        response = self.post(rows)
+        self.assertContains(response, "판매가격이 없습니다")
+        self.assertEqual(set(ShopProduct.objects.values_list("pk", flat=True)), {"F3", "F4"})
+        self.assertEqual(ShopProduct.objects.get(pk="F4").it_use, "0")
+        # updating an existing product without a price cell keeps its price
+        ShopProduct.objects.create(it_id="F5", it_name="기존", category=self.category, it_price=1000)
+        self.post([product_row(it_id="F5", it_name="이름만")], mode="update")
+        self.assertEqual(ShopProduct.objects.get(pk="F5").it_price, 1000)
 
     def test_permissions(self):
         self.client.force_login(self.staff_with("view_shopproduct"))
