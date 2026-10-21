@@ -8,7 +8,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.storage import default_storage
 from django.core.validators import validate_email
 from django.db import transaction
-from django.db.models import Avg, Count, Exists, F, IntegerField, OuterRef, Q, Subquery, Value
+from django.db.models import Avg, BooleanField, Case, Count, Exists, F, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from rest_framework import status as drf_status
@@ -66,7 +66,8 @@ from gnu_jango.shop.shipping import (
     current_shipping_policy,
     shipping_quote,
 )
-from gnu_jango.shop.shop_display import related_list_enabled
+from gnu_jango.shop.product_relations import related_product_ids
+from gnu_jango.shop.shop_display import category_list_display, related_list_enabled
 from gnu_jango.shop.taxes import calculate_order_tax_amounts
 from gnu_jango.users import point_ledger
 from gnu_jango.users.models import Profile
@@ -200,6 +201,12 @@ def category_payload(category, *, include_children=False):
         "ca_order": category.ca_order,
         "ca_skin": category.ca_skin,
         "ca_parent": category.ca_parent,
+        "ca_list_mod": category.ca_list_mod,
+        "ca_list_row": category.ca_list_row,
+        "ca_mobile_list_mod": category.ca_mobile_list_mod,
+        "ca_mobile_list_row": category.ca_mobile_list_row,
+        "ca_nocoupon": category.ca_nocoupon,
+        "list_display": category_list_display(category),
         "item_count": getattr(category, "item_count", None) if hasattr(category, "item_count") else category_products(category.ca_id).count(),
     }
     if include_children:
@@ -327,6 +334,11 @@ def category_tree_item_count():
     return Coalesce(Subquery(members, output_field=IntegerField()), 0)
 
 
+def coupon_target_allowed():
+    """A product coupon, or a category coupon whose category is not 쿠폰적용안함 (ca_nocoupon)."""
+    return Q(cp_method=0) | Exists(ShopCategory.objects.filter(pk=OuterRef("cp_target"), ca_nocoupon=False))
+
+
 def annotate_product_coupon_badge(queryset):
     today = timezone.localdate()
     matching_coupons = ShopCoupon.objects.filter(
@@ -337,11 +349,20 @@ def annotate_product_coupon_badge(queryset):
         | Q(cp_method=1, cp_target=OuterRef("category_id"))
         | Q(cp_method=1, cp_target=OuterRef("category2_id"))
         | Q(cp_method=1, cp_target=OuterRef("category3_id"))
+    ).filter(coupon_target_allowed())
+    # an it_nocoupon product takes no product or category coupon, so it shows no coupon badge
+    return queryset.annotate(
+        has_coupon=Case(
+            When(it_nocoupon=True, then=Value(False)),
+            default=Exists(matching_coupons),
+            output_field=BooleanField(),
+        )
     )
-    return queryset.annotate(has_coupon=Exists(matching_coupons))
 
 
 def product_coupon_badge_available(product):
+    if product.it_nocoupon:
+        return False
     today = timezone.localdate()
     matching_target = Q(cp_method=0, cp_target=product.it_id)
     if product.category_ids:
@@ -349,7 +370,7 @@ def product_coupon_badge_available(product):
     return ShopCoupon.objects.filter(
         cp_start__lte=today,
         cp_end__gte=today,
-    ).filter(matching_target).exists()
+    ).filter(matching_target).filter(coupon_target_allowed()).exists()
 
 
 def product_payload(product, request=None, *, detail=False):
@@ -404,6 +425,7 @@ def product_payload(product, request=None, *, detail=False):
         "it_point_type": product.it_point_type,
         "it_stock_qty": product.it_stock_qty,
         "it_notax": product.it_notax,
+        "it_nocoupon": product.it_nocoupon,
         "it_buy_min_qty": product.it_buy_min_qty,
         "it_buy_max_qty": product.it_buy_max_qty,
         "it_tel_inq": product.it_tel_inq,
@@ -448,12 +470,7 @@ def product_payload(product, request=None, *, detail=False):
             on_sale_products().filter(it_id__gt=product.it_id)
         ).order_by("it_id").first()
         # The shop setting de_rel_list_use switches the related-products list off (no lookup at all).
-        relation = read_smoke_config(f"rel_{product.it_id}", {}) if related_list_enabled() else {}
-        related_ids = [
-            item.strip()
-            for item in str(relation.get("related_csv") or "").split(",")
-            if item.strip()
-        ]
+        related_ids = related_product_ids(product.it_id) if related_list_enabled() else []
         related = annotate_product_coupon_badge(
             on_sale_products().filter(pk__in=related_ids).select_related("category")
         )
@@ -1027,7 +1044,10 @@ def category_detail_view(request, ca_id):
         qa_count=Count("qas", distinct=True),
         review_stats=Avg("reviews__is_score"),
     ).order_by(*shop_product_ordering(request.query_params.get("sort"), request.query_params.get("sortodr")))
-    page, meta = paginate_queryset(request, products, default_per_page=20)
+    # categoryform.php 출력설정: a page holds ca_list_mod x ca_list_row products unless asked otherwise
+    page, meta = paginate_queryset(
+        request, products, default_per_page=category_list_display(category)["per_page"]
+    )
     subcategories = (
         ShopCategory.objects.filter(ca_parent=category.ca_id, ca_use=True)
         .annotate(item_count=category_tree_item_count())
