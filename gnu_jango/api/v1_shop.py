@@ -46,6 +46,7 @@ from gnu_jango.shop.models import (
 )
 from gnu_jango.shop.inventory import StockAdjustmentError, cancel_order_with_stock_restore, reserve_product_stock
 from gnu_jango.shop.images import upload_product_images
+from gnu_jango.shop.notifications import queue_order_placed_mails
 from gnu_jango.shop.order_points import (
     item_purchase_point,
     item_status_update,
@@ -146,6 +147,7 @@ from .shop_cart import (
     wishlist_legacy_update_view,  # noqa: F401 - re-exported for existing importers
     wishlist_view,  # noqa: F401 - re-exported for existing importers
 )
+from .shop_recommend import product_recommend_view  # noqa: F401 - re-exported for existing importers
 from .shop_reviews import (
     my_qna_view,  # noqa: F401 - re-exported for existing importers
     my_reviews_view,  # noqa: F401 - re-exported for existing importers
@@ -1304,18 +1306,6 @@ def product_stock_notify_view(request, it_id):
 product_stock_notify_view.cls.throttle_scope = "stock-notify"
 
 
-@api_view(["POST"])
-@permission_classes([AllowAny])
-@authentication_classes([JWTAuthentication, BasicAuthentication])
-def product_recommend_view(request, it_id):
-    _, error = require_user(request)
-    if error:
-        return error
-    if not ShopProduct.objects.filter(pk=it_id).exists():
-        return api_error("Product not found.", status=drf_status.HTTP_404_NOT_FOUND, code="product_not_found")
-    return api_response(data={"sent": True, "it_id": it_id})
-
-
 # The main banner spans the content width (1440px at most), so a 1440px copy is sharp enough.
 BANNER_IMAGE_WIDTH = 1440
 
@@ -1499,6 +1489,8 @@ def orders_view(request):
         order = create_order_from_request(request, request_data(request))
     except StockAdjustmentError as exc:
         return api_error(str(exc), status=drf_status.HTTP_400_BAD_REQUEST, code=exc.code, details=exc.details)
+    # youngcart orderformupdate.php ordermail1/2: a bank-deposit order is complete once it is saved
+    queue_order_placed_mails(order)
     data = order_payload(order, detail=True)
     redirect_url = f"/shop/orders/{order.od_id}" if order.user_id else f"/shop/orders/{order.od_id}?uid={order.uid}"
     return api_response(

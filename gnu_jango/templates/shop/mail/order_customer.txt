@@ -1,0 +1,18 @@
+{% autoescape off %}[{{ site_title }}] 주문 내역 안내
+
+{{ order.od_name }}님, 주문해 주셔서 감사합니다.
+
+주문번호: {{ order.od_id }}{% if ordered_at %} ({{ ordered_at }}){% endif %}
+
+{% include "shop/mail/_order_lines.txt" %}
+
+결제수단: {{ settle_case }}{% if is_bank %}
+입금 계좌: {{ order.od_bank_account }}
+입금자명: {{ order.od_deposit_name }}
+입금이 확인되면 상품 준비를 시작합니다.{% elif order.od_vbank_account %}
+가상계좌: {{ order.od_vbank_bank_code }} {{ order.od_vbank_account }}{% if order.od_vbank_customer_name %} ({{ order.od_vbank_customer_name }}){% endif %}{% if order.od_vbank_due_date %}
+입금 기한: {{ order.od_vbank_due_date }}{% endif %}{% endif %}
+받는 분: {{ order.od_b_name }} / {{ order.od_b_addr1 }} {{ order.od_b_addr2 }}{% if order_url %}
+
+주문 상세: {{ order_url }}{% endif %}
+{% endautoescape %}

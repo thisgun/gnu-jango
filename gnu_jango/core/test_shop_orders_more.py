@@ -993,7 +993,8 @@ class ProductHitSuggestNotifyTests(CatalogBase):
     def test_recommend_needs_a_member_and_an_existing_product(self):
         self.assertEqual(APIClient().post(f"{API}/products/MO001/recommend").status_code, 401)
         self.assertEqual(self.client.post(f"{API}/products/NOPE/recommend").status_code, 404)
-        self.assertTrue(self.client.post(f"{API}/products/MO001/recommend").json()["data"]["sent"])
+        # an empty form is refused; the mail itself is covered in test_shop_mails
+        self.assertEqual(self.client.post(f"{API}/products/MO001/recommend").status_code, 422)
 
 
 class StockNotifyTests(CatalogBase):

@@ -1,0 +1,18 @@
+{% extends "shop/mail/_base.html" %}
+{% load humanize %}
+{% block heading %}주문 처리 내역 안내{% endblock %}
+{% block content %}
+<p>{{ order.od_name }}님, 주문하신 내역의 처리 상황을 알려 드립니다.</p>
+<p style="margin:12px 0;"><strong>주문번호</strong> {{ order.od_id }}</p>
+{% include "shop/mail/_order_lines.html" with show_status=True %}{% if has_receipt %}
+<h2 style="font-size:15px;margin:16px 0 6px;">결제 정보</h2>
+<p style="margin:0;"><strong>결제수단</strong> {{ settle_case }}</p>{% if order.od_receipt_price %}
+<p style="margin:0;"><strong>입금액</strong> {{ order.od_receipt_price|intcomma }}원{% if order.od_receipt_time %} ({{ order.od_receipt_time }}){% endif %}</p>{% endif %}{% if is_bank and order.od_deposit_name %}
+<p style="margin:0;"><strong>입금자명</strong> {{ order.od_deposit_name }}</p>{% endif %}{% if order.od_receipt_point %}
+<p style="margin:0;"><strong>포인트 사용</strong> {{ order.od_receipt_point|intcomma }}점</p>{% endif %}{% endif %}{% if has_delivery %}
+<h2 style="font-size:15px;margin:16px 0 6px;">배송 정보</h2>
+<p style="margin:0;"><strong>배송회사</strong> {{ order.od_delivery_company }}</p>
+<p style="margin:0;"><strong>운송장번호</strong> {{ order.od_invoice }}</p>{% if order.od_invoice_time %}
+<p style="margin:0;"><strong>배송일시</strong> {{ order.od_invoice_time }}</p>{% endif %}{% endif %}{% if order_url %}
+<p style="margin-top:20px;"><a href="{{ order_url }}" style="display:inline-block;padding:10px 16px;background:#0a8f45;color:#ffffff;text-decoration:none;border-radius:6px;">주문 상세 보기</a></p>{% endif %}
+{% endblock %}

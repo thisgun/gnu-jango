@@ -22,6 +22,7 @@ from gnu_jango.shop.models import (
     ShopOrder,
     ShopOrderData,
 )
+from gnu_jango.shop.notifications import STATUS_PAID as MAIL_STATUS_PAID, queue_order_placed_mails, queue_order_status_mail
 from gnu_jango.shop.order_points import item_status_update, take_back_order_points
 from gnu_jango.shop.payment_options import online_payment_preferences
 
@@ -829,6 +830,7 @@ def save_toss_vbank_authorization(order, toss_payment):
                 status=drf_status.HTTP_409_CONFLICT,
                 code="order_cancelled",
             )
+        newly_issued = locked.od_tno != str(toss_payment.get("paymentKey") or "")[:255]
         locked.od_pg = "toss"
         locked.od_tno = str(toss_payment.get("paymentKey") or "")[:255]
         locked.od_vbank_bank_code = bank_code[:10]
@@ -843,6 +845,9 @@ def save_toss_vbank_authorization(order, toss_payment):
             "od_vbank_customer_name", "od_vbank_due_date", "od_vbank_secret_hash",
             "od_vbank_status", "od_misu",
         ])
+        if newly_issued:
+            # youngcart orderformupdate.php mails the order once the virtual account is issued
+            queue_order_placed_mails(locked)
         return locked, None
 
 
@@ -1044,4 +1049,10 @@ def confirm_order_payment(order_id, amount, pg_service, transaction_id, raw_data
                 # an all-member coupon stays open for the other members (use is in the log)
                 ShopCoupon.objects.filter(pk=log.cp_id, cp_all_members=False).update(cp_used="1")
         record_payment_raw_log(order, order_id, pg_service, transaction_id, raw_data, prefix=log_prefix)
+        # youngcart: a PG order is mailed once approved; a virtual account was mailed when it was
+        # issued, so its deposit gets the 입금 확인 mail
+        if settle_case_is_vbank(order.od_settle_case):
+            queue_order_status_mail(order, MAIL_STATUS_PAID)
+        else:
+            queue_order_placed_mails(order)
     return order, None

@@ -1,0 +1,21 @@
+{% load humanize %}{% autoescape off %}[{{ site_title }}] 주문 처리 내역 안내
+
+{{ order.od_name }}님, 주문하신 내역의 처리 상황을 알려 드립니다.
+
+주문번호: {{ order.od_id }}
+
+{% include "shop/mail/_order_lines.txt" with show_status=True %}{% if has_receipt %}
+
+[결제 정보]
+결제수단: {{ settle_case }}{% if order.od_receipt_price %}
+입금액: {{ order.od_receipt_price|intcomma }}원{% if order.od_receipt_time %} ({{ order.od_receipt_time }}){% endif %}{% endif %}{% if is_bank and order.od_deposit_name %}
+입금자명: {{ order.od_deposit_name }}{% endif %}{% if order.od_receipt_point %}
+포인트 사용: {{ order.od_receipt_point|intcomma }}점{% endif %}{% endif %}{% if has_delivery %}
+
+[배송 정보]
+배송회사: {{ order.od_delivery_company }}
+운송장번호: {{ order.od_invoice }}{% if order.od_invoice_time %}
+배송일시: {{ order.od_invoice_time }}{% endif %}{% endif %}{% if order_url %}
+
+주문 상세: {{ order_url }}{% endif %}
+{% endautoescape %}

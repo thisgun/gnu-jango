@@ -570,6 +570,8 @@ REST_FRAMEWORK = {
         "member-password": "5/min",
         "comment-write": "20/min",
         "stock-notify": "10/min",
+        # product recommendation mails a member may send (itemrecommendmail.php)
+        "shop-recommend": "5/hour",
         "order-lookup": "10/min",
         "guest-password": "10/min",
         "docs-ask": "30/min",

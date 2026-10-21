@@ -188,6 +188,7 @@ def move_order_status(order, target, *, actor=""):
     line that leaves 완료 gives its purchase point back."""
     from gnu_jango.api.shop_common import CANCELLED_STATUSES
     from gnu_jango.shop.inventory import append_order_history, order_history_line
+    from gnu_jango.shop.notifications import queue_order_status_mail
     from gnu_jango.shop.order_points import item_status_update, take_back_order_points
 
     with transaction.atomic():
@@ -221,6 +222,8 @@ def move_order_status(order, target, *, actor=""):
         take_back_order_points(locked)
         if target == STATUS_COMPLETED:
             update_product_sales_quantity(locked)
+        # adm/shop_admin/ordermail.inc.php: 입금 / 배송 mail the customer once this commits
+        queue_order_status_mail(locked, target)
     if target == STATUS_PAID:
         return StatusChange(True, f"주문 {locked.od_id}의 입금 {locked.od_receipt_price:,}원을 기록했습니다.")
     return StatusChange(True)
