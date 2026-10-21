@@ -1,0 +1,579 @@
+{
+  "generated_at": "2026-10-21T11:15:05.897957+09:00",
+  "http_baseline_measured_at": "2026-10-21T10:56:10.108628+09:00",
+  "baseline_commit": "efa8f50bfb12c25660898bfcd1a0e04271ea91ea",
+  "candidate_deployed": true,
+  "cold_start_verified": false,
+  "http_baseline": {
+    "quality": {
+      "all": {
+        "cases": 20,
+        "hits_top3": 19,
+        "top3_rate": 0.95
+      },
+      "document": {
+        "cases": 12,
+        "hits_top3": 11,
+        "top3_rate": 0.9167
+      },
+      "post": {
+        "cases": 4,
+        "hits_top3": 4,
+        "top3_rate": 1.0
+      },
+      "product": {
+        "cases": 4,
+        "hits_top3": 4,
+        "top3_rate": 1.0
+      }
+    },
+    "latency": {
+      "demo": {
+        "first_pass": {
+          "count": 8,
+          "mean_ms": 283.77,
+          "p50_ms": 245.53,
+          "p95_ms": 428.14,
+          "max_ms": 428.14
+        },
+        "repeated": {
+          "count": 16,
+          "mean_ms": 264.28,
+          "p50_ms": 259.66,
+          "p95_ms": 337.04,
+          "max_ms": 337.04
+        }
+      },
+      "handbook": {
+        "first_pass": {
+          "count": 12,
+          "mean_ms": 595.91,
+          "p50_ms": 543.62,
+          "p95_ms": 885.56,
+          "max_ms": 885.56
+        },
+        "repeated": {
+          "count": 24,
+          "mean_ms": 532.95,
+          "p50_ms": 517.12,
+          "p95_ms": 581.45,
+          "max_ms": 746.18
+        }
+      }
+    },
+    "errors": 0,
+    "requests": 60,
+    "regions": [
+      "icn1"
+    ]
+  },
+  "cases": [
+    {
+      "id": "manual-board",
+      "query": "게시판은 어떻게 만드나요",
+      "expected": [
+        {
+          "type": "document",
+          "title": "게시판 만들기",
+          "bo_table": "hb_board"
+        }
+      ],
+      "baseline_rank": 18,
+      "candidate_service_rank": 3,
+      "production_http_ranks": [
+        3,
+        3,
+        3
+      ]
+    },
+    {
+      "id": "manual-level",
+      "query": "회원 등급별로 접근 권한을 바꾸려면",
+      "expected": [
+        {
+          "type": "document",
+          "title": "회원 등급과 접근 권한",
+          "bo_table": "hb_member"
+        }
+      ],
+      "baseline_rank": 1,
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "manual-guest",
+      "query": "비회원이 댓글을 쓰게 하려면",
+      "expected": [
+        {
+          "type": "document",
+          "title": "비회원 글쓰기와 댓글",
+          "bo_table": "hb_member"
+        }
+      ],
+      "baseline_rank": 1,
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "manual-spam",
+      "query": "스팸을 막는 캡챠 설정",
+      "expected": [
+        {
+          "type": "document",
+          "title": "스팸과 자동등록방지",
+          "bo_table": "hb_member"
+        }
+      ],
+      "baseline_rank": 2,
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "manual-category",
+      "query": "상품 분류를 등록하려면",
+      "expected": [
+        {
+          "type": "document",
+          "title": "상품과 분류 등록하기",
+          "bo_table": "hb_shop"
+        }
+      ],
+      "baseline_rank": 1,
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "manual-shipping",
+      "query": "주문 배송 상태를 관리하려면",
+      "expected": [
+        {
+          "type": "document",
+          "title": "배송과 주문 상태 관리",
+          "bo_table": "hb_shop"
+        }
+      ],
+      "baseline_rank": 1,
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "manual-payment",
+      "query": "결제를 테스트하려면",
+      "expected": [
+        {
+          "type": "document",
+          "title": "결제 설정과 테스트",
+          "bo_table": "hb_shop"
+        }
+      ],
+      "baseline_rank": 2,
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "manual-vbank",
+      "query": "가상계좌가 만료되면 어떻게 처리하나요",
+      "expected": [
+        {
+          "type": "document",
+          "title": "가상계좌 운영 점검",
+          "bo_table": "hb_shop"
+        }
+      ],
+      "baseline_rank": 1,
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "manual-pythonanywhere",
+      "query": "PythonAnywhere에 설치하는 방법",
+      "expected": [
+        {
+          "type": "document",
+          "title": "PythonAnywhere에 올리기",
+          "bo_table": "hb_deploy"
+        }
+      ],
+      "baseline_rank": 1,
+      "candidate_service_rank": 2,
+      "production_http_ranks": [
+        2,
+        2,
+        2
+      ]
+    },
+    {
+      "id": "manual-env",
+      "query": "환경 변수는 어디에 넣나요",
+      "expected": [
+        {
+          "type": "document",
+          "title": "환경 변수",
+          "bo_table": "hb_deploy"
+        }
+      ],
+      "baseline_rank": 2,
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "manual-search-error",
+      "query": "검색 결과가 안 나오면",
+      "expected": [
+        {
+          "type": "document",
+          "title": "검색 오류 해결하기",
+          "bo_table": "hb_search"
+        }
+      ],
+      "baseline_rank": 2,
+      "candidate_service_rank": 3,
+      "production_http_ranks": [
+        3,
+        3,
+        3
+      ]
+    },
+    {
+      "id": "manual-search-clicks",
+      "query": "인기 검색어와 클릭 기록을 관리하려면",
+      "expected": [
+        {
+          "type": "document",
+          "title": "검색 순위와 클릭 기록 관리",
+          "bo_table": "hb_search"
+        }
+      ],
+      "baseline_rank": 1,
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "post-photo",
+      "query": "게시글에 사진을 올리려면",
+      "expected": [
+        {
+          "type": "post",
+          "title": "게시글에 사진을 올리려면 어떻게 하나요?",
+          "bo_table": "질문답변"
+        }
+      ],
+      "baseline_rank": 1,
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "post-profile",
+      "query": "계정 정보 변경",
+      "expected": [
+        {
+          "type": "post",
+          "title": "계정 정보를 바꾸고 싶어요",
+          "bo_table": "질문답변"
+        }
+      ],
+      "baseline_rank": 1,
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "post-mobile",
+      "query": "모바일로 게시판을 이용하려면",
+      "expected": [
+        {
+          "type": "post",
+          "title": "모바일에서도 게시판을 이용할 수 있나요?",
+          "bo_table": "질문답변"
+        }
+      ],
+      "baseline_rank": 1,
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "post-howto",
+      "query": "게시판 이용 방법",
+      "expected": [
+        {
+          "type": "post",
+          "title": "게시판 이용 방법",
+          "bo_table": "공지사항"
+        }
+      ],
+      "baseline_rank": 1,
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
+    },
+    {
+      "id": "product-stand",
+      "query": "노트북 높이를 올리는 스탠드",
+      "expected": [
+        {
+          "type": "product",
+          "title": "알루미늄 노트북 스탠드"
+        }
+      ],
+      "baseline_rank": 2,
+      "candidate_service_rank": 2,
+      "production_http_ranks": [
+        2,
+        2,
+        2
+      ]
+    },
+    {
+      "id": "product-mat",
+      "query": "나무 데스크 매트",
+      "expected": [
+        {
+          "type": "product",
+          "title": "내추럴 우드 데스크 매트"
+        }
+      ],
+      "baseline_rank": 2,
+      "candidate_service_rank": 2,
+      "production_http_ranks": [
+        2,
+        2,
+        2
+      ]
+    },
+    {
+      "id": "product-mug",
+      "query": "투명 유리 머그",
+      "expected": [
+        {
+          "type": "product",
+          "title": "데일리 글라스 머그"
+        }
+      ],
+      "baseline_rank": 2,
+      "candidate_service_rank": 2,
+      "production_http_ranks": [
+        2,
+        2,
+        2
+      ]
+    },
+    {
+      "id": "product-pot",
+      "query": "커피 드립 포트",
+      "expected": [
+        {
+          "type": "product",
+          "title": "스테인리스 드립 포트"
+        }
+      ],
+      "baseline_rank": 1,
+      "candidate_service_rank": 1,
+      "production_http_ranks": [
+        1,
+        1,
+        1
+      ]
+    }
+  ],
+  "controlled_service_ab": [
+    {
+      "query": "검색",
+      "timings_ms": {
+        "baseline": [
+          364.28,
+          351.7,
+          373.87,
+          511.62,
+          351.2
+        ],
+        "current": [
+          266.43,
+          260.85,
+          257.0,
+          260.82,
+          258.14
+        ]
+      },
+      "mean_ms": {
+        "baseline": 390.53,
+        "current": 260.65
+      }
+    },
+    {
+      "query": "게시판은 어떻게 만드나요",
+      "timings_ms": {
+        "baseline": [
+          533.27,
+          500.31,
+          476.78,
+          518.63,
+          487.74
+        ],
+        "current": [
+          291.56,
+          287.91,
+          300.29,
+          296.98,
+          287.19
+        ]
+      },
+      "mean_ms": {
+        "baseline": 503.35,
+        "current": 292.79
+      }
+    }
+  ],
+  "rollout": {
+    "code_commit": "b199b6d5e6c221c7a748c9f7863b61b613920a07",
+    "merge_commit": "6987fdca0f239deb7dd134d807a20b78d8adb4a9",
+    "pr": "https://github.com/thisgun/gnu-jango/pull/48",
+    "ci_run": "https://github.com/thisgun/gnu-jango/actions/runs/39533441565",
+    "tests": 2341,
+    "skips": 9,
+    "coverage_percent": 75,
+    "deployments": {
+      "demo": {
+        "id": "dpl_34d2Who5u64CNLcnDQbnz94M4sCQ",
+        "url": "https://gnu-jango-demo.vercel.app",
+        "region": [
+          "icn1"
+        ],
+        "state": "READY"
+      },
+      "handbook": {
+        "id": "dpl_7NYLMHV6V9cCGEsLvmQVfEvdf95M",
+        "url": "https://gnu-jango-handbook.vercel.app",
+        "region": [
+          "icn1"
+        ],
+        "state": "READY"
+      }
+    },
+    "handbook_ranking_chapter": {
+      "post_id": 43,
+      "updated": true,
+      "baseline_matched": true,
+      "other_chapters_changed": false
+    },
+    "http_after": {
+      "measured_at": "2026-10-21T11:41:32.142985+09:00",
+      "quality": {
+        "all": {
+          "cases": 20,
+          "hits_top3": 20,
+          "top3_rate": 1.0
+        },
+        "document": {
+          "cases": 12,
+          "hits_top3": 12,
+          "top3_rate": 1.0
+        },
+        "post": {
+          "cases": 4,
+          "hits_top3": 4,
+          "top3_rate": 1.0
+        },
+        "product": {
+          "cases": 4,
+          "hits_top3": 4,
+          "top3_rate": 1.0
+        }
+      },
+      "latency": {
+        "demo": {
+          "first_pass": {
+            "count": 8,
+            "mean_ms": 298.03,
+            "p50_ms": 178.28,
+            "p95_ms": 739.84,
+            "max_ms": 739.84
+          },
+          "repeated": {
+            "count": 16,
+            "mean_ms": 207.39,
+            "p50_ms": 186.86,
+            "p95_ms": 319.72,
+            "max_ms": 319.72
+          }
+        },
+        "handbook": {
+          "first_pass": {
+            "count": 12,
+            "mean_ms": 405.36,
+            "p50_ms": 349.28,
+            "p95_ms": 674.99,
+            "max_ms": 674.99
+          },
+          "repeated": {
+            "count": 24,
+            "mean_ms": 317.28,
+            "p50_ms": 319.62,
+            "p95_ms": 365.49,
+            "max_ms": 390.06
+          }
+        }
+      },
+      "errors": 0,
+      "requests": 60,
+      "regions": [
+        "icn1"
+      ]
+    },
+    "smoke": {
+      "requests": 46,
+      "errors": 0,
+      "scope": "roots, shop, static assets, unique Top-3 result links, ranking chapter API"
+    },
+    "cold_start_verified": false
+  }
+}
