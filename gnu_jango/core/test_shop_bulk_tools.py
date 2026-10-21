@@ -3,6 +3,7 @@
 (orderlist), 개인결제 복사 (personalpaycopy) and 미수금 개인결제 (personalpayform?od_id=)."""
 
 import csv
+from unittest.mock import patch
 from urllib.parse import quote
 import io
 
@@ -305,6 +306,21 @@ class DeliveryUploadTests(SuperuserMixin, TestCase):
         self.paid.refresh_from_db()
         self.assertEqual((self.paid.od_status, self.paid.od_invoice), ("입금", ""))
         self.assertEqual(len(mail.outbox), 1)
+
+    def test_the_shipping_text_goes_out_only_when_the_sms_box_is_ticked(self):
+        row = ["2026102100000000000001", "", "", "", "", "", "", "", "CJ대한통운", "123-456"]
+        header = ["주문번호", "주문자명", "주문자전화1", "주문자전화2", "배송자명", "배송지전화1", "배송지전화2", "배송지주소", "배송회사", "운송장번호"]
+        with patch("gnu_jango.shop.sms.notifications.queue_order_status_sms") as queued:
+            self.upload([row])
+            queued.assert_not_called()
+            self.ready.refresh_from_db()
+            self.assertEqual(self.ready.od_status, "배송")
+            # a second ready order, uploaded with 배송안내 문자 발송 ticked
+            self.ready.od_status = "준비"
+            self.ready.save(update_fields=["od_status"])
+            self.client.post(self.url, {"file": csv_upload([header, row]), "step": "apply", "send_sms": "1"})
+        queued.assert_called_once()
+        self.assertEqual(queued.call_args.args[1], "배송")
 
     def test_rows_without_courier_or_invoice_fail_and_headerless_files_use_youngcart_columns(self):
         response = self.client.post(

@@ -3,11 +3,22 @@
 ``send_message`` is the one entry point for business code. It never raises: a gateway, network or
 configuration failure comes back as a rejected / unknown ``ICodeSendResult`` and is logged with
 the recipient masked, so an order, a status change or a signup never fails because of a text.
+
+Every text passes ``_send_guard`` first, so all callers (guest checkout, signup, Toss confirm,
+status moves, restock alerts) share the same limits: a per-recipient and a site-wide hourly cap
+and a circuit breaker that skips the gateway for a while after a connect/read timeout. Texts stay
+synchronous (on_commit on the request thread) on purpose: a background thread is not reliable on
+Vercel, which may freeze the function once the response is sent, and a queue would need a worker
+the VPS profile does not have. Tight socket timeouts (icode.py) plus the breaker bound the delay
+instead: at most one slow attempt per breaker window.
 """
 
+import hashlib
 import logging
+import time
 from dataclasses import dataclass, field
 
+from django.conf import settings
 from django.core.cache import cache
 
 from gnu_jango.config.models import Config
@@ -20,6 +31,15 @@ logger = logging.getLogger(__name__)
 
 TEST_SEND_CACHE_KEY = "shop-sms:test-send"
 TEST_SEND_INTERVAL_SECONDS = 60
+BREAKER_CACHE_KEY = "shop-sms:breaker"
+GLOBAL_COUNT_KEY = "shop-sms:sent:{bucket}"
+RECIPIENT_COUNT_KEY = "shop-sms:to:{digest}:{bucket}"
+WINDOW_SECONDS = 3600
+DEFAULT_RECIPIENT_HOURLY_LIMIT = 5
+DEFAULT_HOURLY_LIMIT = 300
+DEFAULT_BREAKER_SECONDS = 300
+# transport failures that mean the gateway is unreachable or hanging (icode._exchange)
+BREAKER_CODES = {"connect_timeout", "timeout", "socket_error"}
 STATUS_LABELS = {"accepted": "접수", "rejected": "실패", "unknown": "확인필요"}
 
 
@@ -85,9 +105,69 @@ def status_label(result):
     return STATUS_LABELS.get(result.status, result.status)
 
 
+def _int_setting(name, default):
+    try:
+        return int(getattr(settings, name, default))
+    except (TypeError, ValueError):
+        return default
+
+
+def _phone_key(value):
+    return "".join(character for character in str(value or "") if character.isdigit())
+
+
+def _count_send(key, limit):
+    """Add one to ``key``'s hourly counter; False once it is past ``limit`` (0 or less: no limit)."""
+    if limit <= 0:
+        return True
+    cache.add(key, 0, WINDOW_SECONDS + 60)
+    try:
+        count = cache.incr(key)
+    except ValueError:  # expired between add and incr
+        cache.add(key, 1, WINDOW_SECONDS + 60)
+        count = 1
+    return count <= limit
+
+
+def _send_guard(recipient, current):
+    """A rejected result when this text must not go out (breaker open, a cap reached), else None."""
+    if cache.get(BREAKER_CACHE_KEY):
+        return ICodeSendResult("rejected", "circuit_open", "SMS gateway paused after a recent timeout.")
+    bucket = int(time.time() // WINDOW_SECONDS)
+    digits = _phone_key(recipient)
+    # the admin's own phone gets one text per order; only the site-wide cap applies to it
+    if digits and digits != _phone_key(current.admin_hp):
+        digest = hashlib.sha256(digits.encode("ascii")).hexdigest()[:24]
+        limit = _int_setting("G5_SMS_RECIPIENT_HOURLY_LIMIT", DEFAULT_RECIPIENT_HOURLY_LIMIT)
+        if not _count_send(RECIPIENT_COUNT_KEY.format(digest=digest, bucket=bucket), limit):
+            return ICodeSendResult("rejected", "recipient_limit", "Hourly text limit for this number reached.")
+    limit = _int_setting("G5_SMS_HOURLY_LIMIT", DEFAULT_HOURLY_LIMIT)
+    if not _count_send(GLOBAL_COUNT_KEY.format(bucket=bucket), limit):
+        return ICodeSendResult("rejected", "hourly_limit", "Hourly text limit of the shop reached.")
+    return None
+
+
+def _trip_breaker(result):
+    if result.provider_code not in BREAKER_CODES:
+        return
+    seconds = _int_setting("G5_SMS_BREAKER_SECONDS", DEFAULT_BREAKER_SECONDS)
+    if seconds > 0 and cache.add(BREAKER_CACHE_KEY, "1", seconds):
+        logger.error(
+            "Shop SMS gateway %s: pausing every text for %s seconds.", result.provider_code, seconds
+        )
+
+
 def send_message(recipient, message, *, current=None, subject="", purpose="sms"):
     """Send one text to ``recipient`` with the shop's callback number. Never raises."""
     current = current or sms_settings()
+    try:
+        blocked = _send_guard(recipient, current)
+    except Exception:  # noqa: BLE001 - a cache outage must not stop the shop's texts
+        logger.exception("Shop SMS limits could not be checked; sending %s anyway", purpose)
+        blocked = None
+    if blocked is not None:
+        logger.warning("Shop SMS %s to %s skipped: %s", purpose, mask_phone(recipient), blocked.provider_code)
+        return blocked
     try:
         result = icode.send_message(
             recipient,
@@ -101,6 +181,10 @@ def send_message(recipient, message, *, current=None, subject="", purpose="sms")
     except Exception as exc:  # noqa: BLE001 - a text must never break the shop flow
         logger.exception("Shop SMS %s to %s failed unexpectedly", purpose, mask_phone(recipient))
         result = ICodeSendResult("unknown", "unexpected", type(exc).__name__)
+    try:
+        _trip_breaker(result)
+    except Exception:  # noqa: BLE001
+        logger.exception("Shop SMS breaker could not be set")
     log = logger.info if result.status == "accepted" else logger.warning
     log(
         "Shop SMS %s to %s: %s %s (%s) %s",

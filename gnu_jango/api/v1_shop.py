@@ -22,7 +22,7 @@ from rest_framework.decorators import (
 )
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
-from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.throttling import ScopedRateThrottle, SimpleRateThrottle
 from .authentication import SessionJWTAuthentication as JWTAuthentication
 
 from gnu_jango.config.models import Config
@@ -1425,10 +1425,24 @@ def addresses_view(request):
     return api_response(data=address_payload(address), status=drf_status.HTTP_201_CREATED)
 
 
+class GuestOrderThrottle(SimpleRateThrottle):
+    """Guest checkouts per address: each one may text the number it was given (주문안내 SMS), so
+    an anonymous script must not place them without limit. Members are not counted here (their
+    accounts already passed the signup limits) and listing orders is never throttled."""
+
+    scope = "shop-guest-order"
+
+    def get_cache_key(self, request, view):
+        if request.method != "POST" or getattr(request.user, "is_authenticated", False):
+            return None
+        return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
+
+
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
 @parser_classes([JSONParser, FormParser])
+@throttle_classes([GuestOrderThrottle])
 def orders_view(request):
     if request.method == "GET":
         user = current_user(request)

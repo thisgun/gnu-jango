@@ -182,7 +182,9 @@ class ShopSmsFixture:
 
     def setUp(self):
         super().setUp()
-        cache.delete(service.TEST_SEND_CACHE_KEY)
+        # the send limits and the breaker live in the cache
+        cache.clear()
+        self.addCleanup(cache.clear)
         ShopShippingPolicy.objects.update_or_create(
             pk=1, defaults={"de_admin_company_name": "데모샵", "de_admin_company_tel": "02-1234-5678"}
         )
@@ -337,6 +339,93 @@ class SmsServiceTests(ShopSmsFixture, TestCase):
         self.assertEqual(current.slot(5), (False, "{이름}님 배송합니다.\n택배:{택배회사}\n운송장번호:\n{운송장번호}\n{회사명}"))
         self.assertEqual(current.callback, "02-1234-5678")
         self.assertEqual(service.render_template("{이름}/{없음}", {"이름": "A"}), "A/{없음}")
+
+
+class SmsLimitTests(ShopSmsFixture, TestCase):
+    @override_settings(G5_SMS_RECIPIENT_HOURLY_LIMIT=2)
+    def test_one_number_gets_at_most_the_hourly_limit(self):
+        with patch(TRANSPORT, side_effect=accepted) as send:
+            results = [service.send_message("010-5555-6666", "hi") for _ in range(3)]
+            other = service.send_message("010-5555-7777", "hi")
+        self.assertEqual([result.status for result in results], ["accepted", "accepted", "rejected"])
+        self.assertEqual(results[2].provider_code, "recipient_limit")
+        self.assertEqual(other.status, "accepted")
+        self.assertEqual(send.call_count, 3)
+
+    @override_settings(G5_SMS_RECIPIENT_HOURLY_LIMIT=1)
+    def test_the_admin_phone_is_not_capped_per_number(self):
+        self.configure()
+        with patch(TRANSPORT, side_effect=accepted) as send:
+            results = [service.send_message("01099990000", "new order") for _ in range(3)]
+        self.assertEqual({result.status for result in results}, {"accepted"})
+        self.assertEqual(send.call_count, 3)
+
+    @override_settings(G5_SMS_HOURLY_LIMIT=2)
+    def test_the_site_wide_hourly_limit_stops_every_number(self):
+        with patch(TRANSPORT, side_effect=accepted) as send:
+            results = [service.send_message(f"0105555{n:04d}", "hi") for n in range(3)]
+        self.assertEqual(results[2].provider_code, "hourly_limit")
+        self.assertEqual(send.call_count, 2)
+
+    def test_a_gateway_timeout_pauses_every_text_for_a_while(self):
+        timeout = ICodeSendResult("rejected", "connect_timeout", "Could not connect to the iCode server.")
+        with patch(TRANSPORT, return_value=timeout) as send, self.assertLogs(service.logger, "ERROR") as logs:
+            first = service.send_message("01011112222", "hi")
+            second = service.send_message("01033334444", "hi")
+            third = service.send_message("01033334444", "hi")
+        self.assertEqual(first.provider_code, "connect_timeout")
+        self.assertEqual((second.status, second.provider_code), ("rejected", "circuit_open"))
+        self.assertEqual(third.provider_code, "circuit_open")
+        send.assert_called_once()
+        # logged once, not on every skipped text
+        self.assertEqual(sum("pausing every text" in line for line in logs.output), 1)
+        cache.delete(service.BREAKER_CACHE_KEY)
+        with patch(TRANSPORT, side_effect=accepted):
+            self.assertEqual(service.send_message("01033334444", "hi").status, "accepted")
+
+    def test_a_refusal_does_not_open_the_breaker(self):
+        refused = ICodeSendResult("rejected", "99", "iCode rejected the message.")
+        with patch(TRANSPORT, return_value=refused) as send:
+            service.send_message("01011112222", "hi")
+            service.send_message("01011112222", "hi")
+        self.assertEqual(send.call_count, 2)
+
+    def test_socket_timeouts_are_tight(self):
+        self.assertLessEqual(icode.CONNECT_TIMEOUT_SECONDS, 2)
+        self.assertLessEqual(icode.READ_TIMEOUT_SECONDS, 3)
+
+    def test_a_status_move_without_send_sms_texts_nobody(self):
+        self.configure(de_sms_use4="1")
+        order = self.make_order()
+        with patch(TRANSPORT, side_effect=accepted) as send:
+            with self.captureOnCommitCallbacks(execute=True):
+                self.assertTrue(move_order_status(order, "입금", send_sms=False))
+        send.assert_not_called()
+
+
+class GuestOrderThrottleTests(ShopSmsFixture, TestCase):
+    def test_guest_checkouts_are_limited_per_address(self):
+        from rest_framework.throttling import SimpleRateThrottle
+
+        from gnu_jango.api.v1_shop import GuestOrderThrottle
+
+        order = self.make_order()
+        statuses = []
+        rates = {**SimpleRateThrottle.THROTTLE_RATES, "shop-guest-order": "3/hour"}
+        with patch.object(GuestOrderThrottle, "THROTTLE_RATES", rates), patch(
+            "gnu_jango.api.v1_shop.create_order_from_request", return_value=order
+        ):
+            for _ in range(4):
+                statuses.append(self.client.post("/api/v1/shop/orders", {}, content_type="application/json").status_code)
+            listing = self.client.get("/api/v1/shop/orders").status_code
+        self.assertNotIn(429, statuses[:3])
+        self.assertEqual(statuses[3], 429)
+        self.assertEqual(listing, 200)
+
+    def test_the_guest_order_rate_is_configured(self):
+        from django.conf import settings
+
+        self.assertEqual(settings.REST_FRAMEWORK["DEFAULT_THROTTLE_RATES"]["shop-guest-order"], "20/hour")
 
 
 @override_settings(G5_SMS_PROVIDER="", G5_ICODE_TOKEN_KEY=TOKEN, **NO_LEGACY)

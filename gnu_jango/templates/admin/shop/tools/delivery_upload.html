@@ -28,6 +28,10 @@
       <span>CSV 파일</span>
       <input class="input" type="file" name="file" accept=".csv,text/csv" required>
     </label>
+    <label>
+      <input type="checkbox" name="send_sms" value="1">
+      <span>배송안내 문자 발송 (SMS 설정의 상품배송시 문자가 켜져 있을 때, 시간당 발송 한도 안에서)</span>
+    </label>
     <div class="g5-admin-report-filter-actions">
       <button class="button btn g5-admin-button-secondary" type="submit" name="step" value="preview">미리보기 (저장 안 함)</button>
       <button class="button btn btn-primary" type="submit" name="step" value="apply">검증 후 배송 처리</button>

@@ -28,8 +28,9 @@ SMS_MAX_BYTES = 90  # token version: up to 90 bytes is an SMS
 LEGACY_SMS_MAX_BYTES = 80  # icode.sms.lib.php cut_char($msg, 80)
 LMS_MAX_BYTES = 2000  # G5_ICODE_JSON_MAX_LENGTH
 LMS_SUBJECT_MAX_BYTES = 30
-CONNECT_TIMEOUT_SECONDS = 3
-READ_TIMEOUT_SECONDS = 8
+# tight: the texts go out on the request thread (see shop/sms/service.py)
+CONNECT_TIMEOUT_SECONDS = 2
+READ_TIMEOUT_SECONDS = 3
 TOKEN_RESPONSE_LENGTH = 31  # "0225  00" + tel(12) + message id(11)
 LEGACY_RESPONSE_LENGTH = 29
 MAX_PACKET_BODY = 9999  # the length field has four digits

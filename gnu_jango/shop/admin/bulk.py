@@ -368,7 +368,12 @@ def delivery_upload_view(model_admin, request):
             def logged(order, item):
                 model_admin.log_change(request, order, f"송장 일괄등록: {item.company} {item.invoice}")
 
-            delivery_import.apply_deliveries(report, actor=request.user.get_username(), on_saved=logged)
+            delivery_import.apply_deliveries(
+                report,
+                actor=request.user.get_username(),
+                on_saved=logged,
+                send_sms=request.POST.get("send_sms") == "1",
+            )
             if report.saved_count:
                 messages.success(request, f"주문 {report.saved_count}건에 운송장을 등록하고 배송으로 바꿨습니다.")
             if report.error_count:

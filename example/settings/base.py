@@ -627,6 +627,8 @@ REST_FRAMEWORK = {
         # personal pay lookups, payer checks and payments, per address (pp_id can be guessed)
         "shop-personalpay": "30/min",
         "order-lookup": "10/min",
+        # guest checkouts per address (each may text the phone number it was given)
+        "shop-guest-order": "20/hour",
         # cash receipt requests after the order (each try may reach the Toss cash receipt API)
         "shop-cash-receipt": "10/hour",
         "guest-password": "10/min",
@@ -773,6 +775,13 @@ G5_ICODE_ID = de_config("G5_ICODE_ID", default="").strip()
 G5_ICODE_PASSWORD = de_config("G5_ICODE_PASSWORD", default="")
 G5_ICODE_SERVER = de_config("G5_ICODE_SERVER", default="").strip()
 G5_ICODE_PORT = de_config("G5_ICODE_PORT", default=7295, cast=int)
+# Send limits of every shop text (signup, order, payment, status, restock): a recipient gets at
+# most G5_SMS_RECIPIENT_HOURLY_LIMIT texts an hour (the admin's de_sms_hp is exempt), the whole
+# site at most G5_SMS_HOURLY_LIMIT, and after a connect/read timeout or socket error the gateway
+# is skipped for G5_SMS_BREAKER_SECONDS so a dead iCode server cannot stall every checkout.
+G5_SMS_RECIPIENT_HOURLY_LIMIT = de_config("G5_SMS_RECIPIENT_HOURLY_LIMIT", default=5, cast=int)
+G5_SMS_HOURLY_LIMIT = de_config("G5_SMS_HOURLY_LIMIT", default=300, cast=int)
+G5_SMS_BREAKER_SECONDS = de_config("G5_SMS_BREAKER_SECONDS", default=300, cast=int)
 
 # Starting theme and manual board group of a deployment. They are only the defaults of cf_theme and
 # cf_docs_group, so a value saved in admin still wins; a second site (the handbook demo) can start

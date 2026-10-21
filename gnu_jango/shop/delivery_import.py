@@ -190,9 +190,10 @@ class _MoveFailed(Exception):
     pass
 
 
-def apply_deliveries(report, *, actor, on_saved=None):
+def apply_deliveries(report, *, actor, on_saved=None, send_sms=False):
     """Register the invoices of the valid rows and move those orders to 배송, one transaction per
-    order (the 배송 mail goes out once that order commits)."""
+    order (the 배송 mail goes out once that order commits). The 배송 text (de_sms_use5) goes out
+    only with ``send_sms`` (orderdelivery.php's 배송안내 SMS box), still within the SMS limits."""
     now_label = timezone.localtime().strftime("%Y-%m-%d %H:%M:%S")
     for item in report.rows:
         if not item.ok:
@@ -208,7 +209,7 @@ def apply_deliveries(report, *, actor, on_saved=None):
                 order.od_invoice = item.invoice
                 order.od_invoice_time = now_label
                 order.save(update_fields=["od_delivery_company", "od_invoice", "od_invoice_time"])
-                result = move_order_status(order, STATUS_SHIPPING, actor=actor)
+                result = move_order_status(order, STATUS_SHIPPING, actor=actor, send_sms=send_sms)
                 if not result:
                     raise _MoveFailed(result.message or "배송으로 바꾸지 못했습니다.")
         except _MoveFailed as exc:
