@@ -163,7 +163,11 @@ class ShopOrderAdmin(ModelAdmin):
         "ordered_at_display",
     )
     list_display_links = ("order_id_display", "customer_display")
-    search_fields = ("od_id", "od_name", "od_email", "od_hp", "od_tno", "od_app_no", "od_cash_no", "od_invoice")
+    # youngcart orderlist.php search fields: also the recipient, the depositor, the member id and phones
+    search_fields = (
+        "od_id", "od_name", "od_email", "od_hp", "od_tel", "od_b_name", "od_b_hp", "od_b_tel", "od_deposit_name",
+        "user__username", "od_tno", "od_app_no", "od_cash_no", "od_invoice",
+    )
     list_filter = (
         OrderStatusFilter,
         SettleCaseFilter,
