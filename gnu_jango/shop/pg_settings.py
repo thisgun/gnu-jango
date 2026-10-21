@@ -152,28 +152,59 @@ def admin_keys(rows=None):
     }
 
 
+def unreadable_key_rows(rows=None):
+    """Key rows that are saved but no longer open (SECRET_KEY changed without
+    SECRET_KEY_FALLBACKS, or the row was altered): [(mode, kind), ...]."""
+    rows = stored_rows() if rows is None else rows
+    return [
+        (mode, kind)
+        for (mode, kind), name in TOSS_KEY_ROWS.items()
+        if str(rows.get(name) or "").strip() and not unseal_key(mode, kind, rows.get(name))
+    ]
+
+
+def mode_flag(mode):
+    """The ShopOrder.od_test value for a key mode (youngcart od_test: 1 = 테스트결제)."""
+    return "1" if mode == "test" else "0"
+
+
+def current_mode(rows=None):
+    return "test" if card_test_enabled(rows) else "live"
+
+
+def order_key_mode(order):
+    """The admin key pair an order was paid with ("test" / "live"), from od_test; None for an
+    order that does not say (it uses the shop's current 결제 테스트)."""
+    value = str(getattr(order, "od_test", "") or "").strip()
+    return "test" if value == "1" else "live" if value == "0" else None
+
+
 @dataclass(frozen=True)
 class TossKeys:
     client_key: str
     secret_key: str
     source: str  # "env" | "admin" | "none"
-    selected_mode: str  # the admin pair de_card_test picks: "test" | "live"
+    selected_mode: str  # the admin pair used: "test" | "live"
+    pinned: bool = False  # the mode came from an order, not from 결제 테스트
 
     def __repr__(self):  # never print a secret by accident
-        return f"TossKeys(source={self.source!r}, selected_mode={self.selected_mode!r})"
+        return f"TossKeys(source={self.source!r}, selected_mode={self.selected_mode!r}, pinned={self.pinned!r})"
 
 
 @sensitive_variables()
-def effective_toss_keys(rows=None):
-    """The Toss key pair the shop uses: the environment pair when either env key is set,
-    otherwise the admin pair chosen by 결제 테스트."""
+def effective_toss_keys(rows=None, *, mode=None):
+    """The Toss key pair to use: the environment pair when either env key is set (the mode is
+    then ignored), otherwise the admin pair of ``mode`` - an order's own mode, so a payment is
+    always confirmed, cancelled and refunded with the pair it was made with - or, without one,
+    the pair 결제 테스트 picks. A missing pair is never replaced by the other mode's."""
     rows = stored_rows() if rows is None else rows
-    selected_mode = "test" if card_test_enabled(rows) else "live"
+    pinned = mode in KEY_MODES
+    selected_mode = mode if pinned else current_mode(rows)
     client, secret = env_toss_keys()
     if client or secret:
-        return TossKeys(client, secret, "env", selected_mode)
+        return TossKeys(client, secret, "env", selected_mode, False)
     if not admin_keys_enabled():
-        return TossKeys("", "", "none", selected_mode)
-    keys = admin_keys(rows)
-    client, secret = keys[(selected_mode, "client")], keys[(selected_mode, "secret")]
-    return TossKeys(client, secret, "admin" if client or secret else "none", selected_mode)
+        return TossKeys("", "", "none", selected_mode, pinned)
+    client = unseal_key(selected_mode, "client", rows.get(TOSS_KEY_ROWS[(selected_mode, "client")], ""))
+    secret = unseal_key(selected_mode, "secret", rows.get(TOSS_KEY_ROWS[(selected_mode, "secret")], ""))
+    return TossKeys(client, secret, "admin" if client or secret else "none", selected_mode, pinned)

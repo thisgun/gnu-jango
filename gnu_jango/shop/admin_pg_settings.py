@@ -26,6 +26,7 @@ from .pg_settings import (
     admin_keys,
     admin_keys_enabled,
     admin_pg_service,
+    unreadable_key_rows,
     card_test_enabled,
     env_keys_set,
     env_payment_provider,
@@ -75,6 +76,7 @@ def pg_field_order():
     return [*names, CARD_TEST_FIELD, ESCROW_FIELD]
 
 
+@sensitive_variables("stored", "current", "rows")
 def add_pg_fields(form, rows):
     """Add the PG fields to ``form`` with their saved values (``rows``: the stored Config rows)."""
     provider_locked = bool(env_payment_provider())
@@ -98,8 +100,8 @@ def add_pg_fields(form, rows):
         choices=CARD_TEST_CHOICES,
         widget=forms.RadioSelect,
         help_text="테스트결제는 테스트 키 쌍으로, 실결제는 실결제 키 쌍으로 결제합니다. 결제단위 최소 1,000원. "
-        "바꾸면 이전 모드로 결제된 주문의 승인 확인·취소·환불도 새 모드의 키로 요청하므로, 진행 중인 주문을 "
-        "정리한 뒤 바꾸세요. "
+        "주문은 결제할 때의 모드를 기억해 승인 확인·취소·환불을 그 모드의 키로 요청하므로, 모드를 바꾼 뒤에도 "
+        "이전 모드의 키 쌍을 지우지 마세요. "
         "테스트 결제건은 토스페이먼츠 상점관리자 상단의 '테스트 모드'에서 볼 수 있습니다."
         + (" 서버 환경 변수 키가 있으면 그 키를 사용합니다." if env_keys_set() else ""),
     )
@@ -116,6 +118,7 @@ def add_pg_fields(form, rows):
     form.initial[ESCROW_FIELD] = "1" if escrow_enabled(rows) else "0"
 
     stored = admin_keys(rows)
+    unreadable = set(unreadable_key_rows(rows))
     env_locked = env_keys_set()
     keys_off = not admin_keys_enabled()
     for mode in KEY_MODES:
@@ -129,11 +132,13 @@ def add_pg_fields(form, rows):
             else:
                 registered = (f"등록됨 ({mask_key(current)})" if kind == "client" else "등록됨") if current else "미등록"
                 state, help_text = registered, f"현재: {registered}. {KEY_HELP[kind]}"
-            widget_attrs = {"autocomplete": "off", "spellcheck": "false", "placeholder": state}
-            widget = (
-                forms.PasswordInput(render_value=False, attrs={**widget_attrs, "autocomplete": "new-password"})
-                if kind == "secret"
-                else forms.TextInput(attrs=widget_attrs)
+            if (mode, kind) in unreadable and not (env_locked or keys_off):
+                state = "저장된 키를 읽을 수 없음 - 다시 입력하세요"
+                help_text = f"{state}. {KEY_HELP[kind]}"
+            # never echoed back, not even after a validation error (a secret may be pasted here)
+            widget = forms.PasswordInput(
+                render_value=False,
+                attrs={"autocomplete": "new-password", "spellcheck": "false", "placeholder": state},
             )
             form.fields[name] = forms.CharField(
                 label=f"토스페이먼츠 {key_label(mode, kind)}",
@@ -235,6 +240,8 @@ def pg_status(toss, provider, rows):
     source_labels = {"env": "서버 환경 변수", "admin": "관리자 설정", "none": "미등록"}
     effective_mode = {"test": "테스트결제", "live": "실결제"}.get(toss["key_status"], "결제 불가")
     warnings = []
+    if admin_keys_enabled() and unreadable_key_rows(rows):
+        warnings.append("저장된 결제 키를 읽을 수 없습니다 — SECRET_KEY 변경 여부를 확인하고 키를 다시 입력하세요.")
     if toss["source"] == "env" and toss["enabled"] and toss["is_test_mode"] != card_test:
         warnings.append(
             f"결제 테스트가 '{'테스트결제' if card_test else '실결제'}'로 설정되어 있지만 서버 환경 변수의 키는 "

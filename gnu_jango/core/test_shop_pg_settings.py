@@ -5,8 +5,10 @@ pair, 에스크로 사용 and 복합과세 결제 reaching the Toss requests, an
 No test talks to Toss: urlopen and toss_api_confirm are patched and every key is fake."""
 
 import base64
+import http.client
 import json
 from unittest.mock import patch
+from urllib import error as urllib_error
 
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model
@@ -14,14 +16,22 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from gnu_jango.api import shop_payments
+from gnu_jango.api.shop_personal_pay import prepared_key_owner, refund_toss_payment
 from gnu_jango.config.models import Config
 from gnu_jango.core.test_shop_partial_cancel import URLOPEN, PartialCancelBase
-from gnu_jango.core.test_shop_payments_api import CONFIG_URL, FAKE_TOSS, PaymentTestBase, fake_http_response
+from gnu_jango.core.test_shop_cash_receipts import CashReceiptBase, toss_receipt
+from gnu_jango.core.test_shop_payments_api import (
+    CONFIG_URL,
+    FAKE_TOSS,
+    WEBHOOK_URL,
+    PaymentTestBase,
+    fake_http_response,
+)
 from gnu_jango.core.test_shop_personal_pay_checkout import PP_ID, PersonalPayCheckoutBase
 from gnu_jango.core.test_shop_orders_more import API
-from gnu_jango.shop import pg_settings
+from gnu_jango.shop import cash_receipt_toss, cash_receipts, pg_settings
 from gnu_jango.shop.admin_settings import SETTINGS_GROUPS, ShopSettingsForm
-from gnu_jango.shop.models import ShopOrder, ShopShippingPolicy
+from gnu_jango.shop.models import ShopOrder, ShopOrderItem, ShopShippingPolicy
 from gnu_jango.shop.order_flow import move_order_status
 from gnu_jango.shop.order_lines import change_order_lines
 
@@ -383,3 +393,200 @@ class PgServiceNoneIsEnforcedTests(PaymentTestBase):
         self.assertEqual(response.json()["code"], "toss_payment_unconfigured")
         set_config(de_pg_service="toss")
         self.assertEqual(self.prepare(pg_service="toss").status_code, 200)
+
+
+ALL_PAIRS = {"test_client": TEST_CLIENT, "test_secret": TEST_SECRET, "live_client": LIVE_CLIENT, "live_secret": LIVE_SECRET}
+
+
+@override_settings(**NO_ENV)
+class OrderKeyModeTests(PaymentTestBase):
+    """An order keeps the key pair it was paid with (od_test) when 결제 테스트 changes."""
+
+    def setUp(self):
+        super().setUp()
+        store_keys(**ALL_PAIRS)
+        set_config(de_card_test="0")
+
+    def test_prepare_records_the_mode_and_a_cancel_after_the_flip_uses_the_live_secret(self):
+        order = self.prepared_order()
+        self.assertEqual(order.od_test, "0")
+        ShopOrder.objects.filter(pk=order.pk).update(od_status="입금", od_tno="pk_live_1")
+        order.refresh_from_db()
+        set_config(de_card_test="1")
+        self.assertEqual(shop_payments.toss_payment_config()["client_key"], TEST_CLIENT)
+        reply = fake_http_response({"orderId": order.od_id, "status": "CANCELED"})
+        with patch(URLOPEN, return_value=reply) as urlopen:
+            shop_payments.toss_api_cancel_payment(order, "고객 요청")
+        self.assertEqual(basic_secret(urlopen.call_args.args[0]), LIVE_SECRET)
+
+    def test_confirm_uses_the_pair_the_order_was_prepared_with(self):
+        order = self.prepared_order()
+        set_config(de_card_test="1")
+        reply = fake_http_response(self.toss_payment(order))
+        with patch(URLOPEN, return_value=reply) as urlopen:
+            response = self.post("/api/v1/shop/payment/confirm", self.confirm_body(order))
+        self.assertEqual(response.status_code, 200, response.content[:300])
+        self.assertEqual(basic_secret(urlopen.call_args.args[0]), LIVE_SECRET)
+
+    def test_a_missing_pair_of_the_order_is_refused_without_falling_back(self):
+        order = ShopOrder.objects.create(od_id="PIN-1", od_status="입금", od_pg="toss", od_tno="pk_1",
+                                         od_settle_case="신용카드", od_receipt_price=1000, od_test="0")
+        Config.objects.filter(name="cf_toss_secret_key").delete()
+        set_config(de_card_test="1")
+        with patch(URLOPEN) as urlopen, self.assertRaises(shop_payments.PaymentCancelError) as refused:
+            shop_payments.toss_api_cancel_payment(order, "x")
+        urlopen.assert_not_called()
+        self.assertIn("실결제 키로 처리되었습니다", str(refused.exception))
+        # an imported order that says 테스트 uses the test pair
+        imported = ShopOrder.objects.create(od_id="PIN-2", od_status="입금", od_pg="toss", od_tno="pk_2",
+                                            od_settle_case="신용카드", od_receipt_price=1000, od_test="1")
+        set_config(de_card_test="0")
+        with patch(URLOPEN, return_value=fake_http_response({"orderId": "PIN-2", "status": "CANCELED"})) as urlopen:
+            shop_payments.toss_api_cancel_payment(imported, "x")
+        self.assertEqual(basic_secret(urlopen.call_args.args[0]), TEST_SECRET)
+
+    def test_the_virtual_account_webhook_looks_up_with_the_order_pair(self):
+        order = self.make_vbank_order(od_test="0")
+        set_config(de_card_test="1")
+        event = {"eventType": "DEPOSIT_CALLBACK",
+                 "data": {"orderId": order.od_id, "secret": "vbank-fake-secret", "status": "DONE"}}
+        payment = {"orderId": order.od_id, "paymentKey": order.od_tno, "method": "가상계좌", "status": "DONE",
+                   "totalAmount": order.od_receipt_price}
+        with patch(URLOPEN, return_value=fake_http_response(payment)) as urlopen:
+            response = self.client.post(WEBHOOK_URL, data=json.dumps(event), content_type="application/json")
+        self.assertEqual(response.status_code, 200, response.content[:300])
+        self.assertEqual(basic_secret(urlopen.call_args.args[0]), LIVE_SECRET)
+
+    def test_the_health_check_uses_the_current_pair(self):
+        set_config(de_card_test="1")
+        with patch(URLOPEN, return_value=fake_http_response({})) as urlopen:
+            shop_payments.check_toss_connection()
+        self.assertEqual(basic_secret(urlopen.call_args.args[0]), TEST_SECRET)
+
+    def test_dropped_connections_become_handled_errors(self):
+        order = ShopOrder.objects.create(od_id="NET-1", od_status="입금", od_pg="toss", od_tno="pk_n",
+                                         od_settle_case="신용카드", od_receipt_price=1000, od_test="0")
+        failures = (http.client.RemoteDisconnected("closed"), ConnectionResetError("reset"), http.client.IncompleteRead(b""))
+        for failure in failures:
+            with self.subTest(failure=type(failure).__name__), patch(URLOPEN, side_effect=failure):
+                with self.assertRaises(shop_payments.PaymentCancelError):
+                    shop_payments.toss_api_cancel_payment(order, "x")
+                _, error = shop_payments.toss_api_confirm("pk_n", order.od_id, 1000, order=order)
+                self.assertEqual(error.status_code, 502)
+                self.assertEqual(shop_payments.check_toss_connection()["status"], "unavailable")
+                with self.assertRaises(cash_receipt_toss.CashReceiptApiError):
+                    cash_receipt_toss.cancel_toss_cash_receipt("rk", order=order)
+
+
+@override_settings(**NO_ENV)
+class CashReceiptKeyModeTests(CashReceiptBase):
+    def test_a_receipt_is_cancelled_with_the_pair_it_was_issued_with(self):
+        store_keys(**ALL_PAIRS)
+        set_config(de_card_test="0")
+        order = self.make_order()
+        with patch(URLOPEN, return_value=fake_http_response(toss_receipt(order.od_id))) as urlopen:
+            self.assertEqual(self.ask(order).status_code, 200)
+        self.assertEqual(basic_secret(urlopen.call_args.args[0]), LIVE_SECRET)
+        order.refresh_from_db()
+        self.assertEqual(order.od_test, "0")
+        set_config(de_card_test="1")
+        cancelled = fake_http_response({"receiptKey": "rk_cash_1", "transactionType": "CANCEL"})
+        with patch(URLOPEN, return_value=cancelled) as urlopen:
+            cash_receipts.cancel_receipt(order, actor="cash-admin")
+        self.assertEqual(basic_secret(urlopen.call_args.args[0]), LIVE_SECRET)
+
+
+@override_settings(**FAKE_TOSS)
+class PartialCancelRetryTests(PartialCancelBase):
+    def test_a_retry_after_a_timeout_sends_the_same_body_under_the_same_key(self):
+        ShopShippingPolicy.objects.filter(pk=1).update(de_send_cost_case="")
+        order = self.toss_order(od_tax_flag=1, od_tax_mny=36364, od_vat_mny=3636, od_free_mny=10000)
+        self.cap_line.ct_notax = 1
+        self.cap_line.save(update_fields=["ct_notax"])
+        before = fake_http_response({"orderId": order.od_id, "status": "DONE", "taxFreeAmount": 10000, "cancels": []})
+        with patch(URLOPEN, side_effect=[before, urllib_error.URLError(TimeoutError("timed out"))]) as first:
+            self.assertFalse(change_order_lines(order, [self.cap_line.pk], "취소"))
+        # Toss did take the first cancel: its tax-free part is gone when it is looked up again
+        after = fake_http_response({"orderId": order.od_id, "status": "PARTIAL_CANCELED", "taxFreeAmount": 10000,
+                                    "cancels": [{"cancelAmount": 10000, "taxFreeAmount": 10000}]})
+        done = fake_http_response({"orderId": order.od_id, "status": "PARTIAL_CANCELED"})
+        order.refresh_from_db()
+        with patch(URLOPEN, side_effect=[after, done]) as second:
+            self.assertTrue(change_order_lines(order, [self.cap_line.pk], "취소"))
+        first_post, second_post = first.call_args_list[1].args[0], second.call_args_list[1].args[0]
+        self.assertEqual(first_post.data, second_post.data)
+        self.assertEqual(json.loads(second_post.data)["taxFreeAmount"], 10000)
+        self.assertEqual(first_post.get_header("Idempotency-key"), second_post.get_header("Idempotency-key"))
+
+
+class EscrowProductsTests(TestCase):
+    def order(self, *, paid, lines, send_cost=0, **fields):
+        order = ShopOrder.objects.create(od_id="ESC-1", od_receipt_price=paid, od_send_cost=send_cost,
+                                         od_status="주문", **fields)
+        for index, (price, qty) in enumerate(lines, start=1):
+            ShopOrderItem.objects.create(order=order, ct_id=str(index), it_id=f"P{index}", it_name=f"Item {index}",
+                                         ct_price=price, ct_qty=qty, ct_status="주문")
+        return order
+
+    def total(self, products):
+        return sum(product["unitPrice"] * product["quantity"] for product in products)
+
+    def test_products_add_up_to_the_paid_amount_with_shipping_and_discounts(self):
+        # 20,000 x 2 + 9,999 + 0 + 3,000 shipping = 52,999; 7,000 of coupons and points off
+        order = self.order(paid=45999, lines=[(20000, 2), (9999, 1), (0, 1)], send_cost=3000,
+                           od_coupon=5000, od_receipt_point=2000)
+        products = shop_payments.toss_escrow_products(order)
+        self.assertEqual(self.total(products), 45999)
+        self.assertEqual([product["name"] for product in products], ["Item 1", "Item 2", "배송비"])
+        self.assertTrue(all(product["unitPrice"] > 0 for product in products))
+
+    def test_an_undiscounted_order_keeps_unit_prices_and_quantities(self):
+        products = shop_payments.toss_escrow_products(self.order(paid=43000, lines=[(20000, 2)], send_cost=3000))
+        self.assertEqual([(p["unitPrice"], p["quantity"]) for p in products], [(20000, 2), (3000, 1)])
+
+    def test_a_list_that_cannot_reach_the_amount_sends_no_escrow(self):
+        with self.assertLogs("gnu_jango.api.shop_payments", "WARNING"):
+            self.assertEqual(shop_payments.toss_escrow_products(self.order(paid=50000, lines=[(20000, 1)])), [])
+
+
+class AdminKeyInputTests(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_superuser(username="key-admin", email="k@example.test", password="pw")
+        self.client.force_login(self.admin)
+
+    @override_settings(**NO_ENV)
+    def test_a_rejected_key_is_not_echoed_back(self):
+        pasted = "test_sk_pasted_in_the_wrong_box_1234"
+        response = self.client.post(reverse("admin-shop-settings"), {
+            **ShopSettingsPgAdminTests.minimal_form, "cf_toss_test_client_key": pasted,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("cf_toss_test_client_key", response.context["form"].errors)
+        self.assertNotIn(pasted, response.content.decode())
+
+    @override_settings(**NO_ENV)
+    def test_keys_that_no_longer_open_are_reported(self):
+        Config.objects.create(name="cf_toss_test_secret_key", value="sv2:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+        page = self.client.get(reverse("admin-shop-settings")).content.decode()
+        self.assertIn("저장된 결제 키를 읽을 수 없습니다 — SECRET_KEY 변경 여부를 확인하고 키를 다시 입력하세요", page)
+        self.assertIn("저장된 키를 읽을 수 없음 - 다시 입력하세요", page)
+
+
+@override_settings(**NO_ENV)
+class PersonalPayKeyModeTests(PersonalPayCheckoutBase):
+    def test_confirm_and_refund_use_the_pair_of_the_prepare(self):
+        store_keys(**ALL_PAIRS)
+        set_config(de_card_test="0")
+        self.make_pay()
+        prepare = f"{API}/personalpay/{PP_ID}/toss/prepare"
+        self.assertEqual(self.client.post(prepare, {"method": "card", "agree": True}, format="json").status_code, 200)
+        set_config(de_card_test="1")
+        owner = prepared_key_owner(f"pp-{PP_ID}", "pk")
+        self.assertEqual(owner.od_test, "0")
+        with patch(URLOPEN, return_value=fake_http_response({})) as urlopen:
+            shop_payments.toss_api_confirm("pk", f"pp-{PP_ID}", 5000, order=owner)
+        self.assertEqual(basic_secret(urlopen.call_args.args[0]), LIVE_SECRET)
+        reply = fake_http_response({"orderId": f"pp-{PP_ID}", "status": "CANCELED"})
+        with patch(URLOPEN, return_value=reply) as urlopen:
+            self.assertTrue(refund_toss_payment(f"pp-{PP_ID}", "pk", "test"))
+        self.assertEqual(basic_secret(urlopen.call_args.args[0]), LIVE_SECRET)

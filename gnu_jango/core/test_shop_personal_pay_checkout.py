@@ -208,7 +208,8 @@ class TossPersonalPayTests(PersonalPayCheckoutBase):
         response, toss_confirm, toss_cancel = self.confirm()
 
         self.assertEqual(response.status_code, 200, response.content[:400])
-        toss_confirm.assert_called_once_with("pay-key-1", TOSS_ORDER_ID, 5000)
+        toss_confirm.assert_called_once()
+        self.assertEqual(toss_confirm.call_args.args, ("pay-key-1", TOSS_ORDER_ID, 5000))
         toss_cancel.assert_not_called()
         pay = ShopPersonalPay.objects.get(pk=PP_ID)
         self.assertEqual(
@@ -254,7 +255,7 @@ class TossPersonalPayTests(PersonalPayCheckoutBase):
     def test_a_request_paid_while_toss_approved_is_refunded(self):
         self.make_pay()
 
-        def approve_after_admin_confirmed(*_args):
+        def approve_after_admin_confirmed(*_args, **_kwargs):
             ShopPersonalPay.objects.filter(pk=PP_ID).update(pp_receipt_price=5000)
             return toss_done(), None
 
@@ -368,7 +369,7 @@ class PersonalPayRefundFailureTests(PersonalPayCheckoutBase):
 
         self.make_pay()
 
-        def approve_after_admin_confirmed(*_args):
+        def approve_after_admin_confirmed(*_args, **_kwargs):
             ShopPersonalPay.objects.filter(pk=PP_ID).update(pp_receipt_price=5000)
             return toss_done(), None
 

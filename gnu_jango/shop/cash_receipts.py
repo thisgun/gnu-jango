@@ -253,7 +253,7 @@ def _toss_order_id(order):
 
 
 def _issue_with_toss(order, cash_type, identity, actor):
-    from gnu_jango.api.shop_payments import record_payment_raw_log, safe_receipt_url
+    from gnu_jango.api.shop_payments import current_toss_mode_flag, record_payment_raw_log, safe_receipt_url
 
     amount, tax_free = receipt_amounts(order)
     try:
@@ -264,6 +264,7 @@ def _issue_with_toss(order, cash_type, identity, actor):
             cash_type=cash_type,
             identity=identity,
             tax_free=tax_free,
+            order=order,
         )
     except CashReceiptApiError as exc:
         raise CashReceiptError(str(exc), "cash_receipt_provider_rejected", 502) from exc
@@ -284,13 +285,18 @@ def _issue_with_toss(order, cash_type, identity, actor):
                 + (" - 발급 진행 중" if in_progress else ""),
                 actor,
             )
-            order.save(update_fields=["od_cash_request", "od_cash_type", "od_cash_no", "od_cash_res", "od_mod_history"])
+            update_fields = ["od_cash_request", "od_cash_type", "od_cash_no", "od_cash_res", "od_mod_history"]
+            if not str(order.od_test or "").strip():
+                # the receipt is cancelled later with the key pair it is issued with now
+                order.od_test = current_toss_mode_flag()
+                update_fields.append("od_test")
+            order.save(update_fields=update_fields)
             _drop_pending_request(order)
     except Exception as exc:
         # youngcart taxsave_result.php: a receipt that could not be recorded is cancelled again
         logger.exception("order %s: Toss issued cash receipt %s but it could not be saved", order.od_id, number)
         try:
-            cancel_toss_cash_receipt(receipt["receiptKey"])
+            cancel_toss_cash_receipt(receipt["receiptKey"], order=order)
         except CashReceiptApiError:
             logger.exception("order %s: could not cancel the unsaved cash receipt", order.od_id)
         raise CashReceiptError("현금영수증 발급 기록에 실패해 발급을 취소했습니다. 잠시 후 다시 시도하세요.", "cash_receipt_save_failed", 500) from exc
@@ -380,7 +386,7 @@ def cancel_receipt(order, *, actor="", reason="", order_closed=False):
         if kind == KIND_TOSS:
             receipt = toss_issued_receipt(locked)
             try:
-                answer = cancel_toss_cash_receipt(receipt.get("receiptKey"))
+                answer = cancel_toss_cash_receipt(receipt.get("receiptKey"), order=locked)
             except CashReceiptApiError as exc:
                 raise CashReceiptError(str(exc), "cash_receipt_provider_rejected", 502) from exc
             _record_cancel_answer(locked, receipt, answer)

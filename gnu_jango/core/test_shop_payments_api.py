@@ -533,7 +533,8 @@ class PaymentConfirmTossTests(PaymentTestBase):
         response, confirm = self.confirm_toss(order)
 
         self.assertEqual(response.status_code, 200, response.content[:300])
-        confirm.assert_called_once_with("pay_fake_key_1", order.od_id, PRODUCT_PRICE)
+        confirm.assert_called_once()
+        self.assertEqual(confirm.call_args.args, ("pay_fake_key_1", order.od_id, PRODUCT_PRICE))
         order.refresh_from_db()
         self.assertEqual(order.od_status, PAID)
         self.assertEqual(order.od_misu, 0)

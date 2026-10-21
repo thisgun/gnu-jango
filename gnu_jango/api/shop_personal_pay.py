@@ -25,6 +25,7 @@ amount; the payer types their own phone and e-mail):
   sequence and can be guessed.
 """
 
+import json
 import logging
 import re
 from types import SimpleNamespace
@@ -37,7 +38,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.throttling import ScopedRateThrottle
 
 from gnu_jango.shop import personal_pay as pp_service
-from gnu_jango.shop.models import ShopPersonalPay
+from gnu_jango.shop.models import ShopOrderData, ShopPersonalPay
 
 from . import shop_payments
 from .authentication import SessionJWTAuthentication as JWTAuthentication
@@ -322,6 +323,37 @@ def personalpay_bank_view(request, pp_id):
     return api_response(data=personalpay_payload(item, trusted=trusted))
 
 
+PREPARED_MODE_PREFIX = "pp-prep"
+
+
+def record_prepared_key_mode(order_id, pp_id):
+    """Remember which admin key pair (od_test, 결제 테스트 at prepare) the payment window opens
+    with, so the confirm and any refund of this personal pay use that pair."""
+    flag = shop_payments.current_toss_mode_flag()
+    shop_payments.record_payment_raw_log(
+        None, order_id, "toss", f"mode{flag}", {"pp_id": pp_id, "od_test": flag}, prefix=PREPARED_MODE_PREFIX
+    )
+    return flag
+
+
+def prepared_key_owner(order_id, payment_key_value=""):
+    """An order-like object for toss_api_context: the key mode of the latest prepare of
+    ``order_id`` (od_test "" when none was recorded: the current 결제 테스트 pair)."""
+    flag = ""
+    log = (
+        ShopOrderData.objects.filter(od_id=order_id, log_id__startswith=f"{PREPARED_MODE_PREFIX}-")
+        .order_by("-dt_time")
+        .values_list("dt_data", flat=True)
+        .first()
+    )
+    if log:
+        try:
+            flag = str(json.loads(log).get("od_test") or "")
+        except (ValueError, AttributeError):
+            flag = ""
+    return SimpleNamespace(od_id=order_id, od_tno=payment_key_value, od_test=flag if flag in {"0", "1"} else "")
+
+
 def toss_ready_error():
     config = shop_payments.toss_payment_config()
     if shop_payments.configured_payment_provider() != "toss" or not config["enabled"]:
@@ -369,6 +401,7 @@ def personalpay_toss_prepare_view(request, pp_id):
         )
     amount = pp_service.amount_due(item)
     order_name = f"개인결제 {item.pp_name}"[:100]
+    record_prepared_key_mode(order_id, item.pp_id)
     # youngcart personalpayform.sub.php: 에스크로 사용 sends the personal pay as one escrow product
     use_escrow = shop_payments.toss_escrow_applies(method)
     return api_response(
@@ -404,7 +437,7 @@ def refund_toss_payment(order_id, payment_key_value, reason, *, pp_id="", amount
     "pp-refund-failed" payment log keeps the request, the payment key and the amount, and the
     personal pay admin list warns about it until the shop has dealt with it."""
     try:
-        shop_payments.toss_api_cancel_payment(SimpleNamespace(od_id=order_id, od_tno=payment_key_value), reason)
+        shop_payments.toss_api_cancel_payment(prepared_key_owner(order_id, payment_key_value), reason)
     except shop_payments.PaymentCancelError as exc:
         logger.exception("Toss payment %s for personal pay %s could not be cancelled", payment_key_value, order_id)
         try:
@@ -498,7 +531,9 @@ def personalpay_toss_confirm_view(request, pp_id):
             code="payment_amount_mismatch",
             details={"expected_amount": due, "received_amount": amount},
         )
-    toss_payment, error = shop_payments.toss_api_confirm(payment_key_value, order_id, due)
+    toss_payment, error = shop_payments.toss_api_confirm(
+        payment_key_value, order_id, due, order=prepared_key_owner(order_id, payment_key_value)
+    )
     if error:
         shop_payments.record_payment_raw_log(None, order_id, "toss", payment_key_value, data, prefix="pp-reject")
         return error
