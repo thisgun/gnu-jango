@@ -358,7 +358,8 @@ def next_coupon_log_id():
 
 
 def generate_numeric_order_id():
-    return timezone.now().strftime("%Y%m%d%H%M%S") + f"{uuid.uuid4().int % 1000000:06d}"
+    # YoungCart's od_id starts with the shop's local date and time (date('YmdHis')), not UTC
+    return timezone.localtime().strftime("%Y%m%d%H%M%S") + f"{uuid.uuid4().int % 1000000:06d}"
 
 
 def pagination_meta(total, page, per_page):
