@@ -5,6 +5,7 @@ shop/price/naver.php)."""
 import csv
 import io
 from datetime import datetime, timedelta
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
@@ -189,6 +190,45 @@ class PriceFeedTests(TestCase):
         self.assertNotIn("바뀐 이름", self.client.get(reverse("api_v1:shop-price-naver")).content.decode())
         price_feed.clear_feed_cache()
         self.assertIn("바뀐 이름", self.client.get(reverse("api_v1:shop-price-naver")).content.decode())
+
+    def feed(self):
+        return self.client.get(reverse("api_v1:shop-price-naver"))
+
+    def test_saving_or_deleting_a_product_refreshes_the_feed(self):
+        price_feed.set_feed_enabled(True)
+        self.assertIn("청바지", self.feed().content.decode())
+        product = ShopProduct.objects.get(pk="F1")
+        product.it_name = "새 청바지"
+        product.save()
+        self.assertIn("새 청바지", self.feed().content.decode())
+        ShopProduct.objects.get(pk="F7").delete()
+        self.assertNotIn("옵션재고", self.feed().content.decode())
+        category = ShopCategory.objects.get(pk="10")
+        category.ca_name = "옷"
+        category.save()
+        self.assertIn("\t옷\t", self.feed().content.decode())
+
+    def test_only_one_request_builds_a_generation_the_others_get_the_last_text(self):
+        price_feed.set_feed_enabled(True)
+        first = self.feed().content
+        price_feed.clear_feed_cache()
+        base = "https://shop.example.test"
+        lock = price_feed.LOCK_KEY.format(generation=price_feed._generation(), base=base)
+        self.assertTrue(cache.add(lock, "1", 60))  # another worker is building
+        with patch.object(price_feed, "build_feed", side_effect=AssertionError("built twice")):
+            self.assertEqual(self.feed().content, first)
+            cache.delete(price_feed.STALE_KEY.format(base=base))
+            response = self.feed()
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response["Retry-After"], str(price_feed.RETRY_AFTER_SECONDS))
+        cache.delete(lock)
+        self.assertEqual(self.feed().status_code, 200)
+
+    def test_one_address_cannot_fetch_the_feed_without_limit(self):
+        price_feed.set_feed_enabled(True)
+        with patch.object(price_feed, "THROTTLE_LIMIT", 2):
+            statuses = [self.feed().status_code for _ in range(3)]
+        self.assertEqual(statuses, [200, 200, 429])
 
     def test_admin_page_toggles_the_feed_with_product_change_permission(self):
         url = reverse("admin:shop_shopproduct_price_compare")

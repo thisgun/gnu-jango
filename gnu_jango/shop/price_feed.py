@@ -7,9 +7,12 @@ shipping, class, update_time). As in naver.php only products on sale (it_use 1),
 comparison site never sends a buyer to something that cannot be ordered.
 
 The feed is off until the admin turns it on (Config row ``de_price_compare_use``) and is cached:
-it covers every product and a comparison site fetches it often.
+it covers every product and a comparison site fetches it often. Saving or deleting a product or a
+category starts a new cache generation; one request rebuilds it under a short build lock while
+the others are served the previous text, and each address may fetch the feed only so often.
 """
 
+import time
 from urllib.parse import quote
 
 from django.conf import settings
@@ -19,6 +22,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from gnu_jango.config.models import Config
+from gnu_jango.utils.lib import get_client_ip
 
 from .models import ShopCategory, ShopProduct
 from .order_points import item_purchase_point
@@ -26,8 +30,18 @@ from .payment_options import config_flag
 from .shipping import SC_METHOD_ON_DELIVERY, base_shipping_cost, current_shipping_policy
 
 ENABLED_CONFIG = "de_price_compare_use"
-CACHE_KEY = "shop:price-feed:naver:v1:{base}"
+CACHE_KEY = "shop:price-feed:naver:v1:{generation}:{base}"
+# the last text built for a host, served while a new generation is being built
+STALE_KEY = "shop:price-feed:naver:stale:{base}"
+GENERATION_KEY = "shop:price-feed:naver:generation"
+LOCK_KEY = "shop:price-feed:naver:lock:{generation}:{base}"
+THROTTLE_KEY = "shop:price-feed:naver:hits:{ip}:{bucket}"
 CACHE_SECONDS = 30 * 60
+STALE_SECONDS = 24 * 60 * 60
+LOCK_SECONDS = 120
+THROTTLE_WINDOW_SECONDS = 10 * 60
+THROTTLE_LIMIT = 30  # fetches per address per window; comparison sites fetch a few times an hour
+RETRY_AFTER_SECONDS = 30
 CATEGORY_LEVEL_LENGTH = 2  # youngcart ca_id: two characters per level
 COLUMNS = (
     "id", "title", "price_pc", "link", "image_link", "category_name1", "category_name2",
@@ -54,11 +68,21 @@ def site_base(request=None):
     return request.build_absolute_uri("/").rstrip("/") if request is not None else ""
 
 
+def _generation():
+    return cache.get(GENERATION_KEY) or 0
+
+
 def clear_feed_cache(request=None):
-    cache.delete(CACHE_KEY.format(base=site_base(request)))
-    # the request host form, when a later request comes in on another host name
-    if request is not None:
-        cache.delete(CACHE_KEY.format(base=request.build_absolute_uri("/").rstrip("/")))
+    """Start a new cache generation, so every host form of the feed is rebuilt on its next fetch
+    (``request`` is accepted for the callers that pass it)."""
+    cache.set(GENERATION_KEY, time.time_ns(), None)
+
+
+def clear_feed_cache_on_change(sender, **kwargs):
+    """post_save / post_delete of a product or a category (registered in shop/apps.py)."""
+    if kwargs.get("raw"):
+        return
+    clear_feed_cache()
 
 
 def _clean(value):
@@ -157,20 +181,52 @@ def build_feed(base):
 
 
 def feed_text(request=None):
+    """The feed text, or None while another request builds it and no earlier text is kept."""
     base = site_base(request)
-    key = CACHE_KEY.format(base=base)
+    generation = _generation()
+    key = CACHE_KEY.format(generation=generation, base=base)
     text = cache.get(key)
-    if text is None:
+    if text is not None:
+        return text
+    lock = LOCK_KEY.format(generation=generation, base=base)
+    if not cache.add(lock, "1", LOCK_SECONDS):
+        # another request is building this generation: hand out the previous text meanwhile
+        return cache.get(STALE_KEY.format(base=base))
+    try:
         text = build_feed(base)
         cache.set(key, text, CACHE_SECONDS)
+        cache.set(STALE_KEY.format(base=base), text, STALE_SECONDS)
+    finally:
+        cache.delete(lock)
     return text
+
+
+def _throttled(request):
+    bucket = int(time.time() // THROTTLE_WINDOW_SECONDS)
+    key = THROTTLE_KEY.format(ip=get_client_ip(request) or "-", bucket=bucket)
+    cache.add(key, 0, THROTTLE_WINDOW_SECONDS + 60)
+    try:
+        return cache.incr(key) > THROTTLE_LIMIT
+    except ValueError:  # expired between add and incr
+        return False
+
+
+def _retry_later(message, status):
+    response = HttpResponse(message, status=status, content_type="text/plain; charset=utf-8")
+    response["Retry-After"] = str(RETRY_AFTER_SECONDS)
+    return response
 
 
 @require_GET
 def naver_feed_view(request):
     if not feed_enabled():
         raise Http404
-    response = HttpResponse(feed_text(request), content_type="text/plain; charset=utf-8")
+    if _throttled(request):
+        return _retry_later("Too many requests.\n", 429)
+    text = feed_text(request)
+    if text is None:
+        return _retry_later("The feed is being built. Retry shortly.\n", 503)
+    response = HttpResponse(text, content_type="text/plain; charset=utf-8")
     response["Cache-Control"] = f"public, max-age={CACHE_SECONDS}"
     response["X-Robots-Tag"] = "noindex"
     return response
