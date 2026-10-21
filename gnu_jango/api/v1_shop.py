@@ -2,7 +2,6 @@ import hashlib
 import hmac
 import json
 import re
-from datetime import timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -43,6 +42,7 @@ from gnu_jango.shop.models import (
     ShopProduct,
     ShopStockNotification,
 )
+from gnu_jango.shop.coupon_dates import coupon_end_date
 from gnu_jango.shop.inventory import StockAdjustmentError, cancel_order_with_stock_restore, reserve_product_stock
 from gnu_jango.shop.images import upload_product_images
 from gnu_jango.shop.notifications import queue_order_placed_mails
@@ -2046,7 +2046,7 @@ def coupon_zone_view(request):
 def issue_coupon_from_zone(zone, user):
     today = timezone.localdate()
     # YoungCart: a coupon of an N-day zone is valid from today through the N-th day
-    end_date = today + timedelta(days=max(0, zone.cz_period - 1))
+    end_date = coupon_end_date(today, zone.cz_period)
     # one coupon per member and zone, used or not (is_coupon_downloaded)
     coupon = ShopCoupon.objects.filter(user=user, coupon_zone=zone).first()
     created = False
