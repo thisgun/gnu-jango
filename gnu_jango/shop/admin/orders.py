@@ -1,5 +1,5 @@
 from gnu_jango.shop.admin._common import *  # noqa: F401,F403
-from functools import update_wrapper
+from functools import partial, update_wrapper
 
 from django import forms
 from django.contrib import messages
@@ -16,6 +16,8 @@ from unfold.forms import ActionForm
 from unfold.widgets import UnfoldAdminSelectWidget
 
 from gnu_jango.api.shop_common import CANCELLED_STATUSES
+from gnu_jango.shop.admin.cash_receipts import order_cash_receipt_page
+from gnu_jango.shop.cash_receipts import admin_risk as cash_receipt_admin_risk
 from gnu_jango.shop.delivery import delivery_company_form_field
 from gnu_jango.shop.models import ORDER_ITEM_STATUS_COMPLETED
 from gnu_jango.shop.order_flow import (
@@ -737,6 +739,8 @@ class ShopOrderAdmin(ModelAdmin):
                     "hint": _("Cash receipt number is registered."),
                 }
             )
+        if receipt_risk := cash_receipt_admin_risk(order):
+            risks.append(receipt_risk)
         if not risks:
             risks.append(
                 {
@@ -784,6 +788,11 @@ class ShopOrderAdmin(ModelAdmin):
                 *(
                     [{"label": "상품 취소·반품·품절", "url": reverse("admin:shop_shoporder_lines", args=[order.pk]), "icon": "remove_shopping_cart"}]
                     if self.has_change_permission(request, order) and order.od_status not in INACTIVE_LINE_STATUSES
+                    else []
+                ),
+                *(
+                    [{"label": "현금영수증", "url": reverse("admin:shop_shoporder_cash_receipt", args=[order.pk]), "icon": "receipt_long"}]
+                    if self.has_change_permission(request, order)
                     else []
                 ),
                 {"label": _("Settlement report"), "url": "../../reports/", "icon": "monitoring"},
@@ -1044,6 +1053,11 @@ class ShopOrderAdmin(ModelAdmin):
                 "<path:object_id>/lines/",
                 self.admin_site.admin_view(self.order_lines_view),
                 name="shop_shoporder_lines",
+            ),
+            path(
+                "<path:object_id>/cash-receipt/",
+                self.admin_site.admin_view(partial(order_cash_receipt_page, self)),
+                name="shop_shoporder_cash_receipt",
             ),
         ]
         return custom_urls + urls

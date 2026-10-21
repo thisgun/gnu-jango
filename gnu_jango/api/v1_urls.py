@@ -3,6 +3,7 @@ from django.urls import path
 from gnu_jango.core import thumbnails
 
 from . import member_lifecycle, page_bootstrap, shop_personal_pay, v1_auth, v1_board, v1_community, v1_docs, v1_search, v1_shop, v1_views
+from .shop_cash_receipts import order_cash_receipt_view
 
 app_name = "api_v1"
 
@@ -101,6 +102,7 @@ urlpatterns = [
     path("shop/addresses", v1_shop.addresses_view, name="shop-addresses"),
     path("shop/orders/lookup", v1_shop.order_lookup_view, name="shop-order-lookup"),
     path("shop/orders/legacy-data", v1_shop.order_legacy_data_view, name="shop-order-legacy-data"),
+    path("shop/orders/<str:od_id>/cash-receipt", order_cash_receipt_view, name="shop-order-cash-receipt"),
     path("shop/orders/<str:od_id>", v1_shop.order_detail_view, name="shop-order-detail"),
     path("shop/orders", v1_shop.orders_view, name="shop-orders"),
     path("shop/payment/config", v1_shop.payment_config_view, name="shop-payment-config"),

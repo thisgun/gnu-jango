@@ -577,6 +577,8 @@ REST_FRAMEWORK = {
         # personal pay lookups, payer checks and payments, per address (pp_id can be guessed)
         "shop-personalpay": "30/min",
         "order-lookup": "10/min",
+        # cash receipt requests after the order (each try may reach the Toss cash receipt API)
+        "shop-cash-receipt": "10/hour",
         "guest-password": "10/min",
         "docs-ask": "30/min",
         "docs-ask-answer": "5/min",

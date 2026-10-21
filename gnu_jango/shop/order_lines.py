@@ -566,11 +566,14 @@ def _history_lines(plan, reason, actor):
 
 def _apply_plan(order, plan, reason, actor):
     from gnu_jango.api.v1_shop import cancel_order_and_refund_benefits
-    from gnu_jango.shop.inventory import append_order_history, restore_line_stock
+    from gnu_jango.shop.cash_receipts import partial_refund_note
+    from gnu_jango.shop.inventory import append_order_history, order_history_line, restore_line_stock
     from gnu_jango.shop.order_points import take_back_order_points
     from gnu_jango.shop.product_counters import recount_product_sales
 
     history = _history_lines(plan, reason, actor)
+    if not plan.all_inactive and (receipt_note := partial_refund_note(order, plan.refund)):
+        history.append(order_history_line(receipt_note.strip(), actor))
     line_ids = [item.pk for item in plan.lines]
     for item in order.items.select_for_update().filter(pk__in=line_ids).order_by("pk"):
         restore_line_stock(item)

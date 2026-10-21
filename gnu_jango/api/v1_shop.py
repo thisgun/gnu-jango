@@ -42,6 +42,7 @@ from gnu_jango.shop.models import (
     ShopProduct,
     ShopStockNotification,
 )
+from gnu_jango.shop.cash_receipts import customer_payload as cash_receipt_payload, schedule_close_settlement
 from gnu_jango.shop.coupon_dates import coupon_end_date
 from gnu_jango.shop.inventory import StockAdjustmentError, cancel_order_with_stock_restore, reserve_product_stock
 from gnu_jango.shop.delivery import delivery_inquiry
@@ -539,6 +540,7 @@ def order_payload(order, *, detail=False):
     inquiry = delivery_inquiry(order.od_delivery_company, order.od_invoice)
     delivery_inquiry_url = inquiry["url"]
     cash_receipt_url = safe_receipt_url(order.od_cash_res)
+    cash_receipt = cash_receipt_payload(order) if detail else None
     bank_account = str(order.od_bank_account or "").strip()
     if not bank_account and settle_case_is_bank(order.od_settle_case):
         # Older orders did not persist the selected account. Keep their prior
@@ -625,8 +627,10 @@ def order_payload(order, *, detail=False):
         "od_payment_app_value": order.od_app_no or order.od_tno,
         "cash_receipt_url": cash_receipt_url,
         "od_cash_receipt_url": cash_receipt_url,
-        "cash_receipt_issue_url": "" if order.od_cash_no else "",
-        "od_cash_receipt_issue_url": "" if order.od_cash_no else "",
+        # youngcart taxsave.php: where a paid cash order asks for its receipt (POST, detail only)
+        "cash_receipt_issue_url": cash_receipt["request_url"] if cash_receipt else "",
+        "od_cash_receipt_issue_url": cash_receipt["request_url"] if cash_receipt else "",
+        "cash_receipt": cash_receipt,
         "can_cancel": can_cancel,
         "cancel_block_reason": cancel_block_reason,
     }
@@ -1550,6 +1554,8 @@ def cancel_order_and_refund_benefits(order, reason, *, refund_price=0, history="
         if str(locked.od_status or "") in CANCELLED_STATUSES:
             return locked, 0
         restore_order_coupons_and_points(locked)
+        # once this commits: cancel the order's cash receipt (Toss) or flag it for a manual cancel
+        schedule_close_settlement(locked)
         return cancel_order_with_stock_restore(locked, reason, refund_price=refund_price, history=history, status=status)
 
 
