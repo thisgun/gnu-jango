@@ -1,0 +1,29 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+{# Shared frame of the shop bulk tools and reports: breadcrumbs, hero, messages. #}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  {% if parent_url %}&rsaquo; <a href="{{ parent_url }}">{{ parent_label }}</a>{% endif %}
+  &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">{{ eyebrow|default:"쇼핑몰 관리" }}</p>
+    <h1>{{ title }}</h1>
+    <p class="g5-admin-hero-copy">{{ subtitle }}</p>
+  </div>
+  {% block hero_form %}{% endblock %}
+</section>
+{% if tool_links %}
+<nav class="g5-admin-export-actions" aria-label="관련 화면">
+  {% for link in tool_links %}<a class="button btn g5-admin-button-secondary" href="{{ link.url }}">{{ link.label }}</a>{% endfor %}
+</nav>
+{% endif %}
+{% block tool_body %}{% endblock %}
+{% endblock %}

@@ -1,0 +1,38 @@
+{% extends "admin/shop/tools/_layout.html" %}
+
+{% block tool_body %}
+{% if error %}<div role="alert" class="alert alert-error">{{ error }}</div>{% endif %}
+<section class="g5-admin-report-metrics" aria-label="배송 준비">
+  <article class="card g5-admin-report-metric">
+    <span>배송 준비 주문</span>
+    <strong>{{ ready_count }}</strong>
+    <em>양식에 모두 담깁니다 (최대 {{ max_rows }}건)</em>
+  </article>
+</section>
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">1. 준비 주문 내려받기 · 2. 배송회사·운송장번호 입력 · 3. 미리보기 후 등록</p>
+      <h2>송장 CSV 파일 올리기</h2>
+    </div>
+    <a class="button btn g5-admin-button-secondary" href="{{ report_path }}?download=template">준비 주문 내려받기 (CSV)</a>
+  </div>
+  <ul class="g5-admin-report-summary-list">
+    <li>영카트 배송일괄처리 엑셀과 같은 열입니다. 첫 행(항목명)을 그대로 두고 <strong>배송회사</strong>와 <strong>운송장번호</strong> 열을 채우세요.</li>
+    <li>준비 상태의 주문만 운송장을 등록하고 배송으로 바뀝니다. 배송 상태가 되면 고객에게 배송 안내 메일이 나갑니다.</li>
+    <li>엑셀에서 <strong>CSV UTF-8(쉼표로 분리)</strong>로 저장해 올리세요. 주문번호 열은 텍스트로 두세요 (지수 형식으로 바뀌면 주문을 찾지 못합니다).</li>
+  </ul>
+  <form class="g5-admin-report-filter" method="post" enctype="multipart/form-data" action="{{ report_path }}">
+    {% csrf_token %}
+    <label>
+      <span>CSV 파일</span>
+      <input class="input" type="file" name="file" accept=".csv,text/csv" required>
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button btn g5-admin-button-secondary" type="submit" name="step" value="preview">미리보기 (저장 안 함)</button>
+      <button class="button btn btn-primary" type="submit" name="step" value="apply">검증 후 배송 처리</button>
+    </div>
+  </form>
+</section>
+{% if report %}{% include "admin/shop/tools/_upload_report.html" %}{% endif %}
+{% endblock %}

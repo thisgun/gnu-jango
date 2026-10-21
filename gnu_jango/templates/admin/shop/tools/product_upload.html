@@ -1,0 +1,40 @@
+{% extends "admin/shop/tools/_layout.html" %}
+
+{% block tool_body %}
+{% if error %}<div role="alert" class="alert alert-error">{{ error }}</div>{% endif %}
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">1. 양식 내려받기 · 2. 상품 입력 · 3. 미리보기 후 등록</p>
+      <h2>상품 CSV 파일 올리기</h2>
+    </div>
+    <a class="button btn g5-admin-button-secondary" href="{{ report_path }}?download=template">등록 양식 내려받기 (CSV)</a>
+  </div>
+  <ul class="g5-admin-report-summary-list">
+    <li>영카트 상품 일괄등록 엑셀과 같은 열 순서입니다. 1행은 항목명, 2행은 필드명이며 3행부터 상품을 입력합니다.</li>
+    <li>엑셀에서 작성한 뒤 <strong>CSV UTF-8(쉼표로 분리)</strong>로 저장해 올리세요. 한 번에 {{ max_rows }}개, {{ max_mb }}MB까지 올릴 수 있습니다.</li>
+    <li>옵션은 파일로 등록하지 않습니다. 등록 뒤 상품 수정 화면에서 입력하세요. 분류코드(기본분류·2차·3차)는 미리 만들어 둔 분류여야 합니다.</li>
+    <li>이미지 열에는 http(s) 주소나 영카트 data/item 아래 경로를 넣습니다. 셀 내용은 글자 그대로 읽으며 수식은 계산하지 않습니다.</li>
+    <li>'기존 상품 수정'을 고르면 같은 상품코드의 상품을 고치며, 빈 칸은 기존 값을 그대로 둡니다. 재고가 바뀌면 재고 이력에 남습니다.</li>
+  </ul>
+  <form class="g5-admin-report-filter" method="post" enctype="multipart/form-data" action="{{ report_path }}">
+    {% csrf_token %}
+    <label>
+      <span>CSV 파일</span>
+      <input class="input" type="file" name="file" accept=".csv,text/csv" required>
+    </label>
+    <label>
+      <span>같은 상품코드가 있을 때</span>
+      <select class="select" name="mode">
+        <option value="create"{% if mode == 'create' %} selected{% endif %}>오류로 처리 (영카트와 같이 신규 등록만)</option>
+        {% if can_update %}<option value="update"{% if mode == 'update' %} selected{% endif %}>기존 상품 수정</option>{% endif %}
+      </select>
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button btn g5-admin-button-secondary" type="submit" name="step" value="preview">미리보기 (저장 안 함)</button>
+      <button class="button btn btn-primary" type="submit" name="step" value="apply">검증 후 등록</button>
+    </div>
+  </form>
+</section>
+{% if report %}{% include "admin/shop/tools/_upload_report.html" %}{% endif %}
+{% endblock %}

@@ -16,6 +16,7 @@ from unfold.forms import ActionForm
 from unfold.widgets import UnfoldAdminSelectWidget
 
 from gnu_jango.api.shop_common import CANCELLED_STATUSES
+from gnu_jango.shop.admin.bulk import copy_selected_personal_pays, create_personal_pay_for_balance, order_tool_urls
 from gnu_jango.shop.admin.cash_receipts import order_cash_receipt_page
 from gnu_jango.shop.cash_receipts import admin_risk as cash_receipt_admin_risk
 from gnu_jango.shop.delivery import delivery_company_form_field
@@ -181,7 +182,12 @@ class ShopOrderAdmin(ModelAdmin):
     list_fullwidth = True
     list_horizontal_scrollbar_top = True
     list_filter_submit = True
-    actions = ("change_selected_order_status", "export_selected_orders_csv", "export_selected_receipts_csv")
+    actions = (
+        "change_selected_order_status",
+        "export_selected_orders_csv",
+        "export_selected_receipts_csv",
+        create_personal_pay_for_balance,
+    )
     action_form = OrderStatusActionForm
     form = ShopOrderAdminForm
     # a member picker, not a select listing every member
@@ -1045,6 +1051,7 @@ class ShopOrderAdmin(ModelAdmin):
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
+            *order_tool_urls(self),
             path("reports/", self.order_report_view(self.reports_view), name="shop_shoporder_reports"),
             path("sales-rank/", self.order_report_view(self.sales_rank_view), name="shop_shoporder_sales_rank"),
             path("order-print/", self.order_report_view(self.order_print_view), name="shop_shoporder_print"),
@@ -2001,7 +2008,7 @@ class ShopPersonalPayAdmin(ModelAdmin):
     search_fields = ("pp_id", "pp_name", "pp_email", "pp_hp", "user__username", "pp_tno", "pp_app_no", "pp_cash_no")
     list_filter = (PersonalPayStateFilter, PersonalPaySettleCaseFilter, PersonalPayActiveFilter, PersonalPayDateFilter)
     readonly_fields = ("personal_pay_snapshot",)
-    actions = ("confirm_selected_bank_deposits",)
+    actions = ("confirm_selected_bank_deposits", copy_selected_personal_pays)
     fieldsets = (
         (
             _("Personal pay snapshot"),

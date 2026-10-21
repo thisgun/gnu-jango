@@ -1,0 +1,65 @@
+{% extends "admin/shop/tools/_layout.html" %}
+
+{% block hero_form %}{% include "admin/shop/tools/_stock_filters.html" %}{% endblock %}
+
+{% block tool_body %}
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">재고 일괄수정</p>
+      <h2>상품 {{ page_obj.paginator.count }}개</h2>
+    </div>
+  </div>
+  <p class="g5-admin-empty">재고를 바꾸면 재고 이력에 이전·이후 수량과 사유가 남습니다. 화면을 연 뒤 주문으로 재고가 바뀐 상품은 저장하지 않고 알려 드립니다. 옵션이 있는 상품은 옵션 재고가 판매에 쓰입니다.</p>
+  <form method="post" action="{{ post_url }}">
+    {% csrf_token %}
+    <input type="hidden" name="row_count" value="{{ rows|length }}">
+    <div class="g5-admin-report-table-wrap">
+      <table class="table g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">상품코드</th>
+            <th scope="col">상품명</th>
+            <th scope="col">분류</th>
+            <th scope="col">현재 재고</th>
+            <th scope="col">재고 수정</th>
+            <th scope="col">판매</th>
+            <th scope="col">품절</th>
+            <th scope="col">재입고 알림</th>
+            <th scope="col">관리</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td>{{ row.product.it_id }}<input type="hidden" name="it_id_{{ forloop.counter0 }}" value="{{ row.product.it_id }}"><input type="hidden" name="stock_was_{{ forloop.counter0 }}" value="{{ row.product.it_stock_qty }}"></td>
+            <td><a href="{{ row.change_url }}">{{ row.product.it_name }}</a>{% if row.option_count %} <span class="g5-admin-badge g5-admin-badge-info">옵션 {{ row.option_count }}</span>{% endif %}</td>
+            <td>{{ row.category_name|default:"-" }}</td>
+            <td>{% if row.product.it_stock_qty <= 0 %}<span class="g5-admin-badge g5-admin-badge-danger">{{ row.product.it_stock_qty }}</span>{% else %}{{ row.product.it_stock_qty }}{% endif %}</td>
+            <td><input class="input" type="number" name="stock_{{ forloop.counter0 }}" value="{{ row.product.it_stock_qty }}" min="0" step="1" aria-label="{{ row.product.it_name }} 재고"{% if not can_change %} disabled{% endif %}></td>
+            <td><input type="checkbox" name="use_{{ forloop.counter0 }}" value="1" aria-label="판매"{% if row.product.it_use == "1" %} checked{% endif %}{% if not can_change %} disabled{% endif %}></td>
+            <td><input type="checkbox" name="soldout_{{ forloop.counter0 }}" value="1" aria-label="품절"{% if row.product.it_soldout == "1" %} checked{% endif %}{% if not can_change %} disabled{% endif %}></td>
+            <td><input type="checkbox" name="sms_{{ forloop.counter0 }}" value="1" aria-label="재입고 알림"{% if row.product.it_stock_sms == "1" %} checked{% endif %}{% if not can_change %} disabled{% endif %}></td>
+            <td><a class="button btn btn-sm g5-admin-button-secondary" href="{{ row.history_url }}">이력</a></td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="9" class="g5-admin-empty">조건에 맞는 상품이 없습니다.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if can_change and rows %}
+    <div class="g5-admin-report-filter">
+      <label>
+        <span>변경 사유 (재고 이력)</span>
+        <input class="input" type="text" name="reason" maxlength="255" placeholder="재고 일괄수정">
+      </label>
+      <div class="g5-admin-report-filter-actions">
+        <button class="button btn btn-primary" type="submit">이 페이지 일괄수정</button>
+      </div>
+    </div>
+    {% endif %}
+  </form>
+  {% include "admin/shop/tools/_pager.html" %}
+</section>
+{% endblock %}

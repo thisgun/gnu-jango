@@ -17,6 +17,7 @@ from gnu_jango.api.community_common import GENERAL_QA_PRODUCT_ID, QA_META_CONFIG
 from gnu_jango.config.models import Config
 from gnu_jango.shop.models import GeneralInquiry
 from gnu_jango.config import config as config_cache
+from gnu_jango.shop.admin.bulk import approve_selected_reviews, hide_selected_reviews
 from gnu_jango.shop.product_counters import recount_product_reviews
 from gnu_jango.shop.settings_sync import sync_shop_phone_from_policy
 
@@ -299,6 +300,7 @@ class ShopReviewAdmin(ModelAdmin):
     list_select_related = ("product", "user")
     date_hierarchy = "is_time"
     list_per_page = 50
+    actions = (approve_selected_reviews, hide_selected_reviews)
     readonly_fields = ("product", "user", "mb_id", "mb_nick", "is_name", "is_score", "is_subject", "is_content", "is_time")
     fields = (*readonly_fields, "is_confirm")
 

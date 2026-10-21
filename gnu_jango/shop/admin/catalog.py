@@ -387,8 +387,12 @@ class ShopProductAdmin(ModelAdmin):
         return actions
 
     def get_urls(self):
+        from gnu_jango.shop.admin.bulk import product_tool_urls
+
         urls = super().get_urls()
         custom_urls = [
+            # bulk tools and reports (shop/admin/bulk.py) before the <str:it_id> routes
+            *product_tool_urls(self),
             path(
                 "<str:it_id>/images/",
                 self.admin_site.admin_view(self.product_images_view),

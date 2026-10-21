@@ -269,6 +269,56 @@ UNFOLD = {
                 ],
             },
             {
+                # youngcart bulk tools and reports (gnu_jango/shop/admin/bulk.py, reports.py)
+                "title": "쇼핑몰 일괄작업·통계",
+                "separator": True,
+                "collapsible": True,
+                "items": [
+                    {
+                        "title": "매출현황",
+                        "icon": "query_stats",
+                        "link": reverse_lazy("admin:shop_shoporder_sales"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shoporder"),
+                    },
+                    {
+                        "title": "송장 일괄등록",
+                        "icon": "local_shipping",
+                        "link": reverse_lazy("admin:shop_shoporder_delivery_upload"),
+                        "permission": lambda request: request.user.has_perm("shop.change_shoporder"),
+                    },
+                    {
+                        "title": "상품 일괄등록",
+                        "icon": "upload_file",
+                        "link": reverse_lazy("admin:shop_shopproduct_bulk_upload"),
+                        "permission": lambda request: request.user.has_perm("shop.add_shopproduct"),
+                    },
+                    {
+                        "title": "재고 일괄수정",
+                        "icon": "inventory",
+                        "link": reverse_lazy("admin:shop_shopproduct_stock_list"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopproduct"),
+                    },
+                    {
+                        "title": "옵션 재고 관리",
+                        "icon": "tune",
+                        "link": reverse_lazy("admin:shop_shopproduct_option_stock_list"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopproduct"),
+                    },
+                    {
+                        "title": "보관함 현황",
+                        "icon": "favorite",
+                        "link": reverse_lazy("admin:shop_shopproduct_wishlist_report"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopwishlist"),
+                    },
+                    {
+                        "title": "가격비교사이트",
+                        "icon": "price_check",
+                        "link": reverse_lazy("admin:shop_shopproduct_price_compare"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopproduct"),
+                    },
+                ],
+            },
+            {
                 "title": _("Community"),
                 "separator": True,
                 "collapsible": True,

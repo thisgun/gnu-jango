@@ -1,6 +1,7 @@
 from django.urls import path
 
 from gnu_jango.core import thumbnails
+from gnu_jango.shop import price_feed
 
 from . import member_lifecycle, page_bootstrap, shop_personal_pay, v1_auth, v1_board, v1_community, v1_docs, v1_search, v1_shop, v1_views
 from .shop_cash_receipts import order_cash_receipt_view
@@ -89,6 +90,8 @@ urlpatterns = [
     path("shop/banners", v1_shop.banners_view, name="shop-banners"),
     path("shop/popups", v1_shop.popups_view, name="shop-popups"),
     path("shop/policy", v1_shop.policy_view, name="shop-policy"),
+    # youngcart shop/price/naver.php: the price comparison feed (off until enabled in the admin)
+    path("shop/price/naver.tsv", price_feed.naver_feed_view, name="shop-price-naver"),
     path("shop/shipping/quote", v1_shop.shipping_quote_view, name="shop-shipping-quote"),
     path("shop/cart/legacy-update", v1_shop.cart_legacy_update_view, name="shop-cart-legacy-update"),
     path("shop/cart/<str:ct_id>", v1_shop.cart_item_view, name="shop-cart-item"),

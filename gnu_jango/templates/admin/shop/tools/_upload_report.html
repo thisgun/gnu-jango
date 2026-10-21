@@ -1,0 +1,38 @@
+{# Per-row result table of an upload: rows have line, ok, errors, notes and the columns in report_columns. #}
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% if report.applied %}반영 결과{% else %}미리보기 (아직 저장하지 않았습니다){% endif %}</p>
+      <h2>전체 {{ report.rows|length }}행 · 정상 {{ report.valid_count }}행 · 오류 {{ report.error_count }}행{% if report.applied %} · 반영 {{ report.saved_count }}건{% endif %}</h2>
+    </div>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="table g5-admin-mini-table">
+      <thead>
+        <tr>
+          <th scope="col">행</th>
+          {% for label in report_columns %}<th scope="col">{{ label }}</th>{% endfor %}
+          <th scope="col">결과</th>
+          <th scope="col">내용</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report_rows %}
+        <tr>
+          <td>{{ row.line }}</td>
+          {% for value in row.cells %}<td>{{ value|default:"-" }}</td>{% endfor %}
+          <td>
+            {% if row.saved %}<span class="g5-admin-badge g5-admin-badge-success">반영</span>
+            {% elif row.ok %}<span class="g5-admin-badge g5-admin-badge-neutral">{% if report.applied %}-{% else %}반영 가능{% endif %}</span>
+            {% else %}<span class="g5-admin-badge g5-admin-badge-danger">오류</span>{% endif %}
+          </td>
+          <td>
+            {% for message in row.errors %}<div>{{ message }}</div>{% endfor %}
+            {% for message in row.notes %}<div class="g5-admin-empty">{{ message }}</div>{% endfor %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
