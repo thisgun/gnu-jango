@@ -1,0 +1,15 @@
+<div class="g5-option-builder"
+     data-option-builder
+     data-max-levels="{{ widget.builder.max_levels }}"
+     data-default-stock="{{ widget.builder.default_stock }}"
+     data-default-noti="{{ widget.builder.default_noti }}"
+     data-subject-field="{{ widget.builder.subject_field }}"
+     data-supply-field="{{ widget.builder.supply_field }}">
+  <noscript><p class="g5-option-builder__note">자바스크립트를 켜면 옵션 생성 도구를 쓸 수 있습니다. 아래 JSON 을 직접 수정해 주세요.</p></noscript>
+  <div class="g5-option-builder__ui" data-builder-ui hidden></div>
+  <div class="g5-option-builder__raw" data-raw-panel>
+    <p class="g5-option-builder__note">옵션 행 JSON: [{"io_id", "io_type"(0 선택 · 1 추가), "io_price", "io_stock_qty", "io_noti_qty", "io_use"}]. 단계 구분은 \u001e 입니다.</p>
+    <textarea name="{{ widget.name }}"{% include "django/forms/widgets/attrs.html" %}>
+{% if widget.value %}{{ widget.value }}{% endif %}</textarea>
+  </div>
+</div>
