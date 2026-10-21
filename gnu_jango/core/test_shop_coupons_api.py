@@ -799,13 +799,14 @@ class OrderCouponOrderTests(CouponTestBase):
         self.assertEqual(order.od_coupon, 8000)
         self.assertEqual(self.payable(order), 100000 - 20000 - 8000)
 
-    def test_order_coupon_larger_than_the_order_never_makes_the_total_negative(self):
+    def test_order_coupon_larger_than_the_order_is_refused_and_stays_unused(self):
+        # YoungCart orderformupdate.php: die('Order coupon error.') instead of shrinking the coupon
         coupon = self.coupon(cp_price=500000)
         self.add(self.big)
-        order = self.placed(cp_id=coupon.cp_id)
-        self.assertLessEqual(order.od_coupon, 100000)
-        self.assertGreaterEqual(self.payable(order), 0)
-        self.assertEqual(self.payable(order), 100000 - order.od_coupon + order.od_send_cost + order.od_send_cost2)
+        response = self.place(cp_id=coupon.cp_id)
+        self.assertEqual((response.status_code, response.json()["code"]), (400, "order_coupon_exceeds_amount"))
+        self.assertFalse(ShopOrder.objects.exists())
+        self.assertEqual(self.used(coupon), "")
 
     def test_the_order_coupon_id_is_also_read_from_cp_id_order(self):
         coupon = self.coupon(cp_price=4000)

@@ -114,12 +114,16 @@ from .shop_common import (
 )
 from .shop_coupons import (
     coupon_discount,
+    coupon_exceeds_base,
     coupon_matches_cart_item,
     coupon_payload,
+    coupon_raw_discount,
     coupon_zone_payload,
+    items_with_product_coupon_prices,
     member_coupons_queryset,
+    product_coupon_entries,
+    product_line_totals,
     valid_coupons_queryset,
-    validated_item_coupons,
 )
 from .shop_order_options import guest_privacy_html, hope_date_range, order_hope_date
 from .shop_cart import (
@@ -700,8 +704,12 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
     order_id = order_id or generate_numeric_order_id()
     selected_ct_ids = {str(item["ct_id"]) for item in cart["items"]}
     cart_total = cart["total_price"]
-    item_coupon_entries = validated_item_coupons(user, cart["items"])
-    cart_coupon = min(sum(discount for _, discount in item_coupon_entries), cart_total)
+    product_coupons = product_coupon_entries(user, cart["items"])
+    item_coupon_entries = [(coupon, discount) for _, coupon, discount in product_coupons]
+    # each product coupon is at most its product's total, so together they never pass cart_total
+    cart_coupon = sum(discount for _, discount in item_coupon_entries)
+    # the lines as ordered: each product's validated coupon on its first line (tax split, snapshot)
+    coupon_lines = items_with_product_coupon_prices(cart["items"], product_coupons)
     orderer_zip = normalize_zip_from_keys(
         data,
         full_keys=("od_zip", "zip"),
@@ -837,7 +845,14 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
     if user and order_cp_id:
         coupon = valid_coupons_queryset(user).filter(pk=order_cp_id, cp_method=2).first()
         if coupon:
-            order_coupon = coupon_discount(coupon, max(0, cart_total - cart_coupon))
+            order_base = max(0, cart_total - cart_coupon)
+            if coupon_exceeds_base(coupon, order_base):
+                # YoungCart orderformupdate.php dies ('Order coupon error.') rather than shrink it
+                raise StockAdjustmentError(
+                    "쿠폰할인금액이 주문금액보다 크므로 쿠폰을 적용할 수 없습니다.",
+                    code="order_coupon_exceeds_amount",
+                )
+            order_coupon = coupon_raw_discount(coupon, order_base)
             if order_coupon > 0:
                 coupon_entries.append((coupon, order_coupon))
 
@@ -846,8 +861,12 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
         coupon = valid_coupons_queryset(user).filter(pk=send_cp_id, cp_method=3).first()
         if coupon:
             # YoungCart orderformupdate.php: the base shipping fee only (not the remote-area extra),
-            # with the coupon minimum checked against the order amount
-            send_coupon = min(coupon_discount(coupon, send_cost, minimum_base=cart_total), send_cost)
+            # with the coupon minimum checked against the order amount after the product and order
+            # coupons ($tot_od_price)
+            send_coupon = min(
+                coupon_discount(coupon, send_cost, minimum_base=cart_total - cart_coupon - order_coupon),
+                send_cost,
+            )
             if send_coupon > 0:
                 coupon_entries.append((coupon, send_coupon))
 
@@ -864,7 +883,7 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
 
     receipt_due = max(0, cart_total + send_cost + send_cost2 - cart_coupon - order_coupon - send_coupon - point_use)
     tax_amounts = calculate_order_tax_amounts(
-        cart["items"],
+        coupon_lines,
         send_cost=send_cost,
         send_cost2=send_cost2,
         order_coupon=order_coupon,
@@ -1024,7 +1043,7 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
                 "user": user if user and user.is_authenticated else None,
                 "mb_id": user.get_username() if user and user.is_authenticated else "",
                 "dt_pg": "cart:prepared" if force_status else "cart:order",
-                "dt_data": json.dumps(cart["items"], ensure_ascii=False, default=str),
+                "dt_data": json.dumps(coupon_lines, ensure_ascii=False, default=str),
                 "dt_time": timezone.now(),
             },
         )
@@ -2157,6 +2176,32 @@ def coupon_download_view(request):
     )
 
 
+def same_product_cart_lines(items, target):
+    """The cart lines of ``target``'s product in the same cart (regular or direct purchase)."""
+    return [
+        item
+        for item in items
+        if str(item.get("it_id")) == str(target.get("it_id"))
+        and bool_int(item.get("ct_direct")) == bool_int(target.get("ct_direct"))
+    ]
+
+
+def product_coupon_base(items, target):
+    """What a product coupon on ``target``'s line is judged on: the total of all its product's
+    lines (YoungCart orderitemcoupon.php)."""
+    lines = [cart_item_payload(item) for item in same_product_cart_lines(items, target)]
+    return product_line_totals(lines).get(str(target.get("it_id")), 0)
+
+
+def coupon_list_amount(request, item):
+    """The amount a coupon list shows discounts on: the product total for an item coupon, else the
+    cart after its product coupons (YoungCart ordercoupon.php: org_od_price - item_coupon)."""
+    if item is not None:
+        return product_coupon_base(cart_items(request), item)
+    cart = cart_payload(request)
+    return max(0, cart["total_price"] - cart["cart_coupon"])
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -2166,7 +2211,7 @@ def coupon_applicable_view(request):
         return error
     ct_id = str(request.query_params.get("ct_id") or "")
     item = next((entry for entry in cart_items(request) if str(entry.get("ct_id")) == ct_id), None)
-    amount = cart_item_payload(item)["line_total"] if item else cart_payload(request)["total_price"]
+    amount = coupon_list_amount(request, item)
     queryset = valid_coupons_queryset(user)
     if item is not None:
         # the item coupon picker offers product and category coupons only (orderitemcoupon.php)
@@ -2182,7 +2227,7 @@ def coupon_legacy_view(request, kind):
     values = request_values(request)
     ct_id = str(first_value(values, "ct_id", "ct_id[]"))
     item = next((entry for entry in cart_items(request) if str(entry.get("ct_id")) == ct_id), None)
-    amount = cart_item_payload(item)["line_total"] if item else cart_payload(request)["total_price"]
+    amount = coupon_list_amount(request, item)
     coupons = valid_coupons_queryset(user)
     if kind == "legacy-item" and item:
         coupons = [coupon for coupon in coupons if coupon_matches_cart_item(coupon, item)]
@@ -2214,25 +2259,37 @@ def coupon_apply_cart_view(request):
     ct_id = str(data.get("ct_id") or "")
     cp_id = str(data.get("cp_id") or "")
     items = cart_items(request)
-    discount = 0
-    matched = False
-    for item in items:
-        if str(item.get("ct_id")) == ct_id:
-            matched = True
-            coupon = None
-            if cp_id:
-                coupon = valid_coupons_queryset(user).filter(pk=cp_id).first()
-                if not coupon:
-                    return api_error("Coupon not found.", status=drf_status.HTTP_404_NOT_FOUND, code="coupon_not_found")
-                # only product and category coupons belong on a cart line (orderitemcoupon.php)
-                if coupon.cp_method not in (0, 1) or not coupon_matches_cart_item(coupon, item):
-                    return api_error("Coupon is not applicable to this cart item.", status=drf_status.HTTP_400_BAD_REQUEST, code="coupon_not_applicable")
-            item["cp_id"] = cp_id if coupon else ""
-            discount = coupon_discount(coupon, cart_item_payload(item)["line_total"]) if coupon else 0
-            item["cp_price"] = discount
-    if not matched:
+    target = next((item for item in items if str(item.get("ct_id")) == ct_id), None)
+    if target is None:
         return api_error("Cart item not found.", status=drf_status.HTTP_404_NOT_FOUND, code="cart_item_not_found")
-    save_cart_items(request, items)
+    coupon = None
+    discount = 0
+    if cp_id:
+        coupon = valid_coupons_queryset(user).filter(pk=cp_id).first()
+        if not coupon:
+            return api_error("Coupon not found.", status=drf_status.HTTP_404_NOT_FOUND, code="coupon_not_found")
+        # only product and category coupons belong on a cart line (orderitemcoupon.php)
+        if coupon.cp_method not in (0, 1) or not coupon_matches_cart_item(coupon, target):
+            return api_error("Coupon is not applicable to this cart item.", status=drf_status.HTTP_400_BAD_REQUEST, code="coupon_not_applicable")
+        # YoungCart judges a product coupon on the product's total over all its lines
+        base = product_coupon_base(items, target)
+        if base < coupon.cp_minimum:
+            return api_error("쿠폰 사용 최소 상품금액에 미달하여 쿠폰을 적용할 수 없습니다.", status=drf_status.HTTP_400_BAD_REQUEST, code="coupon_minimum_not_met")
+        if coupon_exceeds_base(coupon, base):
+            # orderform.sub.php refuses it rather than shrink it to the product total
+            return api_error("쿠폰할인금액이 상품 주문금액보다 크므로 쿠폰을 적용할 수 없습니다.", status=drf_status.HTTP_400_BAD_REQUEST, code="coupon_exceeds_item_price")
+        discount = coupon_raw_discount(coupon, base)
+    product_lines = {id(item) for item in same_product_cart_lines(items, target)}
+
+    def updated(item):
+        if item is target:
+            return {**item, "cp_id": coupon.cp_id if coupon else "", "cp_price": discount}
+        # one coupon per product, and a coupon moved here leaves the line that had it
+        if id(item) in product_lines or (coupon and str(item.get("cp_id") or "") == coupon.cp_id):
+            return {**item, "cp_id": "", "cp_price": 0}
+        return item
+
+    save_cart_items(request, [updated(item) for item in items])
     payload = cart_payload(request, ct_id)
     payload["discount"] = discount
     payload["ct_id"] = ct_id
