@@ -19,6 +19,7 @@ from gnu_jango.shop.models import (
     ShopReview,
 )
 
+from gnu_jango.shop.product_counters import recount_product_reviews
 from gnu_jango.shop.shipping import current_shipping_policy
 
 from .response import api_error, api_response
@@ -216,6 +217,8 @@ def reviews_view(request):
         is_subject=str(data.get("is_subject") or ""),
         is_content=strip_script_and_style_blocks(data.get("is_content")),
     )
+    # youngcart itemuseformupdate.php: update_use_cnt / update_use_avg after every write
+    recount_product_reviews([review.product_id])
     return api_response(data=review_payload(review), status=drf_status.HTTP_201_CREATED)
 
 
@@ -251,7 +254,9 @@ def review_detail_view(request, review_id):
     if request.method in ("PATCH", "DELETE") and not (is_moderator or is_author):
         return api_error("Permission denied.", status=drf_status.HTTP_403_FORBIDDEN, code="permission_denied")
     if request.method == "DELETE":
+        product_id = review.product_id
         review.delete()
+        recount_product_reviews([product_id])
         return api_response(data={"deleted": True, "is_id": review_id})
     if request.method == "PATCH":
         data = request_data(request)
@@ -265,6 +270,7 @@ def review_detail_view(request, review_id):
                 return api_error("평점은 1점에서 5점 사이로 선택해 주세요.", status=drf_status.HTTP_422_UNPROCESSABLE_ENTITY, code="invalid_score")
             review.is_score = score
         review.save()
+        recount_product_reviews([review.product_id])
     return api_response(data=review_payload(review))
 
 

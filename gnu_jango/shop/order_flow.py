@@ -6,10 +6,9 @@ import logging
 from dataclasses import dataclass
 
 from django.db import transaction
-from django.db.models import Sum
 from django.utils import timezone
 
-from gnu_jango.shop.models import ShopOrder, ShopOrderItem, ShopProduct
+from gnu_jango.shop.models import ShopOrder
 
 logger = logging.getLogger(__name__)
 
@@ -153,16 +152,11 @@ def order_misu(order):
 
 def update_product_sales_quantity(order):
     """youngcart orderlistupdate.php 배송→완료: it_sum_qty of each product of the order becomes the
-    quantity of all its completed lines."""
-    product_ids = set(
-        order.items.filter(ct_status=STATUS_COMPLETED, product__isnull=False).values_list("product_id", flat=True)
-    )
-    for product_id in product_ids:
-        sold = (
-            ShopOrderItem.objects.filter(product_id=product_id, ct_status=STATUS_COMPLETED).aggregate(qty=Sum("ct_qty"))["qty"]
-            or 0
-        )
-        ShopProduct.objects.filter(pk=product_id).update(it_sum_qty=sold)
+    quantity of all its completed lines. Every product of the order is recounted, so a line that
+    left 완료 (cancelled or returned) also drops out of the count."""
+    from gnu_jango.shop.product_counters import recount_product_sales
+
+    recount_product_sales(order.items.filter(product__isnull=False).values_list("product_id", flat=True))
 
 
 def move_order_status(order, target, *, actor=""):
