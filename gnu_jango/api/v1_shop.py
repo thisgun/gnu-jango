@@ -2,7 +2,6 @@ import hashlib
 import hmac
 import json
 import re
-from datetime import timedelta
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -40,12 +39,15 @@ from gnu_jango.shop.models import (
     ShopOrder,
     ShopOrderData,
     ShopOrderItem,
-    ShopPersonalPay,
     ShopProduct,
     ShopStockNotification,
 )
+from gnu_jango.shop.coupon_dates import coupon_end_date
 from gnu_jango.shop.inventory import StockAdjustmentError, cancel_order_with_stock_restore, reserve_product_stock
+from gnu_jango.shop.delivery import delivery_inquiry
 from gnu_jango.shop.images import upload_product_images
+from gnu_jango.shop.item_info import item_info_rows, kind_title
+from gnu_jango.shop.notifications import queue_order_placed_mails
 from gnu_jango.shop.order_points import (
     item_purchase_point,
     item_status_update,
@@ -58,6 +60,7 @@ from gnu_jango.shop.payment_options import (
     cash_receipt_preferences,
     online_payment_method_enabled,
 )
+from gnu_jango.shop.order_coupons import order_coupon_totals
 from gnu_jango.shop.shipping import (
     allowed_point_use,
     current_shipping_policy,
@@ -71,6 +74,7 @@ from gnu_jango.utils.lib import get_client_ip
 
 from .response import api_error, api_response
 from .search import any_icontains, apply_text_search
+from .shop_search import search_products
 from .shop_common import (
     fit_to_columns,
     on_sale_products,
@@ -114,12 +118,16 @@ from .shop_common import (
 )
 from .shop_coupons import (
     coupon_discount,
+    coupon_exceeds_base,
     coupon_matches_cart_item,
     coupon_payload,
+    coupon_raw_discount,
     coupon_zone_payload,
+    items_with_product_coupon_prices,
     member_coupons_queryset,
+    product_coupon_entries,
+    product_line_totals,
     valid_coupons_queryset,
-    validated_item_coupons,
 )
 from .shop_order_options import guest_privacy_html, hope_date_range, order_hope_date
 from .shop_cart import (
@@ -141,6 +149,12 @@ from .shop_cart import (
     wishlist_legacy_update_view,  # noqa: F401 - re-exported for existing importers
     wishlist_view,  # noqa: F401 - re-exported for existing importers
 )
+from .shop_personal_pay import (
+    personalpay_payload,  # noqa: F401 - re-exported for existing importers
+    personalpay_start_view,  # noqa: F401 - re-exported for existing importers
+    personalpay_view,  # noqa: F401 - re-exported for existing importers
+)
+from .shop_recommend import product_recommend_view  # noqa: F401 - re-exported for existing importers
 from .shop_reviews import (
     my_qna_view,  # noqa: F401 - re-exported for existing importers
     my_reviews_view,  # noqa: F401 - re-exported for existing importers
@@ -367,22 +381,9 @@ def product_payload(product, request=None, *, detail=False):
         if hasattr(product, "has_coupon")
         else product_coupon_badge_available(product)
     )
-    info_items = []
-    info_title = product.it_info_title
-    if product.it_info_title:
-        try:
-            info_data = json.loads(product.it_info_title)
-        except (TypeError, ValueError):
-            info_data = None
-        if isinstance(info_data, dict) and info_data.get("value"):
-            info_title = "\uc0c1\ud488 \uc815\ubcf4 \uace0\uc2dc"
-            info_items.append(
-                {
-                    "key": str(info_data.get("key") or "info"),
-                    "label": str(info_data.get("key") or "info"),
-                    "value": str(info_data.get("value") or ""),
-                }
-            )
+    # \uc0c1\ud488\uc815\ubcf4\uc81c\uacf5\uace0\uc2dc: every row, titled by the product kind's articles (item.info.skin.php)
+    info_items = item_info_rows(product)
+    info_title = "\uc0c1\ud488 \uc815\ubcf4 \uace0\uc2dc" if info_items else product.it_info_title
     data = {
         "it_id": product.it_id,
         "ca_id": product.category_id or "",
@@ -428,6 +429,7 @@ def product_payload(product, request=None, *, detail=False):
         "it_head_html": product.it_head_html,
         "it_tail_html": product.it_tail_html,
         "it_info_gubun": product.it_info_gubun,
+        "it_info_gubun_title": kind_title(product.it_info_gubun),
         "it_info_title": info_title,
         "it_info_items": info_items,
         "image_url": image_url,
@@ -466,69 +468,6 @@ def product_payload(product, request=None, *, detail=False):
     return data
 
 
-def personalpay_payload(item):
-    paid = item.pp_receipt_price >= item.pp_price and item.pp_price > 0
-    processing = bool(item.pp_tno or item.pp_app_no) and not paid
-    state = "paid" if paid else "processing" if processing else "ready"
-    state_label = {"paid": "결제 완료", "processing": "결제 처리 중", "ready": "결제 대기"}[state]
-    misu = max(0, item.pp_price - item.pp_receipt_price)
-    receipt_url = (
-        f"https://dashboard.tosspayments.com/receipt/redirection?transactionId={item.pp_tno}"
-        if item.pp_tno and paid
-        else ""
-    )
-    cash_receipt_url = (
-        f"https://dashboard.tosspayments.com/receipt/cash-receipt/{item.pp_cash_no}"
-        if item.pp_cash and item.pp_cash_no
-        else ""
-    )
-    can_pay = bool(item.active and state == "ready" and item.pp_price > 0)
-    if can_pay:
-        block_reason = ""
-    elif item.pp_price <= 0:
-        # YoungCart personalpayform.php loads only requests with an amount
-        block_reason = "결제할 금액이 없는 개인결제입니다."
-    else:
-        block_reason = "이미 결제하신 개인결제 내역입니다."
-    return {
-        "pp_id": item.pp_id,
-        "od_id": item.order_id or "",
-        "pp_name": item.pp_name,
-        "pp_email": item.pp_email,
-        "pp_hp": item.pp_hp,
-        "pp_content": item.pp_content,
-        "pp_price": item.pp_price,
-        "pp_pg": item.pp_pg,
-        "pp_tno": item.pp_tno,
-        "pp_app_no": item.pp_app_no,
-        "pp_settle_case": item.pp_settle_case,
-        "pp_bank_account": item.pp_bank_account,
-        "pp_deposit_name": item.pp_deposit_name,
-        "pp_receipt_price": item.pp_receipt_price,
-        "pp_misu_price": misu,
-        "already_paid": paid,
-        "has_payment_transaction": bool(item.pp_tno or item.pp_app_no),
-        "payment_in_progress": processing,
-        "payment_state": state,
-        "payment_state_label": state_label,
-        "pp_receipt_time": item.pp_receipt_time or None,
-        "pp_time": datetime_value(item.pp_time),
-        "pp_cash": item.pp_cash,
-        "pp_cash_no": item.pp_cash_no,
-        "pp_payment_app_label": "Approval no." if item.pp_app_no else "Transaction no." if item.pp_tno else "",
-        "pp_payment_app_value": item.pp_app_no or item.pp_tno,
-        "receipt_url": receipt_url,
-        "pp_payment_receipt_url": receipt_url,
-        "cash_receipt_url": cash_receipt_url,
-        "pp_cash_receipt_url": cash_receipt_url,
-        "cash_receipt_issue_url": "",
-        "pp_cash_receipt_issue_url": "",
-        "payment_path": f"/shop/personalpayform.php?pp_id={item.pp_id}",
-        "can_pay": can_pay,
-        "payment_block_reason": block_reason,
-    }
-
-
 def order_item_payload(item):
     line_unit_price = item.io_price if item.io_type == 1 else item.ct_price + item.io_price
     line_total = max(0, line_unit_price) * item.ct_qty
@@ -557,10 +496,9 @@ def order_item_payload(item):
 def order_payload(order, *, detail=False):
     items = list(order.items.select_related("product").all()) if detail else []
     status_value = normalize_order_status(order.od_status)
-    coupon_logs = list(order.coupon_logs.select_related("coupon").all())
-    cart_coupon = sum(log.cp_price for log in coupon_logs if log.coupon and log.coupon.cp_method in {0, 1})
-    order_coupon = order.od_coupon or sum(log.cp_price for log in coupon_logs if log.coupon and log.coupon.cp_method == 2)
-    send_coupon = order.od_send_coupon or sum(log.cp_price for log in coupon_logs if log.coupon and log.coupon.cp_method == 3)
+    # a product coupon on a cancelled, returned or sold-out line no longer counts
+    coupons = order_coupon_totals(order, items=items if detail else None)
+    cart_coupon, order_coupon, send_coupon = coupons.cart, coupons.order, coupons.send
     if status_value == ORDER_STATUS_CANCELLED:
         cart_coupon = 0
         order_coupon = 0
@@ -579,9 +517,9 @@ def order_payload(order, *, detail=False):
     receipt_url = ""
     if order.od_tno and str(order.od_pg or "").lower() == "toss":
         receipt_url = f"https://dashboard.tosspayments.com/receipt/redirection?transactionId={order.od_tno}"
-    delivery_inquiry_url = ""
-    if order.od_invoice:
-        delivery_inquiry_url = f"https://trace.cjlogistics.com/next/tracking.html?wblNo={order.od_invoice}"
+    # get_delivery_inquiry: the link and phone follow the order's courier; unknown ones get neither
+    inquiry = delivery_inquiry(order.od_delivery_company, order.od_invoice)
+    delivery_inquiry_url = inquiry["url"]
     cash_receipt_url = safe_receipt_url(order.od_cash_res)
     bank_account = str(order.od_bank_account or "").strip()
     if not bank_account and settle_case_is_bank(order.od_settle_case):
@@ -655,13 +593,14 @@ def order_payload(order, *, detail=False):
         "od_order_price": order.od_cart_price,
         "od_list_price": list_price,
         "od_receipt_total": receipt_total,
-        "od_misu_price": max(0, total_price - receipt_total),
+        "od_misu_price": max(0, total_price - (receipt_total - order.od_refund_price)),
         "od_is_fully_paid": order.od_misu <= 0,
         "od_delivery_company": order.od_delivery_company,
         "od_invoice": order.od_invoice,
         "od_invoice_time": order.od_invoice_time,
         "delivery_inquiry_url": delivery_inquiry_url,
         "od_delivery_inquiry_url": delivery_inquiry_url,
+        "delivery_inquiry_tel": inquiry["tel"],
         "receipt_url": receipt_url,
         "od_payment_receipt_url": receipt_url,
         "od_payment_app_label": "승인번호" if order.od_app_no else "거래번호" if order.od_tno else "",
@@ -700,8 +639,12 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
     order_id = order_id or generate_numeric_order_id()
     selected_ct_ids = {str(item["ct_id"]) for item in cart["items"]}
     cart_total = cart["total_price"]
-    item_coupon_entries = validated_item_coupons(user, cart["items"])
-    cart_coupon = min(sum(discount for _, discount in item_coupon_entries), cart_total)
+    product_coupons = product_coupon_entries(user, cart["items"])
+    item_coupon_entries = [(coupon, discount) for _, coupon, discount in product_coupons]
+    # each product coupon is at most its product's total, so together they never pass cart_total
+    cart_coupon = sum(discount for _, discount in item_coupon_entries)
+    # the lines as ordered: each product's validated coupon on its first line (tax split, snapshot)
+    coupon_lines = items_with_product_coupon_prices(cart["items"], product_coupons)
     orderer_zip = normalize_zip_from_keys(
         data,
         full_keys=("od_zip", "zip"),
@@ -837,7 +780,14 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
     if user and order_cp_id:
         coupon = valid_coupons_queryset(user).filter(pk=order_cp_id, cp_method=2).first()
         if coupon:
-            order_coupon = coupon_discount(coupon, max(0, cart_total - cart_coupon))
+            order_base = max(0, cart_total - cart_coupon)
+            if coupon_exceeds_base(coupon, order_base):
+                # YoungCart orderformupdate.php dies ('Order coupon error.') rather than shrink it
+                raise StockAdjustmentError(
+                    "쿠폰할인금액이 주문금액보다 크므로 쿠폰을 적용할 수 없습니다.",
+                    code="order_coupon_exceeds_amount",
+                )
+            order_coupon = coupon_raw_discount(coupon, order_base)
             if order_coupon > 0:
                 coupon_entries.append((coupon, order_coupon))
 
@@ -846,8 +796,12 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
         coupon = valid_coupons_queryset(user).filter(pk=send_cp_id, cp_method=3).first()
         if coupon:
             # YoungCart orderformupdate.php: the base shipping fee only (not the remote-area extra),
-            # with the coupon minimum checked against the order amount
-            send_coupon = min(coupon_discount(coupon, send_cost, minimum_base=cart_total), send_cost)
+            # with the coupon minimum checked against the order amount after the product and order
+            # coupons ($tot_od_price)
+            send_coupon = min(
+                coupon_discount(coupon, send_cost, minimum_base=cart_total - cart_coupon - order_coupon),
+                send_cost,
+            )
             if send_coupon > 0:
                 coupon_entries.append((coupon, send_coupon))
 
@@ -864,7 +818,7 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
 
     receipt_due = max(0, cart_total + send_cost + send_cost2 - cart_coupon - order_coupon - send_coupon - point_use)
     tax_amounts = calculate_order_tax_amounts(
-        cart["items"],
+        coupon_lines,
         send_cost=send_cost,
         send_cost2=send_cost2,
         order_coupon=order_coupon,
@@ -1024,7 +978,7 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
                 "user": user if user and user.is_authenticated else None,
                 "mb_id": user.get_username() if user and user.is_authenticated else "",
                 "dt_pg": "cart:prepared" if force_status else "cart:order",
-                "dt_data": json.dumps(cart["items"], ensure_ascii=False, default=str),
+                "dt_data": json.dumps(coupon_lines, ensure_ascii=False, default=str),
                 "dt_time": timezone.now(),
             },
         )
@@ -1106,11 +1060,8 @@ def products_response(request, *, limit=None):
     if ca_id:
         queryset = queryset.filter(category_tree_member_q(ca_id))
     if q:
-        queryset = apply_text_search(
-            queryset,
-            q,
-            any_icontains(("it_name", "it_id", "it_basic"), q),
-        )
+        # search.php: the ticked name / description / code / summary columns, all when none is ticked
+        queryset = search_products(queryset, q, request.query_params)
     if product_type in {"1", "2", "3", "4", "5"}:
         queryset = queryset.filter(**{f"it_type{product_type}": "1"})
     for type_index in range(1, 6):
@@ -1283,18 +1234,6 @@ def product_stock_notify_view(request, it_id):
 
 
 product_stock_notify_view.cls.throttle_scope = "stock-notify"
-
-
-@api_view(["POST"])
-@permission_classes([AllowAny])
-@authentication_classes([JWTAuthentication, BasicAuthentication])
-def product_recommend_view(request, it_id):
-    _, error = require_user(request)
-    if error:
-        return error
-    if not ShopProduct.objects.filter(pk=it_id).exists():
-        return api_error("Product not found.", status=drf_status.HTTP_404_NOT_FOUND, code="product_not_found")
-    return api_response(data={"sent": True, "it_id": it_id})
 
 
 # The main banner spans the content width (1440px at most), so a 1440px copy is sharp enough.
@@ -1480,6 +1419,8 @@ def orders_view(request):
         order = create_order_from_request(request, request_data(request))
     except StockAdjustmentError as exc:
         return api_error(str(exc), status=drf_status.HTTP_400_BAD_REQUEST, code=exc.code, details=exc.details)
+    # youngcart orderformupdate.php ordermail1/2: a bank-deposit order is complete once it is saved
+    queue_order_placed_mails(order)
     data = order_payload(order, detail=True)
     redirect_url = f"/shop/orders/{order.od_id}" if order.user_id else f"/shop/orders/{order.od_id}?uid={order.uid}"
     return api_response(
@@ -1575,18 +1516,19 @@ def restore_order_coupons_and_points(order):
         change_member_point(order.user, point_to_restore, f"주문번호 {order.od_id} 취소", "@order-cancel", order.od_id)
 
 
-def cancel_order_and_refund_benefits(order, reason, *, refund_price=0, history=""):
+def cancel_order_and_refund_benefits(order, reason, *, refund_price=0, history="", status=ORDER_STATUS_CANCELLED):
     """Cancel an order, put the stock back and give its coupons and points back, once.
 
     The one cancel path of the customer, the expiry jobs and the admin (which cancels the PG
-    payment first and passes the refunded amount). An order that is already cancelled is left
-    as it is, so its refund record is not overwritten by a second call."""
+    payment first and passes the refunded amount; ``status`` 반품 for a returned order). An order
+    that is already cancelled is left as it is, so its refund record is not overwritten by a
+    second call."""
     with transaction.atomic():
         locked = ShopOrder.objects.select_for_update().filter(pk=order.pk).first() or order
         if str(locked.od_status or "") in CANCELLED_STATUSES:
             return locked, 0
         restore_order_coupons_and_points(locked)
-        return cancel_order_with_stock_restore(locked, reason, refund_price=refund_price, history=history)
+        return cancel_order_with_stock_restore(locked, reason, refund_price=refund_price, history=history, status=status)
 
 
 def cancel_shop_order_locally(order_id, reason):
@@ -2095,7 +2037,7 @@ def coupon_zone_view(request):
 def issue_coupon_from_zone(zone, user):
     today = timezone.localdate()
     # YoungCart: a coupon of an N-day zone is valid from today through the N-th day
-    end_date = today + timedelta(days=max(0, zone.cz_period - 1))
+    end_date = coupon_end_date(today, zone.cz_period)
     # one coupon per member and zone, used or not (is_coupon_downloaded)
     coupon = ShopCoupon.objects.filter(user=user, coupon_zone=zone).first()
     created = False
@@ -2157,6 +2099,32 @@ def coupon_download_view(request):
     )
 
 
+def same_product_cart_lines(items, target):
+    """The cart lines of ``target``'s product in the same cart (regular or direct purchase)."""
+    return [
+        item
+        for item in items
+        if str(item.get("it_id")) == str(target.get("it_id"))
+        and bool_int(item.get("ct_direct")) == bool_int(target.get("ct_direct"))
+    ]
+
+
+def product_coupon_base(items, target):
+    """What a product coupon on ``target``'s line is judged on: the total of all its product's
+    lines (YoungCart orderitemcoupon.php)."""
+    lines = [cart_item_payload(item) for item in same_product_cart_lines(items, target)]
+    return product_line_totals(lines).get(str(target.get("it_id")), 0)
+
+
+def coupon_list_amount(request, item):
+    """The amount a coupon list shows discounts on: the product total for an item coupon, else the
+    cart after its product coupons (YoungCart ordercoupon.php: org_od_price - item_coupon)."""
+    if item is not None:
+        return product_coupon_base(cart_items(request), item)
+    cart = cart_payload(request)
+    return max(0, cart["total_price"] - cart["cart_coupon"])
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -2166,7 +2134,7 @@ def coupon_applicable_view(request):
         return error
     ct_id = str(request.query_params.get("ct_id") or "")
     item = next((entry for entry in cart_items(request) if str(entry.get("ct_id")) == ct_id), None)
-    amount = cart_item_payload(item)["line_total"] if item else cart_payload(request)["total_price"]
+    amount = coupon_list_amount(request, item)
     queryset = valid_coupons_queryset(user)
     if item is not None:
         # the item coupon picker offers product and category coupons only (orderitemcoupon.php)
@@ -2182,7 +2150,7 @@ def coupon_legacy_view(request, kind):
     values = request_values(request)
     ct_id = str(first_value(values, "ct_id", "ct_id[]"))
     item = next((entry for entry in cart_items(request) if str(entry.get("ct_id")) == ct_id), None)
-    amount = cart_item_payload(item)["line_total"] if item else cart_payload(request)["total_price"]
+    amount = coupon_list_amount(request, item)
     coupons = valid_coupons_queryset(user)
     if kind == "legacy-item" and item:
         coupons = [coupon for coupon in coupons if coupon_matches_cart_item(coupon, item)]
@@ -2214,25 +2182,37 @@ def coupon_apply_cart_view(request):
     ct_id = str(data.get("ct_id") or "")
     cp_id = str(data.get("cp_id") or "")
     items = cart_items(request)
-    discount = 0
-    matched = False
-    for item in items:
-        if str(item.get("ct_id")) == ct_id:
-            matched = True
-            coupon = None
-            if cp_id:
-                coupon = valid_coupons_queryset(user).filter(pk=cp_id).first()
-                if not coupon:
-                    return api_error("Coupon not found.", status=drf_status.HTTP_404_NOT_FOUND, code="coupon_not_found")
-                # only product and category coupons belong on a cart line (orderitemcoupon.php)
-                if coupon.cp_method not in (0, 1) or not coupon_matches_cart_item(coupon, item):
-                    return api_error("Coupon is not applicable to this cart item.", status=drf_status.HTTP_400_BAD_REQUEST, code="coupon_not_applicable")
-            item["cp_id"] = cp_id if coupon else ""
-            discount = coupon_discount(coupon, cart_item_payload(item)["line_total"]) if coupon else 0
-            item["cp_price"] = discount
-    if not matched:
+    target = next((item for item in items if str(item.get("ct_id")) == ct_id), None)
+    if target is None:
         return api_error("Cart item not found.", status=drf_status.HTTP_404_NOT_FOUND, code="cart_item_not_found")
-    save_cart_items(request, items)
+    coupon = None
+    discount = 0
+    if cp_id:
+        coupon = valid_coupons_queryset(user).filter(pk=cp_id).first()
+        if not coupon:
+            return api_error("Coupon not found.", status=drf_status.HTTP_404_NOT_FOUND, code="coupon_not_found")
+        # only product and category coupons belong on a cart line (orderitemcoupon.php)
+        if coupon.cp_method not in (0, 1) or not coupon_matches_cart_item(coupon, target):
+            return api_error("Coupon is not applicable to this cart item.", status=drf_status.HTTP_400_BAD_REQUEST, code="coupon_not_applicable")
+        # YoungCart judges a product coupon on the product's total over all its lines
+        base = product_coupon_base(items, target)
+        if base < coupon.cp_minimum:
+            return api_error("쿠폰 사용 최소 상품금액에 미달하여 쿠폰을 적용할 수 없습니다.", status=drf_status.HTTP_400_BAD_REQUEST, code="coupon_minimum_not_met")
+        if coupon_exceeds_base(coupon, base):
+            # orderform.sub.php refuses it rather than shrink it to the product total
+            return api_error("쿠폰할인금액이 상품 주문금액보다 크므로 쿠폰을 적용할 수 없습니다.", status=drf_status.HTTP_400_BAD_REQUEST, code="coupon_exceeds_item_price")
+        discount = coupon_raw_discount(coupon, base)
+    product_lines = {id(item) for item in same_product_cart_lines(items, target)}
+
+    def updated(item):
+        if item is target:
+            return {**item, "cp_id": coupon.cp_id if coupon else "", "cp_price": discount}
+        # one coupon per product, and a coupon moved here leaves the line that had it
+        if id(item) in product_lines or (coupon and str(item.get("cp_id") or "") == coupon.cp_id):
+            return {**item, "cp_id": "", "cp_price": 0}
+        return item
+
+    save_cart_items(request, [updated(item) for item in items])
     payload = cart_payload(request, ct_id)
     payload["discount"] = discount
     payload["ct_id"] = ct_id
@@ -2327,62 +2307,6 @@ def events_view(request, ev_id=None):
             }
         )
     return api_response(data=rows, meta=pagination_meta(len(rows), 1, 50))
-
-
-@api_view(["GET"])
-@permission_classes([AllowAny])
-@authentication_classes([JWTAuthentication, BasicAuthentication])
-def personalpay_view(request, pp_id=None):
-    user = current_user(request)
-    if pp_id is not None:
-        queryset = ShopPersonalPay.objects.filter(pk=pp_id, active=True)
-        item = queryset.first()
-        if not item:
-            return api_error("Personal pay not found.", status=drf_status.HTTP_404_NOT_FOUND, code="personalpay_not_found")
-        if item.user_id and not (user and (user.is_staff or user.is_superuser or item.user_id == user.id)):
-            return api_error("Permission denied.", status=drf_status.HTTP_403_FORBIDDEN, code="permission_denied")
-        return api_response(data=personalpay_payload(item))
-
-    if not user or not user.is_authenticated:
-        return api_error(
-            "Authentication credentials were not provided.",
-            status=drf_status.HTTP_401_UNAUTHORIZED,
-            code="not_authenticated",
-        )
-
-    queryset = ShopPersonalPay.objects.filter(active=True, pp_receipt_price__lt=F("pp_price"), pp_tno="", pp_app_no="")
-    if not (user.is_staff or user.is_superuser):
-        queryset = queryset.filter(user=user)
-    page, meta = paginate_queryset(request, queryset, default_per_page=20)
-    return api_response(data=[personalpay_payload(item) for item in page], meta=meta)
-
-
-@api_view(["POST"])
-@permission_classes([AllowAny])
-@authentication_classes([JWTAuthentication, BasicAuthentication])
-def personalpay_start_view(request, pp_id):
-    user = current_user(request)
-    item = ShopPersonalPay.objects.filter(pk=pp_id, active=True).first()
-    if not item:
-        return api_error("Personal pay not found.", status=drf_status.HTTP_404_NOT_FOUND, code="personalpay_not_found")
-    if item.user_id and not (user and (user.is_staff or user.is_superuser or item.user_id == user.id)):
-        return api_error("Permission denied.", status=drf_status.HTTP_403_FORBIDDEN, code="permission_denied")
-    payload = personalpay_payload(item)
-    if not payload["can_pay"]:
-        return api_error(payload["payment_block_reason"], status=drf_status.HTTP_409_CONFLICT, code="personalpay_not_payable")
-    payment_path = f"/shop/personalpayform.php?pp_id={item.pp_id}&nextjs_handoff=1"
-    return api_response(
-        data={
-            "pp_id": item.pp_id,
-            "payment_path": payment_path,
-            "payment_url": payment_path,
-            "legacy_payment_url": payment_path,
-            "can_pay": True,
-            "payment_state": payload["payment_state"],
-            "payment_state_label": payload["payment_state_label"],
-            "payment_block_reason": "",
-        }
-    )
 
 
 @api_view(["POST"])

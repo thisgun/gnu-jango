@@ -17,6 +17,7 @@ from gnu_jango.api.community_common import GENERAL_QA_PRODUCT_ID, QA_META_CONFIG
 from gnu_jango.config.models import Config
 from gnu_jango.shop.models import GeneralInquiry
 from gnu_jango.config import config as config_cache
+from gnu_jango.shop.product_counters import recount_product_reviews
 from gnu_jango.shop.settings_sync import sync_shop_phone_from_policy
 
 
@@ -306,6 +307,22 @@ class ShopReviewAdmin(ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+    # youngcart itemuselistupdate.php: approving, hiding or deleting reviews recounts the product's
+    # it_use_cnt / it_use_avg (update_use_cnt / update_use_avg)
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        recount_product_reviews([obj.product_id])
+
+    def delete_model(self, request, obj):
+        product_id = obj.product_id
+        super().delete_model(request, obj)
+        recount_product_reviews([product_id])
+
+    def delete_queryset(self, request, queryset):
+        product_ids = list(queryset.values_list("product_id", flat=True).distinct())
+        super().delete_queryset(request, queryset)
+        recount_product_reviews(product_ids)
 
     @admin.display(description=_("Visibility"), ordering="is_confirm")
     def visibility_status(self, obj):

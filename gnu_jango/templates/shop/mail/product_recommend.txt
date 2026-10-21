@@ -1,0 +1,12 @@
+{% load humanize %}{% autoescape off %}{{ member_name }}님이 {{ site_title }}의 상품을 추천했습니다.
+
+{{ subject }}
+
+{{ content }}
+
+상품: {{ product.it_name }}
+가격: {{ product.it_price|intcomma }}원{% if product_url %}
+바로가기: {{ product_url }}{% endif %}
+
+{{ site_title }} 회원 {{ member_name }}님이 보낸 추천 메일입니다.
+{% endautoescape %}

@@ -309,23 +309,17 @@ class LegacyShopRedirectTests(RedirectAssertions, TestCase):
         self.assertLocalRedirect("/shop/unknown-page.php?x=1", "/shop?x=1")
         self.assertLocalRedirect("/shop/cartupdate.php", "/shop")
 
-    def test_personalpay_handoff_page_escapes_the_payment_id_and_is_private(self):
-        payload = '"><script>alert(1)</script>'
+    def test_the_old_personalpay_handoff_link_opens_the_checkout_page(self):
+        # the nextjs_handoff=1 stub page was a dead end; the checkout is the Next.js pay page
+        self.assertLocalRedirect("/shop/personalpayform.php?pp_id=5&nextjs_handoff=1", "/shop/personalpay/5/pay")
+        self.assertLocalRedirect("/shop/personalpayform.php?nextjs_handoff=1", "/shop/personalpay")
 
-        response = self.client.get("/shop/personalpayform.php", {"nextjs_handoff": "1", "pp_id": payload})
+    def test_a_hostile_personalpay_id_stays_inside_the_checkout_path(self):
+        response = self.client.get("/shop/personalpayform.php", {"nextjs_handoff": "1", "pp_id": '"><script>alert(1)</script>'})
 
-        self.assertEqual(response.status_code, 200)
-        body = response.content.decode()
-        self.assertNotIn("<script>alert(1)</script>", body)
-        self.assertIn("&lt;script&gt;", body)
-        self.assertIn("no-store", response["Cache-Control"])
-        self.assertIn("noindex", body)
-        self.assertIn("noindex", response["X-Robots-Tag"])
-
-    def test_personalpay_handoff_without_an_id_reports_the_missing_id(self):
-        response = self.client.get("/shop/personalpayform.php", {"nextjs_handoff": "1"})
-        self.assertEqual(response.status_code, 200)
-        self.assertIn("Missing personal payment id.", response.content.decode())
+        self.assertEqual(response.status_code, 307)
+        self.assertNotIn("<script>", response["Location"])
+        self.assertTrue(urlsplit(response["Location"]).path.startswith("/shop/personalpay/"))
 
 
 class LegacyMobileRedirectTests(RedirectAssertions, TestCase):

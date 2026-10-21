@@ -4,14 +4,19 @@ from functools import update_wrapper
 from django import forms
 from django.contrib import messages
 from django.contrib.admin.actions import delete_selected
+from django.contrib.admin.utils import unquote
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
+from django.http import Http404
+from django.shortcuts import redirect
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from unfold.forms import ActionForm
 from unfold.widgets import UnfoldAdminSelectWidget
 
 from gnu_jango.api.shop_common import CANCELLED_STATUSES
+from gnu_jango.shop.delivery import delivery_company_form_field
 from gnu_jango.shop.models import ORDER_ITEM_STATUS_COMPLETED
 from gnu_jango.shop.order_flow import (
     ADMIN_ORDER_STATUSES,
@@ -23,7 +28,25 @@ from gnu_jango.shop.order_flow import (
     order_misu,
     transition_error,
 )
+from gnu_jango.shop.order_lines import (
+    LINE_SOURCES,
+    LINE_TARGETS,
+    admin_return_order,
+    change_order_lines,
+    line_amount,
+    line_label,
+    plan_line_change,
+)
 from gnu_jango.shop.order_points import run_save_order_points_safely, take_back_order_points
+from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES, STATUS_RETURNED
+
+FAILED_REFUND_WARN_DAYS = 30
+
+LINE_TARGET_HELP = {
+    "취소": "배송 전 상품 취소",
+    "품절": "배송 전 상품 품절",
+    "반품": "배송·완료된 상품 반품",
+}
 
 # Amounts the order form can edit: od_misu is worked out from them (youngcart get_order_info).
 ORDER_MONEY_FIELDS = {
@@ -49,13 +72,15 @@ def hope_date_label(value):
 
 def set_order_status(order, status, reason="", *, actor="", pay_due_points=True):
     """Move an order to ``status`` the way youngcart orderlistupdate.php does: one step along
-    주문→입금(무통장)→준비→배송(운송장)→완료, or a cancellation from 주문/입금/준비 through
+    주문→입금(무통장)→준비→배송(운송장)→완료, a cancellation from 주문/입금/준비 through
     admin_cancel_order (the PG payment is cancelled first; stock, coupons and points come back
-    once).
+    once), or a return (반품) of a 배송/완료 order through admin_return_order (refund first too).
 
     Returns a StatusChange, falsy (with the reason in ``message``) when the order was left as it
     was - an order that is already cancelled is never reopened: that would not take back the
     stock, coupons and points the cancellation returned."""
+    if status == STATUS_RETURNED:
+        return admin_return_order(order, reason, actor=actor)
     if status in CANCELLED_STATUSES:
         return admin_cancel_order(order, reason, actor=actor)
     result = move_order_status(order, status, actor=actor)
@@ -75,12 +100,20 @@ class ShopOrderAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if "od_delivery_company" in self.fields:
+            # orderform.php: the courier comes from the list the tracking links are built from
+            self.fields["od_delivery_company"] = delivery_company_form_field(
+                self.instance.od_delivery_company, label="배송회사", widget=UnfoldAdminSelectWidget
+            )
         if "od_status" not in self.fields:
             return
         if self.instance.pk:
             current = self.instance.od_status
             choices = [(current, f"{current} (현재 상태)")] + [(status, status) for status in allowed_targets(self.instance)]
-            help_text = "주문→입금(무통장)→준비→배송→완료 순서로 한 단계씩 바꿀 수 있고, 주문·입금·준비 상태에서는 취소할 수 있습니다."
+            help_text = (
+                "주문→입금(무통장)→준비→배송→완료 순서로 한 단계씩 바꿀 수 있고, 주문·입금·준비 상태에서는 취소, "
+                "배송·완료 상태에서는 반품할 수 있습니다. 일부 상품만 취소·반품·품절하려면 '상품 취소·반품·품절'을 쓰세요."
+            )
         else:
             choices = [(status, status) for status in ADMIN_ORDER_STATUSES]
             help_text = ""
@@ -257,10 +290,10 @@ class ShopOrderAdmin(ModelAdmin):
         request._pending_order_status = None
         order = form.instance
         if status in CANCELLED_STATUSES:
-            # A cancellation may refund the payment at the PG. It must not run inside the order
-            # form's transaction, where a later error would roll the local cancel back while the
-            # refund stands: change_view runs it once that transaction has committed.
-            request._pending_order_cancel = order.pk
+            # A cancellation or return may refund the payment at the PG. It must not run inside the
+            # order form's transaction, where a later error would roll the local change back while
+            # the refund stands: change_view runs it once that transaction has committed.
+            request._pending_order_cancel = status
             return
         self.report_status_change(request, order, set_order_status(order, status, actor=request.user.get_username()))
 
@@ -402,10 +435,67 @@ class ShopOrderAdmin(ModelAdmin):
         # the form's edits are committed; now the cancellation (PG refund first) in its own
         # durable transaction (admin_cancel_order)
         if request._pending_order_cancel is not None and order is not None:
-            request._pending_order_cancel = None
-            result = set_order_status(order, "취소", actor=request.user.get_username())
+            status, request._pending_order_cancel = request._pending_order_cancel, None
+            result = set_order_status(order, status, actor=request.user.get_username())
             self.report_status_change(request, order, result)
         return response
+
+    def order_lines_view(self, request, object_id):
+        """youngcart orderform.php's line status change (orderformcartupdate.php) for 취소, 반품
+        and 품절: pick lines, preview the new amounts and refund, then apply."""
+        order = self.get_object(request, unquote(object_id))
+        if order is None:
+            raise Http404
+        if not self.has_change_permission(request, order):
+            raise PermissionDenied
+        change_url = reverse("admin:shop_shoporder_change", args=[order.pk])
+        target = str(request.POST.get("ct_status") or "").strip() if request.method == "POST" else ""
+        selected = request.POST.getlist("ct_chk") if request.method == "POST" else []
+        reason = str(request.POST.get("reason") or "").strip()[:200]
+        plan = None
+        error = ""
+        if request.method == "POST":
+            if request.POST.get("step") == "apply":
+                result = change_order_lines(order, selected, target, reason, actor=request.user.get_username())
+                if result:
+                    self.log_change(request, order, f"상품 {len(selected)}건 {target} 처리")
+                    self.message_user(request, result.message, messages.WARNING if result.manual_refund else messages.SUCCESS)
+                    return redirect(change_url)
+                error = result.message
+            else:
+                plan, error = plan_line_change(order, selected, target)
+        order.refresh_from_db()
+        chosen = {str(value) for value in selected}
+        lines = []
+        for item in order.items.select_related("product").order_by("pk"):
+            inactive = item.ct_status in INACTIVE_LINE_STATUSES
+            lines.append(
+                {
+                    "pk": item.pk,
+                    "label": line_label(item),
+                    "status": item.ct_status,
+                    "tone": "danger" if inactive else "success" if item.ct_status == ORDER_ITEM_STATUS_COMPLETED else "info",
+                    "qty": item.ct_qty,
+                    "amount": line_amount(item),
+                    "stock_adjusted": item.stock_adjusted,
+                    "selectable": not inactive and any(item.ct_status in LINE_SOURCES[value] for value in LINE_TARGETS),
+                    "checked": str(item.pk) in chosen,
+                }
+            )
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": f"상품 취소·반품·품절 - {order.od_id}",
+            "order": order,
+            "lines": lines,
+            "plan": plan,
+            "error": error,
+            "targets": [(value, LINE_TARGET_HELP[value]) for value in LINE_TARGETS],
+            "target": target,
+            "reason": reason,
+            "change_url": change_url,
+        }
+        return TemplateResponse(request, "admin/shop/order_lines.html", context)
 
     def order_ops_context(self, request):
         orders = ShopOrder.objects.all()
@@ -686,6 +776,11 @@ class ShopOrderAdmin(ModelAdmin):
             "risks": risks,
             "links": [
                 {"label": _("Back to orders"), "url": "../../", "icon": "arrow_back"},
+                *(
+                    [{"label": "상품 취소·반품·품절", "url": reverse("admin:shop_shoporder_lines", args=[order.pk]), "icon": "remove_shopping_cart"}]
+                    if self.has_change_permission(request, order) and order.od_status not in INACTIVE_LINE_STATUSES
+                    else []
+                ),
                 {"label": _("Settlement report"), "url": "../../reports/", "icon": "monitoring"},
                 {"label": _("Order print"), "url": "../../order-print/?q=%s" % order.od_id, "icon": "print"},
                 {"label": _("Payment logs"), "url": "/admin/shop/shoporderdata/?q=%s" % order.od_id, "icon": "fact_check"},
@@ -712,6 +807,9 @@ class ShopOrderAdmin(ModelAdmin):
             "paid": "success",
             "cancel": "danger",
             "refund": "danger",
+            "취소": "danger",
+            "반품": "danger",
+            "품절": "danger",
         }.get(str(obj.od_status).lower(), "neutral")
         return badge(obj.od_status or "-", tone)
 
@@ -937,6 +1035,11 @@ class ShopOrderAdmin(ModelAdmin):
                 self.order_report_view(self.unresolved_orders_view),
                 name="shop_shoporder_unresolved",
             ),
+            path(
+                "<path:object_id>/lines/",
+                self.admin_site.admin_view(self.order_lines_view),
+                name="shop_shoporder_lines",
+            ),
         ]
         return custom_urls + urls
 
@@ -958,8 +1061,10 @@ class ShopOrderAdmin(ModelAdmin):
         if export_type == "csv":
             return self.sales_rank_csv(rows)
 
-        total_sales = order_items.aggregate(value=Sum(order_line_sales_expression()))["value"] or 0
-        total_points = order_items.aggregate(value=Sum(order_line_point_expression()))["value"] or 0
+        # cancelled, returned and sold-out lines are not sales (youngcart itemsellrank.php status split)
+        sold_items = order_items.filter(sold_line_q())
+        total_sales = sold_items.aggregate(value=Sum(order_line_sales_expression()))["value"] or 0
+        total_points = sold_items.aggregate(value=Sum(order_line_point_expression()))["value"] or 0
         metrics = [
             {
                 "label": _("Ranked products"),
@@ -968,8 +1073,8 @@ class ShopOrderAdmin(ModelAdmin):
             },
             {
                 "label": _("Sold quantity"),
-                "value": format_number(order_items.aggregate(value=Sum("ct_qty"))["value"]),
-                "hint": _("%(count)s order lines") % {"count": format_number(order_items.count())},
+                "value": format_number(sold_items.aggregate(value=Sum("ct_qty"))["value"]),
+                "hint": _("%(count)s order lines") % {"count": format_number(sold_items.count())},
             },
             {
                 "label": _("Product sales"),
@@ -995,19 +1100,22 @@ class ShopOrderAdmin(ModelAdmin):
             },
             "metrics": metrics,
             "rank_rows": rows,
+            "rank_statuses": [status for status, _ in SALES_RANK_STATUS_GROUPS],
         }
         request.current_app = self.admin_site.name
         return TemplateResponse(request, "admin/shop/sales_rank.html", context)
 
     def product_sales_rank_rows(self, order_items, limit=100):
+        sold = sold_line_q()
         ranked_queryset = (
             order_items.values("product_id", "it_id", "it_name")
             .annotate(
-                line_count=Count("pk"),
-                order_count=Count("order_id", distinct=True),
-                quantity=Sum("ct_qty"),
-                gross_sales=Sum(order_line_sales_expression()),
-                reward_points=Sum(order_line_point_expression()),
+                line_count=Count("pk", filter=sold),
+                order_count=Count("order_id", distinct=True, filter=sold),
+                quantity=Coalesce(Sum("ct_qty", filter=sold), 0),
+                gross_sales=Coalesce(Sum(order_line_sales_expression(), filter=sold), 0),
+                reward_points=Coalesce(Sum(order_line_point_expression(), filter=sold), 0),
+                **sales_rank_status_annotations(),
             )
             .order_by("-gross_sales", "-quantity", "it_name")
         )
@@ -1032,6 +1140,10 @@ class ShopOrderAdmin(ModelAdmin):
                     "gross_sales": format_number(gross_sales),
                     "reward_points": format_number(row["reward_points"]),
                     "share": round((gross_sales / max_sales) * 100) if max_sales else 0,
+                    "status_quantities": [
+                        format_number(row[f"status_{status_index}"])
+                        for status_index in range(len(SALES_RANK_STATUS_GROUPS))
+                    ],
                 }
             )
         return rows
@@ -1562,6 +1674,7 @@ class ShopOrderAdmin(ModelAdmin):
                 "gross_sales",
                 "reward_points",
                 "share_percent",
+                *(f"qty_{status}" for status, _ in SALES_RANK_STATUS_GROUPS),
             ],
             (
                 [
@@ -1574,6 +1687,7 @@ class ShopOrderAdmin(ModelAdmin):
                     str(row["gross_sales"]).replace(",", ""),
                     str(row["reward_points"]).replace(",", ""),
                     row["share"],
+                    *(str(quantity).replace(",", "") for quantity in row["status_quantities"]),
                 ]
                 for row in rows
             ),
@@ -1864,6 +1978,7 @@ class ShopPersonalPayAdmin(ModelAdmin):
     search_fields = ("pp_id", "pp_name", "pp_email", "pp_hp", "user__username", "pp_tno", "pp_app_no", "pp_cash_no")
     list_filter = (PersonalPayStateFilter, PersonalPaySettleCaseFilter, PersonalPayActiveFilter, PersonalPayDateFilter)
     readonly_fields = ("personal_pay_snapshot",)
+    actions = ("confirm_selected_bank_deposits",)
     fieldsets = (
         (
             _("Personal pay snapshot"),
@@ -1916,8 +2031,61 @@ class ShopPersonalPayAdmin(ModelAdmin):
     )
     list_fullwidth = True
 
+    @admin.action(description="선택한 개인결제 입금 확인", permissions=["change"])
+    def confirm_selected_bank_deposits(self, request, queryset):
+        """youngcart adm/shop_admin/personalpayformupdate.php: the shop records the 무통장입금 of a
+        request (what is still owed, received now) and the linked order is credited."""
+        from gnu_jango.shop.personal_pay import confirm_bank_deposit
+
+        actor = request.user.get_username()
+        confirmed = 0
+        skipped = {}
+        for pay in queryset:
+            pay, reason = confirm_bank_deposit(pay.pp_id, actor=actor)
+            if reason:
+                skipped.setdefault(reason, []).append(pay.pp_id if pay else "-")
+                continue
+            self.log_change(request, pay, "개인결제 입금 확인")
+            confirmed += 1
+        if confirmed:
+            self.message_user(request, f"개인결제 {confirmed}건의 입금을 확인했습니다.", messages.SUCCESS)
+        for message, pay_ids in skipped.items():
+            shown = ", ".join(pay_ids[:5]) + (f" 외 {len(pay_ids) - 5}건" if len(pay_ids) > 5 else "")
+            self.message_user(request, f"개인결제 {len(pay_ids)}건은 처리하지 않았습니다 ({shown}): {message}", messages.WARNING)
+
+    def changelist_view(self, request, extra_context=None):
+        if request.method == "GET":
+            self.warn_failed_refunds(request)
+        return super().changelist_view(request, extra_context=extra_context)
+
+    def warn_failed_refunds(self, request, pp_id=None):
+        """A Toss payment the checkout could neither record nor cancel (api/shop_personal_pay.py
+        refund_toss_payment): the card is charged and only its payment log knows. Payment logs
+        are evidence and cannot be edited, so the warning covers the last 30 days."""
+        from gnu_jango.api.shop_personal_pay import REFUND_FAILED_PREFIX
+
+        since = timezone.now() - timedelta(days=FAILED_REFUND_WARN_DAYS)
+        logs = ShopOrderData.objects.filter(
+            log_id__startswith=f"{REFUND_FAILED_PREFIX}-", dt_time__gte=since
+        ).order_by("-dt_time")
+        if pp_id:
+            logs = logs.filter(od_id=f"pp-{pp_id}")
+        count = logs.count()
+        if not count:
+            return
+        shown = ", ".join(log.od_id or log.log_id for log in logs[:5]) + (f" 외 {count - 5}건" if count > 5 else "")
+        self.message_user(
+            request,
+            f"최근 {FAILED_REFUND_WARN_DAYS}일 동안 결제 승인 뒤 반영도 자동 취소도 하지 못한 개인결제 토스 결제가 "
+            f"{count}건 있습니다 ({shown}). 토스페이먼츠 상점관리자에서 결제를 취소하거나 개인결제에 직접 반영하세요 "
+            "(결제 로그 pp-refund-failed).",
+            messages.ERROR,
+        )
+
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}
+        if request.method == "GET":
+            self.warn_failed_refunds(request, unquote(object_id))
         personal_pay = self.get_object(request, object_id)
         if personal_pay:
             extra_context["personal_pay_detail_ops"] = self.personal_pay_detail_context(personal_pay)

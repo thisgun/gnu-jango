@@ -1423,7 +1423,27 @@ def me_view(request):
         # Gnuboard5 grants the daily login points on the first visit of the day, also for members
         # who stay signed in; the site calls this on every page load and the ledger keeps it to once.
         award_login_points(user)
-    return api_response(data={"member": member_payload(user, request), "is_super_admin": bool(user.is_superuser)})
+    member = {**member_payload(user, request), **_own_contact_payload(user)}
+    return api_response(data={"member": member, "is_super_admin": bool(user.is_superuser)})
+
+
+def _own_contact_payload(user):
+    """The signed-in member's own phone and address, which the order form fills in as the orderer
+    (YoungCart orderform.php prefills od_name/od_tel/od_hp/od_zip/od_addr* from $member).
+    Only ``me_view`` adds this; payloads describing other members never carry it."""
+    profile = _profile_for_user(user)
+    zip_code = str(profile.user_zip or "").strip()
+    return {
+        "mb_hp": profile.user_hp or "",
+        "mb_tel": "",  # Profile keeps a single phone number (mb_hp)
+        "mb_zip": zip_code,
+        "mb_zip1": zip_code[:3],
+        "mb_zip2": zip_code[3:],
+        "mb_addr1": profile.user_addr1 or "",
+        "mb_addr2": profile.user_addr2 or "",
+        "mb_addr3": "",
+        "mb_addr_jibeon": profile.user_addr_jibeon or "",
+    }
 
 
 @api_view(["POST"])

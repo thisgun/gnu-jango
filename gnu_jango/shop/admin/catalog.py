@@ -21,6 +21,7 @@ from gnu_jango.shop.images import (
     managed_product_image_storage_path,
     upload_product_images,
 )
+from gnu_jango.shop.admin.item_info_form import ItemInfoTextField, clean_item_info, item_info_kind_field
 from gnu_jango.shop.models import ShopProduct, ShopStockAdjustment
 
 
@@ -111,9 +112,20 @@ class ShopProductActionForm(ActionForm):
 
 
 class ShopProductAdminForm(forms.ModelForm):
+    it_info_value = ItemInfoTextField()
+
     class Meta:
         model = ShopProduct
         fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "it_info_gubun" in self.fields:
+            # itemform.php: the notice kind comes from lib/iteminfo.lib.php
+            self.fields["it_info_gubun"] = item_info_kind_field(self.instance.it_info_gubun)
+
+    def clean(self):
+        return clean_item_info(self, super().clean())
 
     def clean_it_stock_qty(self):
         stock = self.cleaned_data.get("it_stock_qty")
@@ -327,7 +339,8 @@ class ShopProductAdmin(ModelAdmin):
                     "it_explan",
                     "it_head_html",
                     "it_tail_html",
-                    ("it_info_gubun", "it_info_title"),
+                    "it_info_gubun",
+                    "it_info_value",
                 ),
             },
         ),
@@ -1116,9 +1129,9 @@ class ShopOrderItemAdmin(ModelAdmin):
 
     @admin.display(description=_("Price"), ordering="ct_price")
     def price_display(self, obj):
-        return money_html(obj.ct_price + obj.io_price)
+        return money_html(order_line_unit_price(obj))
 
     @admin.display(description=_("Line total"))
     def line_total_display(self, obj):
-        return money_html((obj.ct_price + obj.io_price) * obj.ct_qty)
+        return money_html(order_line_unit_price(obj) * obj.ct_qty)
 

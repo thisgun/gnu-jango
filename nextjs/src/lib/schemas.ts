@@ -306,6 +306,7 @@ export const shopProductSchema = z
     it_head_html: optionalString,
     it_tail_html: optionalString,
     it_info_gubun: optionalString,
+    it_info_gubun_title: optionalString,
     it_info_title: optionalString,
     it_info_items: z.array(shopProductInfoItemSchema).optional(),
     image_url: stringValue,

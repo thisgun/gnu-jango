@@ -15,7 +15,7 @@ import {
 import { useSearchSuggestions } from "@/hooks/useSearchSuggestions";
 import { useShopProductSuggest } from "@/hooks/useShopProductSuggest";
 import type { BbsRewriteMode } from "@/lib/board-url";
-import { shopProductHref } from "@/lib/product-url";
+import { shopProductHref, shopSearchHref } from "@/lib/product-url";
 import { formatPrice } from "@/lib/utils";
 import { gaSearch } from "@/lib/analytics";
 import { runtimeRouterPush } from "@/lib/runtime-router";
@@ -156,7 +156,8 @@ export function HeaderClientActions({
     if (!query) return;
 
     gaSearch(query);
-    runtimeRouterPush(router, `/search?q=${encodeURIComponent(query)}`);
+    // 쇼핑몰 머리의 검색창(영카트 shop.head.php)은 커뮤니티 통합검색이 아니라 상품 검색으로 간다.
+    runtimeRouterPush(router, shopSearchHref(query));
     setSearchQuery("");
     setSearchOpen(false);
     setSearchFocused(false);
@@ -236,7 +237,7 @@ export function HeaderClientActions({
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => {
                       setSearchFocused(false);
-                      runtimeRouterPush(router, `/search?q=${encodeURIComponent(suggestion)}`);
+                      runtimeRouterPush(router, shopSearchHref(suggestion));
                       setSearchQuery("");
                     }}
                   >
@@ -419,7 +420,7 @@ export function HeaderClientActions({
                       setSearchFocused(false);
                       setSearchOpen(false);
                       setSearchQuery("");
-                      runtimeRouterPush(router, `/search?q=${encodeURIComponent(suggestion)}`);
+                      runtimeRouterPush(router, shopSearchHref(suggestion));
                     }}
                   >
                     <SearchIcon className="size-4 shrink-0 text-base-content/50" />

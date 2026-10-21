@@ -41,6 +41,7 @@ from gnu_jango.shop.models import (
     ORDER_ITEM_STATUS_COMPLETED,
     generate_order_uid,
 )
+from gnu_jango.shop.item_info import parse_item_info_value
 from gnu_jango.users.hashers import convert_gnuboard_password_hash
 from gnu_jango.users.models import Profile, User_Memo, User_Point
 
@@ -1361,7 +1362,7 @@ class Command(BaseCommand):
                     "it_head_html": scalar(row, "it_head_html"),
                     "it_tail_html": scalar(row, "it_tail_html"),
                     "it_info_gubun": scalar(row, "it_info_gubun"),
-                    "it_info_title": scalar(row, "it_info_value"),
+                    **self.product_info_fields(row),
                     "it_option_subject": scalar(row, "it_option_subject"),
                     "it_supply_subject": scalar(row, "it_supply_subject"),
                     "image_url": self.product_image_url(row),
@@ -1370,6 +1371,14 @@ class Command(BaseCommand):
             )
             count += 1
         return count
+
+    def product_info_fields(self, row):
+        """YoungCart keeps 상품정보제공고시 as a PHP-serialized array: store its rows, not the text."""
+        raw = text(row, "it_info_value")
+        rows = parse_item_info_value(raw, text(row, "it_info_gubun"))
+        if rows is None:
+            return {"it_info_title": raw[:255], "it_info_value": []}
+        return {"it_info_title": "", "it_info_value": rows}
 
     def shop_product_metrics(self, row):
         return {
@@ -1671,7 +1680,10 @@ class Command(BaseCommand):
                     "od_tax_mny": integer(row, "od_tax_mny", 0),
                     "od_vat_mny": integer(row, "od_vat_mny", 0),
                     "od_free_mny": integer(row, "od_free_mny", 0),
-                    "od_coupon": integer(row, "od_coupon", 0) + integer(row, "od_cart_coupon", 0),
+                    # od_coupon is the order coupon only: the product coupons (od_cart_coupon) come
+                    # back from the imported coupon logs (order_coupon_totals), so folding them in
+                    # here subtracted them twice from the order total
+                    "od_coupon": integer(row, "od_coupon", 0),
                     "od_send_coupon": integer(row, "od_send_coupon", 0),
                     "od_point": integer(row, "od_receipt_point", 0),
                     "od_cash_no": text(row, "od_cash_no", max_length=255),

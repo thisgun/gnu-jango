@@ -22,6 +22,7 @@ from gnu_jango.shop.models import (
     ShopOrder,
     ShopOrderData,
 )
+from gnu_jango.shop.notifications import STATUS_PAID as MAIL_STATUS_PAID, queue_order_placed_mails, queue_order_status_mail
 from gnu_jango.shop.order_points import item_status_update, take_back_order_points
 from gnu_jango.shop.payment_options import online_payment_preferences
 
@@ -710,22 +711,16 @@ def order_paid_through_toss(order):
     )
 
 
-def toss_api_cancel_payment(order, reason):
-    """Cancel the whole Toss payment of ``order`` (POST /v1/payments/{paymentKey}/cancel), as
-    youngcart orderformcartupdate.php does before it marks the order 취소.
-
-    Returns the Toss payment object; raises PaymentCancelError when Toss did not confirm the
-    cancellation. A payment already cancelled at Toss (in its dashboard) counts as cancelled."""
+def _toss_cancel_request(order, body, idempotency_key):
+    """POST /v1/payments/{paymentKey}/cancel for ``order``; returns Toss's answer (a dict) or
+    raises PaymentCancelError. A payment Toss reports cancelled already comes back as
+    {"status": "CANCELED", "already_canceled": True}."""
     config = toss_payment_config()
     secret_key = str(getattr(settings, "SHOP_TOSS_SECRET_KEY", "") or "").strip()
     if not config["enabled"] or not secret_key:
         raise PaymentCancelError("토스페이먼츠 키가 설정되지 않아 결제를 취소할 수 없습니다.")
     payment_key_value = str(order.od_tno or "").strip()
     credentials = base64.b64encode(f"{secret_key}:".encode("utf-8")).decode("ascii")
-    body = json.dumps(
-        {"cancelReason": (str(reason or "").strip() or "쇼핑몰 운영자 승인 취소")[:200]},
-        ensure_ascii=False,
-    ).encode("utf-8")
     request = urllib_request.Request(
         f"{config['api_base_url']}/v1/payments/{quote(payment_key_value, safe='')}/cancel",
         data=body,
@@ -734,9 +729,7 @@ def toss_api_cancel_payment(order, reason):
             "Authorization": f"Basic {credentials}",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            # the reason is part of the body: a retry with another reason is a new request (Toss
-            # answers ALREADY_CANCELED_PAYMENT when the first one went through)
-            "Idempotency-Key": f"admin-cancel-{order.od_id}-{payment_key_value}-{hashlib.sha256(body).hexdigest()[:16]}"[:300],
+            "Idempotency-Key": idempotency_key[:300],
         },
     )
     try:
@@ -760,12 +753,52 @@ def toss_api_cancel_payment(order, reason):
         raise PaymentCancelError("토스페이먼츠에 연결하지 못했습니다. 잠시 후 다시 시도하세요.") from exc
     except ValueError as exc:
         raise PaymentCancelError("토스페이먼츠의 취소 응답을 확인하지 못했습니다.") from exc
-    if (
-        not isinstance(canceled, dict)
-        or str(canceled.get("orderId") or "") != str(order.od_id)
-        or str(canceled.get("status") or "").upper() != "CANCELED"
-    ):
+    if not isinstance(canceled, dict) or str(canceled.get("orderId") or "") != str(order.od_id):
+        raise PaymentCancelError("토스페이먼츠의 취소 응답이 이 주문과 맞지 않습니다. 토스페이먼츠 상점관리자에서 결제 상태를 확인하세요.")
+    return canceled
+
+
+def toss_api_cancel_payment(order, reason):
+    """Cancel the whole Toss payment of ``order`` (POST /v1/payments/{paymentKey}/cancel), as
+    youngcart orderformcartupdate.php does before it marks the order 취소.
+
+    Returns the Toss payment object; raises PaymentCancelError when Toss did not confirm the
+    cancellation. A payment already cancelled at Toss (in its dashboard) counts as cancelled."""
+    payment_key_value = str(order.od_tno or "").strip()
+    body = json.dumps(
+        {"cancelReason": (str(reason or "").strip() or "쇼핑몰 운영자 승인 취소")[:200]},
+        ensure_ascii=False,
+    ).encode("utf-8")
+    # the reason is part of the body: a retry with another reason is a new request (Toss answers
+    # ALREADY_CANCELED_PAYMENT when the first one went through)
+    key = f"admin-cancel-{order.od_id}-{payment_key_value}-{hashlib.sha256(body).hexdigest()[:16]}"
+    canceled = _toss_cancel_request(order, body, key)
+    if str(canceled.get("status") or "").upper() != "CANCELED":
         raise PaymentCancelError("토스페이먼츠가 전체 취소를 확인하지 않았습니다. 토스페이먼츠 상점관리자에서 결제 상태를 확인하세요.")
+    return canceled
+
+
+def toss_api_partial_cancel_payment(order, amount, reason, *, idempotency_key):
+    """Refund ``amount`` of the Toss payment of ``order`` (cancelAmount, youngcart
+    orderpartcancelupdate.php). ``idempotency_key`` names this one refund, so a retried request
+    never refunds twice. Returns Toss's payment object (PARTIAL_CANCELED, or CANCELED when the
+    whole balance went back); raises PaymentCancelError when Toss did not confirm it. A payment
+    already cancelled in full (in the Toss dashboard) comes back with "already_canceled": the
+    money went back there, so the caller records the refund instead of refusing the change."""
+    amount = int(amount)
+    if amount <= 0:
+        raise PaymentCancelError("환불할 금액이 없습니다.")
+    body = json.dumps(
+        {"cancelReason": (str(reason or "").strip() or "쇼핑몰 운영자 부분취소")[:200], "cancelAmount": amount},
+        ensure_ascii=False,
+    ).encode("utf-8")
+    canceled = _toss_cancel_request(order, body, idempotency_key)
+    if canceled.get("already_canceled"):
+        return canceled
+    if str(canceled.get("status") or "").upper() not in {"PARTIAL_CANCELED", "CANCELED"}:
+        raise PaymentCancelError(
+            "토스페이먼츠가 부분취소를 확인하지 않았습니다. 토스페이먼츠 상점관리자에서 결제 상태를 확인하세요."
+        )
     return canceled
 
 
@@ -800,6 +833,7 @@ def save_toss_vbank_authorization(order, toss_payment):
                 status=drf_status.HTTP_409_CONFLICT,
                 code="order_cancelled",
             )
+        newly_issued = locked.od_tno != str(toss_payment.get("paymentKey") or "")[:255]
         locked.od_pg = "toss"
         locked.od_tno = str(toss_payment.get("paymentKey") or "")[:255]
         locked.od_vbank_bank_code = bank_code[:10]
@@ -814,6 +848,9 @@ def save_toss_vbank_authorization(order, toss_payment):
             "od_vbank_customer_name", "od_vbank_due_date", "od_vbank_secret_hash",
             "od_vbank_status", "od_misu",
         ])
+        if newly_issued:
+            # youngcart orderformupdate.php mails the order once the virtual account is issued
+            queue_order_placed_mails(locked)
         return locked, None
 
 
@@ -1015,4 +1052,10 @@ def confirm_order_payment(order_id, amount, pg_service, transaction_id, raw_data
                 # an all-member coupon stays open for the other members (use is in the log)
                 ShopCoupon.objects.filter(pk=log.cp_id, cp_all_members=False).update(cp_used="1")
         record_payment_raw_log(order, order_id, pg_service, transaction_id, raw_data, prefix=log_prefix)
+        # youngcart: a PG order is mailed once approved; a virtual account was mailed when it was
+        # issued, so its deposit gets the 입금 확인 mail
+        if settle_case_is_vbank(order.od_settle_case):
+            queue_order_status_mail(order, MAIL_STATUS_PAID)
+        else:
+            queue_order_placed_mails(order)
     return order, None

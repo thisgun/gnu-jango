@@ -194,7 +194,7 @@ export function ReviewForm({
       </div>
       <p className="text-xs text-muted-foreground">
         {policy?.review_requires_completed_order
-          ? "주문 상태가 완료인 상품에만 후기 작성 가능합니다."
+          ? "사용후기는 주문이 완료된 경우에만 작성하실 수 있습니다."
           : "로그인 회원은 이 상품에 후기를 작성할 수 있습니다."}
         {policy?.review_requires_moderation
           ? " 등록한 후기는 관리자 확인 후 노출됩니다."

@@ -1,0 +1,129 @@
+{% extends "admin/base_site.html" %}
+{% load i18n humanize %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:shop_shoporder_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; <a href="{{ change_url }}">{{ order.od_id }}</a>
+  &rsaquo; 상품 취소·반품·품절
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">주문 {{ order.od_id }} · {{ order.od_status }} · {{ order.od_settle_case|default:"-" }}</p>
+    <h1>상품 취소·반품·품절</h1>
+    <p class="g5-admin-hero-copy">
+      고른 상품만 취소(배송 전)·품절(배송 전)·반품(배송·완료 후)으로 바꿉니다. 재고를 되돌리고, 남은 상품으로 배송비와 쿠폰을 다시 계산하며,
+      더 받은 결제금액은 토스페이먼츠 카드·계좌이체·간편결제면 PG에서 부분취소하고 그 밖의 결제는 직접 환불할 금액으로 기록합니다.
+      모든 상품이 바뀌면 주문 전체가 취소(반품이 있으면 반품)됩니다.
+    </p>
+  </div>
+  <div class="g5-admin-report-filter-actions">
+    <a class="button btn g5-admin-button-secondary" href="{{ change_url }}">주문으로 돌아가기</a>
+  </div>
+</section>
+
+{% if error %}
+<div role="alert" class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<section class="g5-admin-report-metrics" aria-label="현재 주문 금액">
+  <article class="card g5-admin-report-metric"><span>상품금액</span><strong>{{ order.od_cart_price|intcomma }}</strong><em>취소 {{ order.od_cancel_price|intcomma }}</em></article>
+  <article class="card g5-admin-report-metric"><span>배송비</span><strong>{{ order.od_send_cost|intcomma }}</strong><em>추가 {{ order.od_send_cost2|intcomma }}</em></article>
+  <article class="card g5-admin-report-metric"><span>결제금액</span><strong>{{ order.od_receipt_price|intcomma }}</strong><em>포인트 {{ order.od_receipt_point|intcomma }} · 환불 {{ order.od_refund_price|intcomma }}</em></article>
+  <article class="card g5-admin-report-metric"><span>미수금</span><strong>{{ order.od_misu|intcomma }}</strong><em>쿠폰 {{ order.od_coupon|intcomma }} · 배송쿠폰 {{ order.od_send_coupon|intcomma }}</em></article>
+</section>
+
+<form method="post" action="">
+  {% csrf_token %}
+  <section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+    <div class="g5-admin-panel-header">
+      <div>
+        <p class="g5-admin-eyebrow">주문 상품</p>
+        <h2>바꿀 상품 선택</h2>
+      </div>
+    </div>
+    <div class="g5-admin-report-table-wrap">
+      <table class="table g5-admin-mini-table">
+        <thead>
+          <tr>
+            <th scope="col">선택</th>
+            <th scope="col">상품</th>
+            <th scope="col">상태</th>
+            <th scope="col">수량</th>
+            <th scope="col">금액</th>
+            <th scope="col">재고 차감</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for line in lines %}
+          <tr>
+            <td>
+              {% if line.selectable %}
+              <input type="checkbox" name="ct_chk" value="{{ line.pk }}" id="ct-chk-{{ line.pk }}"{% if line.checked %} checked{% endif %}>
+              {% else %}-{% endif %}
+            </td>
+            <td><label for="ct-chk-{{ line.pk }}">{{ line.label }}</label></td>
+            <td><span class="badge g5-admin-badge g5-admin-badge-{{ line.tone }}">{{ line.status }}</span></td>
+            <td>{{ line.qty }}</td>
+            <td>{{ line.amount|intcomma }}</td>
+            <td>{% if line.stock_adjusted %}예{% else %}아니오{% endif %}</td>
+          </tr>
+          {% empty %}
+          <tr><td colspan="6" class="g5-admin-empty">주문 상품이 없습니다.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="g5-admin-report-filter">
+      <label>
+        <span>변경할 상태</span>
+        <select class="select" name="ct_status" required>
+          {% for value, help in targets %}
+          <option value="{{ value }}"{% if value == target %} selected{% endif %}>{{ value }} — {{ help }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>사유 (관리자 이력·PG 취소 사유)</span>
+        <input class="input" type="text" name="reason" maxlength="200" value="{{ reason }}">
+      </label>
+      <div class="g5-admin-report-filter-actions">
+        <button class="button btn g5-admin-button-secondary" type="submit" name="step" value="preview">금액 미리보기</button>
+        <button class="button btn btn-primary" type="submit" name="step" value="apply">적용</button>
+      </div>
+    </div>
+  </section>
+</form>
+
+{% if plan %}
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide" aria-label="변경 후 금액">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">미리보기 · 아직 바뀌지 않았습니다</p>
+      <h2>상품 {{ plan.lines|length }}건 {{ plan.target }} 처리 후{% if plan.all_inactive %} — 주문 전체 {{ plan.order_status }}{% endif %}</h2>
+    </div>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="table g5-admin-mini-table">
+      <tbody>
+        <tr><th scope="row">남는 상품금액</th><td>{{ plan.cart_price|intcomma }}</td><th scope="row">취소·반품·품절 금액</th><td>{{ plan.cancel_price|intcomma }}</td></tr>
+        <tr><th scope="row">배송비</th><td>{{ plan.send_cost|intcomma }} (추가 {{ plan.send_cost2|intcomma }})</td><th scope="row">상품·주문·배송 쿠폰</th><td>{{ plan.cart_coupon|intcomma }} · {{ plan.od_coupon|intcomma }} · {{ plan.send_coupon|intcomma }}</td></tr>
+        <tr><th scope="row">주문 합계</th><td>{{ plan.total|intcomma }}</td><th scope="row">결제 · 이미 환불</th><td>{{ plan.paid|intcomma }} · {{ plan.refunded|intcomma }}</td></tr>
+        <tr>
+          <th scope="row">이번 환불</th>
+          <td><strong>{{ plan.refund|intcomma }}</strong> {% if plan.method == "toss" %}(토스페이먼츠 {% if plan.full_pg_cancel %}전체취소{% else %}부분취소{% endif %} {{ plan.pg_refund|intcomma }}{% if plan.manual_refund %} · 개인결제분 직접 환불 {{ plan.manual_refund|intcomma }}{% endif %}){% elif plan.method == "manual" %}(직접 환불){% endif %}</td>
+          <th scope="row">변경 후 미수금</th><td>{{ plan.misu|intcomma }}</td>
+        </tr>
+        {% if plan.point_excess %}
+        <tr><th scope="row">포인트 조정</th><td colspan="3">포인트로 결제된 {{ plan.point_excess|intcomma }}점은 자동으로 돌려주지 않습니다. 회원 포인트에서 직접 조정하세요.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

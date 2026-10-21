@@ -17,9 +17,12 @@ from .shop_common import (
 )
 
 
-def coupon_discount(coupon, amount, *, minimum_base=None):
-    """The discount on ``amount``; ``minimum_base`` (default: ``amount``) is what cp_minimum is
-    compared with - a shipping coupon discounts the shipping fee but its minimum is the order amount."""
+def coupon_raw_discount(coupon, amount, *, minimum_base=None):
+    """YoungCart's coupon amount on ``amount`` before it is held to ``amount``: 0 below cp_minimum,
+    else the rate (floored to cp_trunc) or the fixed price, capped by cp_maximum.
+
+    ``minimum_base`` (default: ``amount``) is what cp_minimum is compared with - a shipping coupon
+    discounts the shipping fee but its minimum is the order amount."""
     amount = max(0, safe_int(amount, 0))
     base = amount if minimum_base is None else max(0, safe_int(minimum_base, 0))
     if amount <= 0 or base < coupon.cp_minimum:
@@ -32,34 +35,92 @@ def coupon_discount(coupon, amount, *, minimum_base=None):
         discount = coupon.cp_price
     if coupon.cp_maximum > 0:
         discount = min(discount, coupon.cp_maximum)
-    return min(amount, max(0, discount))
+    return max(0, discount)
 
 
-def validated_item_coupons(user, items):
-    """Discounts of the item-level coupons in the cart that are still valid at order time.
+def coupon_discount(coupon, amount, *, minimum_base=None):
+    """The discount on ``amount``, never more than ``amount`` (how YoungCart treats a shipping
+    coupon); see coupon_raw_discount."""
+    amount = max(0, safe_int(amount, 0))
+    return min(amount, coupon_raw_discount(coupon, amount, minimum_base=minimum_base))
+
+
+def coupon_exceeds_base(coupon, base):
+    """True when the coupon would discount more than ``base``. YoungCart refuses such a product or
+    order coupon (orderformupdate.php ``if($item_price < $dc) continue`` / ``die('Order coupon
+    error.')``) instead of shrinking it to the amount."""
+    return coupon_raw_discount(coupon, base) > max(0, safe_int(base, 0))
+
+
+def product_line_totals(items):
+    """Sum of line_total per it_id: the amount a product coupon is judged on.
+
+    YoungCart orderformupdate.php / orderitemcoupon.php add up every cart line of the product,
+    ``IF(io_type = 1, io_price * ct_qty, (ct_price + io_price) * ct_qty)``, which is line_total."""
+    totals = {}
+    for item in items:
+        it_id = str(item.get("it_id") or "")
+        totals[it_id] = totals.get(it_id, 0) + max(0, safe_int(item.get("line_total"), 0))
+    return totals
+
+
+def product_coupon_entries(user, items):
+    """``(it_id, coupon, discount)`` for the product and category coupons in the cart that are still
+    valid at order time.
 
     The cart only remembers which coupon was picked and the discount it showed then; the coupon may
-    have expired, been used elsewhere or never matched the item, and one coupon counts once.
+    have expired, been used elsewhere or never matched the item, and one coupon counts once. Like
+    YoungCart orderformupdate.php a product takes one coupon, judged on the total of all its lines,
+    and a coupon worth more than that total is dropped.
     """
     if not user:
         return []
+    totals = product_line_totals(items)
     entries = []
     seen = set()
     couponed_products = set()
     for item in items:
         cp_id = str(item.get("cp_id") or "")
-        # YoungCart orderformupdate.php: one item coupon per product, even with several option lines
-        if not cp_id or cp_id in seen or str(item.get("it_id")) in couponed_products:
+        it_id = str(item.get("it_id") or "")
+        if not cp_id or cp_id in seen or it_id in couponed_products:
             continue
         coupon = valid_coupons_queryset(user).filter(pk=cp_id, cp_method__in=(0, 1)).first()
         if not coupon or not coupon_matches_cart_item(coupon, item):
             continue
-        discount = coupon_discount(coupon, item["line_total"])
+        base = totals.get(it_id, 0)
+        if coupon_exceeds_base(coupon, base):
+            continue
+        discount = coupon_raw_discount(coupon, base)
         if discount > 0:
-            entries.append((coupon, discount))
+            entries.append((it_id, coupon, discount))
             seen.add(cp_id)
-            couponed_products.add(str(item.get("it_id")))
+            couponed_products.add(it_id)
     return entries
+
+
+def validated_item_coupons(user, items):
+    """``(coupon, discount)`` of the valid product and category coupons; see product_coupon_entries."""
+    return [(coupon, discount) for _, coupon, discount in product_coupon_entries(user, items)]
+
+
+def items_with_product_coupon_prices(items, entries):
+    """Copies of the cart lines carrying the validated product coupons.
+
+    YoungCart orderformupdate.php writes the product's discount on its first cart line (``order by
+    ct_id asc limit 1``) and nothing on its other lines, so the lines add up to the order's item
+    coupon total."""
+    by_product = {it_id: (coupon, discount) for it_id, coupon, discount in entries}
+    placed = set()
+    lines = []
+    for item in items:
+        it_id = str(item.get("it_id") or "")
+        if it_id in by_product and it_id not in placed:
+            coupon, discount = by_product[it_id]
+            lines.append({**item, "cp_id": coupon.cp_id, "cp_price": discount})
+            placed.add(it_id)
+        else:
+            lines.append({**item, "cp_id": "", "cp_price": 0})
+    return lines
 
 
 def coupon_payload(coupon, *, amount=0):

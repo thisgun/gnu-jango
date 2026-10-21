@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>BOARDPROTO</title>
+    <link>http://localhost:3000/bbs/BOARDONE</link>
+    <description></description>
+    <language>ko-KR</language>
+    <atom:link href="http://localhost:3000/rss/BOARDONE" rel="self" type="application/rss+xml"/>
+    <lastBuildDate>Wed, 21 Oct 2026 04:24:17 GMT</lastBuildDate>
+    <item>
+      <title>테스트</title>
+      <link>http://localhost:3000/bbs/BOARDONE/244</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/244</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Mon, 18 Jul 2022 14:39:09 GMT</pubDate>
+    </item>
+    <item>
+      <title>Depth1</title>
+      <link>http://localhost:3000/bbs/BOARDONE/333</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/333</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 10 Jan 2024 06:36:53 GMT</pubDate>
+    </item>
+    <item>
+      <title>Depth2</title>
+      <link>http://localhost:3000/bbs/BOARDONE/334</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/334</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 10 Jan 2024 06:38:24 GMT</pubDate>
+    </item>
+    <item>
+      <title>Depth3</title>
+      <link>http://localhost:3000/bbs/BOARDONE/335</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/335</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 10 Jan 2024 06:39:01 GMT</pubDate>
+    </item>
+    <item>
+      <title>Depth4</title>
+      <link>http://localhost:3000/bbs/BOARDONE/336</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/336</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 10 Jan 2024 06:40:19 GMT</pubDate>
+    </item>
+    <item>
+      <title>Depth5</title>
+      <link>http://localhost:3000/bbs/BOARDONE/337</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/337</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 10 Jan 2024 06:40:30 GMT</pubDate>
+    </item>
+    <item>
+      <title>Depth6</title>
+      <link>http://localhost:3000/bbs/BOARDONE/338</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/338</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 10 Jan 2024 06:40:55 GMT</pubDate>
+    </item>
+    <item>
+      <title>Depth7</title>
+      <link>http://localhost:3000/bbs/BOARDONE/339</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/339</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 10 Jan 2024 06:41:14 GMT</pubDate>
+    </item>
+    <item>
+      <title>Depth8</title>
+      <link>http://localhost:3000/bbs/BOARDONE/340</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/340</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 10 Jan 2024 06:42:05 GMT</pubDate>
+    </item>
+    <item>
+      <title>Depth9</title>
+      <link>http://localhost:3000/bbs/BOARDONE/341</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/341</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 10 Jan 2024 06:42:14 GMT</pubDate>
+    </item>
+    <item>
+      <title>Depth10</title>
+      <link>http://localhost:3000/bbs/BOARDONE/342</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/342</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 10 Jan 2024 06:42:24 GMT</pubDate>
+    </item>
+    <item>
+      <title>Depth11</title>
+      <link>http://localhost:3000/bbs/BOARDONE/343</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/343</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 10 Jan 2024 06:42:37 GMT</pubDate>
+    </item>
+    <item>
+      <title>ㅅㅅ</title>
+      <link>http://localhost:3000/bbs/BOARDONE/326</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/326</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Tue, 09 Jan 2024 05:21:02 GMT</pubDate>
+    </item>
+    <item>
+      <title>sdsdsdsd</title>
+      <link>http://localhost:3000/bbs/BOARDONE/324</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/324</guid>
+      <description></description>
+      <author>sdfsd</author>
+      <pubDate>Tue, 31 Oct 2023 10:11:14 GMT</pubDate>
+    </item>
+    <item>
+      <title>tee</title>
+      <link>http://localhost:3000/bbs/BOARDONE/323</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/323</guid>
+      <description></description>
+      <author>test</author>
+      <pubDate>Tue, 31 Oct 2023 10:05:42 GMT</pubDate>
+    </item>
+    <item>
+      <title>비밀글 테스트</title>
+      <link>http://localhost:3000/bbs/BOARDONE/314</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/314</guid>
+      <description></description>
+      <author>errser</author>
+      <pubDate>Tue, 22 Nov 2022 16:54:21 GMT</pubDate>
+    </item>
+    <item>
+      <title>2222</title>
+      <link>http://localhost:3000/bbs/BOARDONE/313</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/313</guid>
+      <description></description>
+      <author>1111</author>
+      <pubDate>Wed, 16 Nov 2022 03:09:24 GMT</pubDate>
+    </item>
+    <item>
+      <title>fghsefsf</title>
+      <link>http://localhost:3000/bbs/BOARDONE/311</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/311</guid>
+      <description></description>
+      <author>DFGDFG</author>
+      <pubDate>Wed, 31 Aug 2022 01:47:10 GMT</pubDate>
+    </item>
+    <item>
+      <title>test11111</title>
+      <link>http://localhost:3000/bbs/BOARDONE/287</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/287</guid>
+      <description></description>
+      <author>test</author>
+      <pubDate>Mon, 28 May 2018 04:15:06 GMT</pubDate>
+    </item>
+    <item>
+      <title>test</title>
+      <link>http://localhost:3000/bbs/BOARDONE/286</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/286</guid>
+      <description></description>
+      <author>아카이sun</author>
+      <pubDate>Mon, 30 Jul 2018 13:18:54 GMT</pubDate>
+    </item>
+    <item>
+      <title>ddddddddd</title>
+      <link>http://localhost:3000/bbs/BOARDONE/261</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/BOARDONE/261</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Thu, 05 Jul 2018 05:39:23 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

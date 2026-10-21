@@ -2,7 +2,7 @@ from django.urls import path
 
 from gnu_jango.core import thumbnails
 
-from . import member_lifecycle, page_bootstrap, v1_auth, v1_board, v1_community, v1_docs, v1_search, v1_shop, v1_views
+from . import member_lifecycle, page_bootstrap, shop_personal_pay, v1_auth, v1_board, v1_community, v1_docs, v1_search, v1_shop, v1_views
 
 app_name = "api_v1"
 
@@ -131,6 +131,17 @@ urlpatterns = [
     path("shop/events/<str:ev_id>", v1_shop.events_view, name="shop-event-detail"),
     path("shop/events", v1_shop.events_view, name="shop-events"),
     path("shop/personalpay/<str:pp_id>/start", v1_shop.personalpay_start_view, name="shop-personalpay-start"),
+    path("shop/personalpay/<str:pp_id>/bank", shop_personal_pay.personalpay_bank_view, name="shop-personalpay-bank"),
+    path(
+        "shop/personalpay/<str:pp_id>/toss/prepare",
+        shop_personal_pay.personalpay_toss_prepare_view,
+        name="shop-personalpay-toss-prepare",
+    ),
+    path(
+        "shop/personalpay/<str:pp_id>/toss/confirm",
+        shop_personal_pay.personalpay_toss_confirm_view,
+        name="shop-personalpay-toss-confirm",
+    ),
     path("shop/personalpay/<str:pp_id>", v1_shop.personalpay_view, name="shop-personalpay-detail"),
     path("shop/personalpay", v1_shop.personalpay_view, name="shop-personalpay"),
     path("upload", v1_board.editor_upload_view, name="editor-upload"),

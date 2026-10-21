@@ -18,6 +18,7 @@ from gnu_jango.shop.models import (
     ShopProduct,
     ShopCouponLog,
 )
+from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES
 from gnu_jango.shop.shipping import (
     shipping_policy_payload,
 )
@@ -33,7 +34,9 @@ ORDER_STATUS_ORDERED = "주문"
 ORDER_STATUS_PAID = "입금"
 ORDER_STATUS_SHIPPING = "배송"
 ORDER_STATUS_CANCELLED = "취소"
-CANCELLED_STATUSES = {ORDER_STATUS_CANCELLED, "cancel", "cancelled"}
+# youngcart $status_cancel (취소, 반품, 품절): every "cancelled" check of the shop goes through
+# CANCELLED_STATUSES, so a returned or sold-out line or order counts as cancelled too.
+CANCELLED_STATUSES = INACTIVE_LINE_STATUSES
 PAID_STATUSES = {ORDER_STATUS_PAID, ORDER_STATUS_SHIPPING, "paid", "shipping"}
 ORDERED_STATUSES = {ORDER_STATUS_ORDERED, "order", "ordered"}
 PAYMENT_ADAPTER_PROVIDERS = {"kcp", "kcp_v2", "inicis", "nicepay", "naverpay", "kakaopay", "samsungpay"}
@@ -355,7 +358,8 @@ def next_coupon_log_id():
 
 
 def generate_numeric_order_id():
-    return timezone.now().strftime("%Y%m%d%H%M%S") + f"{uuid.uuid4().int % 1000000:06d}"
+    # YoungCart's od_id starts with the shop's local date and time (date('YmdHis')), not UTC
+    return timezone.localtime().strftime("%Y%m%d%H%M%S") + f"{uuid.uuid4().int % 1000000:06d}"
 
 
 def pagination_meta(total, page, per_page):

@@ -424,6 +424,8 @@ export interface ShopProduct {
   it_head_html?: string;
   it_tail_html?: string;
   it_info_gubun?: string;
+  /** 상품정보제공고시 상품군 이름(예: 의류). */
+  it_info_gubun_title?: string;
   it_info_title?: string;
   it_info_items?: ShopProductInfoItem[];
   it_option_subject?: string;
@@ -694,6 +696,8 @@ export interface ShopOrder {
   od_invoice_time?: string;
   od_delivery_inquiry_url?: string;
   delivery_inquiry_url?: string;
+  /** 배송회사 문의전화(영카트 get_delivery_inquiry) — 목록에 없는 배송회사면 빈 값. */
+  delivery_inquiry_tel?: string;
   // 현금영수증 — PG 발급 결과. od_cash=1 이면 발급된 상태.
   od_cash?: number;
   od_cash_request?: boolean;

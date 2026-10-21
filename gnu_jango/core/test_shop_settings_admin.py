@@ -85,7 +85,7 @@ class ShopSettingsAdminTests(TestCase):
     minimal_form = {
         "de_admin_company_name": "Demo Shop",
         "de_admin_company_tel": "",
-        "de_delivery_company": "Courier",
+        "de_delivery_company": "CJ대한통운",
         "de_send_cost_case": "",
         "de_send_cost_limit": "",
         "de_send_cost_list": "",
@@ -133,7 +133,7 @@ class ShopSettingsAdminTests(TestCase):
             {
                 "de_admin_company_name": "Demo Shop",
                 "de_admin_company_tel": "02-1234-5678",
-                "de_delivery_company": "Courier",
+                "de_delivery_company": "CJ대한통운",
                 "de_send_cost_case": "차등",
                 "de_send_cost_limit": "30000;50000",
                 "de_send_cost_list": "4000;0",
@@ -274,7 +274,7 @@ class ShopSettingsAdminTests(TestCase):
             data={
                 "de_admin_company_name": "Demo Shop",
                 "de_admin_company_tel": "",
-                "de_delivery_company": "Courier",
+                "de_delivery_company": "CJ대한통운",
                 "de_send_cost_case": "차등",
                 "de_send_cost_limit": "50000;30000",
                 "de_send_cost_list": "3000",

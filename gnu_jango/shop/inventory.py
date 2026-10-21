@@ -3,6 +3,7 @@ from django.utils import timezone
 
 from .models import ShopOrder, ShopProduct
 from .order_points import item_status_update, take_back_order_points
+from .order_statuses import INACTIVE_LINE_STATUSES
 
 
 class StockAdjustmentError(Exception):
@@ -92,8 +93,40 @@ def order_history_line(text, actor=""):
     return f"{timezone.localtime().strftime('%Y-%m-%d %H:%M:%S')} {actor or '-'} {text}"
 
 
-def cancel_order_with_stock_restore(order, reason="", *, refund_price=0, history=""):
+def restore_line_stock(item):
+    """Put the stock an order line reserved back on its product (or option); returns the quantity
+    put back. The caller clears ``item.stock_adjusted``; a product set 품절 because its stock ran
+    out comes off 품절, one set by hand stays."""
+    if not item.stock_adjusted or not item.product_id:
+        return 0
+    product = ShopProduct.objects.select_for_update().filter(pk=item.product_id).first()
+    if not product:
+        return 0
+    update_fields = ["updated_at"]
+    if item.ct_option:
+        options = list(product.options or [])
+        for option in options:
+            if str(option.get("io_id")) == str(item.ct_option) and int(option.get("io_type") or 0) == int(item.io_type or 0):
+                option["io_stock_qty"] = int(option.get("io_stock_qty") or 0) + item.ct_qty
+                break
+        product.options = options
+        update_fields.append("options")
+    else:
+        ran_out = product.it_stock_qty <= 0
+        product.it_stock_qty += item.ct_qty
+        update_fields.append("it_stock_qty")
+        if product.it_soldout == "1" and ran_out and product.it_stock_qty > 0:
+            product.it_soldout = ""
+            update_fields.append("it_soldout")
+    product.save(update_fields=update_fields)
+    return item.ct_qty
+
+
+def cancel_order_with_stock_restore(order, reason="", *, refund_price=0, history="", status="취소"):
     """Cancel the whole order and put the reserved stock back.
+
+    ``status`` is what the order and its remaining lines become: 취소, or 반품 for an order
+    returned after it shipped (lines already 취소/반품/품절 keep their status).
 
     ``reason`` comes from the customer (or a system job) and is appended to the order memo;
     ``history`` is the admin log line written to od_mod_history instead (an admin reason never
@@ -104,38 +137,21 @@ def cancel_order_with_stock_restore(order, reason="", *, refund_price=0, history
         locked_order = ShopOrder.objects.select_for_update().get(pk=order.pk)
         restored_count = 0
         for item in locked_order.items.select_for_update().filter(stock_adjusted=True):
-            if item.product_id:
-                product = ShopProduct.objects.select_for_update().filter(pk=item.product_id).first()
-                if product:
-                    update_fields = ["updated_at"]
-                    if item.ct_option:
-                        options = list(product.options or [])
-                        for option in options:
-                            if str(option.get("io_id")) == str(item.ct_option) and int(option.get("io_type") or 0) == int(item.io_type or 0):
-                                option["io_stock_qty"] = int(option.get("io_stock_qty") or 0) + item.ct_qty
-                                break
-                        product.options = options
-                        update_fields.append("options")
-                    else:
-                        ran_out = product.it_stock_qty <= 0
-                        product.it_stock_qty += item.ct_qty
-                        update_fields.append("it_stock_qty")
-                        # only the 품절 set when the stock ran out comes off; one set by hand stays
-                        if product.it_soldout == "1" and ran_out and product.it_stock_qty > 0:
-                            product.it_soldout = ""
-                            update_fields.append("it_soldout")
-                    product.save(update_fields=update_fields)
-                    restored_count += item.ct_qty
+            restored_count += restore_line_stock(item)
             item.stock_adjusted = False
-            item.ct_status = "취소"
-            item.save(update_fields=["stock_adjusted", "ct_status"])
+            fields = ["stock_adjusted"]
+            if item.ct_status not in INACTIVE_LINE_STATUSES:
+                item.ct_status = status
+                fields.append("ct_status")
+            item.save(update_fields=fields)
 
-        locked_order.items.exclude(ct_status="취소").update(**item_status_update("취소"))
+        # a line already 취소/반품/품절 (a partial change) keeps what it became
+        locked_order.items.exclude(ct_status__in=INACTIVE_LINE_STATUSES).update(**item_status_update(status))
         # a line that already earned its purchase point gives it back
         take_back_order_points(locked_order)
 
         update_fields = ["od_status", "od_mod_history"]
-        locked_order.od_status = "취소"
+        locked_order.od_status = status
         if reason:
             locked_order.od_memo = (locked_order.od_memo + "\n" + str(reason)).strip()
             update_fields.append("od_memo")

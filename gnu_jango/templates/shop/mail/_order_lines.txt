@@ -1,0 +1,6 @@
+{% load humanize %}{% autoescape off %}{% for line in lines %}- {{ line.it_name }}{% if line.option %} ({{ line.option }}){% endif %} x {{ line.qty|intcomma }} = {{ line.total|intcomma }}원{% if show_status %} [{{ line.status }}]{% endif %}
+{% endfor %}
+상품금액: {{ totals.cart_price|intcomma }}원
+배송비: {{ totals.send_cost|intcomma }}원{% if totals.coupon %}
+할인: -{{ totals.coupon|intcomma }}원{% endif %}
+결제금액: {{ totals.total|intcomma }}원{% endautoescape %}

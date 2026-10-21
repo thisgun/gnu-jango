@@ -1,0 +1,12 @@
+{% extends "shop/mail/_base.html" %}
+{% block heading %}새 주문 알림{% endblock %}
+{% block content %}
+<p>{{ order.od_name }}님의 새 주문이 들어왔습니다.</p>
+<p style="margin:12px 0;"><strong>주문번호</strong> {{ order.od_id }}{% if ordered_at %} · {{ ordered_at }}{% endif %} · {{ order.od_status }}</p>
+{% include "shop/mail/_order_lines.html" %}
+<p><strong>결제수단</strong> {{ settle_case }}{% if is_bank %} ({{ order.od_bank_account }}, 입금자 {{ order.od_deposit_name }}){% endif %}</p>
+<p><strong>주문하신 분</strong> {{ order.od_name }} / {{ order.od_hp|default:order.od_tel }} / {{ order.od_email }}</p>
+<p><strong>받는 분</strong> {{ order.od_b_name }} / {{ order.od_b_hp|default:order.od_b_tel }} / {{ order.od_b_zip }} {{ order.od_b_addr1 }} {{ order.od_b_addr2 }}</p>{% if order.od_memo %}
+<p><strong>전하실 말씀</strong><br>{{ order.od_memo|linebreaksbr }}</p>{% endif %}
+<p style="color:#78716c;">관리자 화면의 주문 관리에서 처리해 주세요.</p>
+{% endblock %}

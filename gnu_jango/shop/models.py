@@ -295,7 +295,11 @@ class ShopProduct(models.Model):
     it_head_html = models.TextField(blank=True, default="")
     it_tail_html = models.TextField(blank=True, default="")
     it_info_gubun = models.CharField(max_length=100, blank=True, default="")
+    # Legacy column: older imports put YoungCart it_info_value here (cut at 255 characters).
+    # Rows now live in it_info_value; a leftover plain text is still shown as the notice text.
     it_info_title = models.CharField(max_length=255, blank=True, default="")
+    # 상품정보제공고시 rows: [{"key", "title", "value"}] (see gnu_jango.shop.item_info).
+    it_info_value = models.JSONField(default=list, blank=True)
     it_option_subject = models.CharField(max_length=255, blank=True, default="")
     it_supply_subject = models.CharField(max_length=255, blank=True, default="")
     image_url = models.CharField(max_length=1000, blank=True, default="")

@@ -2,11 +2,11 @@
 (bbs/register_form_update.php, de_member_reg_coupon_*)."""
 
 import logging
-from datetime import timedelta
 
 from django.db import transaction
 from django.utils import timezone
 
+from gnu_jango.shop.coupon_dates import coupon_end_date
 from gnu_jango.shop.models import ShopCoupon
 from gnu_jango.shop.shop_options import shop_options
 
@@ -46,7 +46,7 @@ def issue_signup_coupon(user):
                 cp_maximum=0,
                 cp_start=today,
                 # valid from today through the term-th day, like a coupon zone's period
-                cp_end=today + timedelta(days=term - 1),
+                cp_end=coupon_end_date(today, term),
             )
     except Exception:  # noqa: BLE001 - the coupon is a bonus; the signup must go through
         logger.exception("Could not issue the new-member coupon for user %s", getattr(user, "pk", None))
