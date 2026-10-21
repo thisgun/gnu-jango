@@ -188,6 +188,33 @@ class OptionBuilderAdminTests(AdminBase):
         product.refresh_from_db()
         self.assertEqual(product.options, [])
 
+    def test_legacy_option_ids_do_not_block_editing_the_stock(self):
+        legacy = [
+            {"io_no": 1, "io_id": 'A"B', "io_type": 0, "io_price": 0, "io_stock_qty": 1, "io_noti_qty": 0, "io_use": 1},
+            {"io_no": 2, "io_id": "C,D", "io_type": 0, "io_price": 0, "io_stock_qty": 1, "io_noti_qty": 0, "io_use": 1},
+            {"io_no": 3, "io_id": "E", "io_type": 0, "io_price": 0, "io_stock_qty": 1, "io_noti_qty": 0, "io_use": 1},
+        ]
+        product = self.product(options=legacy)
+        edited = [dict(row, io_stock_qty=row["io_stock_qty"] + 5) for row in legacy]
+        response = self.post_change(product, options=json.dumps(edited))
+        self.assertEqual(response.status_code, 302, response.content[:2000])
+        product.refresh_from_db()
+        self.assertEqual([(row["io_id"], row["io_stock_qty"]) for row in product.options], [('A"B', 6), ("C,D", 6), ("E", 6)])
+
+        # a new or renamed row is still checked strictly
+        added = [*edited, {"io_id": 'X"Y', "io_type": 0}]
+        response = self.post_change(product, options=json.dumps(added))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("따옴표", response.content.decode())
+        renamed = [dict(edited[0], io_id="A,B2"), *edited[1:]]
+        self.assertIn("쉼표", self.post_change(product, options=json.dumps(renamed)).content.decode())
+
+    def test_stored_ids_are_kept_verbatim_by_the_normalizer(self):
+        stored = [{"io_id": "C,D", "io_type": 0}]
+        self.assertEqual(normalize_option_rows([{"io_id": "C,D", "io_type": 0, "io_stock_qty": 3}], stored=stored)[0]["io_id"], "C,D")
+        with self.assertRaises(ValidationError):
+            normalize_option_rows([{"io_id": "C,D", "io_type": 1}], stored=stored)  # another type is a new row
+
     def test_untouched_legacy_rows_do_not_block_an_unrelated_edit(self):
         # imported rows the strict checks would refuse (4 levels) are re-sent unchanged by the builder
         legacy = [{"io_no": 7, "io_id": SEP.join("ABCD"), "io_type": 0, "io_price": 0, "io_stock_qty": 2, "io_noti_qty": 0, "io_use": 1}]

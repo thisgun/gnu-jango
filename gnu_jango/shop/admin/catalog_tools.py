@@ -63,7 +63,8 @@ class ProductOptionFormMixin:
             # stored rows sent back untouched (e.g. imported rows the builder only re-serialized):
             # keep them as they are instead of failing an unrelated edit on stricter checks
             return initial
-        return normalize_option_rows(options)
+        # rows kept from the stored list are not re-checked on their (possibly legacy) ids
+        return normalize_option_rows(options, stored=initial)
 
     def clean_option_fields(self, cleaned_data):
         touched = {"options", "it_option_subject", "it_supply_subject"} & set(self.changed_data)
@@ -74,7 +75,7 @@ class ProductOptionFormMixin:
             return cleaned_data
         if "options" not in self.changed_data or rows is self.instance.options:
             try:
-                rows = normalize_option_rows(rows)
+                rows = normalize_option_rows(rows, stored=self.instance.options if self.instance.pk else None)
             except ValidationError:
                 return cleaned_data  # stored rows from before the builder; leave them be
         try:

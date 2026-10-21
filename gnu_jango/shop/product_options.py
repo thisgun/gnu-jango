@@ -94,15 +94,32 @@ def _option_parts(io_id, io_type, position):
     return parts
 
 
-def normalize_option_rows(rows):
+def _stored_option_ids(stored):
+    """(io_type, io_id) of the rows already saved on the product, exactly as stored."""
+    ids = set()
+    for row in stored if isinstance(stored, list) else []:
+        if not isinstance(row, dict) or not isinstance(row.get("io_id"), str):
+            continue
+        io_type = row.get("io_type", 0)
+        if io_type in (0, 1, "0", "1"):
+            ids.add((int(io_type), row["io_id"]))
+    return ids
+
+
+def normalize_option_rows(rows, *, stored=None):
     """Checked, typed copies of the option rows; raises ValidationError (Korean) on bad input.
 
     Selection rows come first, then supplement rows, each in the given order, numbered by io_no.
-    Missing numbers take the values the cart already assumes for them (price/stock/notice 0, used)."""
+    Missing numbers take the values the cart already assumes for them (price/stock/notice 0, used).
+
+    A row whose io_id is one of the ``stored`` rows' (same type, same text) keeps that id as it is:
+    ids imported from youngcart may hold quotes or commas, and must not block editing the stock or
+    price of this or any other row. New or renamed rows are checked strictly."""
     if rows in (None, ""):
         return []
     if not isinstance(rows, list):
         raise ValidationError("옵션은 옵션 행의 목록(JSON 배열)이어야 합니다.")
+    legacy_ids = _stored_option_ids(stored)
     seen = set()
     levels = None
     normalized = {0: [], 1: []}
@@ -115,8 +132,12 @@ def normalize_option_rows(rows):
             io_type = int(io_type)
         else:
             raise ValidationError(f"{position}: io_type 은 0(선택옵션) 또는 1(추가옵션)이어야 합니다.")
-        parts = _option_parts(row.get("io_id"), io_type, position)
-        io_id = OPTION_SEPARATOR.join(parts)
+        if (io_type, row.get("io_id")) in legacy_ids:
+            io_id = row["io_id"]
+            parts = io_id.split(OPTION_SEPARATOR)
+        else:
+            parts = _option_parts(row.get("io_id"), io_type, position)
+            io_id = OPTION_SEPARATOR.join(parts)
         if io_type == 0:
             if levels is None:
                 levels = len(parts)
