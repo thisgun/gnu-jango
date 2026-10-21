@@ -562,7 +562,8 @@ def order_item_payload(item):
 def order_payload(order, *, detail=False):
     items = list(order.items.select_related("product").all()) if detail else []
     status_value = normalize_order_status(order.od_status)
-    coupons = order_coupon_totals(order)
+    # a product coupon on a cancelled, returned or sold-out line no longer counts
+    coupons = order_coupon_totals(order, items=items if detail else None)
     cart_coupon, order_coupon, send_coupon = coupons.cart, coupons.order, coupons.send
     if status_value == ORDER_STATUS_CANCELLED:
         cart_coupon = 0
@@ -658,7 +659,7 @@ def order_payload(order, *, detail=False):
         "od_order_price": order.od_cart_price,
         "od_list_price": list_price,
         "od_receipt_total": receipt_total,
-        "od_misu_price": max(0, total_price - receipt_total),
+        "od_misu_price": max(0, total_price - (receipt_total - order.od_refund_price)),
         "od_is_fully_paid": order.od_misu <= 0,
         "od_delivery_company": order.od_delivery_company,
         "od_invoice": order.od_invoice,
@@ -1593,18 +1594,19 @@ def restore_order_coupons_and_points(order):
         change_member_point(order.user, point_to_restore, f"주문번호 {order.od_id} 취소", "@order-cancel", order.od_id)
 
 
-def cancel_order_and_refund_benefits(order, reason, *, refund_price=0, history=""):
+def cancel_order_and_refund_benefits(order, reason, *, refund_price=0, history="", status=ORDER_STATUS_CANCELLED):
     """Cancel an order, put the stock back and give its coupons and points back, once.
 
     The one cancel path of the customer, the expiry jobs and the admin (which cancels the PG
-    payment first and passes the refunded amount). An order that is already cancelled is left
-    as it is, so its refund record is not overwritten by a second call."""
+    payment first and passes the refunded amount; ``status`` 반품 for a returned order). An order
+    that is already cancelled is left as it is, so its refund record is not overwritten by a
+    second call."""
     with transaction.atomic():
         locked = ShopOrder.objects.select_for_update().filter(pk=order.pk).first() or order
         if str(locked.od_status or "") in CANCELLED_STATUSES:
             return locked, 0
         restore_order_coupons_and_points(locked)
-        return cancel_order_with_stock_restore(locked, reason, refund_price=refund_price, history=history)
+        return cancel_order_with_stock_restore(locked, reason, refund_price=refund_price, history=history, status=status)
 
 
 def cancel_shop_order_locally(order_id, reason):

@@ -710,22 +710,16 @@ def order_paid_through_toss(order):
     )
 
 
-def toss_api_cancel_payment(order, reason):
-    """Cancel the whole Toss payment of ``order`` (POST /v1/payments/{paymentKey}/cancel), as
-    youngcart orderformcartupdate.php does before it marks the order 취소.
-
-    Returns the Toss payment object; raises PaymentCancelError when Toss did not confirm the
-    cancellation. A payment already cancelled at Toss (in its dashboard) counts as cancelled."""
+def _toss_cancel_request(order, body, idempotency_key):
+    """POST /v1/payments/{paymentKey}/cancel for ``order``; returns Toss's answer (a dict) or
+    raises PaymentCancelError. A payment Toss reports cancelled already comes back as
+    {"status": "CANCELED", "already_canceled": True}."""
     config = toss_payment_config()
     secret_key = str(getattr(settings, "SHOP_TOSS_SECRET_KEY", "") or "").strip()
     if not config["enabled"] or not secret_key:
         raise PaymentCancelError("토스페이먼츠 키가 설정되지 않아 결제를 취소할 수 없습니다.")
     payment_key_value = str(order.od_tno or "").strip()
     credentials = base64.b64encode(f"{secret_key}:".encode("utf-8")).decode("ascii")
-    body = json.dumps(
-        {"cancelReason": (str(reason or "").strip() or "쇼핑몰 운영자 승인 취소")[:200]},
-        ensure_ascii=False,
-    ).encode("utf-8")
     request = urllib_request.Request(
         f"{config['api_base_url']}/v1/payments/{quote(payment_key_value, safe='')}/cancel",
         data=body,
@@ -734,9 +728,7 @@ def toss_api_cancel_payment(order, reason):
             "Authorization": f"Basic {credentials}",
             "Content-Type": "application/json",
             "Accept": "application/json",
-            # the reason is part of the body: a retry with another reason is a new request (Toss
-            # answers ALREADY_CANCELED_PAYMENT when the first one went through)
-            "Idempotency-Key": f"admin-cancel-{order.od_id}-{payment_key_value}-{hashlib.sha256(body).hexdigest()[:16]}"[:300],
+            "Idempotency-Key": idempotency_key[:300],
         },
     )
     try:
@@ -760,12 +752,49 @@ def toss_api_cancel_payment(order, reason):
         raise PaymentCancelError("토스페이먼츠에 연결하지 못했습니다. 잠시 후 다시 시도하세요.") from exc
     except ValueError as exc:
         raise PaymentCancelError("토스페이먼츠의 취소 응답을 확인하지 못했습니다.") from exc
-    if (
-        not isinstance(canceled, dict)
-        or str(canceled.get("orderId") or "") != str(order.od_id)
-        or str(canceled.get("status") or "").upper() != "CANCELED"
-    ):
+    if not isinstance(canceled, dict) or str(canceled.get("orderId") or "") != str(order.od_id):
+        raise PaymentCancelError("토스페이먼츠의 취소 응답이 이 주문과 맞지 않습니다. 토스페이먼츠 상점관리자에서 결제 상태를 확인하세요.")
+    return canceled
+
+
+def toss_api_cancel_payment(order, reason):
+    """Cancel the whole Toss payment of ``order`` (POST /v1/payments/{paymentKey}/cancel), as
+    youngcart orderformcartupdate.php does before it marks the order 취소.
+
+    Returns the Toss payment object; raises PaymentCancelError when Toss did not confirm the
+    cancellation. A payment already cancelled at Toss (in its dashboard) counts as cancelled."""
+    payment_key_value = str(order.od_tno or "").strip()
+    body = json.dumps(
+        {"cancelReason": (str(reason or "").strip() or "쇼핑몰 운영자 승인 취소")[:200]},
+        ensure_ascii=False,
+    ).encode("utf-8")
+    # the reason is part of the body: a retry with another reason is a new request (Toss answers
+    # ALREADY_CANCELED_PAYMENT when the first one went through)
+    key = f"admin-cancel-{order.od_id}-{payment_key_value}-{hashlib.sha256(body).hexdigest()[:16]}"
+    canceled = _toss_cancel_request(order, body, key)
+    if str(canceled.get("status") or "").upper() != "CANCELED":
         raise PaymentCancelError("토스페이먼츠가 전체 취소를 확인하지 않았습니다. 토스페이먼츠 상점관리자에서 결제 상태를 확인하세요.")
+    return canceled
+
+
+def toss_api_partial_cancel_payment(order, amount, reason, *, idempotency_key):
+    """Refund ``amount`` of the Toss payment of ``order`` (cancelAmount, youngcart
+    orderpartcancelupdate.php). ``idempotency_key`` names this one refund, so a retried request
+    never refunds twice. Returns Toss's payment object (PARTIAL_CANCELED, or CANCELED when the
+    whole balance went back); raises PaymentCancelError when Toss did not confirm it - a payment
+    that is cancelled already is an error here, since the refund amount cannot be checked."""
+    amount = int(amount)
+    if amount <= 0:
+        raise PaymentCancelError("환불할 금액이 없습니다.")
+    body = json.dumps(
+        {"cancelReason": (str(reason or "").strip() or "쇼핑몰 운영자 부분취소")[:200], "cancelAmount": amount},
+        ensure_ascii=False,
+    ).encode("utf-8")
+    canceled = _toss_cancel_request(order, body, idempotency_key)
+    if canceled.get("already_canceled") or str(canceled.get("status") or "").upper() not in {"PARTIAL_CANCELED", "CANCELED"}:
+        raise PaymentCancelError(
+            "토스페이먼츠가 부분취소를 확인하지 않았습니다. 토스페이먼츠 상점관리자에서 결제 상태를 확인하세요."
+        )
     return canceled
 
 

@@ -9,20 +9,31 @@ from django.db import transaction
 from django.utils import timezone
 
 from gnu_jango.shop.models import ShopOrder
+from gnu_jango.shop.order_statuses import (
+    INACTIVE_LINE_STATUSES,
+    STATUS_CANCELLED,
+    STATUS_COMPLETED,
+    STATUS_ORDERED,
+    STATUS_PAID,
+    STATUS_READY,
+    STATUS_RETURNED,
+    STATUS_SHIPPING,
+)
 
 logger = logging.getLogger(__name__)
 
-STATUS_ORDERED = "주문"
-STATUS_PAID = "입금"
-STATUS_READY = "준비"
-STATUS_SHIPPING = "배송"
-STATUS_COMPLETED = "완료"
-STATUS_CANCELLED = "취소"
-
-# youngcart adm/shop_admin/orderlist.php: the states an operator moves an order through.
-# 반품/품절 (returns, sold out) are line-level outcomes youngcart reaches through
-# orderformcartupdate.php; this admin has no returns flow yet.
-ADMIN_ORDER_STATUSES = (STATUS_ORDERED, STATUS_PAID, STATUS_READY, STATUS_SHIPPING, STATUS_COMPLETED, STATUS_CANCELLED)
+# youngcart adm/shop_admin/orderlist.php: the states an operator moves an order through, and the
+# whole-order return of a shipped or delivered order. 품절 (sold out) is a line-level outcome only
+# (orderformcartupdate.php, see shop/order_lines.py), as are partial 취소/반품.
+ADMIN_ORDER_STATUSES = (
+    STATUS_ORDERED,
+    STATUS_PAID,
+    STATUS_READY,
+    STATUS_SHIPPING,
+    STATUS_COMPLETED,
+    STATUS_CANCELLED,
+    STATUS_RETURNED,
+)
 NEXT_STATUS = {
     STATUS_ORDERED: STATUS_PAID,
     STATUS_PAID: STATUS_READY,
@@ -30,6 +41,7 @@ NEXT_STATUS = {
     STATUS_SHIPPING: STATUS_COMPLETED,
 }
 CANCELLABLE_STATUSES = {STATUS_ORDERED, STATUS_PAID, STATUS_READY}
+RETURNABLE_STATUSES = {STATUS_SHIPPING, STATUS_COMPLETED}
 
 # Older rows (and the API's own aliases) spell the statuses in English.
 STATUS_ALIASES = {
@@ -47,6 +59,8 @@ STATUS_ALIASES = {
     "cancel": STATUS_CANCELLED,
     "cancelled": STATUS_CANCELLED,
     "canceled": STATUS_CANCELLED,
+    "return": STATUS_RETURNED,
+    "returned": STATUS_RETURNED,
 }
 
 
@@ -83,7 +97,8 @@ def paid_amount(order):
 def transition_error(order, target, *, invoice=None, delivery_company=None):
     """Why ``order`` cannot move to ``target`` ("" when it can), following youngcart
     orderlistupdate.php: 주문→입금 (bank deposit only), 입금→준비, 준비→배송 (with an invoice),
-    배송→완료, and a cancellation while the order is 주문, 입금 or 준비 (later it is a return).
+    배송→완료, a cancellation while the order is 주문, 입금 or 준비, and a return (반품) once it
+    is 배송 or 완료.
 
     ``invoice`` / ``delivery_company`` are the values about to be saved (the order form);
     otherwise the stored ones are checked."""
@@ -92,20 +107,27 @@ def transition_error(order, target, *, invoice=None, delivery_company=None):
     current = canonical_status(order.od_status)
     if target not in ADMIN_ORDER_STATUSES:
         return "알 수 없는 주문 상태입니다."
-    if current == STATUS_CANCELLED:
-        return "취소된 주문은 다른 상태로 되돌릴 수 없습니다."
+    if current in INACTIVE_LINE_STATUSES:
+        return f"{current}된 주문은 다른 상태로 되돌릴 수 없습니다."
     if target == current:
         return f"이미 '{current}' 상태입니다."
     if target == STATUS_CANCELLED:
         if current not in CANCELLABLE_STATUSES:
-            return f"'{current}' 상태의 주문은 취소할 수 없습니다. 주문·입금·준비 상태에서만 취소할 수 있습니다."
+            also = " 배송·완료된 주문은 반품으로 처리하세요." if current in RETURNABLE_STATUSES else ""
+            return f"'{current}' 상태의 주문은 취소할 수 없습니다. 주문·입금·준비 상태에서만 취소할 수 있습니다.{also}"
+        return ""
+    if target == STATUS_RETURNED:
+        if current not in RETURNABLE_STATUSES:
+            return f"'{current}' 상태의 주문은 반품할 수 없습니다. 배송·완료 상태에서만 반품할 수 있습니다."
         return ""
     expected = NEXT_STATUS.get(current)
     if expected != target:
         if not expected:
+            if current in RETURNABLE_STATUSES:
+                return f"'{current}' 상태에서는 '반품'으로만 바꿀 수 있습니다."
             return f"'{current or '-'}' 상태의 주문은 다른 상태로 바꿀 수 없습니다."
-        also_cancel = " 또는 '취소'" if current in CANCELLABLE_STATUSES else ""
-        return f"'{current}' 상태에서는 '{expected}'{also_cancel}(으)로만 바꿀 수 있습니다."
+        also = " 또는 '취소'" if current in CANCELLABLE_STATUSES else " 또는 '반품'" if current in RETURNABLE_STATUSES else ""
+        return f"'{current}' 상태에서는 '{expected}'{also}(으)로만 바꿀 수 있습니다."
     if target == STATUS_PAID and not settle_case_is_bank(order.od_settle_case):
         return "무통장입금 주문만 입금 처리할 수 있습니다. PG 결제는 결제 승인으로 입금됩니다."
     if target == STATUS_SHIPPING:
@@ -243,6 +265,12 @@ def _cancel_locked_order(current, reason, actor):
     error = transition_error(current, STATUS_CANCELLED)
     if error:
         return StatusChange(False, error)
+    if int(current.od_refund_price or 0) > 0:
+        # part of the payment went back with an earlier line cancel: only the rest is refunded
+        # (youngcart orderformcartupdate.php cancels the remaining amount)
+        from gnu_jango.shop.order_lines import active_line_ids, change_locked_order_lines
+
+        return change_locked_order_lines(current, active_line_ids(current), STATUS_CANCELLED, reason, actor=actor)
 
     paid = paid_amount(current)
     note = ""
