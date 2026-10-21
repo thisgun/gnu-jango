@@ -123,9 +123,6 @@ def product_recommend_view(request, it_id):
     user, error = require_user(request)
     if error:
         return error
-    error = sender_error(user)
-    if error:
-        return error
     product = on_sale_products().filter(pk=it_id).first()
     if not product:
         return api_error("Product not found.", status=drf_status.HTTP_404_NOT_FOUND, code="product_not_found")
@@ -150,6 +147,9 @@ def product_recommend_view(request, it_id):
         return invalid("content", "Content is required.")
     if len(content) > CONTENT_MAX:
         return invalid("content", "Content is too long.")
+    error = sender_error(user)
+    if error:
+        return error
     for throttle in (RecommendMailIpThrottle(), RecommendMailThrottle()):
         if not throttle.allow_request(request, None):
             return throttled(throttle)
