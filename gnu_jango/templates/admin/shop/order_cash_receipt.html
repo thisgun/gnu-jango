@@ -93,6 +93,7 @@
     <label>
       <span>식별번호 (휴대폰번호 · 현금영수증카드 · 사업자등록번호)</span>
       <input class="input" type="text" name="identity" inputmode="numeric" autocomplete="off" maxlength="40" required value="{{ posted.identity|default:summary.request_identity }}">
+      {% if summary.request_identity_unreadable and not posted.identity %}<span role="alert" class="g5-admin-help">식별번호를 읽을 수 없습니다 — 고객에게 다시 받아 주세요.</span>{% endif %}
     </label>
     <div class="g5-admin-report-filter-actions">
       <button class="button btn btn-primary" type="submit">{% if summary.through_toss %}토스페이먼츠로 발급{% else %}수동 발급 요청으로 기록{% endif %} ({{ summary.amount|intcomma }}원)</button>

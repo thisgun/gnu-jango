@@ -139,8 +139,15 @@ def pending_request(order):
         data = {}
     if not isinstance(data, dict):
         return {}
-    identity = unseal(data.pop("identity_sealed", ""), salt=IDENTITY_SEAL_SALT)
-    return {**data, "identity": identity, "identity_masked": mask_identity(identity)}
+    sealed = data.pop("identity_sealed", "")
+    identity = unseal(sealed, salt=IDENTITY_SEAL_SALT, context=order.od_id)
+    return {
+        **data,
+        "identity": identity,
+        "identity_masked": mask_identity(identity),
+        # kept but no longer opens (SECRET_KEY rotated without a fallback, or the row was altered)
+        "identity_unreadable": bool(sealed) and not identity,
+    }
 
 
 def _drop_pending_request(order):
@@ -302,7 +309,7 @@ def _record_manual_request(order, cash_type, identity, actor, *, by_admin):
             "dt_data": json.dumps(
                 {
                     "cash_type": cash_type,
-                    "identity_sealed": seal(identity, salt=IDENTITY_SEAL_SALT),
+                    "identity_sealed": seal(identity, salt=IDENTITY_SEAL_SALT, context=order.od_id),
                     "requested_at": timezone.now().isoformat(),
                 },
                 ensure_ascii=False,
@@ -500,6 +507,7 @@ def admin_summary(order):
         "type_label": CASH_RECEIPT_TYPE_LABELS.get(order.od_cash_type, ""),
         "request": request,
         "request_identity": (request or {}).get("identity", ""),
+        "request_identity_unreadable": bool((request or {}).get("identity_unreadable")),
         "request_type": (request or {}).get("cash_type", "") or order.od_cash_type,
         "checkout_request_without_number": bool(order.od_cash_request and not order.od_cash_no and request is None),
         "amount": amount,

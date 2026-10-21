@@ -176,17 +176,37 @@ class ManualRequestTests(CashReceiptBase):
         request = cash_receipts.pending_request(order)
         self.assertEqual((request["identity"], request["identity_masked"]), ("01012345678", "010****5678"))
 
-    def test_a_sealed_number_opens_only_unchanged_and_under_its_key(self):
+    def test_a_sealed_number_round_trips_and_a_tampered_one_does_not(self):
         from gnu_jango.shop.sealed_values import seal, unseal
 
-        token = seal("1234567890", salt="t")
-        self.assertEqual(unseal(token, salt="t"), "1234567890")
-        self.assertNotEqual(seal("1234567890", salt="t"), token)  # a fresh nonce each time
-        self.assertEqual(unseal(token, salt="other"), "")
-        self.assertEqual(unseal(token[:-2] + ("AA" if not token.endswith("AA") else "BB"), salt="t"), "")
+        token = seal("1234567890", salt="t", context="ORDER-1")
+        self.assertEqual(unseal(token, salt="t", context="ORDER-1"), "1234567890")
+        self.assertNotEqual(seal("1234567890", salt="t", context="ORDER-1"), token)  # a fresh nonce each time
+        self.assertEqual(unseal(token, salt="other", context="ORDER-1"), "")
+        self.assertEqual(unseal(token[:-2] + ("AA" if not token.endswith("AA") else "BB"), salt="t", context="ORDER-1"), "")
         self.assertEqual(unseal("plain", salt="t"), "")
-        with self.settings(SECRET_KEY="rotated-" + "x" * 50):
-            self.assertEqual(unseal(token, salt="t"), "")
+
+    def test_a_sealed_number_does_not_open_on_another_row(self):
+        from gnu_jango.shop.sealed_values import seal, unseal
+
+        token = seal("1234567890", salt="t", context="ORDER-1")
+        self.assertEqual(unseal(token, salt="t", context="ORDER-2"), "")
+        self.assertEqual(unseal(token, salt="t"), "")
+
+    def test_a_rotated_secret_key_still_opens_through_the_fallbacks(self):
+        from django.conf import settings
+
+        from gnu_jango.shop.sealed_values import seal, unseal
+
+        old_key = settings.SECRET_KEY
+        token = seal("1234567890", salt="t", context="ORDER-1")
+        new_key = "rotated-" + "x" * 50
+        with self.settings(SECRET_KEY=new_key, SECRET_KEY_FALLBACKS=[old_key]):
+            self.assertEqual(unseal(token, salt="t", context="ORDER-1"), "1234567890")
+            resealed = seal("1234567890", salt="t", context="ORDER-1")
+        with self.settings(SECRET_KEY=new_key, SECRET_KEY_FALLBACKS=[]):
+            self.assertEqual(unseal(token, salt="t", context="ORDER-1"), "")
+            self.assertEqual(unseal(resealed, salt="t", context="ORDER-1"), "1234567890")
 
     def test_card_payments_credited_by_personal_pay_are_not_cash(self):
         from gnu_jango.shop.models import ShopPersonalPay
@@ -285,6 +305,25 @@ class AdminCashReceiptTests(CashReceiptBase):
         self.assertIn("현금영수증 발급 등록 (수동) 승인번호 HT-777", order.od_mod_history)
         payload = self.api.get(f"/api/v1/shop/orders/{order.od_id}").json()["data"]
         self.assertEqual((payload["cash_receipt"]["state"], payload["od_cash_no"]), ("issued", "HT-777"))
+
+    @override_settings(**NO_TOSS)
+    def test_an_identity_that_no_longer_opens_asks_the_admin_to_get_it_again(self):
+        import json
+
+        from gnu_jango.shop.sealed_values import seal
+
+        order = self.make_order()
+        self.assertEqual(self.ask(order).status_code, 200)
+        self.assertNotContains(self.client.get(self.page(order)), "식별번호를 읽을 수 없습니다")
+        # sealed under a SECRET_KEY that is gone (rotated without SECRET_KEY_FALLBACKS)
+        with self.settings(SECRET_KEY="rotated-" + "y" * 50):
+            lost = seal(PHONE, salt=cash_receipts.IDENTITY_SEAL_SALT, context=order.od_id)
+        row = ShopOrderData.objects.get(log_id=f"crq-{order.od_id}")
+        row.dt_data = json.dumps({**json.loads(row.dt_data), "identity_sealed": lost})
+        row.save(update_fields=["dt_data"])
+        request = cash_receipts.pending_request(order)
+        self.assertEqual((request["identity"], request["identity_unreadable"]), ("", True))
+        self.assertContains(self.client.get(self.page(order)), "식별번호를 읽을 수 없습니다 — 고객에게 다시 받아 주세요.")
 
     @override_settings(**FAKE_TOSS)
     def test_the_admin_issues_through_toss_even_when_customers_cannot_and_cancels_it(self):
