@@ -162,13 +162,19 @@ class ShopStockNotificationAdmin(ModelAdmin):
             self.message_user(request, _("Send at most 25 messages per operation."), level=messages.ERROR)
             return
 
-        from gnu_jango.shop.sms.icode import ICodeConfigurationError, send_sms
+        from gnu_jango.shop.sms.service import send_message, sms_settings
 
         counts = {"accepted": 0, "rejected": 0, "unknown": 0, "skipped": 0}
-        shop_policy = ShopShippingPolicy.objects.filter(pk=1).first()
-        sender_name = str(shop_policy.de_admin_company_name if shop_policy else "").strip()
-        callback = str(shop_policy.de_admin_company_tel if shop_policy else "")
-        if not sender_name or not callback:
+        sms = sms_settings()
+        sender_name = sms.company_name
+        if not sms.enabled:
+            self.message_user(
+                request,
+                "쇼핑몰 설정의 SMS 사용이 꺼져 있습니다. SMS 설정에서 아이코드를 선택한 뒤 발송하세요.",
+                level=messages.ERROR,
+            )
+            return
+        if not sender_name or not sms.callback:
             self.message_user(
                 request,
                 _("Set the shop name and callback number in YoungCart shop settings before sending."),
@@ -209,22 +215,13 @@ class ShopStockNotificationAdmin(ModelAdmin):
                     requested_by=request.user,
                 )
 
-            try:
-                result = send_sms(notification.ss_hp, callback, message_text)
-            except ICodeConfigurationError as exc:
-                result = None
-                final_status = "rejected"
-                error_text = str(exc)
-                provider_code = "configuration"
-            except Exception as exc:
-                result = None
-                final_status = "unknown"
-                error_text = type(exc).__name__
-                provider_code = "unexpected"
-            else:
-                final_status = result.status
-                error_text = result.error_text
-                provider_code = result.provider_code
+            # never raises: configuration, gateway and network failures come back as a result
+            result = send_message(
+                notification.ss_hp, message_text, current=sms, purpose=f"재입고 {notification.it_id}"
+            )
+            final_status = result.status
+            error_text = result.error_text
+            provider_code = result.provider_code
 
             with transaction.atomic():
                 send_log.status = final_status

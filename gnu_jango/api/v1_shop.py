@@ -48,6 +48,7 @@ from gnu_jango.shop.delivery import delivery_inquiry
 from gnu_jango.shop.images import upload_product_images
 from gnu_jango.shop.item_info import item_info_rows, kind_title
 from gnu_jango.shop.notifications import queue_order_placed_mails
+from gnu_jango.shop.sms.notifications import queue_order_placed_sms
 from gnu_jango.shop.order_points import (
     item_purchase_point,
     item_status_update,
@@ -1441,6 +1442,7 @@ def orders_view(request):
         return api_error(str(exc), status=drf_status.HTTP_400_BAD_REQUEST, code=exc.code, details=exc.details)
     # youngcart orderformupdate.php ordermail1/2: a bank-deposit order is complete once it is saved
     queue_order_placed_mails(order)
+    queue_order_placed_sms(order)
     data = order_payload(order, detail=True)
     redirect_url = f"/shop/orders/{order.od_id}" if order.user_id else f"/shop/orders/{order.od_id}?uid={order.uid}"
     return api_response(
