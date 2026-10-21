@@ -3,6 +3,7 @@ import type {
   KcpExtra,
   NicepayExtra,
   ConfiguredPgService,
+  TossEscrowProduct,
 } from "@/lib/payment";
 
 export type OrderBody = Record<string, string | number>;
@@ -38,6 +39,13 @@ export type PreparedPaymentResponse = {
   cash_receipt_request?: boolean;
   cash_receipt_type?: "income" | "expense";
   cash_receipt_registration_number?: string;
+  /** 복합과세 결제 (de_tax_flag_use): comm_free_mny goes to Toss as taxFreeAmount. */
+  tax_flag?: number;
+  comm_tax_mny?: number;
+  comm_vat_mny?: number;
+  comm_free_mny?: number;
+  use_escrow?: boolean;
+  escrow_products?: TossEscrowProduct[];
   pg_service?: ConfiguredPgService;
   uid?: string;
   pg_extra?: {

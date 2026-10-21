@@ -7,7 +7,8 @@
  * 주문 결제(lib/payment.toss.ts)와 달리 실패해도 취소할 "준비된 주문"이 없다.
  */
 import { loadTossPayments } from "@tosspayments/tosspayments-sdk";
-import { normalizeTossError, TOSS_CANCELLED_MESSAGE, tossCustomerKey } from "./payment.toss";
+import { normalizeTossError, TOSS_CANCELLED_MESSAGE, tossCustomerKey, tossEscrowOptions } from "./payment.toss";
+import type { TossEscrowProduct } from "./payment.types";
 
 export const PERSONAL_PAY_TOSS_METHODS = ["card", "iche", "hp", "easy_pay"] as const;
 export type PersonalPayTossMethod = (typeof PERSONAL_PAY_TOSS_METHODS)[number];
@@ -22,6 +23,9 @@ export interface PersonalPayTossPrepared {
   buyer_tel: string;
   method: PersonalPayTossMethod;
   client_key: string;
+  /** 에스크로 사용: set by the server for a transfer (one escrow product, the personal pay). */
+  use_escrow?: boolean;
+  escrow_products?: TossEscrowProduct[];
 }
 
 export type PersonalPayReturn =
@@ -97,7 +101,7 @@ export async function openPersonalPayTossWindow(prepared: PersonalPayTossPrepare
   try {
     switch (request.method) {
       case "TRANSFER":
-        await payment.requestPayment({ ...request, method: "TRANSFER", transfer: {} });
+        await payment.requestPayment({ ...request, method: "TRANSFER", transfer: tossEscrowOptions(prepared) });
         break;
       case "MOBILE_PHONE":
         await payment.requestPayment({ ...request, method: "MOBILE_PHONE" });

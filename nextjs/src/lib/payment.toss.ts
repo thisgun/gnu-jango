@@ -1,6 +1,6 @@
 import { loadTossPayments } from "@tosspayments/tosspayments-sdk";
 import { cancelPreparedPayment, paymentTaxAmounts } from "./payment.shared";
-import type { PaymentRequest } from "./payment.types";
+import type { PaymentRequest, TossEscrowProduct } from "./payment.types";
 
 export const TOSS_CANCELLED_MESSAGE = "결제가 취소되었습니다.";
 export const TOSS_FALLBACK_ERROR_MESSAGE =
@@ -54,6 +54,27 @@ export function createTossCommonPaymentRequest(req: PaymentRequest) {
   };
 }
 
+/**
+ * 에스크로 사용 (youngcart de_escrow_use): useEscrow and escrowProducts for a Toss transfer or
+ * virtual account. The server decides (use_escrow); nothing is added when it is off.
+ */
+export function tossEscrowOptions(order: {
+  use_escrow?: boolean;
+  escrow_products?: TossEscrowProduct[];
+}): { useEscrow?: true; escrowProducts?: TossEscrowProduct[] } {
+  if (!order.use_escrow) return {};
+  const products = (order.escrow_products || []).map((product) => ({
+    id: String(product.id),
+    name: String(product.name),
+    code: String(product.code),
+    unitPrice: Math.max(0, Math.trunc(Number(product.unitPrice) || 0)),
+    quantity: Math.max(1, Math.trunc(Number(product.quantity) || 1)),
+  }));
+  return products.length
+    ? { useEscrow: true, escrowProducts: products }
+    : { useEscrow: true };
+}
+
 function createCashReceiptRequest(req: PaymentRequest) {
   return {
     type:
@@ -91,6 +112,7 @@ export async function requestTossPayment(req: PaymentRequest): Promise<void> {
           ...common,
           virtualAccount: {
             useEscrow: false,
+            ...tossEscrowOptions(req.order),
             validHours: 24,
             ...(req.order.cash_receipt_request
               ? { cashReceipt: createCashReceiptRequest(req) }
@@ -102,9 +124,12 @@ export async function requestTossPayment(req: PaymentRequest): Promise<void> {
         await payment.requestPayment({
           method: "TRANSFER",
           ...common,
-          transfer: req.order.cash_receipt_request
-            ? { cashReceipt: createCashReceiptRequest(req) }
-            : {},
+          transfer: {
+            ...(req.order.cash_receipt_request
+              ? { cashReceipt: createCashReceiptRequest(req) }
+              : {}),
+            ...tossEscrowOptions(req.order),
+          },
         });
         break;
       case "hp":
