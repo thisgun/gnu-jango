@@ -43,6 +43,7 @@ interface PersonalPay {
   cash_receipt_issue_url?: string;
   pp_cash_receipt_issue_url?: string;
   can_pay?: boolean;
+  can_change_deposit?: boolean;
   payment_block_reason?: string;
 }
 
@@ -254,7 +255,11 @@ export default function PersonalPayPage() {
           </div>
         ) : null}
 
-        {pp.can_pay === false ? (
+        {pp.can_change_deposit ? (
+          <Button className="w-full" size="lg" variant="outline" asChild>
+            <Link href={`/shop/personalpay/${encodeURIComponent(pp.pp_id)}/pay`}>입금 정보 변경</Link>
+          </Button>
+        ) : pp.can_pay === false ? (
           <Button className="w-full" size="lg" disabled>
             {paymentInProgress ? "결제 처리 중" : `${formatPrice(pp.pp_price)} 결제하기`}
           </Button>

@@ -49,7 +49,6 @@ from .legacy_redirects import (  # noqa: F401 - views and urls address these thr
     _legacy_local_redirect,
     _legacy_memo_type,
     _legacy_mobile_shop_route,
-    _legacy_personalpay_handoff_response,
     _legacy_php_redirect,
     _legacy_product_path,
     _legacy_query,

@@ -1970,6 +1970,7 @@ class ShopPersonalPayAdmin(ModelAdmin):
     search_fields = ("pp_id", "pp_name", "pp_email", "pp_hp", "user__username", "pp_tno", "pp_app_no", "pp_cash_no")
     list_filter = (PersonalPayStateFilter, PersonalPaySettleCaseFilter, PersonalPayActiveFilter, PersonalPayDateFilter)
     readonly_fields = ("personal_pay_snapshot",)
+    actions = ("confirm_selected_bank_deposits",)
     fieldsets = (
         (
             _("Personal pay snapshot"),
@@ -2021,6 +2022,28 @@ class ShopPersonalPayAdmin(ModelAdmin):
         ),
     )
     list_fullwidth = True
+
+    @admin.action(description="선택한 개인결제 입금 확인", permissions=["change"])
+    def confirm_selected_bank_deposits(self, request, queryset):
+        """youngcart adm/shop_admin/personalpayformupdate.php: the shop records the 무통장입금 of a
+        request (what is still owed, received now) and the linked order is credited."""
+        from gnu_jango.shop.personal_pay import confirm_bank_deposit
+
+        actor = request.user.get_username()
+        confirmed = 0
+        skipped = {}
+        for pay in queryset:
+            pay, reason = confirm_bank_deposit(pay.pp_id, actor=actor)
+            if reason:
+                skipped.setdefault(reason, []).append(pay.pp_id if pay else "-")
+                continue
+            self.log_change(request, pay, "개인결제 입금 확인")
+            confirmed += 1
+        if confirmed:
+            self.message_user(request, f"개인결제 {confirmed}건의 입금을 확인했습니다.", messages.SUCCESS)
+        for message, pay_ids in skipped.items():
+            shown = ", ".join(pay_ids[:5]) + (f" 외 {len(pay_ids) - 5}건" if len(pay_ids) > 5 else "")
+            self.message_user(request, f"개인결제 {len(pay_ids)}건은 처리하지 않았습니다 ({shown}): {message}", messages.WARNING)
 
     def change_view(self, request, object_id, form_url="", extra_context=None):
         extra_context = extra_context or {}

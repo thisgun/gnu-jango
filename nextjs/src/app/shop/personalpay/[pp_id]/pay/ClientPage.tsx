@@ -1,68 +1,105 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { G5Link as Link } from "@/components/ui/g5-link";
-import { AlertCircle, ArrowLeft, CreditCard, Loader2, ShieldCheck } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, Clock3, CreditCard, Loader2, XCircle } from "lucide-react";
 import { api } from "@/lib/api";
 import { useRuntimeRouteParam } from "@/hooks/use-runtime-route-param";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { g5BaseUrlForRuntime } from "@/lib/config";
 import { formatDate, formatPrice } from "@/lib/utils";
+import type { PaymentConfig } from "@/app/shop/order/orderPaymentHelpers";
+import { parsePersonalPayReturn, type PersonalPayReturn } from "@/lib/personal-pay-checkout";
+import { PersonalPayCheckoutForm } from "./PersonalPayCheckoutForm";
+import { personalPayPaymentConfig, type PersonalPay } from "./personalPayTypes";
 
-interface PersonalPay {
-  pp_id: string;
-  pp_name: string;
-  pp_email?: string;
-  pp_hp?: string;
-  pp_content: string;
-  pp_price: number;
-  pp_settle_case: string;
-  pp_bank_account: string;
-  pp_deposit_name: string;
-  pp_time?: string;
-  already_paid: boolean;
-  payment_in_progress?: boolean;
-  payment_state?: string;
-  payment_state_label?: string;
-  can_pay?: boolean;
-  payment_block_reason?: string;
+type ConfirmState =
+  | { status: "idle" }
+  | { status: "processing" }
+  | { status: "success" }
+  | { status: "error"; message: string };
+
+const BREADCRUMB = [
+  { label: "쇼핑몰", href: "/shop" },
+  { label: "개인결제", href: "/shop/personalpay" },
+];
+
+function detailHref(ppId: string) {
+  return `/shop/personalpay/${encodeURIComponent(ppId)}`;
 }
 
-interface PersonalPayStart {
-  pp_id: string;
-  payment_path?: string;
-  payment_url: string;
-  legacy_payment_url?: string;
-  can_pay: boolean;
-  payment_block_reason?: string;
+function clearReturnQuery() {
+  // 새로고침해도 승인 요청을 다시 보내지 않도록 결제창이 붙인 쿼리를 지운다
+  try {
+    window.history.replaceState(window.history.state, "", window.location.pathname);
+  } catch {
+    // ignore
+  }
 }
 
-export default function PersonalPayPaymentPage() {
+function PersonalPayPaymentContent() {
   const ppId = useRuntimeRouteParam("pp_id", "/shop/personalpay/:pp_id/pay");
+  const searchParams = useSearchParams();
   const [pp, setPp] = useState<PersonalPay | null>(null);
+  const [config, setConfig] = useState<PaymentConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  const [starting, setStarting] = useState(false);
   const [error, setError] = useState("");
-  const [startError, setStartError] = useState("");
+  const [returned] = useState<PersonalPayReturn>(() => parsePersonalPayReturn(searchParams));
+  const [confirm, setConfirm] = useState<ConfirmState>({ status: "idle" });
+  const [bankSaved, setBankSaved] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  // React Strict Mode runs effects twice: the confirm POST must go out once per return
+  const confirmedRef = useRef(false);
+
+  const load = useCallback(async (id: string) => {
+    const [ppRes, configRes] = await Promise.allSettled([
+      api.get<PersonalPay>(`/shop/personalpay/${encodeURIComponent(id)}`),
+      api.get<PaymentConfig>("/shop/payment/config"),
+    ]);
+    if (ppRes.status === "rejected") throw ppRes.reason;
+    return {
+      pp: (ppRes.value.data as PersonalPay) ?? null,
+      config: configRes.status === "fulfilled" ? ((configRes.value.data as PaymentConfig) ?? null) : null,
+    };
+  }, []);
+
+  // Toss returned to this page: approve once, then reload the request
+  useEffect(() => {
+    if (!ppId || returned.kind !== "success" || confirmedRef.current) return;
+    confirmedRef.current = true;
+    setConfirm({ status: "processing" });
+    api
+      .post<PersonalPay>(`/shop/personalpay/${encodeURIComponent(ppId)}/toss/confirm`, {
+        paymentKey: returned.paymentKey,
+        orderId: returned.orderId,
+        amount: returned.amount,
+      })
+      .then(() => setConfirm({ status: "success" }))
+      .catch((err: unknown) =>
+        setConfirm({
+          status: "error",
+          message: err instanceof Error ? err.message : "결제 승인에 실패했습니다.",
+        })
+      )
+      .finally(() => {
+        clearReturnQuery();
+        setReloadKey((key) => key + 1);
+      });
+  }, [ppId, returned]);
 
   useEffect(() => {
-    if (!ppId) {
-      setPp(null);
-      setError("");
-      setLoading(true);
-      return;
-    }
-
+    if (!ppId) return;
     let alive = true;
     setLoading(true);
     setError("");
-    setStartError("");
 
-    api
-      .get<PersonalPay>(`/shop/personalpay/${encodeURIComponent(ppId)}`)
-      .then((res) => {
-        if (alive) setPp((res.data as PersonalPay) ?? null);
+    load(ppId)
+      .then((loaded) => {
+        if (alive) {
+          setPp(loaded.pp);
+          setConfig(loaded.config);
+        }
       })
       .catch((err: unknown) => {
         if (alive) {
@@ -77,37 +114,15 @@ export default function PersonalPayPaymentPage() {
     return () => {
       alive = false;
     };
-  }, [ppId]);
+  }, [ppId, reloadKey, load]);
 
-  const startPayment = async () => {
-    if (!pp?.pp_id || starting) return;
-
-    setStarting(true);
-    setStartError("");
-
-    try {
-      const res = await api.post<PersonalPayStart>(
-        `/shop/personalpay/${encodeURIComponent(pp.pp_id)}/start`
-      );
-      const paymentPath = String(res.data?.payment_path || "").trim();
-      const paymentUrl = paymentPath
-        ? new URL(paymentPath, g5BaseUrlForRuntime()).toString()
-        : String(res.data?.payment_url || res.data?.legacy_payment_url || "").trim();
-      if (!paymentUrl) {
-        throw new Error("결제 이동 URL을 받지 못했습니다.");
-      }
-      window.location.href = paymentUrl;
-    } catch (err) {
-      setStartError(err instanceof Error ? err.message : "결제 준비 중 오류가 발생했습니다.");
-      setStarting(false);
-    }
-  };
-
-  if (loading) {
+  if (loading || confirm.status === "processing") {
     return (
-      <div className="mx-auto max-w-2xl animate-pulse py-8">
-        <div className="h-8 w-44 rounded bg-muted" />
-        <div className="mt-4 h-72 rounded-lg bg-muted" />
+      <div className="mx-auto flex max-w-2xl flex-col items-center py-16 text-center" role="status">
+        <Loader2 className="mb-4 h-10 w-10 animate-spin text-primary" />
+        <p className="font-medium">
+          {confirm.status === "processing" ? "결제 승인 처리 중..." : "개인결제 정보를 불러오는 중..."}
+        </p>
       </div>
     );
   }
@@ -115,13 +130,7 @@ export default function PersonalPayPaymentPage() {
   if (error || !pp) {
     return (
       <div>
-        <Breadcrumb
-          items={[
-            { label: "쇼핑몰", href: "/shop" },
-            { label: "개인결제", href: "/shop/personalpay" },
-            { label: "결제" },
-          ]}
-        />
+        <Breadcrumb items={[...BREADCRUMB, { label: "결제" }]} />
         <div className="flex flex-col items-center py-16 text-center text-muted-foreground">
           <AlertCircle className="mb-4 h-14 w-14 text-muted-foreground/40" />
           <p className="font-medium">{error || "개인결제 정보를 찾을 수 없습니다."}</p>
@@ -133,113 +142,131 @@ export default function PersonalPayPaymentPage() {
     );
   }
 
-  const paymentState = pp.payment_state || (pp.already_paid ? "paid" : "ready");
-  const paymentStateLabel =
-    pp.payment_state_label || (pp.already_paid ? "결제 완료" : "결제 대기");
-  const blockReason =
-    pp.payment_block_reason || (pp.already_paid ? "이미 결제하신 개인결제 내역입니다." : "");
-  const canPay = pp.can_pay !== false && paymentState === "ready";
+  const paymentConfig = personalPayPaymentConfig(config, pp);
+  const isPaid = pp.already_paid || confirm.status === "success";
+  const canCheckout = pp.can_pay === true || pp.can_change_deposit === true;
+  const failMessage =
+    confirm.status === "error"
+      ? confirm.message
+      : returned.kind === "fail" || returned.kind === "invalid"
+        ? returned.message
+        : "";
 
   return (
     <div>
-      <Breadcrumb
-        items={[
-          { label: "쇼핑몰", href: "/shop" },
-          { label: "개인결제", href: "/shop/personalpay" },
-          { label: pp.pp_id },
-          { label: "결제" },
-        ]}
-      />
+      <Breadcrumb items={[...BREADCRUMB, { label: pp.pp_id }, { label: "결제" }]} />
 
       <div className="mx-auto max-w-2xl space-y-5 py-6">
         <Button variant="ghost" size="sm" asChild>
-          <Link href={`/shop/personalpay/${encodeURIComponent(pp.pp_id)}`}>
+          <Link href={detailHref(pp.pp_id)}>
             <ArrowLeft className="h-4 w-4" />
             상세로 돌아가기
           </Link>
         </Button>
 
+        {isPaid ? (
+          <section className="rounded-lg border border-green-200 bg-green-50 p-6 text-green-900" role="status">
+            <CheckCircle2 className="mb-3 h-10 w-10 text-green-600" />
+            <h1 className="text-xl font-bold">결제가 완료되었습니다.</h1>
+            <p className="mt-1 text-sm">
+              {formatPrice(pp.pp_price)}
+              {pp.pp_receipt_time ? ` · ${formatDate(pp.pp_receipt_time)}` : ""}
+            </p>
+            <Button className="mt-4" asChild>
+              <Link href={detailHref(pp.pp_id)}>결제 내역 보기</Link>
+            </Button>
+          </section>
+        ) : null}
+
+        {failMessage && !isPaid ? (
+          <div
+            className="flex gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+            role="alert"
+          >
+            <XCircle className="mt-0.5 h-5 w-5 shrink-0" />
+            <div>
+              <p className="font-semibold">결제가 완료되지 않았습니다.</p>
+              <p className="mt-1">{failMessage}</p>
+              {returned.kind === "fail" && returned.code ? (
+                <p className="mt-1 text-xs opacity-80">코드: {returned.code}</p>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
         <section className="rounded-lg border bg-background p-6">
-          <div className="flex items-start gap-4">
+          <div className="flex flex-wrap items-start gap-4">
             <div className="flex size-12 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
               <CreditCard className="h-6 w-6" />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-sm font-medium text-primary">개인결제</p>
-              <h1 className="mt-1 text-2xl font-bold">{pp.pp_name}님 개인결제</h1>
+              <h2 className="mt-1 text-2xl font-bold">{pp.pp_name}님 개인결제</h2>
               <p className="mt-1 text-sm text-muted-foreground">결제번호 {pp.pp_id}</p>
               {pp.pp_time ? (
                 <p className="mt-1 text-xs text-muted-foreground">발급일 {formatDate(pp.pp_time)}</p>
               ) : null}
             </div>
+            <div className="text-right">
+              <p className="text-sm text-muted-foreground">결제 금액</p>
+              <p className="mt-1 text-2xl font-extrabold text-primary">
+                {formatPrice(isPaid ? pp.pp_price : (pp.pp_misu_price ?? pp.pp_price))}
+              </p>
+              <p className="mt-1 text-sm font-semibold">{pp.payment_state_label || "결제 대기"}</p>
+            </div>
           </div>
 
           {pp.pp_content ? (
-            <div className="mt-5 whitespace-pre-wrap rounded-md bg-muted/30 p-4 text-sm">
-              {pp.pp_content}
-            </div>
+            <div className="mt-5 whitespace-pre-wrap rounded-md bg-muted/30 p-4 text-sm">{pp.pp_content}</div>
           ) : null}
-        </section>
 
-        <section className="rounded-lg border bg-background p-6">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="text-sm text-muted-foreground">결제 금액</p>
-              <p className="mt-1 text-3xl font-extrabold text-primary">
-                {formatPrice(pp.pp_price)}
+          {pp.awaiting_deposit ? (
+            <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" role="status">
+              <p className="flex items-center gap-1.5 font-semibold">
+                <Clock3 className="h-4 w-4" />
+                {bankSaved ? "입금 계좌가 등록되었습니다." : "입금 확인을 기다리고 있습니다."}
               </p>
-            </div>
-            <div className="text-right text-sm">
-              <p className="text-muted-foreground">결제 상태</p>
-              <p className="mt-1 font-semibold">{paymentStateLabel}</p>
-            </div>
-          </div>
-
-          {pp.pp_settle_case === "무통장" && pp.pp_bank_account ? (
-            <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-              <p className="font-semibold">입금 안내</p>
               <p className="mt-1 font-mono">{pp.pp_bank_account}</p>
-              {pp.pp_deposit_name ? (
-                <p className="mt-1 text-xs text-amber-700">입금자명: {pp.pp_deposit_name}</p>
-              ) : null}
-            </div>
-          ) : null}
-        </section>
-
-        <section className="rounded-lg border bg-background p-6">
-          <div className="flex gap-3">
-            <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
-            <div>
-              <h2 className="font-semibold">결제 전 확인</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
-                결제 가능 여부를 API에서 다시 확인한 뒤 그누보드 원본 결제창으로 이동합니다.
-                실제 승인, 무통장 처리, 영수증 처리는 기존 영카트 로직을 그대로 사용합니다.
+              <p className="mt-1 text-xs text-amber-700">입금자명: {pp.pp_deposit_name}</p>
+              <p className="mt-2 text-xs text-amber-700">
+                입금이 확인되면 결제 완료로 바뀝니다. 입금 정보를 바꾸려면 아래에서 다시 신청하세요.
               </p>
             </div>
-          </div>
-
-          {blockReason ? (
-            <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-              {blockReason}
-            </div>
           ) : null}
-
-          {startError ? (
-            <div className="mt-5 rounded-md border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-              {startError}
-            </div>
-          ) : null}
-
-          <Button className="mt-5 w-full" size="lg" disabled={!canPay || starting} onClick={startPayment}>
-            {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            {starting
-              ? "결제 준비 중..."
-              : canPay
-                ? `${formatPrice(pp.pp_price)} 결제 시작`
-                : "결제할 수 없습니다"}
-          </Button>
         </section>
+
+        {!isPaid ? (
+          canCheckout ? (
+            <PersonalPayCheckoutForm
+              key={`${pp.payment_state}-${pp.pp_bank_account}-${pp.pp_deposit_name}`}
+              pp={pp}
+              paymentConfig={paymentConfig}
+              onBankSaved={(saved) => {
+                setPp(saved);
+                setBankSaved(true);
+              }}
+            />
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              {pp.payment_block_reason || "결제할 수 없는 개인결제입니다."}
+            </div>
+          )
+        ) : null}
       </div>
     </div>
+  );
+}
+
+export default function PersonalPayPaymentPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[40vh] items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <PersonalPayPaymentContent />
+    </Suspense>
   );
 }

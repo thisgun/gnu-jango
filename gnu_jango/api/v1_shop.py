@@ -40,7 +40,6 @@ from gnu_jango.shop.models import (
     ShopOrder,
     ShopOrderData,
     ShopOrderItem,
-    ShopPersonalPay,
     ShopProduct,
     ShopStockNotification,
 )
@@ -146,6 +145,11 @@ from .shop_cart import (
     wishlist_item_view,  # noqa: F401 - re-exported for existing importers
     wishlist_legacy_update_view,  # noqa: F401 - re-exported for existing importers
     wishlist_view,  # noqa: F401 - re-exported for existing importers
+)
+from .shop_personal_pay import (
+    personalpay_payload,  # noqa: F401 - re-exported for existing importers
+    personalpay_start_view,  # noqa: F401 - re-exported for existing importers
+    personalpay_view,  # noqa: F401 - re-exported for existing importers
 )
 from .shop_recommend import product_recommend_view  # noqa: F401 - re-exported for existing importers
 from .shop_reviews import (
@@ -471,69 +475,6 @@ def product_payload(product, request=None, *, detail=False):
             if item_id in related_by_id
         ]
     return data
-
-
-def personalpay_payload(item):
-    paid = item.pp_receipt_price >= item.pp_price and item.pp_price > 0
-    processing = bool(item.pp_tno or item.pp_app_no) and not paid
-    state = "paid" if paid else "processing" if processing else "ready"
-    state_label = {"paid": "결제 완료", "processing": "결제 처리 중", "ready": "결제 대기"}[state]
-    misu = max(0, item.pp_price - item.pp_receipt_price)
-    receipt_url = (
-        f"https://dashboard.tosspayments.com/receipt/redirection?transactionId={item.pp_tno}"
-        if item.pp_tno and paid
-        else ""
-    )
-    cash_receipt_url = (
-        f"https://dashboard.tosspayments.com/receipt/cash-receipt/{item.pp_cash_no}"
-        if item.pp_cash and item.pp_cash_no
-        else ""
-    )
-    can_pay = bool(item.active and state == "ready" and item.pp_price > 0)
-    if can_pay:
-        block_reason = ""
-    elif item.pp_price <= 0:
-        # YoungCart personalpayform.php loads only requests with an amount
-        block_reason = "결제할 금액이 없는 개인결제입니다."
-    else:
-        block_reason = "이미 결제하신 개인결제 내역입니다."
-    return {
-        "pp_id": item.pp_id,
-        "od_id": item.order_id or "",
-        "pp_name": item.pp_name,
-        "pp_email": item.pp_email,
-        "pp_hp": item.pp_hp,
-        "pp_content": item.pp_content,
-        "pp_price": item.pp_price,
-        "pp_pg": item.pp_pg,
-        "pp_tno": item.pp_tno,
-        "pp_app_no": item.pp_app_no,
-        "pp_settle_case": item.pp_settle_case,
-        "pp_bank_account": item.pp_bank_account,
-        "pp_deposit_name": item.pp_deposit_name,
-        "pp_receipt_price": item.pp_receipt_price,
-        "pp_misu_price": misu,
-        "already_paid": paid,
-        "has_payment_transaction": bool(item.pp_tno or item.pp_app_no),
-        "payment_in_progress": processing,
-        "payment_state": state,
-        "payment_state_label": state_label,
-        "pp_receipt_time": item.pp_receipt_time or None,
-        "pp_time": datetime_value(item.pp_time),
-        "pp_cash": item.pp_cash,
-        "pp_cash_no": item.pp_cash_no,
-        "pp_payment_app_label": "Approval no." if item.pp_app_no else "Transaction no." if item.pp_tno else "",
-        "pp_payment_app_value": item.pp_app_no or item.pp_tno,
-        "receipt_url": receipt_url,
-        "pp_payment_receipt_url": receipt_url,
-        "cash_receipt_url": cash_receipt_url,
-        "pp_cash_receipt_url": cash_receipt_url,
-        "cash_receipt_issue_url": "",
-        "pp_cash_receipt_issue_url": "",
-        "payment_path": f"/shop/personalpayform.php?pp_id={item.pp_id}",
-        "can_pay": can_pay,
-        "payment_block_reason": block_reason,
-    }
 
 
 def order_item_payload(item):
@@ -2377,62 +2318,6 @@ def events_view(request, ev_id=None):
             }
         )
     return api_response(data=rows, meta=pagination_meta(len(rows), 1, 50))
-
-
-@api_view(["GET"])
-@permission_classes([AllowAny])
-@authentication_classes([JWTAuthentication, BasicAuthentication])
-def personalpay_view(request, pp_id=None):
-    user = current_user(request)
-    if pp_id is not None:
-        queryset = ShopPersonalPay.objects.filter(pk=pp_id, active=True)
-        item = queryset.first()
-        if not item:
-            return api_error("Personal pay not found.", status=drf_status.HTTP_404_NOT_FOUND, code="personalpay_not_found")
-        if item.user_id and not (user and (user.is_staff or user.is_superuser or item.user_id == user.id)):
-            return api_error("Permission denied.", status=drf_status.HTTP_403_FORBIDDEN, code="permission_denied")
-        return api_response(data=personalpay_payload(item))
-
-    if not user or not user.is_authenticated:
-        return api_error(
-            "Authentication credentials were not provided.",
-            status=drf_status.HTTP_401_UNAUTHORIZED,
-            code="not_authenticated",
-        )
-
-    queryset = ShopPersonalPay.objects.filter(active=True, pp_receipt_price__lt=F("pp_price"), pp_tno="", pp_app_no="")
-    if not (user.is_staff or user.is_superuser):
-        queryset = queryset.filter(user=user)
-    page, meta = paginate_queryset(request, queryset, default_per_page=20)
-    return api_response(data=[personalpay_payload(item) for item in page], meta=meta)
-
-
-@api_view(["POST"])
-@permission_classes([AllowAny])
-@authentication_classes([JWTAuthentication, BasicAuthentication])
-def personalpay_start_view(request, pp_id):
-    user = current_user(request)
-    item = ShopPersonalPay.objects.filter(pk=pp_id, active=True).first()
-    if not item:
-        return api_error("Personal pay not found.", status=drf_status.HTTP_404_NOT_FOUND, code="personalpay_not_found")
-    if item.user_id and not (user and (user.is_staff or user.is_superuser or item.user_id == user.id)):
-        return api_error("Permission denied.", status=drf_status.HTTP_403_FORBIDDEN, code="permission_denied")
-    payload = personalpay_payload(item)
-    if not payload["can_pay"]:
-        return api_error(payload["payment_block_reason"], status=drf_status.HTTP_409_CONFLICT, code="personalpay_not_payable")
-    payment_path = f"/shop/personalpayform.php?pp_id={item.pp_id}&nextjs_handoff=1"
-    return api_response(
-        data={
-            "pp_id": item.pp_id,
-            "payment_path": payment_path,
-            "payment_url": payment_path,
-            "legacy_payment_url": payment_path,
-            "can_pay": True,
-            "payment_state": payload["payment_state"],
-            "payment_state_label": payload["payment_state_label"],
-            "payment_block_reason": "",
-        }
-    )
 
 
 @api_view(["POST"])

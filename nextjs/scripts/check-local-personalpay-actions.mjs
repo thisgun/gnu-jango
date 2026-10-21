@@ -543,32 +543,21 @@ async function verifyBrowser(seeded, personalPay) {
       !paymentBody.includes('45,670') ||
       !paymentBody.includes(personalPay.pp_name)
     ) {
-      fail('personal pay payment page did not render the Next.js payment handoff screen', {
+      fail('personal pay payment page did not render the Next.js checkout', {
         body: paymentBody.slice(0, 2500),
         personalPay,
       });
     }
 
-    const [startResponse] = await Promise.all([
-      page.waitForResponse(
-        (response) =>
-          response.url().startsWith(`${expectedPageApiUrl}/shop/personalpay/${seeded.pp_id}/start`) &&
-          response.request().method() === 'POST'
-      ),
-      page.waitForURL(
-        (url) =>
-          url.href.startsWith(`${expectedG5Url}/shop/personalpayform.php`) &&
-          url.searchParams.get('pp_id') === String(seeded.pp_id),
-        { timeout: 10000 }
-      ),
-      page.getByRole('button', { name: /결제 시작/ }).click(),
-    ]);
-
-    if (!startResponse.ok()) {
-      fail('personal pay start API response failed from payment page', {
-        status: startResponse.status(),
-        url: startResponse.url(),
-        body: await startResponse.text().catch(() => ''),
+    // The pay page is the checkout itself now (payment methods, bank account, agreement);
+    // it no longer hands off to the Gnuboard personalpayform.php.
+    await page.getByRole('heading', { name: '결제 수단' }).first().waitFor({
+      state: 'visible',
+      timeout: 10000,
+    });
+    if (!(await page.getByRole('checkbox').first().isVisible())) {
+      fail('personal pay payment page did not render the checkout agreement', {
+        body: paymentBody.slice(0, 2500),
       });
     }
 
@@ -650,8 +639,7 @@ async function verifyProcessingBrowser(seeded, personalPay) {
     const payBody = await page.locator('body').innerText({ timeout: 10000 });
     if (
       !payBody.includes('결제 처리 중') ||
-      !payBody.includes('이미 결제하신 개인결제 내역입니다.') ||
-      !payBody.includes('결제할 수 없습니다')
+      !payBody.includes('이미 결제하신 개인결제 내역입니다.')
     ) {
       fail('processing personal pay payment page did not render the blocked state', {
         body: payBody.slice(0, 2500),
