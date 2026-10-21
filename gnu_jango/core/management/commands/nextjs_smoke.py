@@ -18,6 +18,7 @@ from gnu_jango.bbs.models import Post_scrap
 from gnu_jango.config.models import Config
 from gnu_jango.core.models import Poll, PollChoice, PollComment, PollVote
 from gnu_jango.shop.inventory import cancel_order_with_stock_restore
+from gnu_jango.shop.item_info import article_title, parse_item_info_value
 from gnu_jango.shop.order_points import item_status_update, take_back_order_points
 from gnu_jango.shop.models import ShopCoupon, ShopCouponLog, ShopCouponZone, ShopOrder, ShopOrderData, ShopOrderItem, ShopPersonalPay, ShopProduct, ShopQA, ShopReview
 from gnu_jango.users.models import Profile, User_Memo, User_Point
@@ -286,22 +287,22 @@ class Command(BaseCommand):
             "success": True,
             "product_id": product.it_id,
             "previous_info_gubun": product.it_info_gubun,
-            "previous_info_value": product.it_info_title,
+            "previous_info_value": json.dumps(product.it_info_value, ensure_ascii=False, separators=(",", ":")),
         }
         raw_gubun = self.arg_value(options, "raw-gubun")
         raw_value = self.arg_value(options, "raw-value")
         if raw_gubun is not None or raw_value is not None:
+            # restore: the JSON rows reported above, or a YoungCart PHP-serialized value
             product.it_info_gubun = raw_gubun or ""
-            product.it_info_title = raw_value or ""
+            product.it_info_value = parse_item_info_value(raw_value or "", product.it_info_gubun) or []
         else:
-            payload = {
-                "gubun": self.arg_value(options, "gubun") or "",
-                "key": self.arg_value(options, "key") or "",
-                "value": self.arg_value(options, "value") or "",
-            }
-            product.it_info_gubun = payload["gubun"]
-            product.it_info_title = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-        product.save(update_fields=["it_info_gubun", "it_info_title"])
+            gubun = self.arg_value(options, "gubun") or ""
+            key = self.arg_value(options, "key") or ""
+            product.it_info_gubun = gubun
+            product.it_info_value = [
+                {"key": key, "title": article_title(gubun, key), "value": self.arg_value(options, "value") or ""}
+            ]
+        product.save(update_fields=["it_info_gubun", "it_info_value"])
         return previous
 
     def set_product_relation(self, options):

@@ -424,6 +424,8 @@ export interface ShopProduct {
   it_head_html?: string;
   it_tail_html?: string;
   it_info_gubun?: string;
+  /** 상품정보제공고시 상품군 이름(예: 의류). */
+  it_info_gubun_title?: string;
   it_info_title?: string;
   it_info_items?: ShopProductInfoItem[];
   it_option_subject?: string;

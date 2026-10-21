@@ -46,6 +46,7 @@ from gnu_jango.shop.coupon_dates import coupon_end_date
 from gnu_jango.shop.inventory import StockAdjustmentError, cancel_order_with_stock_restore, reserve_product_stock
 from gnu_jango.shop.delivery import delivery_inquiry
 from gnu_jango.shop.images import upload_product_images
+from gnu_jango.shop.item_info import item_info_rows, kind_title
 from gnu_jango.shop.notifications import queue_order_placed_mails
 from gnu_jango.shop.order_points import (
     item_purchase_point,
@@ -380,22 +381,9 @@ def product_payload(product, request=None, *, detail=False):
         if hasattr(product, "has_coupon")
         else product_coupon_badge_available(product)
     )
-    info_items = []
-    info_title = product.it_info_title
-    if product.it_info_title:
-        try:
-            info_data = json.loads(product.it_info_title)
-        except (TypeError, ValueError):
-            info_data = None
-        if isinstance(info_data, dict) and info_data.get("value"):
-            info_title = "\uc0c1\ud488 \uc815\ubcf4 \uace0\uc2dc"
-            info_items.append(
-                {
-                    "key": str(info_data.get("key") or "info"),
-                    "label": str(info_data.get("key") or "info"),
-                    "value": str(info_data.get("value") or ""),
-                }
-            )
+    # \uc0c1\ud488\uc815\ubcf4\uc81c\uacf5\uace0\uc2dc: every row, titled by the product kind's articles (item.info.skin.php)
+    info_items = item_info_rows(product)
+    info_title = "\uc0c1\ud488 \uc815\ubcf4 \uace0\uc2dc" if info_items else product.it_info_title
     data = {
         "it_id": product.it_id,
         "ca_id": product.category_id or "",
@@ -441,6 +429,7 @@ def product_payload(product, request=None, *, detail=False):
         "it_head_html": product.it_head_html,
         "it_tail_html": product.it_tail_html,
         "it_info_gubun": product.it_info_gubun,
+        "it_info_gubun_title": kind_title(product.it_info_gubun),
         "it_info_title": info_title,
         "it_info_items": info_items,
         "image_url": image_url,

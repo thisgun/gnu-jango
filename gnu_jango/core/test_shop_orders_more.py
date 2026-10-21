@@ -917,11 +917,11 @@ class ProductDetailTests(CatalogBase):
         self.assertEqual(self.client.get(f"{API}/products/seo/nope").status_code, 404)
 
     def test_the_info_notice_is_unpacked_and_garbage_is_kept_as_text(self):
-        ShopProduct.objects.filter(pk="DET-2").update(it_info_title=json.dumps({"key": "Origin", "value": "Korea"}))
+        ShopProduct.objects.filter(pk="DET-2").update(it_info_value=[{"key": "Origin", "title": "Origin", "value": "Korea"}])
         ShopProduct.objects.filter(pk="DET-4").update(it_info_title="plain text")
         middle = self.client.get(f"{API}/products/DET-2").json()["data"]
         last = self.client.get(f"{API}/products/DET-4").json()["data"]
-        self.assertEqual(middle["it_info_items"], [{"key": "Origin", "label": "Origin", "value": "Korea"}])
+        self.assertEqual(middle["it_info_items"], [{"key": "Origin", "title": "Origin", "value": "Korea", "example": ""}])
         self.assertEqual((last["it_info_title"], last["it_info_items"]), ("plain text", []))
 
     def test_option_subjects_are_derived_when_the_shop_left_them_empty(self):
