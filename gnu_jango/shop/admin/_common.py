@@ -35,6 +35,13 @@ from gnu_jango.shop.models import (
     ShopShippingPolicy,
     ShopWishlist,
 )
+from gnu_jango.shop.order_statuses import (
+    ACTIVE_LINE_STATUSES,
+    INACTIVE_LINE_STATUSES,
+    STATUS_CANCELLED,
+    STATUS_RETURNED,
+    STATUS_SOLD_OUT,
+)
 from gnu_jango.utils.admin_display import (
     badge,
     compact_text,
@@ -278,13 +285,15 @@ def _status_spellings(status):
 # youngcart itemsellrank.php: the quantity of each product per line status (the cart state 쇼핑
 # never reaches an order here), with the older English spellings of the same status
 SALES_RANK_STATUS_GROUPS = tuple(
-    (status, _status_spellings(status)) for status in ("주문", "입금", "준비", "배송", "완료", "취소", "반품", "품절")
+    (status, _status_spellings(status))
+    for status in (*ACTIVE_LINE_STATUSES, STATUS_CANCELLED, STATUS_RETURNED, STATUS_SOLD_OUT)
 )
-# lines that did not end up sold: they stay out of the sales quantity and amount
-UNSOLD_LINE_STATUSES = frozenset(
+# lines that did not end up sold (youngcart $status_cancel, the same set the order totals leave
+# out): they stay out of the sales quantity and amount
+UNSOLD_LINE_STATUSES = INACTIVE_LINE_STATUSES | frozenset(
     spelling
     for status, spellings in SALES_RANK_STATUS_GROUPS
-    if status in {"취소", "반품", "품절"}
+    if status in INACTIVE_LINE_STATUSES
     for spelling in spellings
 )
 

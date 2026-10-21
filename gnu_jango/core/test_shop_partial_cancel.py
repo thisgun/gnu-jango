@@ -22,6 +22,7 @@ from gnu_jango.shop.models import (
     ShopProduct,
     ShopShippingPolicy,
 )
+from gnu_jango.shop.order_coupons import order_coupon_totals
 from gnu_jango.shop.order_flow import order_misu
 from gnu_jango.shop.order_lines import change_order_lines, plan_line_change
 
@@ -190,6 +191,45 @@ class BankPaidPartialCancelTests(PartialCancelBase):
         self.assertEqual((order.od_refund_price, order.od_receipt_point, order.od_misu), (10000, 40000, 0))
         self.assertIn("포인트 27,000점 수동 조정 필요", order.od_mod_history)
         self.assertIn("27,000점은 회원 포인트에서 직접 조정", result.message)
+
+
+class ProductCouponLineTests(PartialCancelBase):
+    """A product coupon sits on its product's first line (api.shop_coupons
+    items_with_product_coupon_prices) and counts while that line is active (get_order_info)."""
+
+    def setUp(self):
+        super().setUp()
+        self.order = self.make_order("주문", paid=0, od_misu=49000)
+        self.shirt_option = ShopOrderItem.objects.create(
+            order=self.order, product=self.shirt, ct_id="3", it_id="P-SHIRT", it_name="Shirt", ct_option="XL",
+            ct_price=0, io_type=1, io_price=1000, ct_qty=1, ct_status="주문", stock_adjusted=False,
+        )
+        coupon = ShopCoupon.objects.create(
+            user=self.member, cp_subject="셔츠", cp_method=0, cp_target="P-SHIRT", cp_price=2000, cp_used="1"
+        )
+        ShopCouponLog.objects.create(
+            cl_id=1, coupon=coupon, cp_id=coupon.cp_id, user=self.member, order=self.order, od_id=self.order.od_id, cp_price=2000
+        )
+
+    def test_the_coupon_stays_while_the_first_line_of_its_product_is_active(self):
+        self.assertEqual(order_coupon_totals(self.order).cart_by_line, {self.shirt_line.pk: 2000})
+        self.assertTrue(change_order_lines(self.order, [self.shirt_option.pk], "취소"))
+        self.reload(self.order)
+        self.assertEqual(order_coupon_totals(self.order).cart, 2000)
+        self.assertEqual(order_misu(self.order), 50000 - 2000)
+
+    def test_the_coupon_drops_with_the_first_line_of_its_product(self):
+        plan, _ = plan_line_change(self.order, [self.shirt_line.pk], "취소")
+        self.assertEqual(plan.cart_coupon, 0)
+        self.assertTrue(change_order_lines(self.order, [self.shirt_line.pk], "취소"))
+        self.reload(self.order)
+        self.assertEqual(order_coupon_totals(self.order).cart, 0)
+        api = APIClient()
+        api.force_authenticate(self.member)
+        payload = api.get(f"/api/v1/shop/orders/{self.order.od_id}").json()["data"]
+        # cap 10,000 + supplement 1,000 + 3,000 shipping, without the shirt coupon
+        self.assertEqual((payload["od_cart_coupon"], payload["od_total_price"], payload["od_misu_price"]), (0, 14000, 14000))
+        self.assertEqual(order_misu(self.order), 14000)
 
 
 @override_settings(**FAKE_TOSS)

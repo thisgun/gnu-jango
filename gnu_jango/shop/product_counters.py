@@ -15,9 +15,9 @@ from decimal import ROUND_HALF_UP, Decimal
 from django.db.models import Avg, Count, Sum
 
 from .models import ShopOrderItem, ShopProduct, ShopReview
+from .order_statuses import STATUS_COMPLETED
 
 REVIEW_PUBLISHED = "1"
-STATUS_COMPLETED = "완료"
 AVERAGE_STEP = Decimal("0.1")  # it_use_avg is DECIMAL(2,1)
 
 
@@ -58,8 +58,9 @@ def recount_product_reviews(it_ids=None):
 
 def recount_product_sales(it_ids=None):
     """Store it_sum_qty, the quantity of the 완료 order lines, of the products ``it_ids`` (None:
-    all); returns how many product rows were updated. A line leaving 완료 (cancelled or returned)
-    drops out of the count the next time this runs for its product."""
+    all); returns how many product rows were updated. Only 완료 counts (youngcart
+    orderformcartupdate.php ``ct_status = '완료'``), so a line that became 취소/반품/품절
+    (order_statuses.INACTIVE_LINE_STATUSES) drops out the next time this runs for its product."""
     ids = _product_ids(it_ids)
     if not ids:
         return 0
