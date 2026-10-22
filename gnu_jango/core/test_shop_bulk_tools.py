@@ -24,7 +24,7 @@ from gnu_jango.shop.models import (
     ShopStockAdjustment,
 )
 from gnu_jango.shop.product_import import COLUMNS, FIELD_NAMES
-from gnu_jango.shop.spreadsheet import SpreadsheetError, read_csv_upload
+from gnu_jango.shop.spreadsheet import SpreadsheetError, read_upload
 
 LABELS = [label for _name, label in COLUMNS]
 
@@ -59,21 +59,21 @@ class SuperuserMixin:
 
 class SpreadsheetReadingTests(TestCase):
     def test_reads_utf8_bom_and_cp949_and_drops_blank_rows(self):
-        self.assertEqual(read_csv_upload(csv_upload([["상품코드"], [""], ["A1"]]), max_rows=10), [["상품코드"], ["A1"]])
-        self.assertEqual(read_csv_upload(csv_upload([["상품명"], ["바지"]], encoding="cp949"), max_rows=10), [["상품명"], ["바지"]])
+        self.assertEqual(read_upload(csv_upload([["상품코드"], [""], ["A1"]]), max_rows=10), [["상품코드"], ["A1"]])
+        self.assertEqual(read_upload(csv_upload([["상품명"], ["바지"]], encoding="cp949"), max_rows=10), [["상품명"], ["바지"]])
 
     def test_refuses_spreadsheet_binaries_oversized_and_too_many_rows(self):
-        with self.assertRaisesMessage(SpreadsheetError, "CSV UTF-8"):
-            read_csv_upload(SimpleUploadedFile("items.xlsx", b"PK\x03\x04data"), max_rows=10)
+        with self.assertRaisesMessage(SpreadsheetError, "예전 엑셀 형식(.xls)"):
+            read_upload(SimpleUploadedFile("items.xls", b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1data"), max_rows=10)
         with self.assertRaisesMessage(SpreadsheetError, "CSV 파일이 아닙니다"):
-            read_csv_upload(SimpleUploadedFile("items.csv", b"PK\x03\x04data"), max_rows=10)
+            read_upload(SimpleUploadedFile("items.csv", b"PK\x03\x04data"), max_rows=10)
         with self.assertRaisesMessage(SpreadsheetError, "너무 큽니다"):
-            read_csv_upload(SimpleUploadedFile("big.csv", b"a," * 100), max_rows=10, max_bytes=50)
+            read_upload(SimpleUploadedFile("big.csv", b"a," * 100), max_rows=10, max_bytes=50)
         with self.assertRaisesMessage(SpreadsheetError, "3행까지"):
-            read_csv_upload(csv_upload([["a"]] * 5), max_rows=3)
+            read_upload(csv_upload([["a"]] * 5), max_rows=3)
 
     def test_quoted_formula_cells_read_back_as_text(self):
-        rows = read_csv_upload(csv_upload([["'=SUM(A1)", '="2026102100000000000001"', "=1+1"]]), max_rows=5)
+        rows = read_upload(csv_upload([["'=SUM(A1)", '="2026102100000000000001"', "=1+1"]]), max_rows=5)
         self.assertEqual(rows, [["=SUM(A1)", "2026102100000000000001", "=1+1"]])
 
 
