@@ -6,6 +6,7 @@ import {
   createTossCommonPaymentRequest,
   normalizeTossError,
   tossCustomerKey,
+  tossEscrowOptions,
 } from "../src/lib/payment.toss";
 
 function paymentRequest(orderOverrides: Partial<PreparedOrder> = {}): PaymentRequest {
@@ -73,6 +74,25 @@ test.describe("Toss payment helpers", () => {
         })
       ).taxFreeAmount
     ).toBe(0);
+  });
+
+  test("adds escrow options only when the server turns escrow on", () => {
+    expect(tossEscrowOptions({})).toEqual({});
+    expect(tossEscrowOptions({ use_escrow: false, escrow_products: [] })).toEqual({});
+    expect(
+      tossEscrowOptions({
+        use_escrow: true,
+        escrow_products: [
+          { id: "11", name: "Shirt", code: "P-1", unitPrice: 20000, quantity: 2 },
+        ],
+      })
+    ).toEqual({
+      useEscrow: true,
+      escrowProducts: [
+        { id: "11", name: "Shirt", code: "P-1", unitPrice: 20000, quantity: 2 },
+      ],
+    });
+    expect(tossEscrowOptions({ use_escrow: true })).toEqual({ useEscrow: true });
   });
 
   test("normalizes Toss cancellation errors from code or message", () => {

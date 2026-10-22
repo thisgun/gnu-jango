@@ -34,6 +34,7 @@ from gnu_jango.shop.models import (
     ShopOrderItem,
     ShopPersonalPay,
     ShopProduct,
+    ShopProductRelation,
     ShopQA,
     ShopReview,
     ShopStockNotification,
@@ -42,6 +43,7 @@ from gnu_jango.shop.models import (
     ORDER_ITEM_STATUS_COMPLETED,
     generate_order_uid,
 )
+from gnu_jango.shop.item_info import parse_item_info_value
 from gnu_jango.users.hashers import convert_gnuboard_password_hash
 from gnu_jango.users.models import Profile, User_Memo, User_Point
 
@@ -67,6 +69,7 @@ TABLE_KEYS = {
     "g5_shop_default_table": "shop_default",
     "g5_shop_sendcost_table": "shop_sendcost",
     "g5_shop_item_option_table": "shop_item_option",
+    "g5_shop_item_relation_table": "shop_item_relation",
     "g5_shop_order_table": "shop_order",
     "g5_shop_order_data_table": "shop_order_data",
     "g5_shop_cart_table": "shop_cart",
@@ -100,6 +103,7 @@ DEFAULT_TABLE_SUFFIXES = {
     "g5_shop_default_table": "default",
     "g5_shop_sendcost_table": "sendcost",
     "g5_shop_item_option_table": "item_option",
+    "g5_shop_item_relation_table": "item_relation",
     "g5_shop_order_table": "order",
     "g5_shop_order_data_table": "order_data",
     "g5_shop_cart_table": "cart",
@@ -485,6 +489,7 @@ class Command(BaseCommand):
             "shop_default": self.import_shop_default,
             "shop_sendcost": self.import_shop_sendcosts,
             "shop_item_option": self.import_shop_item_options,
+            "shop_item_relation": self.import_shop_item_relations,
             "shop_order": self.import_shop_orders,
             "shop_order_data": self.import_shop_order_data,
             "shop_cart": self.import_shop_cart_items,
@@ -558,9 +563,13 @@ class Command(BaseCommand):
         )
 
         # Import only values needed for public branding and shop support. Payment
-        # credentials, OAuth secrets, SMS keys, and other private settings are excluded.
+        # credentials, OAuth secrets, SMS keys (cf_icode_id / cf_icode_pw / cf_icode_token_key),
+        # and other private settings are excluded.
         mappings = (
             (config_row, "cf_title", "cf_title", 255),
+            # SMS 사용 / 전송유형; de_sms_hp, de_sms_use1..5 and de_sms_cont1..5 come with the shop options
+            (config_row, "cf_sms_use", "cf_sms_use", 16),
+            (config_row, "cf_sms_type", "cf_sms_type", 8),
             (shop_row, "de_admin_company_name", "cf_company_name", 255),
             (shop_row, "de_admin_company_owner", "cf_company_owner", 255),
             (shop_row, "de_admin_company_addr", "cf_company_addr", 255),
@@ -1275,6 +1284,12 @@ class Command(BaseCommand):
                     "ca_order": integer(row, "ca_order", 0),
                     "ca_skin": scalar(row, "ca_skin"),
                     "ca_use": bool_char(row, "ca_use", True),
+                    # categoryform.php 출력설정 and 쿠폰적용안함
+                    "ca_list_mod": max(0, integer(row, "ca_list_mod", 0)),
+                    "ca_list_row": max(0, integer(row, "ca_list_row", 0)),
+                    "ca_mobile_list_mod": max(0, integer(row, "ca_mobile_list_mod", 0)),
+                    "ca_mobile_list_row": max(0, integer(row, "ca_mobile_list_row", 0)),
+                    "ca_nocoupon": bool(integer(row, "ca_nocoupon", 0)),
                 },
             )
             count += 1
@@ -1354,6 +1369,7 @@ class Command(BaseCommand):
                     "it_sc_minimum": integer(row, "it_sc_minimum", 50000),
                     "it_sc_qty": integer(row, "it_sc_qty", 0),
                     "it_notax": integer(row, "it_notax", 0),
+                    "it_nocoupon": bool(integer(row, "it_nocoupon", 0)),
                     "it_type1": scalar(row, "it_type1"),
                     "it_type2": scalar(row, "it_type2"),
                     "it_type3": scalar(row, "it_type3"),
@@ -1365,7 +1381,7 @@ class Command(BaseCommand):
                     "it_head_html": scalar(row, "it_head_html"),
                     "it_tail_html": scalar(row, "it_tail_html"),
                     "it_info_gubun": scalar(row, "it_info_gubun"),
-                    "it_info_title": scalar(row, "it_info_value"),
+                    **self.product_info_fields(row),
                     "it_option_subject": scalar(row, "it_option_subject"),
                     "it_supply_subject": scalar(row, "it_supply_subject"),
                     "image_url": self.product_image_url(row),
@@ -1374,6 +1390,14 @@ class Command(BaseCommand):
             )
             count += 1
         return count
+
+    def product_info_fields(self, row):
+        """YoungCart keeps 상품정보제공고시 as a PHP-serialized array: store its rows, not the text."""
+        raw = text(row, "it_info_value")
+        rows = parse_item_info_value(raw, text(row, "it_info_gubun"))
+        if rows is None:
+            return {"it_info_title": raw[:255], "it_info_value": []}
+        return {"it_info_title": "", "it_info_value": rows}
 
     def shop_product_metrics(self, row):
         return {
@@ -1628,6 +1652,25 @@ class Command(BaseCommand):
             count += len(options)
         return count
 
+    def import_shop_item_relations(self, rows):
+        """g5_shop_item_relation (it_id, it_id2, ir_no): both directions are already rows there."""
+        known = set(ShopProduct.objects.values_list("it_id", flat=True))
+        count = 0
+        for row in rows:
+            it_id = text(row, "it_id", max_length=40).strip()
+            related_id = text(row, "it_id2", max_length=40).strip()
+            if not it_id or not related_id or it_id == related_id:
+                continue
+            if it_id not in known or related_id not in known:
+                continue
+            ShopProductRelation.objects.update_or_create(
+                product_id=it_id,
+                related_id=related_id,
+                defaults={"ir_no": integer(row, "ir_no", 0)},
+            )
+            count += 1
+        return count
+
     @suppress_notification_events()
     def import_shop_orders(self, rows):
         count = 0
@@ -1676,7 +1719,10 @@ class Command(BaseCommand):
                     "od_tax_mny": integer(row, "od_tax_mny", 0),
                     "od_vat_mny": integer(row, "od_vat_mny", 0),
                     "od_free_mny": integer(row, "od_free_mny", 0),
-                    "od_coupon": integer(row, "od_coupon", 0) + integer(row, "od_cart_coupon", 0),
+                    # od_coupon is the order coupon only: the product coupons (od_cart_coupon) come
+                    # back from the imported coupon logs (order_coupon_totals), so folding them in
+                    # here subtracted them twice from the order total
+                    "od_coupon": integer(row, "od_coupon", 0),
                     "od_send_coupon": integer(row, "od_send_coupon", 0),
                     "od_point": integer(row, "od_receipt_point", 0),
                     "od_cash_no": text(row, "od_cash_no", max_length=255),

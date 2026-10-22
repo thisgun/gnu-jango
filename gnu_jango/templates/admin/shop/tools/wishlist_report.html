@@ -1,0 +1,60 @@
+{% extends "admin/shop/tools/_layout.html" %}
+
+{% block hero_form %}
+<form class="g5-admin-report-filter g5-admin-report-filter-compact" method="get" action="{{ report_path }}">
+  <label><span>보관 시작일</span><input class="input" type="date" name="date_from" value="{{ filters.date_from }}"></label>
+  <label><span>보관 종료일</span><input class="input" type="date" name="date_to" value="{{ filters.date_to }}"></label>
+  <label><span>상품코드·상품명</span><input class="input" type="search" name="q" value="{{ filters.q }}" maxlength="120"></label>
+  <div class="g5-admin-report-filter-actions">
+    <button class="button btn" type="submit">조회</button>
+    <a class="button btn g5-admin-button-secondary" href="{{ report_path }}">초기화</a>
+  </div>
+</form>
+{% endblock %}
+
+{% block tool_body %}
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">보관 {{ total }}건 · 상위 {{ limit }}개 상품</p>
+      <h2>보관함 상품 순위</h2>
+    </div>
+    <a class="button btn g5-admin-button-secondary" href="{{ report_path }}?{{ export_query }}">CSV 내려받기</a>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="table g5-admin-mini-table g5-admin-rank-table">
+      <thead>
+        <tr>
+          <th scope="col">순위</th>
+          <th scope="col">상품</th>
+          <th scope="col">판매가</th>
+          <th scope="col">재고</th>
+          <th scope="col">보관 수</th>
+          <th scope="col">회원</th>
+          <th scope="col">비회원</th>
+          <th scope="col">최근 보관</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td><strong class="g5-admin-rank-no">{{ row.rank }}</strong></td>
+          <td>
+            {% if row.change_url %}<a href="{{ row.change_url }}">{{ row.name }}</a> <a class="g5-admin-empty" href="{{ row.public_url }}" target="_blank" rel="noopener">쇼핑몰</a>{% else %}{{ row.name }}{% endif %}
+            <div class="g5-admin-empty">{{ row.it_id }}{% if row.change_url and not row.on_sale %} · 판매 안 함/품절{% endif %}</div>
+          </td>
+          <td>{{ row.price }}</td>
+          <td>{{ row.stock }}</td>
+          <td><strong>{{ row.count }}</strong></td>
+          <td>{{ row.members }}</td>
+          <td>{{ row.guests }}</td>
+          <td>{{ row.last }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="g5-admin-empty">보관함에 담긴 상품이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

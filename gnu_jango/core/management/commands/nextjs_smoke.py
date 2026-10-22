@@ -18,8 +18,10 @@ from gnu_jango.bbs.models import Post_scrap
 from gnu_jango.config.models import Config
 from gnu_jango.core.models import Poll, PollChoice, PollComment, PollVote
 from gnu_jango.shop.inventory import cancel_order_with_stock_restore
+from gnu_jango.shop.item_info import article_title, parse_item_info_value
 from gnu_jango.shop.order_points import item_status_update, take_back_order_points
 from gnu_jango.shop.models import ShopCoupon, ShopCouponLog, ShopCouponZone, ShopOrder, ShopOrderData, ShopOrderItem, ShopPersonalPay, ShopProduct, ShopQA, ShopReview
+from gnu_jango.shop.product_relations import related_product_ids, replace_product_relations
 from gnu_jango.users.models import Profile, User_Memo, User_Point
 
 
@@ -286,34 +288,34 @@ class Command(BaseCommand):
             "success": True,
             "product_id": product.it_id,
             "previous_info_gubun": product.it_info_gubun,
-            "previous_info_value": product.it_info_title,
+            "previous_info_value": json.dumps(product.it_info_value, ensure_ascii=False, separators=(",", ":")),
         }
         raw_gubun = self.arg_value(options, "raw-gubun")
         raw_value = self.arg_value(options, "raw-value")
         if raw_gubun is not None or raw_value is not None:
+            # restore: the JSON rows reported above, or a YoungCart PHP-serialized value
             product.it_info_gubun = raw_gubun or ""
-            product.it_info_title = raw_value or ""
+            product.it_info_value = parse_item_info_value(raw_value or "", product.it_info_gubun) or []
         else:
-            payload = {
-                "gubun": self.arg_value(options, "gubun") or "",
-                "key": self.arg_value(options, "key") or "",
-                "value": self.arg_value(options, "value") or "",
-            }
-            product.it_info_gubun = payload["gubun"]
-            product.it_info_title = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-        product.save(update_fields=["it_info_gubun", "it_info_title"])
+            gubun = self.arg_value(options, "gubun") or ""
+            key = self.arg_value(options, "key") or ""
+            product.it_info_gubun = gubun
+            product.it_info_value = [
+                {"key": key, "title": article_title(gubun, key), "value": self.arg_value(options, "value") or ""}
+            ]
+        product.save(update_fields=["it_info_gubun", "it_info_value"])
         return previous
 
     def set_product_relation(self, options):
+        # the product's own related list (ShopProductRelation), reported and restored as a CSV
         product = self.product(options)
-        suffix = f"rel_{product.it_id}"
-        previous_csv = str(self.read_json_config(suffix, {}).get("related_csv", ""))
+        previous_csv = ",".join(related_product_ids(product.it_id))
         restore_csv = self.arg_value(options, "restore-csv")
         related_id = self.arg_value(options, "related-id")
         if restore_csv is not None:
-            self.write_json_config(suffix, {"related_csv": restore_csv})
+            replace_product_relations(product, restore_csv.split(","))
         elif related_id:
-            self.write_json_config(suffix, {"related_csv": related_id})
+            replace_product_relations(product, [related_id])
         return {"success": True, "product_id": product.it_id, "previous_related_csv": previous_csv}
 
     def set_review_policy(self, options):

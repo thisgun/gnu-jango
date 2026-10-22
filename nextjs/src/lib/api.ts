@@ -441,6 +441,8 @@ export interface ShopProduct {
   it_head_html?: string;
   it_tail_html?: string;
   it_info_gubun?: string;
+  /** 상품정보제공고시 상품군 이름(예: 의류). */
+  it_info_gubun_title?: string;
   it_info_title?: string;
   it_info_items?: ShopProductInfoItem[];
   it_option_subject?: string;
@@ -489,6 +491,14 @@ export interface ShopCategory {
   ca_skin?: string;
   item_count?: number;
   children?: ShopCategory[];
+  /** 분류 출력설정(1줄당 이미지 수 · 줄 수, PC · 모바일). 0 은 기본 진열. */
+  ca_list_mod?: number;
+  ca_list_row?: number;
+  ca_mobile_list_mod?: number;
+  ca_mobile_list_row?: number;
+  ca_nocoupon?: boolean;
+  /** 서버가 출력설정으로 정한 목록 격자 — lib/shop-display.ts shopCategoryGridOf 가 읽는다. */
+  list_display?: unknown;
 }
 
 export interface ShopBanner {
@@ -641,6 +651,16 @@ export interface ShopShippingQuote {
   policy: ShopPolicy;
 }
 
+/** 주문 상세의 현금영수증 상태: 발급 가능(available) · 신청 접수(requested) · 발급됨(issued) · 취소 필요 · 대상 아님. */
+export interface ShopOrderCashReceipt {
+  state: "available" | "requested" | "issued" | "cancel_needed" | "unavailable";
+  can_request: boolean;
+  amount: number;
+  types: { value: "income" | "expense"; label: string }[];
+  message: string;
+  request_url: string;
+}
+
 export interface ShopOrder {
   od_id: string;
   item_count?: number;
@@ -711,15 +731,22 @@ export interface ShopOrder {
   od_invoice_time?: string;
   od_delivery_inquiry_url?: string;
   delivery_inquiry_url?: string;
+  /** 배송회사 문의전화(영카트 get_delivery_inquiry) — 목록에 없는 배송회사면 빈 값. */
+  delivery_inquiry_tel?: string;
   // 현금영수증 — PG 발급 결과. od_cash=1 이면 발급된 상태.
   od_cash?: number;
   od_cash_request?: boolean;
+  /** 현금영수증 종류: income(소득공제) · expense(지출증빙). */
+  od_cash_type?: string;
   od_cash_no?: string;
   od_cash_info?: string;
   od_cash_receipt_url?: string;
   cash_receipt_url?: string;
+  /** 주문 후 현금영수증 발급 신청 주소(API, POST) — 신청할 수 있을 때만 값이 있다. */
   od_cash_receipt_issue_url?: string;
   cash_receipt_issue_url?: string;
+  /** 주문 상세에서만 오는 현금영수증 상태(영카트 taxsave.php). */
+  cash_receipt?: ShopOrderCashReceipt | null;
   // 희망배송일 (YYYY-MM-DD), 모바일 주문 마킹, 세금계산서 신청 플래그.
   od_hope_date?: string;
   od_mobile?: number;

@@ -9,30 +9,31 @@ import { useAuthStore } from "@/store/auth";
 import { runtimeRouterPush } from "@/lib/runtime-router";
 import type { ShopOrder } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
-import { formatPrice, formatDate, cn } from "@/lib/utils";
+import {
+  ORDER_PROGRESS_STEPS,
+  isClosedOrderStatus,
+  ORDER_STATUS_BADGE_CLASS,
+  normalizeOrderStatus,
+  orderStatusLabel,
+} from "@/lib/order-status";
+import { formatPrice, formatDateTime, cn } from "@/lib/utils";
 import { formatHopeDate } from "@/lib/hope-date";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Check, X } from "lucide-react";
 import { toastSuccess, toastError } from "@/lib/toast";
 import { cancelMyOrder, getMyOrder } from "@/services/member";
 import { getClientPublicSettings } from "@/services/settings";
+import { CashReceiptPanel } from "./CashReceiptPanel";
 import { OrderDetailItems } from "./OrderDetailItems";
 
-// 백엔드의 그누보드5 표준 상태값을 그대로 사용 — UI 라벨만 친절하게 매핑.
-const STATUS_MAP: Record<string, { label: string; variant: string }> = {
-  "준비": { label: "결제대기", variant: "bg-gray-100 text-gray-700" },
-  "주문": { label: "입금대기", variant: "bg-amber-100 text-amber-700" },
-  "입금": { label: "입금완료", variant: "bg-blue-100 text-blue-700" },
-  "배송": { label: "배송중", variant: "bg-indigo-100 text-indigo-700" },
-  "완료": { label: "배송완료", variant: "bg-green-100 text-green-700" },
-  "취소": { label: "취소", variant: "bg-red-100 text-red-700" },
-};
-
-const TIMELINE_STEPS = ["주문", "입금", "배송", "완료"];
+// 백엔드의 그누보드5 표준 상태값(주문·입금·준비·배송·완료·취소)을 그대로 쓰고, 라벨은 주문 목록과 같은 표를 쓴다.
+const TIMELINE_STEPS: readonly string[] = ORDER_PROGRESS_STEPS;
 
 function OrderTimeline({ currentStatus }: { currentStatus: string }) {
-  const isCancelled = currentStatus === "취소";
-  const currentIdx = TIMELINE_STEPS.indexOf(currentStatus);
+  const status = normalizeOrderStatus(currentStatus);
+  // 영카트 $status_cancel — 취소 · 반품 · 품절은 모두 끝난 주문이다.
+  const isCancelled = isClosedOrderStatus(status);
+  const currentIdx = TIMELINE_STEPS.indexOf(status);
 
   return (
     <div className="py-4">
@@ -101,7 +102,7 @@ function OrderTimeline({ currentStatus }: { currentStatus: string }) {
 
       {isCancelled && (
         <p className="mt-3 text-center text-sm font-medium text-red-700">
-          주문이 취소되었습니다
+          {normalizeOrderStatus(currentStatus) === "반품" ? "주문이 반품되었습니다" : "주문이 취소되었습니다"}
         </p>
       )}
     </div>
@@ -109,18 +110,15 @@ function OrderTimeline({ currentStatus }: { currentStatus: string }) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const config = STATUS_MAP[status] ?? {
-    label: status,
-    variant: "bg-gray-100 text-gray-700",
-  };
+  const { label, tone } = orderStatusLabel(status);
   return (
     <span
       className={cn(
         "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium",
-        config.variant
+        ORDER_STATUS_BADGE_CLASS[tone]
       )}
     >
-      {config.label}
+      {label}
     </span>
   );
 }
@@ -301,10 +299,9 @@ export default function OrderDetailPage() {
     order.od_is_fully_paid ?? (misuPrice === 0 && cartPrice > cancelPrice);
   const receiptUrl = order.receipt_url || order.od_payment_receipt_url || "";
   const cashReceiptUrl = order.cash_receipt_url || order.od_cash_receipt_url || "";
-  const cashReceiptIssueUrl =
-    order.cash_receipt_issue_url || order.od_cash_receipt_issue_url || "";
   const deliveryInquiryUrl =
     order.delivery_inquiry_url || order.od_delivery_inquiry_url || "";
+  const deliveryInquiryTel = deliveryInquiryUrl ? order.delivery_inquiry_tel || "" : "";
   const hasInvoice =
     !!order.od_invoice &&
     !!order.od_delivery_company &&
@@ -342,7 +339,7 @@ export default function OrderDetailPage() {
                 <StatusBadge status={order.od_status} />
               </div>
               <p className="text-sm text-muted-foreground">
-                주문일시: {formatDate(orderTime)}
+                주문일시: {formatDateTime(orderTime)}
               </p>
               <p className="text-sm text-muted-foreground">
                 결제방법: {order.od_settle_case}
@@ -477,10 +474,15 @@ export default function OrderDetailPage() {
                     </a>
                   )}
                 </dd>
+                {deliveryInquiryTel && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    문의전화: {deliveryInquiryTel}
+                  </p>
+                )}
                 {order.od_invoice_time &&
                   order.od_invoice_time !== "0000-00-00 00:00:00" && (
                     <p className="mt-1 text-xs text-muted-foreground">
-                      발송일: {formatDate(order.od_invoice_time)}
+                      발송일: {formatDateTime(order.od_invoice_time)}
                     </p>
                   )}
               </div>
@@ -501,7 +503,7 @@ export default function OrderDetailPage() {
                 <dt className="text-muted-foreground">주문번호</dt>
                 <dd className="font-medium">{order.od_id}</dd>
                 <dt className="text-muted-foreground">주문일시</dt>
-                <dd>{orderTime ? formatDate(orderTime) : "-"}</dd>
+                <dd>{formatDateTime(orderTime) || "-"}</dd>
                 <dt className="text-muted-foreground">결제방식</dt>
                 <dd>
                   {order.od_settle_case}
@@ -512,7 +514,7 @@ export default function OrderDetailPage() {
                 {order.od_receipt_price > 0 && order.od_receipt_time && (
                   <>
                     <dt className="text-muted-foreground">결제일시</dt>
-                    <dd>{formatDate(order.od_receipt_time)}</dd>
+                    <dd>{formatDateTime(order.od_receipt_time)}</dd>
                   </>
                 )}
                 {order.od_payment_app_label && order.od_payment_app_value && (
@@ -553,7 +555,7 @@ export default function OrderDetailPage() {
                 )}
               </dl>
 
-              {(receiptUrl || cashReceiptUrl || cashReceiptIssueUrl) && (
+              {(receiptUrl || cashReceiptUrl) && (
                 <div className="flex flex-wrap gap-2 border-t pt-3">
                   {receiptUrl && (
                     <Button variant="outline" size="sm" asChild>
@@ -566,17 +568,6 @@ export default function OrderDetailPage() {
                     <Button variant="outline" size="sm" asChild>
                       <a href={cashReceiptUrl} target="_blank" rel="noopener noreferrer">
                         현금영수증 확인
-                      </a>
-                    </Button>
-                  )}
-                  {!cashReceiptUrl && cashReceiptIssueUrl && (
-                    <Button variant="outline" size="sm" asChild>
-                      <a
-                        href={cashReceiptIssueUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        현금영수증 발급
                       </a>
                     </Button>
                   )}
@@ -660,33 +651,15 @@ export default function OrderDetailPage() {
             </div>
           </div>
 
-          {/* 현금영수증 — od_cash=1 면 발급된 상태. od_cash_no 가 영수증 번호. */}
-          {order.od_cash === 1 && order.od_cash_no && (
-            <div className="mt-4 rounded-md border bg-muted/30 p-3 text-sm">
-              <p className="text-xs text-muted-foreground">현금영수증</p>
-              <p className="mt-1 font-mono">{order.od_cash_no}</p>
-              {order.od_cash_info && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {order.od_cash_info}
-                </p>
-              )}
-            </div>
-          )}
-          {(order.od_tax_invoice_request ||
-            (order.od_cash_request && !order.od_cash_no)) && (
+          {/* 현금영수증 — 발급 번호, 신청 접수 안내, 또는 주문 후 발급 신청(영카트 taxsave.php). */}
+          <CashReceiptPanel order={order} guestUid={guestUid} onOrderUpdated={setOrder} />
+          {order.od_tax_invoice_request && (
             <div role="status" className="alert alert-info mt-4">
               <div>
                 <p className="font-semibold">증빙 신청 접수</p>
-                {order.od_tax_invoice_request && (
-                  <p className="text-sm">
-                    세금계산서 신청이 접수되었습니다. 발급 여부는 별도 확인이 필요합니다.
-                  </p>
-                )}
-                {order.od_cash_request && !order.od_cash_no && (
-                  <p className="text-sm">
-                    현금영수증 신청이 접수되었습니다. 발급 번호가 등록되면 이 화면에 표시됩니다.
-                  </p>
-                )}
+                <p className="text-sm">
+                  세금계산서 신청이 접수되었습니다. 발급 여부는 별도 확인이 필요합니다.
+                </p>
               </div>
             </div>
           )}

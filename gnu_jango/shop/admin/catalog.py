@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib import messages
 from unfold.forms import ActionForm
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import OuterRef, Subquery, Value
 from django.db.models.functions import Coalesce
 from django.http import Http404, HttpResponseRedirect
@@ -21,7 +21,22 @@ from gnu_jango.shop.images import (
     managed_product_image_storage_path,
     upload_product_images,
 )
-from gnu_jango.shop.models import ShopProduct, ShopStockAdjustment
+from gnu_jango.shop.admin.catalog_tools import (
+    CategoryAdminForm,
+    ProductCopyForm,
+    ProductOptionFormMixin,
+    ShopProductRelationInline,
+    add_child_category_button,
+    copy_products,
+    new_category_initial,
+    product_copy_button,
+    protected_category_reasons,
+    refuse_blocked_categories,
+)
+from gnu_jango.shop.admin.item_info_form import ItemInfoTextField, clean_item_info, item_info_kind_field
+from gnu_jango.shop.product_copy import copy_product, next_product_id
+from gnu_jango.shop.product_relations import mirror_product_relations
+from gnu_jango.shop.models import ShopProduct, ShopProductRelation, ShopStockAdjustment
 
 
 PRODUCT_TYPE_FIELDS = (
@@ -110,53 +125,28 @@ class ShopProductActionForm(ActionForm):
     )
 
 
-class ShopProductAdminForm(forms.ModelForm):
+class ShopProductAdminForm(ProductOptionFormMixin, forms.ModelForm):
+    it_info_value = ItemInfoTextField()
+
     class Meta:
         model = ShopProduct
         fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "it_info_gubun" in self.fields:
+            # itemform.php: the notice kind comes from lib/iteminfo.lib.php
+            self.fields["it_info_gubun"] = item_info_kind_field(self.instance.it_info_gubun)
+        self.setup_option_builder()
+
+    def clean(self):
+        return self.clean_option_fields(clean_item_info(self, super().clean()))
 
     def clean_it_stock_qty(self):
         stock = self.cleaned_data.get("it_stock_qty")
         if stock is not None and (stock < 0 or stock > 2_147_483_647):
             raise forms.ValidationError(_("Stock must be between 0 and 2,147,483,647."))
         return stock
-
-    def clean_options(self):
-        options = self.cleaned_data.get("options")
-        if "options" not in self.changed_data:
-            return options
-        if not isinstance(options, list):
-            raise forms.ValidationError(_("Options must be a list of option records."))
-        seen_options = set()
-        for index, option in enumerate(options):
-            if not isinstance(option, dict):
-                continue
-            option_id = str(option.get("io_id") or "").strip()
-            if option_id:
-                try:
-                    option_type = int(option.get("io_type") or 0)
-                except (TypeError, ValueError):
-                    option_type = -1
-                option_key = (option_type, option_id)
-                if option_type in (0, 1) and option_key in seen_options:
-                    raise forms.ValidationError(
-                        _("Option %(index)s duplicates another option ID and type.") % {"index": index + 1}
-                    )
-                if option_type in (0, 1):
-                    seen_options.add(option_key)
-            if option.get("io_stock_qty") in (None, ""):
-                continue
-            try:
-                stock = int(option["io_stock_qty"])
-            except (TypeError, ValueError):
-                raise forms.ValidationError(
-                    _("Option %(index)s has an invalid stock quantity.") % {"index": index + 1}
-                )
-            if stock < 0 or stock > 2_147_483_647:
-                raise forms.ValidationError(
-                    _("Option %(index)s stock must be between 0 and 2,147,483,647.") % {"index": index + 1}
-                )
-        return options
 
 
 def option_stock_map(options):
@@ -182,12 +172,45 @@ class ShopCategoryAdmin(ModelAdmin):
     """YoungCart categorylist.php: the tree (two ca_id characters per level), item counts, and the
     order and use flags edited in the list."""
 
-    list_display = ("ca_id", "tree_name", "product_count", "ca_order", "ca_use")
+    form = CategoryAdminForm
+    list_display = ("ca_id", "tree_name", "product_count", "ca_order", "ca_use", "add_child_link")
     list_display_links = ("ca_id", "tree_name")
     list_editable = ("ca_order", "ca_use")
     search_fields = ("ca_id", "ca_name")
     list_filter = ("ca_use",)
     ordering = ("ca_id",)
+    readonly_fields = ("add_child_link",)
+    fieldsets = (
+        (None, {"fields": (("ca_id", "add_child_link"), "ca_name", "ca_parent", ("ca_order", "ca_use"), "ca_skin")}),
+        ("출력설정", {
+            "description": "상품 목록의 1줄당 이미지 수와 줄 수입니다. 한 쪽에 1줄당 수 × 줄 수(최대 100개)를 "
+                           "보여 줍니다. 0 이면 기본 진열을 씁니다.",
+            "fields": (("ca_list_mod", "ca_list_row"), ("ca_mobile_list_mod", "ca_mobile_list_row")),
+        }),
+        ("쿠폰", {"fields": ("ca_nocoupon",)}),
+    )
+
+    def get_changeform_initial_data(self, request):
+        # categoryform.php: a new category starts at 3 x 5 and ?parent= proposes the next child code
+        return {**new_category_initial(request), **super().get_changeform_initial_data(request)}
+
+    @admin.display(description="하위분류")
+    def add_child_link(self, obj):
+        return add_child_category_button(obj)
+
+    def get_deleted_objects(self, objs, request):
+        # categoryformupdate.php refuses a category that still has child categories or products;
+        # listing the reasons as "protected" makes Django's delete pages refuse it as well.
+        deleted, model_count, perms_needed, protected = super().get_deleted_objects(objs, request)
+        return deleted, model_count, perms_needed, [*protected, *protected_category_reasons(objs)]
+
+    def delete_model(self, request, obj):
+        if refuse_blocked_categories(self, request, [obj]):
+            super().delete_model(request, obj)
+
+    def delete_queryset(self, request, queryset):
+        allowed = refuse_blocked_categories(self, request, list(queryset))
+        super().delete_queryset(request, queryset.filter(pk__in=[category.pk for category in allowed]))
 
     def get_queryset(self, request):
         # A product counts once for each category it belongs to through ca_id, ca_id2 or ca_id3.
@@ -221,7 +244,8 @@ class ShopCategoryAdmin(ModelAdmin):
 class ShopProductAdmin(ModelAdmin):
     form = ShopProductAdminForm
     action_form = ShopProductActionForm
-    actions = ("add_selected_to_event", "update_selected_product_type")
+    actions = ("add_selected_to_event", "update_selected_product_type", "copy_selected_products")
+    inlines = (ShopProductRelationInline,)
     list_before_template = "admin/shop/product_list_before.html"
     list_display = (
         "product_id_display",
@@ -252,6 +276,7 @@ class ShopProductAdmin(ModelAdmin):
         "product_image_preview",
         "product_image_manager_link",
         "stock_adjustment_link",
+        "product_copy_link",
         "updated_at",
     )
     fieldsets = (
@@ -273,6 +298,7 @@ class ShopProductAdmin(ModelAdmin):
                     ("it_brand", "it_maker"),
                     ("it_origin", "it_model"),
                     ("created_at", "updated_at"),
+                    "product_copy_link",
                 ),
             },
         ),
@@ -283,7 +309,7 @@ class ShopProductAdmin(ModelAdmin):
                 "fields": (
                     ("it_price", "it_basic_price", "it_cust_price"),
                     ("it_point", "it_point_type"),
-                    "it_notax",
+                    ("it_notax", "it_nocoupon"),
                 ),
             },
         ),
@@ -327,7 +353,8 @@ class ShopProductAdmin(ModelAdmin):
                     "it_explan",
                     "it_head_html",
                     "it_tail_html",
-                    ("it_info_gubun", "it_info_title"),
+                    "it_info_gubun",
+                    "it_info_value",
                 ),
             },
         ),
@@ -360,8 +387,12 @@ class ShopProductAdmin(ModelAdmin):
         return actions
 
     def get_urls(self):
+        from gnu_jango.shop.admin.bulk import product_tool_urls
+
         urls = super().get_urls()
         custom_urls = [
+            # bulk tools and reports (shop/admin/bulk.py) before the <str:it_id> routes
+            *product_tool_urls(self),
             path(
                 "<str:it_id>/images/",
                 self.admin_site.admin_view(self.product_images_view),
@@ -372,6 +403,11 @@ class ShopProductAdmin(ModelAdmin):
                 self.admin_site.admin_view(self.stock_adjustments_view),
                 name="shop_shopproduct_stock_adjustments",
             ),
+            path(
+                "<str:it_id>/copy/",
+                self.admin_site.admin_view(self.product_copy_view),
+                name="shop_shopproduct_copy",
+            ),
         ]
         return custom_urls + urls
 
@@ -381,6 +417,67 @@ class ShopProductAdmin(ModelAdmin):
             return "-"
         url = f"{reverse('admin:shop_shopproduct_stock_adjustments')}?{urlencode({'it_id': obj.it_id})}"
         return format_html('<a class="button" href="{}">{}</a>', url, _("Adjust stock / history"))
+
+    @admin.display(description="상품 복사")
+    def product_copy_link(self, obj):
+        return product_copy_button(obj)
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        # itemformupdate.php lists the product back on each related product. Only when the related
+        # list was edited: a list_editable save (no formsets) or an untouched inline must not drop
+        # the one-way relations an import brought in.
+        if any(formset.model is ShopProductRelation and formset.has_changed() for formset in formsets):
+            mirror_product_relations(form.instance)
+
+    def product_copy_view(self, request, it_id):
+        """itemcopy.php: copy one product under a new code (default: the current unix time)."""
+        source = ShopProduct.objects.filter(pk=it_id).first()
+        if not source:
+            raise Http404
+        if not (self.has_add_permission(request) and self.has_view_permission(request, source)):
+            raise PermissionDenied
+        if request.method == "POST":
+            form = ProductCopyForm(request.POST)
+            if form.is_valid():
+                try:
+                    copy = copy_product(source, form.cleaned_data["new_it_id"])
+                except ValidationError as error:
+                    form.add_error("new_it_id", error)
+                except IntegrityError:
+                    form.add_error("new_it_id", "이미 존재하는 상품코드 입니다.")
+                else:
+                    self.message_user(
+                        request,
+                        f"{source.it_id} 상품을 {copy.it_id} 코드로 복사했습니다. 내용을 확인한 뒤 판매해 주세요.",
+                        level=messages.SUCCESS,
+                    )
+                    return HttpResponseRedirect(reverse("admin:shop_shopproduct_change", args=[copy.it_id]))
+        else:
+            form = ProductCopyForm(initial={"new_it_id": next_product_id()})
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "상품 복사",
+            "opts": self.model._meta,
+            "product": source,
+            "form": form,
+        }
+        request.current_app = self.admin_site.name
+        return TemplateResponse(request, "admin/shop/product_copy.html", context)
+
+    @admin.action(description="선택 상품 복사", permissions=["add"])
+    def copy_selected_products(self, request, queryset):
+        copies, failures = copy_products(queryset)
+        if copies:
+            self.message_user(
+                request,
+                "상품 {}개를 복사했습니다: {}".format(
+                    len(copies), ", ".join(f"{source.it_id} → {copy.it_id}" for source, copy in copies)
+                ),
+                level=messages.SUCCESS,
+            )
+        for source, error in failures:
+            self.message_user(request, f"{source.it_id} 상품을 복사하지 못했습니다: {error}", level=messages.ERROR)
 
     @admin.display(description=_("Image management"))
     def product_image_manager_link(self, obj):
@@ -1116,9 +1213,9 @@ class ShopOrderItemAdmin(ModelAdmin):
 
     @admin.display(description=_("Price"), ordering="ct_price")
     def price_display(self, obj):
-        return money_html(obj.ct_price + obj.io_price)
+        return money_html(order_line_unit_price(obj))
 
     @admin.display(description=_("Line total"))
     def line_total_display(self, obj):
-        return money_html((obj.ct_price + obj.io_price) * obj.ct_qty)
+        return money_html(order_line_unit_price(obj) * obj.ct_qty)
 

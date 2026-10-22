@@ -85,7 +85,7 @@ class ShopSettingsAdminTests(TestCase):
     minimal_form = {
         "de_admin_company_name": "Demo Shop",
         "de_admin_company_tel": "",
-        "de_delivery_company": "Courier",
+        "de_delivery_company": "CJ대한통운",
         "de_send_cost_case": "",
         "de_send_cost_limit": "",
         "de_send_cost_list": "",
@@ -133,7 +133,7 @@ class ShopSettingsAdminTests(TestCase):
             {
                 "de_admin_company_name": "Demo Shop",
                 "de_admin_company_tel": "02-1234-5678",
-                "de_delivery_company": "Courier",
+                "de_delivery_company": "CJ대한통운",
                 "de_send_cost_case": "차등",
                 "de_send_cost_limit": "30000;50000",
                 "de_send_cost_list": "4000;0",
@@ -184,7 +184,8 @@ class ShopSettingsAdminTests(TestCase):
     def test_new_option_sections_render_with_youngcart_defaults(self):
         self.client.force_login(self.admin)
         page = self.client.get(self.url).content.decode()
-        for title in ("주문·장바구니", "구매 포인트·신규회원 쿠폰", "쇼핑몰 초기화면 진열", "상품 목록·관련상품 진열", "쇼핑몰 로고"):
+        for title in ("장바구니", "희망배송일", "포인트 사용·구매 포인트", "신규회원 쿠폰", "쇼핑몰 초기화면 진열",
+                      "상품 목록·관련상품 진열", "쇼핑몰 로고"):
             self.assertIn(title, page)
         self.assertIn('enctype="multipart/form-data"', page)
         self.assertIn('name="de_cart_keep_term" value="15"', page)
@@ -274,7 +275,7 @@ class ShopSettingsAdminTests(TestCase):
             data={
                 "de_admin_company_name": "Demo Shop",
                 "de_admin_company_tel": "",
-                "de_delivery_company": "Courier",
+                "de_delivery_company": "CJ대한통운",
                 "de_send_cost_case": "차등",
                 "de_send_cost_limit": "50000;30000",
                 "de_send_cost_list": "3000",

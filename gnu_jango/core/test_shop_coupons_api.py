@@ -127,7 +127,8 @@ class CouponTestBase(TestCase):
         )
         ShopShippingPolicy.objects.update_or_create(
             pk=1,
-            defaults={"de_delivery_company": "Courier", "de_settle_min_point": 1000, "de_settle_max_point": 100000, "de_settle_point_unit": 100},
+            # 3,000 below 50,000 (youngcart get_sendcost charges a shared fee only for 차등)
+            defaults={"de_send_cost_case": "차등", "de_send_cost_limit": "50000", "de_send_cost_list": "3000", "de_delivery_company": "Courier", "de_settle_min_point": 1000, "de_settle_max_point": 100000, "de_settle_point_unit": 100},
         )
         Config.objects.update_or_create(name="de_bank_use", defaults={"value": "1"})
         Config.objects.update_or_create(name="de_bank_account", defaults={"value": "Test Bank 000-00 Holder"})
@@ -799,13 +800,14 @@ class OrderCouponOrderTests(CouponTestBase):
         self.assertEqual(order.od_coupon, 8000)
         self.assertEqual(self.payable(order), 100000 - 20000 - 8000)
 
-    def test_order_coupon_larger_than_the_order_never_makes_the_total_negative(self):
+    def test_order_coupon_larger_than_the_order_is_refused_and_stays_unused(self):
+        # YoungCart orderformupdate.php: die('Order coupon error.') instead of shrinking the coupon
         coupon = self.coupon(cp_price=500000)
         self.add(self.big)
-        order = self.placed(cp_id=coupon.cp_id)
-        self.assertLessEqual(order.od_coupon, 100000)
-        self.assertGreaterEqual(self.payable(order), 0)
-        self.assertEqual(self.payable(order), 100000 - order.od_coupon + order.od_send_cost + order.od_send_cost2)
+        response = self.place(cp_id=coupon.cp_id)
+        self.assertEqual((response.status_code, response.json()["code"]), (400, "order_coupon_exceeds_amount"))
+        self.assertFalse(ShopOrder.objects.exists())
+        self.assertEqual(self.used(coupon), "")
 
     def test_the_order_coupon_id_is_also_read_from_cp_id_order(self):
         coupon = self.coupon(cp_price=4000)
@@ -876,7 +878,7 @@ class OrderCouponOrderTests(CouponTestBase):
 
 
 class ShippingCouponOrderTests(CouponTestBase):
-    """Shipping of 3000 applies below the free threshold (default policy)."""
+    """Shipping of 3000 applies below the free threshold (the test policy: 차등 3,000 under 50,000)."""
 
     def test_fixed_shipping_coupon_is_capped_at_the_shipping_cost(self):
         coupon = self.coupon(cp_method=3, cp_price=5000)

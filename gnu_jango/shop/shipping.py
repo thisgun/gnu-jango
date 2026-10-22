@@ -6,8 +6,16 @@ from django.utils.html import strip_tags
 from .models import ShopShippingCost, ShopShippingPolicy
 
 
+# product-level fallbacks of a cart line whose product is gone (it_sc_price / it_sc_minimum)
 DEFAULT_SHIPPING_COST = 3000
 DEFAULT_FREE_THRESHOLD = 50000
+
+SEND_COST_CASE_TIERED = "차등"
+SEND_COST_CASE_FREE = "무료"
+# youngcart install/install_db.php: a new shop starts with 금액별차등 - under 20,000 4,000, under
+# 30,000 3,000, under 40,000 2,000 and free from 40,000. Used until the settings are saved once.
+INSTALL_SEND_COST_LIMIT = "20000;30000;40000"
+INSTALL_SEND_COST_LIST = "4000;3000;2000"
 
 # ct_send_cost of a cart line (YoungCart g5_shop_cart.ct_send_cost)
 SEND_COST_PREPAID = 0
@@ -66,6 +74,9 @@ def current_shipping_policy():
     return ShopShippingPolicy.objects.filter(pk=1).first() or ShopShippingPolicy(
         pk=1,
         de_delivery_company="Default courier",
+        de_send_cost_case=SEND_COST_CASE_TIERED,
+        de_send_cost_limit=INSTALL_SEND_COST_LIMIT,
+        de_send_cost_list=INSTALL_SEND_COST_LIST,
     )
 
 
@@ -90,29 +101,29 @@ def shipping_rules(policy=None):
     return sorted(rules, key=lambda rule: rule["limit"])
 
 
-def shipping_free_threshold(policy=None):
+def active_shipping_rules(policy=None):
+    """The amount tiers in force: only 금액별차등 (차등) charges by tier; any other case charges no
+    shared shipping fee (youngcart get_sendcost)."""
     policy = policy or current_shipping_policy()
-    if str(policy.de_send_cost_case or "").strip() == "무료":
-        return 0
-    rules = shipping_rules(policy)
-    return max((rule["limit"] for rule in rules), default=DEFAULT_FREE_THRESHOLD)
+    if str(policy.de_send_cost_case or "").strip() != SEND_COST_CASE_TIERED:
+        return []
+    return shipping_rules(policy)
+
+
+def shipping_free_threshold(policy=None):
+    """The order amount from which the shared shipping fee is 0 (0: it is always 0)."""
+    return max((rule["limit"] for rule in active_shipping_rules(policy)), default=0)
 
 
 def base_shipping_cost(item_total, policy=None):
-    policy = policy or current_shipping_policy()
+    """youngcart get_sendcost: the shared fee of the products without a shipping type of their
+    own. 차등 charges the cost of the first tier whose limit the amount is under and 0 past the last
+    one; 무료, an empty case or 차등 without tiers charge 0."""
     item_total = max(0, int(item_total or 0))
-    case = str(policy.de_send_cost_case or "").strip()
-    if case == "무료":
-        return 0
-
-    rules = shipping_rules(policy)
-    if case == "차등" and rules:
-        for rule in rules:
-            if item_total < rule["limit"]:
-                return rule["cost"]
-        return 0
-
-    return 0 if item_total >= DEFAULT_FREE_THRESHOLD else DEFAULT_SHIPPING_COST
+    for rule in active_shipping_rules(policy):
+        if item_total < rule["limit"]:
+            return rule["cost"]
+    return 0
 
 
 def extra_shipping_cost(postal_code):
@@ -181,7 +192,7 @@ def shipping_quote(item_total, postal_code="", policy=None, items=None):
 
 def shipping_policy_payload(policy=None):
     policy = policy or current_shipping_policy()
-    rules = shipping_rules(policy)
+    rules = active_shipping_rules(policy)
     return {
         "de_admin_company_name": policy.de_admin_company_name,
         "de_admin_company_tel": policy.de_admin_company_tel,

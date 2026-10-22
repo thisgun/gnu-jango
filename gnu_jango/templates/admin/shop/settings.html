@@ -22,14 +22,18 @@
   <header>
     <div>
       <h1>쇼핑몰 설정</h1>
-      <p>결제수단과 입금계좌, 배송비 및 운영 정책을 관리합니다.</p>
+      <p>영카트 쇼핑몰설정과 같은 순서로 사업자정보, 진열, 결제, 배송, 기타 운영 설정과 SMS를 관리합니다.</p>
     </div>
     <a class="btn" href="/shop" target="_blank" rel="noopener">쇼핑몰 보기</a>
   </header>
 
-  <nav aria-label="쇼핑몰 설정 바로가기">
-    <a class="btn" href="#payment-status">결제 연결 상태</a>
-    {% for section in sections %}<a class="btn" href="#shop-{{ section.id }}">{{ section.title }}</a>{% endfor %}
+  <nav aria-label="쇼핑몰 설정 바로가기" class="shop-settings-nav">
+    {% for group in groups %}
+    <div class="shop-settings-nav-group">
+      <a class="btn" href="#{{ group.id }}">{{ group.title }}</a>
+      {% for section in group.sections %}{% if section.title != group.title %}<a class="btn btn-ghost" href="#{% if section.status %}{{ section.id }}{% else %}shop-{{ section.id }}{% endif %}">{{ section.title }}</a>{% endif %}{% endfor %}
+    </div>
+    {% endfor %}
     <a class="btn" href="{% url 'admin:shop_shopshippingcost_changelist' %}">지역별 추가 배송비</a>
   </nav>
 
@@ -39,53 +43,9 @@
   </div>
   {% endif %}
 
-  <section id="payment-status" class="card card-border" aria-labelledby="payment-status-title">
-    <div class="card-body">
-      <h2 id="payment-status-title" class="card-title">결제 연결 상태</h2>
-      <p>현재 저장된 설정을 기준으로 주문 화면에서 사용할 수 있는 결제수단입니다.</p>
-      <div class="overflow-x-auto">
-        <table class="table">
-          <caption class="sr-only">현재 결제수단 사용 가능 여부</caption>
-          <thead><tr><th scope="col">결제수단</th><th scope="col">주문 화면 상태</th></tr></thead>
-          <tbody>
-            {% for method in payment_status %}
-            <tr><th scope="row">{{ method.name }}</th><td><span class="shop-payment-state{% if method.enabled %} is-ready{% endif %}">{% if method.enabled %}사용 가능{% else %}사용 불가{% endif %}</span> <small>{{ method.detail }}</small></td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      <dl>
-        <div><dt>주문 결제 연동</dt><dd>{{ payment_provider_label }}</dd></div>
-        <div><dt>토스페이먼츠 키 상태</dt><dd>{{ gateway.mode }}{% if gateway.enabled and not gateway.native_checkout %} · 주문 화면의 PG로 선택되지 않음{% endif %}</dd></div>
-        <div><dt>클라이언트 키</dt><dd>{% if gateway.has_client_key %}등록됨{% else %}미등록{% endif %}</dd></div>
-        <div><dt>시크릿 키</dt><dd>{% if gateway.has_secret_key %}등록됨{% else %}미등록{% endif %}</dd></div>
-        <div><dt>가상계좌 서버 설정</dt><dd>{% if gateway.vbank_enabled %}플래그 켜짐 · 웹훅 등록은 별도 확인{% else %}비활성{% endif %}</dd></div>
-        <div><dt>현금영수증 신청</dt><dd>{% if cash_receipt.enabled %}허용 · {{ cash_receipt.methods|join:" · " }}{% else %}중지{% endif %}</dd></div>
-      </dl>
-      <p>무통장입금의 현금영수증 요청은 주문에 기록되며 관리자가 수동 발급합니다. 토스 가상계좌·계좌이체는 고객이 요청한 경우에만 발급 옵션을 보내고, PG 응답의 발급 정보가 있으면 주문에 저장합니다.</p>
-      <form method="post" class="shop-pg-check-form">
-        {% csrf_token %}
-        <input type="hidden" name="action" value="check_pg">
-        <button class="btn" type="submit"{% if not gateway.enabled %} disabled{% endif %}>토스 서버 인증 확인</button>
-        <small>읽기 전용 API 조회만 수행하며 결제나 취소는 실행하지 않습니다.</small>
-      </form>
-      {% if gateway.adapter_enabled %}
-      <p>외부 PG 어댑터가 설정되어 있습니다. 현재 주문 화면에서 직접 시작할 수 있는 온라인 결제는 토스페이먼츠입니다.</p>
-      {% endif %}
-      <details>
-        <summary>PG 연결 설정 방법</summary>
-        <p>호스팅 서비스의 환경 변수에 아래 항목을 등록한 뒤 서버를 재시작하거나 다시 배포하세요. Vercel에서는 프로젝트의 Settings → Environment Variables에서 등록합니다.</p>
-        <ul>
-          <li><code>SHOP_TOSS_CLIENT_KEY</code>: 토스페이먼츠 클라이언트 키</li>
-          <li><code>SHOP_TOSS_SECRET_KEY</code>: 토스페이먼츠 시크릿 키</li>
-          <li><code>SHOP_PAYMENT_PROVIDER=toss</code>: 토스페이먼츠 선택</li>
-        </ul>
-        <p>테스트 키끼리 또는 실결제 키끼리 등록하세요. 키 값은 이 화면에 표시하거나 저장하지 않습니다.</p>
-        <p>클라이언트 키와 시크릿 키의 모드가 다르거나 키 형식이 맞지 않으면 결제 수단을 사용할 수 없습니다.</p>
-        <p>가상계좌는 <code>/api/v1/shop/payment/toss/vbank/webhook</code> 웹훅을 PG에 등록하고 입금 통지를 확인한 후 <code>SHOP_TOSS_VBANK_ENABLED=True</code>도 설정해야 합니다.</p>
-      </details>
-    </div>
-  </section>
+  {# The status cards sit inside the settings form; their buttons submit these separate forms. #}
+  <form method="post" id="shop-pg-check-form" hidden>{% csrf_token %}<input type="hidden" name="action" value="check_pg"></form>
+  <form method="post" id="shop-sms-test-form" hidden>{% csrf_token %}<input type="hidden" name="action" value="test_sms"></form>
 
   <form method="post" enctype="multipart/form-data">
     {% csrf_token %}
@@ -103,66 +63,17 @@
     </div>
     {% endif %}
 
-    {% for section in sections %}
-    <section id="shop-{{ section.id }}" class="card card-border" aria-labelledby="shop-{{ section.id }}-title">
-      <div class="card-body">
-        <h2 id="shop-{{ section.id }}-title" class="card-title">{{ section.title }}</h2>
-        <p>{{ section.description }}</p>
-        {% if section.id == "shipping" %}
-        <div class="shop-shipping-preview" data-shipping-preview aria-live="polite">
-          <h3>기본 배송비 미리보기</h3>
-          <p>아래 예시는 장바구니 공통 배송비만 계산합니다. 상품별 배송비와 지역별 추가 배송비는 제외됩니다.</p>
-          <p class="shop-shipping-preview-error" data-preview-error hidden>구간별 금액과 배송비 형식을 확인해 주세요.</p>
-          <table class="table">
-            <thead><tr><th scope="col">상품 금액</th><th scope="col">기본 배송비</th></tr></thead>
-            <tbody data-preview-rows>
-              <tr><td>10,000원</td><td>3,000원</td></tr>
-              <tr><td>30,000원</td><td>3,000원</td></tr>
-              <tr><td>50,000원</td><td>0원</td></tr>
-              <tr><td>100,000원</td><td>0원</td></tr>
-            </tbody>
-          </table>
-        </div>
-        {% endif %}
-        {% if section.table %}
-        <div class="overflow-x-auto">
-          <table class="table shop-settings-grid">
-            <caption class="sr-only">{{ section.title }}</caption>
-            <thead><tr><th scope="col">상품 묶음</th>{% for column in section.table.columns %}<th scope="col">{{ column }}</th>{% endfor %}</tr></thead>
-            <tbody>
-              {% for row in section.table.rows %}
-              <tr>
-                <th scope="row">{{ row.label }}</th>
-                {% for field in row.fields %}
-                <td>
-                  <label class="sr-only" for="{{ field.id_for_label }}">{{ field.label }}</label>
-                  {{ field }}
-                  {% if field.errors %}<div id="{{ field.id_for_label }}_errors">{{ field.errors }}</div>{% endif %}
-                </td>
-                {% endfor %}
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% endif %}
-        {% for item in section.fields %}
-        {% with field=item.bound %}
-        <div class="fieldset">
-          {% if item.checkbox %}
-          <label class="label" for="{{ field.id_for_label }}">{{ field }} <span>{{ field.label }}</span></label>
-          {% else %}
-          <label class="fieldset-legend" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} (필수){% endif %}</label>
-          {% if item.current_url %}<p class="shop-logo-preview"><img src="{{ item.current_url }}" alt="현재 {{ field.label }}"></p>{% endif %}
-          {{ field }}
-          {% endif %}
-          <div id="{{ field.id_for_label }}_help">{% if field.help_text %}<p>{{ field.help_text }}</p>{% endif %}</div>
-          <div id="{{ field.id_for_label }}_errors">{{ field.errors }}</div>
-        </div>
-        {% endwith %}
-        {% endfor %}
-      </div>
-    </section>
+    {% for group in groups %}
+    <h2 id="{{ group.id }}" class="shop-settings-group-title">{{ group.title }}</h2>
+    {% for section in group.sections %}
+      {% if section.status == "payment-status" %}
+        {% include "admin/shop/_settings_payment_status.html" %}
+      {% elif section.status == "sms-status" %}
+        {% include "admin/shop/_settings_sms_status.html" %}
+      {% else %}
+        {% include "admin/shop/_settings_section.html" %}
+      {% endif %}
+    {% endfor %}
     {% endfor %}
     <footer class="shop-settings-savebar">
       <p>저장하면 새 주문부터 적용됩니다. 진행 중인 결제의 승인·입금 확인은 계속 처리됩니다.</p>

@@ -2,10 +2,9 @@
 
 
 import re
-from html import escape
 from urllib.parse import quote, urlsplit, urlunsplit
 
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import HttpResponseRedirect
 from django.conf import settings
 
 
@@ -468,9 +467,8 @@ def _legacy_shop_file_redirect(request, file_name):
     if file_name == "personalpay.php":
         return _legacy_local_redirect(request, "/shop/personalpay")
     if file_name == "personalpayform.php":
+        # the checkout lives on the Next.js pay page (the old nextjs_handoff=1 stub ended there too)
         pp_id = _legacy_first_param(request, ["pp_id"])
-        if _legacy_first_param(request, ["nextjs_handoff"]) == "1":
-            return _legacy_personalpay_handoff_response(pp_id)
         return _legacy_local_redirect(
             request,
             f"/shop/personalpay/{quote(pp_id, safe='')}/pay" if pp_id else "/shop/personalpay",
@@ -489,34 +487,6 @@ def _legacy_shop_file_redirect(request, file_name):
         return _legacy_local_redirect(request, "/shop/wishlist")
 
     return _legacy_php_redirect(request, f"/shop/{quote(file_name, safe='')}", fallback="/shop")
-
-
-def _legacy_personalpay_handoff_response(pp_id):
-    safe_pp_id = escape(pp_id)
-    message = (
-        "This request has been handed off to the Gnuboard payment endpoint."
-        if pp_id
-        else "Missing personal payment id."
-    )
-    html = f"""<!doctype html>
-<html lang="ko">
-<head>
-<meta charset="utf-8">
-<meta name="robots" content="noindex,nofollow">
-<title>Gnuboard personal payment</title>
-</head>
-<body data-nextjs-handoff="personalpayform" data-pp-id="{safe_pp_id}">
-<main>
-<h1>Gnuboard personal payment</h1>
-<p>{escape(message)}</p>
-</main>
-</body>
-</html>"""
-    return HttpResponse(
-        html,
-        content_type="text/html; charset=utf-8",
-        headers={"Cache-Control": "no-store"},
-    )
 
 
 def legacy_mobile_route(request, legacy_path=""):

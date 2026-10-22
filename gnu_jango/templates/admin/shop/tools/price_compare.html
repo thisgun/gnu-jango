@@ -1,0 +1,70 @@
+{% extends "admin/shop/tools/_layout.html" %}
+
+{% block tool_body %}
+<section class="g5-admin-report-metrics" aria-label="상품목록 상태">
+  <article class="card g5-admin-report-metric">
+    <span>공개 상태</span>
+    <strong>{% if enabled %}공개 중{% else %}꺼짐{% endif %}</strong>
+    <em>{% if enabled %}가격비교사이트가 주소를 읽을 수 있습니다{% else %}주소가 404를 돌려줍니다{% endif %}</em>
+  </article>
+  <article class="card g5-admin-report-metric">
+    <span>목록 상품 수</span>
+    <strong>{{ product_count }}</strong>
+    <em>판매 중·재고 있음·가격 있음·전화문의 아님</em>
+  </article>
+  <article class="card g5-admin-report-metric">
+    <span>캐시</span>
+    <strong>{{ cache_minutes }}분</strong>
+    <em>상품을 고친 내용은 이 시간 안에 반영됩니다</em>
+  </article>
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">네이버쇼핑 EP 3.0 (전체상품)</p>
+      <h2>엔진페이지 주소</h2>
+    </div>
+  </div>
+  <ul class="g5-admin-report-summary-list">
+    <li>전체상품 URL: <a href="{{ feed_url }}" target="_blank" rel="noopener">{{ feed_url }}</a></li>
+    <li>영카트 주소 (기존 입점 주소 유지): <a href="{{ legacy_url }}" target="_blank" rel="noopener">{{ legacy_url }}</a></li>
+    <li>입점 안내: <a href="https://join.shopping.naver.com/" target="_blank" rel="noopener">네이버쇼핑 입점</a>. 입점한 가격비교사이트에 위 주소를 알려 주세요.</li>
+    <li>판매 안 함·품절·전화문의 상품, 가격이 0원인 상품, 재고(옵션이 있으면 옵션 재고)가 없는 상품, 숨긴 분류의 상품은 빠집니다.</li>
+  </ul>
+  {% if can_change %}
+  <form class="g5-admin-report-filter" method="post" action="{{ report_path }}">
+    {% csrf_token %}
+    <div class="g5-admin-report-filter-actions">
+      {% if enabled %}
+      <button class="button btn g5-admin-button-secondary" type="submit" name="action" value="disable">공개 끄기</button>
+      {% else %}
+      <button class="button btn btn-primary" type="submit" name="action" value="enable">상품목록 공개</button>
+      {% endif %}
+      <button class="button btn g5-admin-button-secondary" type="submit" name="action" value="refresh">캐시 비우기</button>
+    </div>
+  </form>
+  {% endif %}
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">미리보기 (앞의 {{ preview_rows|length }}개)</p>
+      <h2>상품목록 내용</h2>
+    </div>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="table g5-admin-mini-table">
+      <thead><tr>{% for name in preview_header %}<th scope="col">{{ name }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in preview_rows %}
+        <tr>{% for value in row %}<td>{{ value }}</td>{% endfor %}</tr>
+        {% empty %}
+        <tr><td colspan="17" class="g5-admin-empty">목록에 넣을 상품이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

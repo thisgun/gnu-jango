@@ -3,6 +3,7 @@
 import base64
 import hashlib
 import hmac
+import http.client
 import json
 import logging
 import re
@@ -15,6 +16,7 @@ import uuid
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from django.views.decorators.debug import sensitive_variables
 from rest_framework import status as drf_status
 
 from gnu_jango.shop.models import (
@@ -22,8 +24,22 @@ from gnu_jango.shop.models import (
     ShopOrder,
     ShopOrderData,
 )
+from gnu_jango.shop.notifications import STATUS_PAID as MAIL_STATUS_PAID, queue_order_placed_mails, queue_order_status_mail
+from gnu_jango.shop.sms.notifications import queue_order_placed_sms, queue_order_status_sms
 from gnu_jango.shop.order_points import item_status_update, take_back_order_points
 from gnu_jango.shop.payment_options import online_payment_preferences
+from gnu_jango.shop.pg_settings import (
+    MODE_LABELS,
+    PG_SERVICE_NONE,
+    admin_pg_service,
+    current_mode,
+    effective_toss_keys,
+    env_payment_provider,
+    escrow_enabled,
+    mode_flag,
+    order_key_mode,
+    stored_rows as pg_stored_rows,
+)
 
 from .response import api_error
 
@@ -40,6 +56,10 @@ from .shop_common import (
 
 logger = logging.getLogger(__name__)
 
+# what a PG request can fail with before any answer: also a dropped connection
+# (http.client.RemoteDisconnected, ConnectionResetError) or a broken HTTP response
+NETWORK_ERRORS = (urllib_error.URLError, TimeoutError, socket.timeout, http.client.HTTPException, OSError)
+
 
 def payment_transaction_id(data):
     for key in ("transaction_id", "transactionId", "paymentKey", "tno", "TID", "tid", "P_TID", "LGD_TID", "authToken"):
@@ -53,20 +73,71 @@ def payment_key(data):
     return str(first_value(data, "paymentKey", "payment_key", "payment_key_id") or "").strip()
 
 
-def configured_payment_provider():
-    configured_provider = str(getattr(settings, "SHOP_PAYMENT_PROVIDER", "") or "").strip().lower()
+def configured_payment_provider(*, rows=None, toss_config=None):
+    """The PG the checkout starts payments with: SHOP_PAYMENT_PROVIDER when the server sets it
+    (an external adapter, or Toss), otherwise the admin 결제대행사 (de_pg_service). "bank" means
+    no online PG (무통장입금 only). ``rows`` / ``toss_config`` reuse what the caller loaded."""
+    configured_provider = env_payment_provider()
     if configured_provider in PAYMENT_ADAPTER_PROVIDERS and payment_adapter_enabled(configured_provider):
         return configured_provider
-    if toss_payment_config()["enabled"]:
+    rows = pg_stored_rows() if rows is None else rows
+    if not configured_provider and admin_pg_service(rows) == PG_SERVICE_NONE:
+        return "bank"
+    toss_config = toss_payment_config(rows=rows) if toss_config is None else toss_config
+    if toss_config["enabled"]:
         return "toss"
     return "bank"
 
 
-def toss_payment_config():
-    client_key = str(getattr(settings, "SHOP_TOSS_CLIENT_KEY", "") or "").strip()
-    secret_key = str(getattr(settings, "SHOP_TOSS_SECRET_KEY", "") or "").strip()
-    client_mode = "test" if client_key.startswith("test_") else "live" if client_key.startswith("live_") else "unknown"
-    secret_mode = "test" if secret_key.startswith("test_") else "live" if secret_key.startswith("live_") else "unknown"
+def _toss_key_mode(value):
+    return "test" if value.startswith("test_") else "live" if value.startswith("live_") else "unknown"
+
+
+def toss_payment_config(*, rows=None):
+    """The effective Toss setup for a new payment (environment keys first, then the admin pair
+    결제 테스트 picks). It never holds the secret key itself: has_secret_key only says whether
+    there is one."""
+    return _toss_config_from_keys(effective_toss_keys(rows))
+
+
+def current_toss_mode_flag(rows=None):
+    """od_test for an order about to be paid: the admin pair 결제 테스트 picks now."""
+    return mode_flag(current_mode(rows))
+
+
+@sensitive_variables("keys", "token")
+def toss_api_context(order=None):
+    """(config, Authorization header value) for a Toss API call; the header is "" when the keys
+    are not a usable pair. Every Toss API request goes through here. An ``order`` that recorded
+    its key mode (od_test) is always handled with that admin pair - a payment made with the live
+    keys is confirmed, cancelled and refunded with them even after 결제 테스트 changes, and a
+    missing pair is refused instead of replaced by the other one. Without an order (the health
+    check, a new checkout) the current 결제 테스트 pair is used; environment keys ignore modes."""
+    keys = effective_toss_keys(mode=order_key_mode(order) if order is not None else None)
+    config = _toss_config_from_keys(keys)
+    if not config["enabled"] or not keys.secret_key:
+        return config, ""
+    token = base64.b64encode(f"{keys.secret_key}:".encode("utf-8")).decode("ascii")
+    return config, f"Basic {token}"
+
+
+def toss_keys_missing_message(config):
+    """The Korean reason a Toss call could not be made with ``config``'s keys."""
+    mode = config.get("pinned_mode")
+    if mode:
+        label = MODE_LABELS[mode]
+        return (
+            f"이 결제는 토스페이먼츠 {label} 키로 처리되었습니다. 관리자 쇼핑몰 설정 > 결제설정에 "
+            f"{label} 클라이언트 키와 시크릿 키를 등록해야 처리할 수 있습니다."
+        )
+    return "토스페이먼츠 키가 설정되지 않았습니다."
+
+
+@sensitive_variables("keys", "client_key", "secret_key")
+def _toss_config_from_keys(keys):
+    client_key, secret_key = keys.client_key, keys.secret_key
+    client_mode = _toss_key_mode(client_key)
+    secret_mode = _toss_key_mode(secret_key)
     if not client_key and not secret_key:
         key_status = "missing"
     elif not client_key or not secret_key:
@@ -88,22 +159,26 @@ def toss_payment_config():
         "has_secret_key": bool(secret_key),
         "api_base_url": str(getattr(settings, "SHOP_TOSS_API_BASE_URL", "") or "https://api.tosspayments.com").rstrip("/"),
         "is_test_mode": key_status == "test",
+        # where the keys come from ("env" | "admin" | "none"), and the admin pair in use
+        "source": keys.source,
+        "selected_mode": keys.selected_mode,
+        # the order's own mode when it decided the pair (admin keys only)
+        "pinned_mode": keys.selected_mode if keys.pinned and keys.source != "env" else None,
     }
 
 
+@sensitive_variables("authorization")
 def check_toss_connection():
-    """Verify server credentials with a read-only Toss order lookup."""
-    config = toss_payment_config()
-    if not config["enabled"]:
+    """Verify server credentials (the current 결제 테스트 pair) with a read-only Toss lookup."""
+    config, authorization = toss_api_context()
+    if not authorization:
         return {"status": config["key_status"], "connected": False}
 
-    secret_key = str(getattr(settings, "SHOP_TOSS_SECRET_KEY", "") or "").strip()
-    credentials = base64.b64encode(f"{secret_key}:".encode("utf-8")).decode("ascii")
     order_id = f"codex-health-{uuid.uuid4().hex}"
     request = urllib_request.Request(
         f"{config['api_base_url']}/v1/payments/orders/{quote(order_id, safe='')}",
         method="GET",
-        headers={"Authorization": f"Basic {credentials}", "Accept": "application/json"},
+        headers={"Authorization": authorization, "Accept": "application/json"},
     )
     try:
         with urllib_request.urlopen(request, timeout=5) as response:
@@ -124,7 +199,7 @@ def check_toss_connection():
         if exc.code in {400, 401} and provider_code in {"INVALID_API_KEY", "UNAUTHORIZED_KEY"}:
             return {"status": "invalid_credentials", "connected": False}
         return {"status": "unavailable", "connected": False}
-    except (urllib_error.URLError, TimeoutError, socket.timeout):
+    except NETWORK_ERRORS:
         return {"status": "unavailable", "connected": False}
     except (UnicodeDecodeError, ValueError):
         return {"status": "invalid_response", "connected": False}
@@ -139,6 +214,98 @@ def checkout_payment_methods(*, toss_config=None, pg_service=None, bank_accounts
     methods = {name: pg_enabled and allowed for name, allowed in preferences.items()}
     methods["vbank"] = methods["vbank"] and toss_config["vbank_enabled"]
     return {"bank": bool(bank_accounts), **methods, "kakaopay": False}
+
+
+# youngcart de_escrow_use: Toss takes an escrow payment for these methods (the checkout's names)
+TOSS_ESCROW_METHODS = ("vbank", "iche")
+ESCROW_HISTORY_MARK = "에스크로 결제 (토스페이먼츠)"
+ESCROW_DELIVERY_NOTICE = "에스크로 배송 등록 필요 (토스 상점관리자)"
+
+
+def settle_case_is_transfer(value):
+    normalized = str(value or "").strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+    return normalized in {"iche", "transfer", "계좌이체", "실시간계좌이체"}
+
+
+def toss_escrow_applies(settle_case):
+    """에스크로 사용 is on and ``settle_case`` is a Toss transfer or virtual account."""
+    return (settle_case_is_vbank(settle_case) or settle_case_is_transfer(settle_case)) and escrow_enabled()
+
+
+def _escrow_entry(entry_id, name, code, unit_price, quantity):
+    return {"id": str(entry_id), "name": str(name)[:100], "code": str(code)[:100],
+            "unitPrice": int(unit_price), "quantity": int(quantity)}
+
+
+def toss_escrow_products(order):
+    """Toss escrowProducts for ``order`` (youngcart orderform.sub.php $escrow_products), adding
+    up to exactly the amount paid (od_receipt_price): one entry per active order line plus the
+    shipping fee, with the coupons and points used shared out in proportion and the rounding
+    remainder on the last entry. A line whose share is not a whole price per unit is sent as one
+    entry of its total. [] when the list cannot match the amount; the payment then goes without
+    escrow rather than with a list Toss would not reconcile."""
+    amount = safe_int(order.od_receipt_price, 0)
+    if amount <= 0:
+        return []
+    entries = []  # (id, name, code, unit price, quantity, total)
+    for item in order.items.exclude(ct_status__in=CANCELLED_STATUSES).order_by("pk"):
+        option_price = safe_int(item.io_price, 0)
+        unit_price = option_price if safe_int(item.io_type, 0) == 1 else safe_int(item.ct_price, 0) + option_price
+        quantity = max(1, safe_int(item.ct_qty, 1))
+        if unit_price > 0:
+            name = str(item.it_name or item.it_id or "상품")
+            entries.append((item.pk, name, item.it_id or item.pk, unit_price, quantity, unit_price * quantity))
+    shipping = max(0, safe_int(order.od_send_cost, 0)) + max(0, safe_int(order.od_send_cost2, 0))
+    if shipping:
+        entries.append(("shipping", "배송비", "SHIPPING", shipping, 1, shipping))
+    gross = sum(entry[5] for entry in entries)
+    if gross < amount:
+        logger.warning("order %s: escrow products add up to %s, less than the %s paid; no escrow sent.",
+                       order.od_id, gross, amount)
+        return []
+    shares = [entry[5] * amount // gross for entry in entries]
+    shares[-1] += amount - sum(shares)
+    products = []
+    for (entry_id, name, code, unit_price, quantity, total), share in zip(entries, shares):
+        if share <= 0:
+            continue
+        if share == total:
+            products.append(_escrow_entry(entry_id, name, code, unit_price, quantity))
+        elif share % quantity == 0:
+            products.append(_escrow_entry(entry_id, name, code, share // quantity, quantity))
+        else:
+            products.append(_escrow_entry(entry_id, name, code, share, 1))
+    if sum(product["unitPrice"] * product["quantity"] for product in products) != amount:
+        logger.warning("order %s: escrow products do not add up to the %s paid; no escrow sent.", order.od_id, amount)
+        return []
+    return products
+
+
+def toss_tax_free_amount(order):
+    """The tax-free part Toss gets with the payment request (taxFreeAmount): od_free_mny of an
+    order placed under 복합과세 결제 (od_tax_flag), never more than the amount paid online."""
+    if not safe_int(getattr(order, "od_tax_flag", 0), 0):
+        return 0
+    return max(0, min(safe_int(order.od_free_mny, 0), safe_int(order.od_receipt_price, 0)))
+
+
+def mark_toss_escrow_order(order_pk):
+    """Note in od_mod_history that Toss took an escrow payment, so the 배송 step can remind the
+    admin to register the delivery in the Toss dashboard. Recorded once."""
+    from gnu_jango.shop.inventory import append_order_history, order_history_line
+
+    with transaction.atomic():
+        locked = ShopOrder.objects.select_for_update().filter(pk=order_pk).first()
+        if locked is None or ESCROW_HISTORY_MARK in (locked.od_mod_history or ""):
+            return
+        locked.od_mod_history = append_order_history(
+            locked.od_mod_history, order_history_line(ESCROW_HISTORY_MARK, "toss")
+        )
+        locked.save(update_fields=["od_mod_history"])
+
+
+def order_paid_with_escrow(order):
+    return ESCROW_HISTORY_MARK in str(getattr(order, "od_mod_history", "") or "")
 
 
 def payment_adapter_config():
@@ -209,7 +376,7 @@ def payment_adapter_request(action, provider, data):
             code="payment_adapter_rejected",
             details={"provider": provider, "adapter_status": exc.code},
         )
-    except (urllib_error.URLError, TimeoutError, socket.timeout) as exc:
+    except NETWORK_ERRORS as exc:
         # The exception text can name internal hosts; it goes to the log, not to the client.
         logger.warning("Payment adapter request for %s failed: %s", provider, exc)
         return None, api_error(
@@ -513,17 +680,17 @@ def record_payment_raw_log(order, order_id, pg_service, transaction_id, data, *,
     )
 
 
-def toss_api_confirm(payment_key_value, order_id, amount):
-    config = toss_payment_config()
-    secret_key = str(getattr(settings, "SHOP_TOSS_SECRET_KEY", "") or "").strip()
-    if not config["enabled"] or not secret_key:
+@sensitive_variables("authorization")
+def toss_api_confirm(payment_key_value, order_id, amount, *, order=None):
+    """POST /v1/payments/confirm with the key pair ``order`` was prepared with (od_test)."""
+    config, authorization = toss_api_context(order)
+    if not authorization:
         return None, api_error(
-            "Toss Payments is not configured.",
+            toss_keys_missing_message(config) if config.get("pinned_mode") else "Toss Payments is not configured.",
             status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
             code="toss_payment_unconfigured",
         )
 
-    credentials = base64.b64encode(f"{secret_key}:".encode("utf-8")).decode("ascii")
     body = json.dumps(
         {
             "paymentKey": payment_key_value,
@@ -537,7 +704,7 @@ def toss_api_confirm(payment_key_value, order_id, amount):
         data=body,
         method="POST",
         headers={
-            "Authorization": f"Basic {credentials}",
+            "Authorization": authorization,
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Idempotency-Key": f"confirm-{order_id}-{payment_key_value}"[:300],
@@ -563,7 +730,7 @@ def toss_api_confirm(payment_key_value, order_id, amount):
                 "provider_code": payload.get("code", ""),
             },
         )
-    except (urllib_error.URLError, TimeoutError, socket.timeout) as exc:
+    except NETWORK_ERRORS as exc:
         logger.warning("Toss payment authorization request failed: %s", exc)
         return None, api_error(
             "Toss payment authorization request failed.",
@@ -579,20 +746,20 @@ def toss_api_confirm(payment_key_value, order_id, amount):
         )
 
 
-def toss_api_get_payment_by_order(order_id):
-    config = toss_payment_config()
-    secret_key = str(getattr(settings, "SHOP_TOSS_SECRET_KEY", "") or "").strip()
-    if not config["enabled"] or not secret_key:
+@sensitive_variables("authorization")
+def toss_api_get_payment_by_order(order_id, *, order=None):
+    """GET /v1/payments/orders/{orderId} with ``order``'s key pair (od_test)."""
+    config, authorization = toss_api_context(order)
+    if not authorization:
         return None, api_error(
-            "Toss Payments is not configured.",
+            toss_keys_missing_message(config) if config.get("pinned_mode") else "Toss Payments is not configured.",
             status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
             code="toss_payment_unconfigured",
         )
-    credentials = base64.b64encode(f"{secret_key}:".encode("utf-8")).decode("ascii")
     request = urllib_request.Request(
         f"{config['api_base_url']}/v1/payments/orders/{quote(str(order_id), safe='')}",
         method="GET",
-        headers={"Authorization": f"Basic {credentials}", "Accept": "application/json"},
+        headers={"Authorization": authorization, "Accept": "application/json"},
     )
     try:
         with urllib_request.urlopen(request, timeout=10) as response:
@@ -607,7 +774,7 @@ def toss_api_get_payment_by_order(order_id):
             code="toss_payment_status_unavailable",
             details={"provider_status": exc.code},
         )
-    except (urllib_error.URLError, TimeoutError, socket.timeout):
+    except NETWORK_ERRORS:
         return None, api_error(
             "Toss payment status could not be retrieved.",
             status=drf_status.HTTP_502_BAD_GATEWAY,
@@ -621,10 +788,11 @@ def toss_api_get_payment_by_order(order_id):
         )
 
 
+@sensitive_variables("authorization")
 def cancel_pending_toss_vbank(order, reason):
     if not settle_case_is_vbank(order.od_settle_case) or not order.od_tno:
         return None
-    payment, error = toss_api_get_payment_by_order(order.od_id)
+    payment, error = toss_api_get_payment_by_order(order.od_id, order=order)
     if error:
         return error
     if (
@@ -648,16 +816,20 @@ def cancel_pending_toss_vbank(order, reason):
             code="toss_vbank_cancel_requires_review",
         )
 
-    config = toss_payment_config()
-    secret_key = str(getattr(settings, "SHOP_TOSS_SECRET_KEY", "") or "").strip()
-    credentials = base64.b64encode(f"{secret_key}:".encode("utf-8")).decode("ascii")
+    config, authorization = toss_api_context(order)
+    if not authorization:
+        return api_error(
+            toss_keys_missing_message(config) if config.get("pinned_mode") else "Toss Payments is not configured.",
+            status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="toss_payment_unconfigured",
+        )
     payload = json.dumps({"cancelReason": str(reason or "Customer requested cancellation")[:200]}).encode("utf-8")
     request = urllib_request.Request(
         f"{config['api_base_url']}/v1/payments/{quote(str(order.od_tno), safe='')}/cancel",
         data=payload,
         method="POST",
         headers={
-            "Authorization": f"Basic {credentials}",
+            "Authorization": authorization,
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Idempotency-Key": f"vbank-cancel-{order.od_id}"[:300],
@@ -675,7 +847,7 @@ def cancel_pending_toss_vbank(order, reason):
             code="toss_vbank_cancel_failed",
             details={"provider_status": exc.code},
         )
-    except (urllib_error.URLError, TimeoutError, socket.timeout, ValueError):
+    except (*NETWORK_ERRORS, ValueError):
         return api_error(
             "Toss could not confirm virtual account cancellation. The order was left unchanged.",
             status=drf_status.HTTP_502_BAD_GATEWAY,
@@ -710,33 +882,24 @@ def order_paid_through_toss(order):
     )
 
 
-def toss_api_cancel_payment(order, reason):
-    """Cancel the whole Toss payment of ``order`` (POST /v1/payments/{paymentKey}/cancel), as
-    youngcart orderformcartupdate.php does before it marks the order 취소.
-
-    Returns the Toss payment object; raises PaymentCancelError when Toss did not confirm the
-    cancellation. A payment already cancelled at Toss (in its dashboard) counts as cancelled."""
-    config = toss_payment_config()
-    secret_key = str(getattr(settings, "SHOP_TOSS_SECRET_KEY", "") or "").strip()
-    if not config["enabled"] or not secret_key:
-        raise PaymentCancelError("토스페이먼츠 키가 설정되지 않아 결제를 취소할 수 없습니다.")
+@sensitive_variables("authorization")
+def _toss_cancel_request(order, body, idempotency_key):
+    """POST /v1/payments/{paymentKey}/cancel for ``order``; returns Toss's answer (a dict) or
+    raises PaymentCancelError. A payment Toss reports cancelled already comes back as
+    {"status": "CANCELED", "already_canceled": True}."""
+    config, authorization = toss_api_context(order)
+    if not authorization:
+        raise PaymentCancelError(cancel_keys_missing_message(config))
     payment_key_value = str(order.od_tno or "").strip()
-    credentials = base64.b64encode(f"{secret_key}:".encode("utf-8")).decode("ascii")
-    body = json.dumps(
-        {"cancelReason": (str(reason or "").strip() or "쇼핑몰 운영자 승인 취소")[:200]},
-        ensure_ascii=False,
-    ).encode("utf-8")
     request = urllib_request.Request(
         f"{config['api_base_url']}/v1/payments/{quote(payment_key_value, safe='')}/cancel",
         data=body,
         method="POST",
         headers={
-            "Authorization": f"Basic {credentials}",
+            "Authorization": authorization,
             "Content-Type": "application/json",
             "Accept": "application/json",
-            # the reason is part of the body: a retry with another reason is a new request (Toss
-            # answers ALREADY_CANCELED_PAYMENT when the first one went through)
-            "Idempotency-Key": f"admin-cancel-{order.od_id}-{payment_key_value}-{hashlib.sha256(body).hexdigest()[:16]}"[:300],
+            "Idempotency-Key": idempotency_key[:300],
         },
     )
     try:
@@ -755,17 +918,121 @@ def toss_api_cancel_payment(order, reason):
         message = str(payload.get("message") or "").strip()[:200]
         detail = f"{message} ({code})" if message and code else message or code or f"HTTP {exc.code}"
         raise PaymentCancelError(f"토스페이먼츠가 결제 취소를 거절했습니다: {detail}") from exc
-    except (urllib_error.URLError, TimeoutError, socket.timeout) as exc:
+    except NETWORK_ERRORS as exc:
         logger.warning("Toss payment cancel request for %s failed: %s", order.od_id, exc)
         raise PaymentCancelError("토스페이먼츠에 연결하지 못했습니다. 잠시 후 다시 시도하세요.") from exc
     except ValueError as exc:
         raise PaymentCancelError("토스페이먼츠의 취소 응답을 확인하지 못했습니다.") from exc
-    if (
-        not isinstance(canceled, dict)
-        or str(canceled.get("orderId") or "") != str(order.od_id)
-        or str(canceled.get("status") or "").upper() != "CANCELED"
-    ):
+    if not isinstance(canceled, dict) or str(canceled.get("orderId") or "") != str(order.od_id):
+        raise PaymentCancelError("토스페이먼츠의 취소 응답이 이 주문과 맞지 않습니다. 토스페이먼츠 상점관리자에서 결제 상태를 확인하세요.")
+    return canceled
+
+
+def cancel_keys_missing_message(config):
+    if config.get("pinned_mode"):
+        return toss_keys_missing_message(config)
+    return "토스페이먼츠 키가 설정되지 않아 결제를 취소할 수 없습니다."
+
+
+@sensitive_variables("authorization")
+def _toss_payment_tax_free(order):
+    """(taxFreeAmount the payment was made with, the part of it not cancelled yet) from GET
+    /v1/payments/{paymentKey}. A payment made before the checkout passed taxFreeAmount holds 0
+    tax-free at Toss, so its cancels must not send one."""
+    config, authorization = toss_api_context(order)
+    if not authorization:
+        raise PaymentCancelError(cancel_keys_missing_message(config))
+    payment_key_value = str(order.od_tno or "").strip()
+    request = urllib_request.Request(
+        f"{config['api_base_url']}/v1/payments/{quote(payment_key_value, safe='')}",
+        method="GET",
+        headers={"Authorization": authorization, "Accept": "application/json"},
+    )
+    try:
+        with urllib_request.urlopen(request, timeout=10) as response:
+            payment = json.loads(response.read().decode("utf-8") or "{}")
+    except (*NETWORK_ERRORS, ValueError) as exc:
+        logger.warning("Toss payment lookup before the cancel of %s failed: %s", order.od_id, exc)
+        raise PaymentCancelError(
+            "토스페이먼츠 결제의 면세 금액을 확인하지 못했습니다. 잠시 후 다시 시도하세요."
+        ) from exc
+    if not isinstance(payment, dict):
+        raise PaymentCancelError("토스페이먼츠 결제의 면세 금액을 확인하지 못했습니다. 잠시 후 다시 시도하세요.")
+    cancels = payment.get("cancels") if isinstance(payment.get("cancels"), list) else []
+    taken = sum(safe_int(cancel.get("taxFreeAmount"), 0) for cancel in cancels if isinstance(cancel, dict))
+    total = max(0, safe_int(payment.get("taxFreeAmount"), 0))
+    return total, max(0, total - taken)
+
+
+def toss_cancel_tax_free(order, wanted=None, *, cancel_amount=None):
+    """taxFreeAmount for a cancel of ``order``'s Toss payment (youngcart orderpartcancel.inc.php
+    passes the refunded 면세 amount). Only an order placed under 복합과세 결제 has one.
+
+    A partial cancel (``wanted``: the plan's tax-free refund) sends exactly what the local plan
+    says, held to the refund: the body stays the same when a refund whose answer was lost is
+    tried again under the same Idempotency-Key. Toss is asked only whether the payment holds a
+    tax-free part at all. A full cancel (``wanted`` None) sends the order's tax-free amount, held
+    to what is left at Toss (its key is a hash of the body, so a retry is its own request)."""
+    if not safe_int(getattr(order, "od_tax_flag", 0), 0):
+        return 0
+    full_cancel = wanted is None
+    wanted = safe_int(order.od_free_mny, 0) if full_cancel else safe_int(wanted, 0)
+    if wanted <= 0:
+        return 0
+    total, remaining = _toss_payment_tax_free(order)
+    if total <= 0:
+        return 0
+    if full_cancel:
+        return min(wanted, remaining)
+    limit = total if cancel_amount is None else min(total, max(0, int(cancel_amount)))
+    return max(0, min(wanted, limit))
+
+
+def toss_api_cancel_payment(order, reason):
+    """Cancel the whole Toss payment of ``order`` (POST /v1/payments/{paymentKey}/cancel), as
+    youngcart orderformcartupdate.php does before it marks the order 취소. A 복합과세 order
+    sends the tax-free part that is left (taxFreeAmount).
+
+    Returns the Toss payment object; raises PaymentCancelError when Toss did not confirm the
+    cancellation. A payment already cancelled at Toss (in its dashboard) counts as cancelled."""
+    payment_key_value = str(order.od_tno or "").strip()
+    request_body = {"cancelReason": (str(reason or "").strip() or "쇼핑몰 운영자 승인 취소")[:200]}
+    tax_free = toss_cancel_tax_free(order)
+    if tax_free > 0:
+        request_body["taxFreeAmount"] = tax_free
+    body = json.dumps(request_body, ensure_ascii=False).encode("utf-8")
+    # the reason is part of the body: a retry with another reason is a new request (Toss answers
+    # ALREADY_CANCELED_PAYMENT when the first one went through)
+    key = f"admin-cancel-{order.od_id}-{payment_key_value}-{hashlib.sha256(body).hexdigest()[:16]}"
+    canceled = _toss_cancel_request(order, body, key)
+    if str(canceled.get("status") or "").upper() != "CANCELED":
         raise PaymentCancelError("토스페이먼츠가 전체 취소를 확인하지 않았습니다. 토스페이먼츠 상점관리자에서 결제 상태를 확인하세요.")
+    return canceled
+
+
+def toss_api_partial_cancel_payment(order, amount, reason, *, idempotency_key, tax_free_amount=0):
+    """Refund ``amount`` of the Toss payment of ``order`` (cancelAmount, youngcart
+    orderpartcancelupdate.php), ``tax_free_amount`` of it tax-free (taxFreeAmount, from the local
+    plan so a retry repeats the same body). ``idempotency_key`` names this one refund, so a retried request
+    never refunds twice. Returns Toss's payment object (PARTIAL_CANCELED, or CANCELED when the
+    whole balance went back); raises PaymentCancelError when Toss did not confirm it. A payment
+    already cancelled in full (in the Toss dashboard) comes back with "already_canceled": the
+    money went back there, so the caller records the refund instead of refusing the change."""
+    amount = int(amount)
+    if amount <= 0:
+        raise PaymentCancelError("환불할 금액이 없습니다.")
+    request_body = {"cancelReason": (str(reason or "").strip() or "쇼핑몰 운영자 부분취소")[:200], "cancelAmount": amount}
+    tax_free = toss_cancel_tax_free(order, tax_free_amount, cancel_amount=amount) if tax_free_amount else 0
+    if tax_free > 0:
+        request_body["taxFreeAmount"] = tax_free
+    body = json.dumps(request_body, ensure_ascii=False).encode("utf-8")
+    canceled = _toss_cancel_request(order, body, idempotency_key)
+    if canceled.get("already_canceled"):
+        return canceled
+    if str(canceled.get("status") or "").upper() not in {"PARTIAL_CANCELED", "CANCELED"}:
+        raise PaymentCancelError(
+            "토스페이먼츠가 부분취소를 확인하지 않았습니다. 토스페이먼츠 상점관리자에서 결제 상태를 확인하세요."
+        )
     return canceled
 
 
@@ -800,6 +1067,7 @@ def save_toss_vbank_authorization(order, toss_payment):
                 status=drf_status.HTTP_409_CONFLICT,
                 code="order_cancelled",
             )
+        newly_issued = locked.od_tno != str(toss_payment.get("paymentKey") or "")[:255]
         locked.od_pg = "toss"
         locked.od_tno = str(toss_payment.get("paymentKey") or "")[:255]
         locked.od_vbank_bank_code = bank_code[:10]
@@ -814,6 +1082,10 @@ def save_toss_vbank_authorization(order, toss_payment):
             "od_vbank_customer_name", "od_vbank_due_date", "od_vbank_secret_hash",
             "od_vbank_status", "od_misu",
         ])
+        if newly_issued:
+            # youngcart orderformupdate.php mails the order once the virtual account is issued
+            queue_order_placed_mails(locked)
+            queue_order_placed_sms(locked)
         return locked, None
 
 
@@ -844,7 +1116,7 @@ def confirm_toss_payment(data):
             details={"expected_amount": order.od_receipt_price, "received_amount": amount},
         )
 
-    toss_payment, error = toss_api_confirm(payment_key_value, order_id, amount)
+    toss_payment, error = toss_api_confirm(payment_key_value, order_id, amount, order=order)
     if error:
         record_payment_raw_log(order, order_id, "toss", payment_key_value, data, prefix="toss-reject")
         return None, error
@@ -909,6 +1181,7 @@ def confirm_toss_payment(data):
         record_payment_raw_log(pending_order or order, order_id, "toss", payment_key_value, raw_data, prefix="toss-pending")
         if error:
             return None, error
+        note_toss_payment_terms(order, toss_payment)
         return toss_payment, None
     if approved_status != "DONE":
         raw_data = {**data, "toss_payment": toss_payment}
@@ -920,7 +1193,25 @@ def confirm_toss_payment(data):
             details={"provider_status": approved_status},
         )
 
+    note_toss_payment_terms(order, toss_payment)
     return toss_payment, None
+
+
+def note_toss_payment_terms(order, toss_payment):
+    """After Toss approved ``order``: mark an escrow payment (for the 배송 reminder) and log a
+    tax-free amount that differs from the order's 복합과세 split, for the admin to check."""
+    if toss_payment.get("useEscrow") is True:
+        try:
+            mark_toss_escrow_order(order.pk)
+        except Exception:  # noqa: BLE001 - Toss charged already; the confirmation must go on
+            logger.exception("order %s: could not note the Toss escrow payment", order.od_id)
+    expected = toss_tax_free_amount(order)
+    approved = safe_int(toss_payment.get("taxFreeAmount"), 0)
+    if "taxFreeAmount" in toss_payment and approved != expected:
+        logger.warning(
+            "Toss approved order %s with taxFreeAmount %s; the order's tax-free amount is %s.",
+            order.od_id, approved, expected,
+        )
 
 
 def confirm_adapter_payment(provider, data):
@@ -1015,4 +1306,12 @@ def confirm_order_payment(order_id, amount, pg_service, transaction_id, raw_data
                 # an all-member coupon stays open for the other members (use is in the log)
                 ShopCoupon.objects.filter(pk=log.cp_id, cp_all_members=False).update(cp_used="1")
         record_payment_raw_log(order, order_id, pg_service, transaction_id, raw_data, prefix=log_prefix)
+        # youngcart: a PG order is mailed once approved; a virtual account was mailed when it was
+        # issued, so its deposit gets the 입금 확인 mail
+        if settle_case_is_vbank(order.od_settle_case):
+            queue_order_status_mail(order, MAIL_STATUS_PAID)
+            queue_order_status_sms(order, MAIL_STATUS_PAID)
+        else:
+            queue_order_placed_mails(order)
+            queue_order_placed_sms(order)
     return order, None

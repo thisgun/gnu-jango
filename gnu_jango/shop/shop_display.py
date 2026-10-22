@@ -79,6 +79,37 @@ def list_display():
     }
 
 
+# A category whose 출력설정 is unset (0, the youngcart install default) keeps the storefront's
+# standard category grid: 20 products, up to 4 columns, 2 on phones.
+DEFAULT_CATEGORY_GRID = {"pc_cols": 4, "rows": 5, "mobile_cols": 2, "mobile_rows": 5}
+MAX_CATEGORY_COLS = 8  # nextjs lib/shop-display.ts MAX_COLS
+
+
+def category_list_display(category):
+    """The category page grid from categoryform.php 출력설정 (ca_list_mod / ca_list_row and the mobile
+    pair): ``{"configured", "pc_cols", "rows", "per_page", "mobile_cols", "mobile_rows"}``.
+
+    ``per_page`` is the PC count (cols x rows, at most MAX_PRODUCT_PAGE_SIZE) like the search and
+    type-list grids; phones take the mobile columns. ``configured`` is False while the PC pair is
+    unset, and the storefront then keeps its standard grid."""
+    pc_cols, rows = category.ca_list_mod, category.ca_list_row
+    configured = bool(pc_cols and rows)
+    if not configured:
+        pc_cols, rows = DEFAULT_CATEGORY_GRID["pc_cols"], DEFAULT_CATEGORY_GRID["rows"]
+    mobile_cols = category.ca_mobile_list_mod or DEFAULT_CATEGORY_GRID["mobile_cols"]
+    mobile_rows = category.ca_mobile_list_row or rows
+    pc_cols = min(pc_cols, MAX_CATEGORY_COLS)
+    mobile_cols = min(mobile_cols, MAX_CATEGORY_COLS)
+    return {
+        "configured": configured,
+        "pc_cols": pc_cols,
+        "rows": rows,
+        "per_page": min(MAX_PRODUCT_PAGE_SIZE, pc_cols * rows),
+        "mobile_cols": mobile_cols,
+        "mobile_rows": mobile_rows,
+    }
+
+
 def related_list_enabled():
     return bool(shop_options("de_rel_list_use")["de_rel_list_use"])
 

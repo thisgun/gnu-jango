@@ -1,0 +1,11 @@
+{% autoescape off %}[{{ site_title }}] 새 주문 알림
+
+주문번호: {{ order.od_id }}{% if ordered_at %} ({{ ordered_at }}){% endif %} / {{ order.od_status }}
+
+{% include "shop/mail/_order_lines.txt" %}
+
+결제수단: {{ settle_case }}{% if is_bank %} ({{ order.od_bank_account }}, 입금자 {{ order.od_deposit_name }}){% endif %}
+주문하신 분: {{ order.od_name }} / {{ order.od_hp|default:order.od_tel }} / {{ order.od_email }}
+받는 분: {{ order.od_b_name }} / {{ order.od_b_hp|default:order.od_b_tel }} / {{ order.od_b_zip }} {{ order.od_b_addr1 }} {{ order.od_b_addr2 }}{% if order.od_memo %}
+전하실 말씀: {{ order.od_memo }}{% endif %}
+{% endautoescape %}

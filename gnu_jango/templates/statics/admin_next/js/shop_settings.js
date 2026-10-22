@@ -38,14 +38,11 @@
     if (invalid) return;
 
     const previewRows = examples.map((total) => {
+      // youngcart get_sendcost: only 금액별 차등 charges the shared fee; other cases charge 0
       let charge = 0;
-      if (shippingMode === "무료") {
-        charge = 0;
-      } else if (shippingMode === "차등") {
+      if (shippingMode === "차등") {
         const index = tierLimits.findIndex((limit) => total < limit);
         charge = index >= 0 ? tierCosts[index] : 0;
-      } else {
-        charge = total < 50000 ? 3000 : 0;
       }
       return `<tr><td>${money.format(total)}원</td><td>${money.format(charge)}원</td></tr>`;
     });
@@ -55,4 +52,65 @@
   [mode, limits, costs].forEach((input) => input?.addEventListener("input", render));
   [mode, limits, costs].forEach((input) => input?.addEventListener("change", render));
   render();
+})();
+
+(() => {
+  "use strict";
+
+  // youngcart configform.php byte_check: 1 byte for ASCII, 2 for anything else (iCode billing)
+  const texts = document.querySelectorAll("textarea[data-sms-bytes]");
+  if (!texts.length) return;
+  const smsType = document.getElementById("id_cf_sms_type");
+
+  function byteLength(value) {
+    let total = 0;
+    for (const character of String(value || "")) total += character.charCodeAt(0) < 128 ? 1 : 2;
+    return total;
+  }
+
+  const counters = Array.from(texts, (textarea) => {
+    const counter = document.createElement("p");
+    counter.className = "shop-sms-bytes";
+    counter.id = `${textarea.id}_bytes`;
+    counter.setAttribute("aria-live", "polite");
+    textarea.insertAdjacentElement("afterend", counter);
+    textarea.setAttribute("aria-describedby", `${textarea.getAttribute("aria-describedby") || ""} ${counter.id}`.trim());
+    return { textarea, counter };
+  });
+
+  function render() {
+    const isLms = smsType?.value === "LMS";
+    counters.forEach(({ textarea, counter }) => {
+      const limit = Number(isLms ? textarea.dataset.lmsLimit : textarea.dataset.smsLimit) || 90;
+      const bytes = byteLength(textarea.value);
+      counter.textContent = `${bytes} / ${limit} 바이트${bytes > limit ? " · 초과한 내용은 잘려서 발송됩니다" : ""}`;
+      counter.classList.toggle("is-over", bytes > limit);
+    });
+  }
+
+  texts.forEach((textarea) => textarea.addEventListener("input", render));
+  smsType?.addEventListener("change", render);
+  render();
+})();
+
+(() => {
+  "use strict";
+
+  // 가상계좌 입금통보 URL: copy the shown address for the Toss webhook form
+  document.querySelectorAll("[data-copy-target]").forEach((button) => {
+    const source = document.getElementById(button.dataset.copyTarget || "");
+    if (!source || !navigator.clipboard) return;
+    const label = button.textContent;
+    button.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(source.textContent.trim());
+        button.textContent = button.dataset.copiedLabel || label;
+      } catch {
+        button.textContent = "복사하지 못했습니다";
+      }
+      window.setTimeout(() => {
+        button.textContent = label;
+      }, 2000);
+    });
+  });
 })();

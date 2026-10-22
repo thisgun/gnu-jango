@@ -29,6 +29,7 @@ from gnu_jango.shop.models import (
     ShopOrderItem,
     ShopPersonalPay,
     ShopProduct,
+    ShopProductRelation,
     ShopShippingCost,
     ShopShippingPolicy,
     ShopStockNotification,
@@ -75,7 +76,8 @@ class ShopOrderBase(TestCase):
         self.product = self.make_product("MO001", "More product", it_price=10000, it_stock_qty=20)
         ShopShippingPolicy.objects.update_or_create(
             pk=1,
-            defaults={"de_delivery_company": "Courier", "de_settle_min_point": 1000, "de_settle_max_point": 100000, "de_settle_point_unit": 100},
+            # 3,000 below 50,000 (youngcart get_sendcost charges a shared fee only for 차등)
+            defaults={"de_send_cost_case": "차등", "de_send_cost_limit": "50000", "de_send_cost_list": "3000", "de_delivery_company": "Courier", "de_settle_min_point": 1000, "de_settle_max_point": 100000, "de_settle_point_unit": 100},
         )
         Config.objects.update_or_create(name="de_bank_use", defaults={"value": "1"})
         Config.objects.update_or_create(name="de_bank_account", defaults={"value": BANK})
@@ -895,13 +897,14 @@ class ProductDetailTests(CatalogBase):
         self.assertEqual(data["prev_item"]["it_id"], "DET-1")
         self.assertEqual(data["next_item"]["it_id"], "DET-4")
 
-    def test_related_items_are_listed_in_order_and_skip_unsold_and_unknown_ids(self):
-        Config.objects.update_or_create(name="nextjs_smoke_rel_DET-2", defaults={"value": json.dumps({"related_csv": "DET-4, DET-3,NOPE,DET-1"})})
+    def test_related_items_are_listed_in_order_and_skip_unsold_ones(self):
+        for number, it_id in enumerate(("DET-4", "DET-3", "DET-1"), 1):
+            ShopProductRelation.objects.create(product_id="DET-2", related_id=it_id, ir_no=number)
         data = self.client.get(f"{API}/products/DET-2").json()["data"]
         self.assertEqual([row["it_id"] for row in data["related_items"]], ["DET-4", "DET-1"])
 
-    def test_a_broken_related_setting_is_ignored(self):
-        Config.objects.update_or_create(name="nextjs_smoke_rel_DET-2", defaults={"value": "{not json"})
+    def test_the_legacy_smoke_relation_setting_is_no_longer_read(self):
+        Config.objects.update_or_create(name="nextjs_smoke_rel_DET-2", defaults={"value": json.dumps({"related_csv": "DET-4"})})
         self.assertEqual(self.client.get(f"{API}/products/DET-2").json()["data"]["related_items"], [])
 
     def test_an_unsold_or_unknown_product_is_not_found_by_id_and_by_slug(self):
@@ -916,11 +919,11 @@ class ProductDetailTests(CatalogBase):
         self.assertEqual(self.client.get(f"{API}/products/seo/nope").status_code, 404)
 
     def test_the_info_notice_is_unpacked_and_garbage_is_kept_as_text(self):
-        ShopProduct.objects.filter(pk="DET-2").update(it_info_title=json.dumps({"key": "Origin", "value": "Korea"}))
+        ShopProduct.objects.filter(pk="DET-2").update(it_info_value=[{"key": "Origin", "title": "Origin", "value": "Korea"}])
         ShopProduct.objects.filter(pk="DET-4").update(it_info_title="plain text")
         middle = self.client.get(f"{API}/products/DET-2").json()["data"]
         last = self.client.get(f"{API}/products/DET-4").json()["data"]
-        self.assertEqual(middle["it_info_items"], [{"key": "Origin", "label": "Origin", "value": "Korea"}])
+        self.assertEqual(middle["it_info_items"], [{"key": "Origin", "title": "Origin", "value": "Korea", "example": ""}])
         self.assertEqual((last["it_info_title"], last["it_info_items"]), ("plain text", []))
 
     def test_option_subjects_are_derived_when_the_shop_left_them_empty(self):
@@ -992,7 +995,8 @@ class ProductHitSuggestNotifyTests(CatalogBase):
     def test_recommend_needs_a_member_and_an_existing_product(self):
         self.assertEqual(APIClient().post(f"{API}/products/MO001/recommend").status_code, 401)
         self.assertEqual(self.client.post(f"{API}/products/NOPE/recommend").status_code, 404)
-        self.assertTrue(self.client.post(f"{API}/products/MO001/recommend").json()["data"]["sent"])
+        # an empty form is refused; the mail itself is covered in test_shop_mails
+        self.assertEqual(self.client.post(f"{API}/products/MO001/recommend").status_code, 422)
 
 
 class StockNotifyTests(CatalogBase):
@@ -1292,7 +1296,7 @@ class OrderBadInputTests(OrderDirectCreateMixin, ShopOrderBase):
         self.assertEqual(self.profile.user_point, 50000)
 
     def test_payment_links_show_for_toss_and_shipped_orders(self):
-        order = self.make_order("주문", user=self.member, od_id="MORE-LINK", od_tno="PAYKEY1", od_pg="toss", od_invoice="INV123", od_cash_no="C77")
+        order = self.make_order("주문", user=self.member, od_id="MORE-LINK", od_tno="PAYKEY1", od_pg="toss", od_delivery_company="CJ대한통운", od_invoice="INV123", od_cash_no="C77")
         data = self.client.get(f"{API}/orders/{order.od_id}").json()["data"]
         self.assertIn("PAYKEY1", data["receipt_url"])
         self.assertIn("INV123", data["delivery_inquiry_url"])

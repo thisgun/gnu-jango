@@ -1,0 +1,16 @@
+{% extends "shop/mail/_base.html" %}
+{% load humanize %}
+{% block heading %}{{ member_name }}님이 상품을 추천했습니다{% endblock %}
+{% block content %}
+<p style="margin:0 0 4px;font-weight:bold;">{{ subject }}</p>
+<div style="margin:0 0 16px;padding:12px;background:#fafaf9;border-radius:6px;">{{ content|linebreaksbr }}</div>
+<table style="width:100%;border-collapse:collapse;"><tr>{% if image_url %}
+<td style="width:120px;vertical-align:top;padding-right:12px;">{% if product_url %}<a href="{{ product_url }}">{% endif %}<img src="{{ image_url }}" alt="{{ product.it_name }}" width="120" style="display:block;max-width:120px;border:1px solid #e7e5e4;border-radius:6px;">{% if product_url %}</a>{% endif %}</td>{% endif %}
+<td style="vertical-align:top;">
+<p style="margin:0;font-size:16px;font-weight:bold;">{{ product.it_name }}</p>{% if product.it_basic %}
+<p style="margin:4px 0 0;color:#78716c;">{{ product.it_basic }}</p>{% endif %}
+<p style="margin:8px 0 0;font-weight:bold;color:#0a8f45;">{{ product.it_price|intcomma }}원</p>{% if product_url %}
+<p style="margin:12px 0 0;"><a href="{{ product_url }}" style="display:inline-block;padding:8px 14px;background:#0a8f45;color:#ffffff;text-decoration:none;border-radius:6px;">상품 보러 가기</a></p>{% endif %}
+</td></tr></table>
+<p style="margin-top:16px;font-size:12px;color:#a8a29e;">{{ site_title }} 회원 {{ member_name }}님이 보낸 추천 메일입니다. 이 메일에 회신하면 추천한 회원에게 전달됩니다.</p>
+{% endblock %}

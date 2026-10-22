@@ -245,6 +245,32 @@ export async function getMyOrder(
   return parsed.success ? parsed.data : null;
 }
 
+export interface CashReceiptRequestResult {
+  issued: boolean;
+  message: string;
+  order: ShopOrder | null;
+}
+
+/** 주문 후 현금영수증 발급 신청(영카트 taxsave.php) — 회원 본인 또는 비회원 주문 조회 uid. */
+export async function requestOrderCashReceipt(
+  orderId: string,
+  cashType: "income" | "expense",
+  identity: string,
+  uid = ""
+): Promise<CashReceiptRequestResult> {
+  const query = uid ? `?uid=${encodeURIComponent(uid)}` : "";
+  const response = await apiClient.post<{ issued?: boolean; message?: string; order?: unknown }>(
+    `/shop/orders/${encodeURIComponent(orderId.trim())}/cash-receipt${query}`,
+    { od_cash_type: cashType, cash_receipt_registration_number: identity }
+  );
+  const parsed = shopOrderSchema.safeParse(response.data?.order);
+  return {
+    issued: response.data?.issued === true,
+    message: String(response.data?.message ?? ""),
+    order: parsed.success ? parsed.data : null,
+  };
+}
+
 export function cancelMyOrder(orderId: string, reason = "본인 취소", uid = "") {
   return apiClient.patch(`/shop/orders/${encodeURIComponent(orderId)}`, {
     reason,

@@ -1,0 +1,26 @@
+<form class="g5-admin-report-filter g5-admin-report-filter-compact" method="get" action="{{ report_path }}">
+  <label>
+    <span>상품코드·상품명{% if option_list %}·옵션{% endif %}</span>
+    <input class="input" type="search" name="q" value="{{ filters.q }}" maxlength="120">
+  </label>
+  <label>
+    <span>분류</span>
+    <select class="select" name="ca">
+      <option value="">전체 분류</option>
+      {% for category in categories %}<option value="{{ category.ca_id }}"{% if filters.ca == category.ca_id %} selected{% endif %}>{{ category.indent }}{{ category.ca_name }} ({{ category.ca_id }})</option>{% endfor %}
+    </select>
+  </label>
+  <label>
+    <span>재고 이하만 (수량)</span>
+    <input class="input" type="number" name="low" min="0" step="1" value="{{ filters.low }}">
+  </label>
+  {% if option_list %}
+  <label>
+    <span><input type="checkbox" name="below_noti" value="1"{% if filters.below_noti %} checked{% endif %}> 통보수량 이하만</span>
+  </label>
+  {% endif %}
+  <div class="g5-admin-report-filter-actions">
+    <button class="button btn" type="submit">검색</button>
+    <a class="button btn g5-admin-button-secondary" href="{{ report_path }}">초기화</a>
+  </div>
+</form>

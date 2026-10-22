@@ -1,0 +1,19 @@
+{% extends "shop/mail/_base.html" %}
+{% block heading %}주문 내역 안내{% endblock %}
+{% block content %}
+<p>{{ order.od_name }}님, 주문해 주셔서 감사합니다. 주문 내역을 알려 드립니다.</p>
+<p style="margin:12px 0;"><strong>주문번호</strong> {{ order.od_id }}{% if ordered_at %} · {{ ordered_at }}{% endif %}</p>
+{% include "shop/mail/_order_lines.html" %}
+<p><strong>결제수단</strong> {{ settle_case }}</p>{% if is_bank %}
+<div style="margin:12px 0;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;">
+<p style="margin:0;"><strong>입금 계좌</strong> {{ order.od_bank_account }}</p>
+<p style="margin:4px 0 0;"><strong>입금자명</strong> {{ order.od_deposit_name }}</p>
+<p style="margin:4px 0 0;color:#92400e;">입금이 확인되면 상품 준비를 시작합니다.</p>
+</div>{% elif order.od_vbank_account %}
+<div style="margin:12px 0;padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;">
+<p style="margin:0;"><strong>가상계좌</strong> {{ order.od_vbank_bank_code }} {{ order.od_vbank_account }}{% if order.od_vbank_customer_name %} ({{ order.od_vbank_customer_name }}){% endif %}</p>{% if order.od_vbank_due_date %}
+<p style="margin:4px 0 0;"><strong>입금 기한</strong> {{ order.od_vbank_due_date }}</p>{% endif %}
+</div>{% endif %}
+<p><strong>받는 분</strong> {{ order.od_b_name }} / {{ order.od_b_addr1 }} {{ order.od_b_addr2 }}</p>{% if order_url %}
+<p style="margin-top:20px;"><a href="{{ order_url }}" style="display:inline-block;padding:10px 16px;background:#0a8f45;color:#ffffff;text-decoration:none;border-radius:6px;">주문 상세 보기</a></p>{% endif %}
+{% endblock %}

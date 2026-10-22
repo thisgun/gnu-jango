@@ -252,13 +252,13 @@ function DescriptionTab({
           <div className="overflow-x-auto">
             <table id="sit_inf_open" className="w-full border-collapse text-sm">
               <tbody>
-                {productInfoItems.map((item) => (
-                  <tr key={item.key} className="border-b last:border-b-0">
+                {productInfoItems.map((item, index) => (
+                  <tr key={`${item.key}-${index}`} className="border-b last:border-b-0">
                     <th
                       scope="row"
                       className="w-36 bg-muted/40 px-4 py-3 text-left align-top font-medium text-foreground sm:w-48"
                     >
-                      {item.title}
+                      {item.title || item.key}
                     </th>
                     <td
                       className="px-4 py-3 align-top text-muted-foreground"

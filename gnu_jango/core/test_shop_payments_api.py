@@ -92,7 +92,8 @@ class PaymentTestBase(TestCase):
         )
         ShopShippingPolicy.objects.update_or_create(
             pk=1,
-            defaults={"de_delivery_company": "Courier", "de_settle_min_point": 5000, "de_settle_max_point": 50000, "de_settle_point_unit": 100},
+            # 3,000 below 50,000 (youngcart get_sendcost charges a shared fee only for 차등)
+            defaults={"de_send_cost_case": "차등", "de_send_cost_limit": "50000", "de_send_cost_list": "3000", "de_delivery_company": "Courier", "de_settle_min_point": 5000, "de_settle_max_point": 50000, "de_settle_point_unit": 100},
         )
         Config.objects.update_or_create(name="de_bank_use", defaults={"value": "1"})
         Config.objects.update_or_create(name="de_bank_account", defaults={"value": BANK_ACCOUNT})
@@ -532,7 +533,8 @@ class PaymentConfirmTossTests(PaymentTestBase):
         response, confirm = self.confirm_toss(order)
 
         self.assertEqual(response.status_code, 200, response.content[:300])
-        confirm.assert_called_once_with("pay_fake_key_1", order.od_id, PRODUCT_PRICE)
+        confirm.assert_called_once()
+        self.assertEqual(confirm.call_args.args, ("pay_fake_key_1", order.od_id, PRODUCT_PRICE))
         order.refresh_from_db()
         self.assertEqual(order.od_status, PAID)
         self.assertEqual(order.od_misu, 0)

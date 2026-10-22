@@ -6,7 +6,8 @@ import { G5Link as Link } from "@/components/ui/g5-link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { ShopOrder, ShopWishItem } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
-import { formatDate, formatPrice } from "@/lib/utils";
+import { orderStatusLabel, type OrderStatusTone } from "@/lib/order-status";
+import { formatDate, formatDateTime, formatPrice } from "@/lib/utils";
 import { shopProductHref } from "@/lib/product-url";
 import {
   getMyDashboardCounts,
@@ -29,20 +30,6 @@ import {
 
 type LoadState = "loading" | "loaded" | "error";
 
-const ORDER_STATUS: Record<string, { label: string; className: string }> = {
-  주문: { label: "입금확인중", className: "badge-warning" },
-  입금대기: { label: "입금확인중", className: "badge-warning" },
-  입금: { label: "입금완료", className: "badge-info" },
-  결제완료: { label: "입금완료", className: "badge-info" },
-  준비: { label: "상품준비중", className: "badge-neutral" },
-  배송준비: { label: "상품준비중", className: "badge-neutral" },
-  배송: { label: "상품배송", className: "badge-primary" },
-  배송중: { label: "상품배송", className: "badge-primary" },
-  완료: { label: "배송완료", className: "badge-success" },
-  배송완료: { label: "배송완료", className: "badge-success" },
-  취소: { label: "주문취소", className: "badge-error" },
-};
-
 function orderAmount(order: ShopOrder) {
   return (
     order.od_list_price ??
@@ -56,13 +43,19 @@ function orderAmount(order: ShopOrder) {
   );
 }
 
-function OrderStatus({ status }: { status: string }) {
-  const config = ORDER_STATUS[status] ?? {
-    label: status || "주문취소",
-    className: "badge-error",
-  };
+// 쇼핑몰 주문 목록·상세와 같은 상태 라벨(영카트 orderinquiry.sub.php). 클래스 이름은 Tailwind 가 찾도록 통째로 적는다.
+const ORDER_STATUS_BADGE: Record<OrderStatusTone, string> = {
+  warning: "badge-warning",
+  info: "badge-info",
+  neutral: "badge-neutral",
+  primary: "badge-primary",
+  success: "badge-success",
+  error: "badge-error",
+};
 
-  return <span className={`badge badge-sm ${config.className}`}>{config.label}</span>;
+function OrderStatus({ status }: { status: string }) {
+  const { label, tone } = orderStatusLabel(status);
+  return <span className={`badge badge-sm ${ORDER_STATUS_BADGE[tone]}`}>{label}</span>;
 }
 
 function LoadingMessage({ children }: { children: string }) {
@@ -294,7 +287,7 @@ export default function MyPageDashboard() {
                           </Link>
                         </th>
                         <td className="whitespace-nowrap">
-                          {formatDate(order.od_time || order.od_receipt_time)}
+                          {formatDateTime(order.od_time || order.od_receipt_time)}
                         </td>
                         <td className="text-right">{itemCount.toLocaleString()}</td>
                         <td className="whitespace-nowrap text-right">{formatPrice(orderAmount(order))}</td>

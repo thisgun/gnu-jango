@@ -2,6 +2,7 @@ from django.urls import path, re_path
 
 from . import views
 from .admin_view import add_menu_form
+from gnu_jango.shop import price_feed
 
 urlpatterns = [
     path("", views.index, name="index"),
@@ -30,6 +31,8 @@ urlpatterns = [
     path("mobile/", views.legacy_mobile_route, {"legacy_path": ""}, name="legacy_mobile_root_slash"),
     re_path(r"^mobile/(?P<legacy_path>.+?)/?$", views.legacy_mobile_route, name="legacy_mobile_route"),
     re_path(r"^bbs/(?P<legacy_path>.+\.php)$", views.legacy_bbs_php_route, name="legacy_bbs_php_route"),
+    # the address comparison sites were given for the youngcart feed, before the *.php redirects
+    path("shop/price/naver.php", price_feed.naver_feed_view, name="legacy_shop_price_naver"),
     re_path(r"^shop/(?P<legacy_path>.+\.php)$", views.legacy_shop_php_route, name="legacy_shop_php_route"),
     # Board pages: /bbs (list of boards), /bbs/<bo_table>, /bbs/<bo_table>/<wr_id|seo-title|write>.
     # The bbs/*.php pattern above keeps the Gnuboard5 file addresses working.

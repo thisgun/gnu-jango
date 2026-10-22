@@ -866,7 +866,7 @@ class ImporterShopOrderMappingTests(TestCase):
         self.assertEqual(order.od_addr3, "Fixture parcel address")
         self.assertEqual(order.od_b_addr3, "Fixture recipient parcel address")
         self.assertEqual(order.od_email, "")
-        self.assertEqual(order.od_coupon, 750)
+        self.assertEqual(order.od_coupon, 500)  # od_cart_coupon comes from the coupon logs
         self.assertEqual(order.od_ip, "198.51.100.12")
         self.assertIsNone(order.user)
 
