@@ -26,7 +26,7 @@ django-taggit==6.1.0
 bleach[css]==6.4.0
 cmarkgfm==2025.10.22
 pillow==13.0.0
-sorl-thumbnail==13.1.0
+sorl-thumbnail==13.2.0
 
 # Requests / sessions
 django_user_agents==0.4.0
