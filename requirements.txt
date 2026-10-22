@@ -50,7 +50,7 @@ dj-database-url==3.1.2
 # The binary wheel ships libpq, so it installs where no compiler or pg_config exists (the Vercel
 # Python build image); same `psycopg2` module and version as the source package it replaces.
 psycopg2-binary==2.9.13
-PyMySQL==1.2.0
+PyMySQL==1.2.3
 
 # Background work
 celery==5.6.3
