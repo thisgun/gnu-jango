@@ -43,9 +43,9 @@ python manage.py migrate
 
 이 변경의 `core.0013_notification_unread_index`는 읽지 않은 알림 조회 인덱스입니다. 알림 데이터는 삭제하지 않습니다.
 `core.0014_notification_delivery`는 중복 방지 키, 생성/전달 재시도 대기열, 공지 발송 기록을 추가합니다.
-코드 배포 전에 두 마이그레이션을 적용하세요. 운영 DB에는 이 작업 중 적용하지 않았습니다.
+새 사이트는 코드 배포 전에 두 마이그레이션을 적용하세요. 공개 데모와 핸드북의 운영 DB 및 Preview에는 2026-10-22 배포 시 적용했습니다.
 같이 남아 있는 검색 작업의 `site_search.0005`~`0007`은 [검색 배포 가이드](search-reliability.md)의 준비·순서도 확인하세요.
-이번 구현 중 실제 로컬 DB나 운영 DB에는 마이그레이션을 실행하지 않았습니다.
+자신의 사이트는 대상 DB에서 `python manage.py showmigrations core`로 적용 상태를 따로 확인하세요.
 
 | 변수 | 기본값 | 설명 |
 |---|---|---|
@@ -223,6 +223,24 @@ Vercel에서 활성화하려면 별도 배포에서 다음을 준비하세요.
 
 또한 같은 DB와 Redis를 사용하는 별도 알림 작업자를 준비해야 합니다. Vercel의 짧은 HTTP 요청 안에서 `--watch`를 실행하면 안 됩니다.
 현재 `/api/internal/cron`의 예약 작업에는 실패 복구용 단발 처리가 포함되지만, 일일 스케줄은 실시간 작업자를 대체하지 않습니다.
+
+### Vercel Daemons로 작업자 실행하기
+
+2026-10-15 공개 베타로 출시된 [Vercel Daemons](https://vercel.com/docs/daemons)는 Celery 같은 상시 컨테이너 작업자를 실행할 수 있습니다.
+외부 Redis를 준비하고 웹의 ASGI 전환을 검증한 뒤, 알림 전용 Daemon의 시작 명령에
+`python manage.py process_notifications --apply --watch --interval 1`을 지정하는 도입안을 사용할 수 있습니다.
+메일 Celery를 비동기로 전환한다면 별도 Daemon으로 `celery -A example worker --loglevel=INFO`를 실행하고,
+연결 가능한 broker와 `CELERY_TASK_ALWAYS_EAGER=False`를 함께 설정합니다.
+
+현재 `vercel.json`에는 `daemons` 설정이 없으며 이 문서 추가로 활성화되는 것은 아닙니다.
+Daemon의 Dockerfile·앱 빌드 범위·선택 패키지·환경 변수·인스턴스 수·종료와 재시도를 별도로 검증해야 합니다.
+설정의 `command`는 이미지의 `ENTRYPOINT` 및 `CMD`를 바꾸므로 기존 진입 스크립트에 의존하는 준비 작업도 확인하세요.
+
+[베타 한도](https://vercel.com/docs/daemons/limits)상 Production 전용이며 Preview·자동 확장·영구 로컬 저장소는 지원하지 않습니다.
+Hobby는 팀 전체 월 Active CPU 10시간 한도가 있고 초과하면 다음 달까지 중지됩니다. Pro/Enterprise는 CPU·메모리 과금과 Redis 비용을 확인합니다.
+현재 두 Vercel 데모는 DB 캐시·Celery eager 모드·WebSocket 비활성 구성이며, 새 작업자를 실행하려면 별도 배포가 필요합니다.
+
+핸드북에서는 개발자 안내서의 **실시간 알림과 WebSocket**, 서버에 올리기의 **실시간 알림 설정과 운영**, **Vercel에서 Redis와 작업자 연결** 순서로 읽을 수 있습니다.
 
 저장소에 Expo/React Native 앱이 없어 FCM/APNs를 연결하지 않았습니다.
 모바일 앱을 추가하면 기기별 토큰 등록·로그아웃 시 해제·푸시 수신 동의·실패 토큰 정리·FCM/APNs 또는 Expo 전송 자격 증명을 별도로 구현해야 합니다.
