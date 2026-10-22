@@ -342,6 +342,18 @@ python manage.py configure_search_postgres
 
 전체 운영 절차와 성능·검색 범위의 제한은 [통합 검색 운영 안내](docs/04-deploy/unified-search.md), 요구사항은 [PRD](docs/01-plan/features/unified-search.prd.md), 구현 계획은 [계획서](docs/01-plan/features/unified-search.plan.md)를 참고하세요.
 
+## 실시간 알림
+
+댓글·수신 쪽지·회원 주문 상태 변경과 관리자 공지를 기존 알림함에 저장합니다.
+관리자는 **공지 알림 발송** 메뉴(`/admin/core/notification/announce/`)에서 수신자를 선택해 보낼 수 있습니다.
+
+Channels + Redis 전송은 선택 기능입니다. `requirements-realtime.txt` 설치, ASGI 서버,
+`NOTIFICATION_WS_ENABLED`·Redis 주소·허용 Origin 설정이 필요하며 기본값은 꺼짐입니다.
+실시간 전달에는 같은 설정의 `python manage.py process_notifications --apply --watch` 작업자가 필요합니다.
+비활성 환경과 장애 중에는 REST 폴링을 유지합니다. 기존 WSGI Vercel/PythonAnywhere 설정은 그대로 사용할 수 있습니다.
+
+설치·Docker 실행·인증 규격·Vercel 전환 조건은 [실시간 알림 가이드](docs/04-deploy/realtime-notifications.md)를 참고하세요.
+
 ## 백그라운드 작업
 
 메일 캠페인과 정기 유지보수 작업에는 Celery와 Redis를 사용합니다. 개발 환경은 기본적으로 작업을 요청 안에서 실행하므로 Redis 없이도 기본 개발 서버를 사용할 수 있습니다. 운영에서는 worker를 별도 프로세스로 실행하거나 Docker Compose의 `worker` 서비스를 사용합니다.

@@ -6,3 +6,6 @@ class CoreConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "gnu_jango.core"
     verbose_name = _("Core")
+
+    def ready(self):
+        from gnu_jango.notifications import checks, signals  # noqa: F401

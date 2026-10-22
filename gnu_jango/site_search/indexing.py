@@ -1,9 +1,11 @@
 """Synchronous DB indexing; no worker, local files, or external search service."""
 import hashlib
 import html
+import re
 from collections import Counter
 
 from django.db import connections, transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.html import strip_tags
 
@@ -35,6 +37,27 @@ def terms(text, limit):
 
 def encoded(term):
     return "t" + term.encode("utf-8").hex()
+
+
+def prefix_terms(query_terms):
+    """ASCII words/codes support prefixes; Korean bigrams remain exact lexemes."""
+    return {term for term in query_terms if re.fullmatch(r"[a-z0-9][a-z0-9_.+\-]{1,63}", term)}
+
+
+def posting_match(query_terms):
+    result = Q(term__in=set(query_terms))
+    for term in prefix_terms(query_terms):
+        result |= Q(term__gte=term, term__lt=term + "\uffff")
+    return result
+
+
+def postgres_query(query_terms):
+    from functools import reduce
+    from operator import or_
+    from django.contrib.postgres.search import SearchQuery
+    prefixes = prefix_terms(query_terms)
+    return reduce(or_, [SearchQuery(encoded(term) + (":*" if term in prefixes else ""),
+                                   config="simple", search_type="raw") for term in sorted(set(query_terms))])
 
 
 def source_text(instance, kind):

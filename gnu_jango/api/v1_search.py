@@ -1,3 +1,6 @@
+import logging
+import time
+
 from django.conf import settings
 from django.core import signing
 from django.utils.cache import patch_cache_control
@@ -13,6 +16,8 @@ from gnu_jango.utils.lib import get_client_ip
 
 from .authentication import SessionJWTAuthentication
 from .response import api_error, api_response
+
+logger = logging.getLogger("gnu_jango.site_search.requests")
 
 
 class SearchThrottle(SimpleRateThrottle):
@@ -56,8 +61,17 @@ def unified_search_view(request):
                          status=503, code="search_index_not_ready", details={"kinds": missing})
     limit = _integer(request.query_params.get("limit"), 20, 50)
     page = _integer(request.query_params.get("page"), 1, CANDIDATE_LIMIT)
-    results, meta = ranked_results(request, query, result_type=result_type, bo_table=bo_table, page=page, limit=limit)
+    started = time.perf_counter()
+    try:
+        results, meta = ranked_results(request, query, result_type=result_type, bo_table=bo_table, page=page, limit=limit)
+    except Exception as exc:
+        logger.error("search_failed type=%s error_type=%s", result_type, type(exc).__name__)
+        raise
+    elapsed = (time.perf_counter() - started) * 1000
+    log = logger.warning if elapsed > getattr(settings, "G5_SEARCH_SLOW_MS", 1000) else logger.info
+    log("search_completed type=%s duration_ms=%.2f returned=%d truncated=%s", result_type, elapsed, len(results), meta["truncated"])
     response = api_response(data={"query": query, "results": results}, meta=meta)
+    response["Server-Timing"] = f"search;dur={elapsed:.2f}"
     patch_cache_control(response, private=True, no_store=True)
     return response
 

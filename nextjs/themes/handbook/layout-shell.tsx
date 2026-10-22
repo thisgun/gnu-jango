@@ -8,6 +8,7 @@ import { currentPathForRuntime } from "@/lib/config";
 import { g5ShortHref } from "@/lib/g5-short-url";
 import { useRuntimeMenus } from "@/hooks/useRuntimeMenus";
 import { useAuthStore } from "@/store/auth";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import { DOCS_GROUP, docsSourceFrom, type DocsBook } from "./docs-nav";
 import { useDocsBooks } from "./use-docs-chapters";
 import { useNavScrollMemory } from "./use-nav-scroll";
@@ -104,7 +105,7 @@ function ShellFooter({ config }: { config: G5ThemeConfig }) {
 }
 
 /**
- * 헤더의 계정 영역. 문서 사이트라 크게 두지 않는다 — 로그인하면 이름과 로그아웃만.
+ * 헤더의 계정 영역. 로그인하면 알림함, 이름과 로그아웃을 표시한다.
  * 인증 상태가 정해지기 전에는 아무것도 그리지 않아 로그인/로그아웃이 깜빡이지 않게 한다.
  */
 function AccountArea() {
@@ -124,6 +125,7 @@ function AccountArea() {
 
   return (
     <div className="doc-account">
+      <NotificationBell />
       <Link href="/mypage" className="doc-topnav-link">
         {user.mb_nick || user.mb_name || user.mb_id}
       </Link>

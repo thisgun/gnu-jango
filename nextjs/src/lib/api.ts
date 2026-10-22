@@ -17,6 +17,21 @@ const AUTH_HINT_COOKIE = 'g5_auth_hint';
  */
 const REFRESH_COOKIE_MAX_AGE = 30 * 24 * 60 * 60;
 
+/** Abort one caller without cancelling a CSRF/refresh promise shared by other requests. */
+function waitWithSignal<T>(operation: Promise<T>, signal?: AbortSignal | null): Promise<T> {
+  if (!signal) return operation;
+  return new Promise<T>((resolve, reject) => {
+    const aborted = () => reject(signal.reason ?? new DOMException('Request aborted', 'AbortError'));
+    if (signal.aborted) {
+      operation.catch(() => undefined);
+      aborted();
+      return;
+    }
+    signal.addEventListener('abort', aborted, { once: true });
+    operation.then(resolve, reject).finally(() => signal.removeEventListener('abort', aborted));
+  });
+}
+
 export type { ApiResponse };
 
 function getCookie(name: string): string | null {
@@ -103,6 +118,7 @@ class ApiClient {
         headers: { Accept: 'application/json' },
         credentials: 'include',
         cache: 'no-store',
+        signal: AbortSignal.timeout(10_000),
       });
       const env = parseApiEnvelope<{ csrf_token?: string }>(await res.json());
       const token = env.data?.csrf_token;
@@ -202,6 +218,7 @@ class ApiClient {
           headers,
           credentials: 'include',
           body,
+          signal: AbortSignal.timeout(15_000),
         });
         if (!res.ok) {
           // 401/403 → refresh token 도 만료 또는 revoked. 둘 다 폐기.
@@ -246,7 +263,7 @@ class ApiClient {
       (!this.token || cookieRefreshPath) &&
       !['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method.toUpperCase())
     ) {
-      headers.set('X-CSRFToken', await this.getCsrfToken());
+      headers.set('X-CSRFToken', await waitWithSignal(this.getCsrfToken(), options?.signal));
     }
 
     const res = await fetch(`${this.baseUrl}${path}`, {
@@ -264,7 +281,7 @@ class ApiClient {
       this.shouldAttemptRefresh(path) &&
       (this.refreshToken || (this.canAttemptCookieRefresh() && this.hasAuthHint()))
     ) {
-      const newToken = await this.refreshAccessToken();
+      const newToken = await waitWithSignal(this.refreshAccessToken(), options?.signal);
       if (newToken) {
         return this.request<T>(method, path, body, { ...options, _retried: true });
       }

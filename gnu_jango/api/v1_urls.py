@@ -1,6 +1,7 @@
 from django.urls import path
 
 from gnu_jango.core import thumbnails
+from gnu_jango.notifications.api import ticket_view
 from gnu_jango.shop import price_feed
 
 from . import member_lifecycle, page_bootstrap, shop_personal_pay, v1_auth, v1_board, v1_community, v1_docs, v1_search, v1_shop, v1_views
@@ -9,6 +10,7 @@ from .shop_cash_receipts import order_cash_receipt_view
 app_name = "api_v1"
 
 urlpatterns = [
+    path("notifications/ticket", ticket_view, name="notifications-ticket"),
     path("status", v1_views.status_view, name="status"),
     path("home", page_bootstrap.community_home_view, name="home"),
     path("shop/home", page_bootstrap.shop_home_view, name="shop-home"),

@@ -15,6 +15,7 @@ from gnu_jango.core.models import (
 )
 from gnu_jango.users import point_ledger
 from gnu_jango.users.models import User_Memo
+from gnu_jango.notifications.delivery import invalidate_on_commit
 from gnu_jango.utils.lib import get_client_ip
 
 from .response import api_error, api_response
@@ -203,6 +204,7 @@ def notifications_view(request):
 
     if request.method == "DELETE":
         deleted, _ = Notification.objects.filter(user=user).delete()
+        invalidate_on_commit(user.pk)
         return api_response(data={"deleted": deleted})
 
     if request.method == "POST":
@@ -232,4 +234,5 @@ def notifications_read_all_view(request):
         return error
     read_at = timezone.now()
     Notification.objects.filter(user=user, nt_read_at__isnull=True).update(nt_read_at=read_at)
+    invalidate_on_commit(user.pk)
     return api_response(data={"read_at": _datetime(read_at), "message": "Notifications marked as read."})

@@ -347,8 +347,10 @@ export function HeaderClientActions({
           </div>
         ) : null}
 
+        <span className={isCommunity ? "solune-community-notification-action" : "solune-shop-notification-action"}>
+          <NotificationBell />
+        </span>
         {!isCommunity ? <>
-          <span className="solune-shop-notification-action"><NotificationBell /></span>
           <CartMiniPopover />
         </> : null}
 

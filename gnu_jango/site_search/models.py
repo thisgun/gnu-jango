@@ -2,6 +2,8 @@ from django.db import models
 from django.db.models import Q
 from django.utils import timezone
 
+from .vectors import StoredVectorField, TokenVector
+
 
 class SearchDocument(models.Model):
     KIND_CHOICES = (("post", "Post"), ("product", "Product"), ("page", "Page"))
@@ -14,6 +16,8 @@ class SearchDocument(models.Model):
     # including product codes and Korean morphemes. No raw body is duplicated.
     title_tokens = models.TextField(blank=True)
     body_tokens = models.TextField(blank=True)
+    title_vector = models.GeneratedField(expression=TokenVector("title_tokens"), output_field=StoredVectorField(), db_persist=True)
+    body_vector = models.GeneratedField(expression=TokenVector("body_tokens"), output_field=StoredVectorField(), db_persist=True)
     fingerprint = models.CharField(max_length=64)
     tokenizer = models.CharField(max_length=40)
     indexed_at = models.DateTimeField(default=timezone.now)
@@ -57,6 +61,8 @@ class SearchSnapshot(models.Model):
     generation = models.CharField(max_length=32, db_index=True)
     title_tokens = models.TextField(blank=True)
     body_tokens = models.TextField(blank=True)
+    title_vector = models.GeneratedField(expression=TokenVector("title_tokens"), output_field=StoredVectorField(), db_persist=True)
+    body_vector = models.GeneratedField(expression=TokenVector("body_tokens"), output_field=StoredVectorField(), db_persist=True)
     fingerprint = models.CharField(max_length=64)
     tokenizer = models.CharField(max_length=40)
 
@@ -84,3 +90,16 @@ class SearchClickDaily(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=["query_hash", "document", "day"], name="search_click_day_unique")]
         indexes = [models.Index(fields=["query_hash", "day"], name="search_click_query_day")]
+
+
+class SearchIndexRetry(models.Model):
+    """A durable source identity, never a copy of source text or exception text."""
+    kind = models.CharField(max_length=10, choices=SearchDocument.KIND_CHOICES)
+    source_id = models.CharField(max_length=255)
+    attempts = models.PositiveIntegerField(default=0)
+    error_type = models.CharField(max_length=80, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    available_at = models.DateTimeField(default=timezone.now, db_index=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["kind", "source_id"], name="search_retry_source_unique")]

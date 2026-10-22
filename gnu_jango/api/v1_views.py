@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes
@@ -36,6 +37,7 @@ def status_view(request):
     data = {
         "service": "gnu_jango",
         "api_version": "v1",
+        "deployment_revision": getattr(settings, "DEPLOYMENT_REVISION", ""),
         "status": "ok",
         "server_time": timezone.now().isoformat(),
         "counts": {

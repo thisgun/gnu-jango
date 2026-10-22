@@ -1,0 +1,34 @@
+# docker compose --profile realtime -f docker-compose.yml -f docker-compose.realtime.yml up -d --build
+# Set NOTIFICATION_WS_ORIGINS to the actual browser origin(s), including scheme and port.
+services:
+  web:
+    build:
+      args:
+        INSTALL_REALTIME: "1"
+    command:
+      - sh
+      - -c
+      - uvicorn example.asgi:application --host 0.0.0.0 --port 8000 --workers $${ASGI_WORKERS:-2} --lifespan off --ws-max-size 1024 --ws-max-queue 8
+    environment:
+      NOTIFICATION_WS_ENABLED: "True"
+      NOTIFICATION_REDIS_URL: ${NOTIFICATION_REDIS_URL:-redis://redis:6379/2}
+      NOTIFICATION_WS_URL: ${NOTIFICATION_WS_URL:-/ws/notifications/}
+      NOTIFICATION_WS_ORIGINS: ${NOTIFICATION_WS_ORIGINS:?Set the exact browser origins, e.g. https://example.com}
+  worker:
+    build:
+      args:
+        INSTALL_REALTIME: "1"
+    environment:
+      NOTIFICATION_WS_ENABLED: "True"
+      NOTIFICATION_REDIS_URL: ${NOTIFICATION_REDIS_URL:-redis://redis:6379/2}
+      NOTIFICATION_WS_URL: ${NOTIFICATION_WS_URL:-/ws/notifications/}
+      NOTIFICATION_WS_ORIGINS: ${NOTIFICATION_WS_ORIGINS:?Set the exact browser origins}
+  notification-worker:
+    build:
+      args:
+        INSTALL_REALTIME: "1"
+    environment:
+      NOTIFICATION_WS_ENABLED: "True"
+      NOTIFICATION_REDIS_URL: ${NOTIFICATION_REDIS_URL:-redis://redis:6379/2}
+      NOTIFICATION_WS_URL: ${NOTIFICATION_WS_URL:-/ws/notifications/}
+      NOTIFICATION_WS_ORIGINS: ${NOTIFICATION_WS_ORIGINS:?Set the exact browser origins}

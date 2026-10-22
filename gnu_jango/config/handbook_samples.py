@@ -17,6 +17,7 @@ from django.utils import timezone
 
 from gnu_jango.bbs.models import Board, Group, Post
 from gnu_jango.bbs.utils import get_next_num
+from gnu_jango.notifications.context import suppress_notification_events
 
 from .models import Config
 from .handbook_content import LEGACY_SAMPLE_MARKER, chapter_body
@@ -232,6 +233,7 @@ def _clear_config_cache():
 
 
 @transaction.atomic
+@suppress_notification_events()
 def ensure_samples(*, stable_dates=False, refresh=False):
     """Create the sample manual (or complete it) and point the theme at it. Safe to run again.
 

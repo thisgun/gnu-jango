@@ -395,13 +395,16 @@ class ScheduledJobsRunnerTests(TestCase):
                 "expire_toss_vbank_orders",
                 "cleanup_admin_privacy",
                 "cleanup_search_clicks",
+                "process_notifications",
+                "retry_search_index",
+                "check_search_health",
                 "save_order_points",
             ],
         )
         for name, args in runner.calls:
-            if name in {"cleanup_admin_privacy", "cleanup_search_clicks"}:
+            if name in {"cleanup_admin_privacy", "cleanup_search_clicks", "check_search_health"}:
                 self.assertNotIn("--dry-run", args)
-            else:
+            elif name != "check_search_health":
                 self.assertIn("--apply", args)
         first = report["jobs"][0]
         self.assertEqual(first["status"], "ok")
@@ -446,6 +449,7 @@ class ScheduledJobsRunnerTests(TestCase):
         self.assertFalse(scheduled_jobs.run_scheduled_jobs(runner=runner)["skipped"])
 
     def test_real_commands_run_cleanly_on_an_empty_database(self):
+        call_command("rebuild_search_index", stdout=StringIO())
         report = scheduled_jobs.run_scheduled_jobs(dry_run=True)
         self.assertTrue(report["ok"], report)
         report = scheduled_jobs.run_scheduled_jobs()
@@ -524,7 +528,7 @@ class CronEndpointTests(TestCase):
         self.assertEqual(len(body["data"]["jobs"]), len(scheduled_jobs.SCHEDULED_JOBS))
         self.assertIn("no-store", response["Cache-Control"])
         self.assertTrue(all("--apply" in args for name, args in runner.calls
-                            if name not in {"cleanup_admin_privacy", "cleanup_search_clicks"}))
+                            if name not in {"cleanup_admin_privacy", "cleanup_search_clicks", "check_search_health"}))
 
     @override_settings(CRON_SECRET="s" * 32)
     def test_post_and_dry_run_query(self):

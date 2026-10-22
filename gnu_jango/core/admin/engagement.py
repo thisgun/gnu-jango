@@ -4,6 +4,39 @@ from gnu_jango.core.maintenance import maintenance_snapshot, run_maintenance_act
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.utils.translation import gettext_lazy as _
+from gnu_jango.core.models import NotificationAnnouncement, NotificationWork
+
+
+@admin.register(NotificationAnnouncement)
+class NotificationAnnouncementAdmin(ModelAdmin):
+    list_display = ("request_id", "created_by", "recipient_count", "status", "created_at")
+    readonly_fields = ("request_id", "created_by", "content_digest", "recipient_count", "status", "created_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(NotificationWork)
+class NotificationWorkAdmin(ModelAdmin):
+    list_display = ("id", "kind", "user", "attempts", "error_type", "available_at", "completed_at")
+    list_filter = ("kind", "completed_at")
+    exclude = ("payload",)
+    readonly_fields = ("event_key", "kind", "user", "attempts", "error_type", "created_at", "available_at", "completed_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Notification)
@@ -17,12 +50,22 @@ class NotificationAdmin(ModelAdmin):
         urls = super().get_urls()
         custom_urls = [
             path(
+                "announce/",
+                self.admin_site.admin_view(self.announcement_view),
+                name="core_notification_announce",
+            ),
+            path(
                 "mail-tools/",
                 self.admin_site.admin_view(self.mail_tools_view),
                 name="core_notification_mail_tools",
             ),
         ]
         return custom_urls + urls
+
+    def announcement_view(self, request):
+        from gnu_jango.notifications.announcements import announcement_view
+
+        return announcement_view(self, request)
 
     def mail_tools_view(self, request):
         test_form = {

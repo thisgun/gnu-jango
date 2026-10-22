@@ -8,10 +8,12 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /tmp/requirements.txt
+ARG INSTALL_REALTIME=0
+COPY requirements.txt requirements-realtime.txt /tmp/
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --upgrade pip \
-    && /opt/venv/bin/pip install -r /tmp/requirements.txt
+    && /opt/venv/bin/pip install -r /tmp/requirements.txt \
+    && if [ "$INSTALL_REALTIME" = "1" ]; then /opt/venv/bin/pip install -r /tmp/requirements-realtime.txt; fi
 
 
 FROM python:3.12-slim
