@@ -1,6 +1,6 @@
 """상품 엑셀 일괄등록 (youngcart adm/shop_admin/itemexcel.php, itemexcelupdate.php).
 
-The upload keeps youngcart's column layout (lib/Excel/itemexcel.xls): row 1 the Korean labels,
+The upload, an .xlsx workbook or a CSV file (shop/spreadsheet.py), keeps youngcart's column layout (lib/Excel/itemexcel.xls): row 1 the Korean labels,
 row 2 the field names, the products from row 3. Options are not part of the sheet, as in
 youngcart. youngcart only adds products and fails a row whose 상품코드 exists; here the admin may
 choose to update existing products instead, where an empty cell keeps the stored value.
@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 from django.db import transaction
 
 from .models import ShopCategory, ShopProduct, ShopStockAdjustment
-from .spreadsheet import read_csv_upload
+from .spreadsheet import read_upload
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,8 @@ COLUMNS = (
     *((f"it_img{number}", f"이미지{number}") for number in range(1, IMAGE_COUNT + 1)),
 )
 FIELD_NAMES = tuple(name for name, _label in COLUMNS)
+# codes the .xlsx template formats as text, so Excel keeps a long or zero-led code as typed
+TEXT_COLUMNS = tuple(FIELD_NAMES.index(name) for name in ("it_id", "ca_id", "ca_id2", "ca_id3"))
 LABEL_FIELDS = {label: name for name, label in COLUMNS}
 # youngcart columns this model has no place for: read and ignored
 IGNORED_FIELDS = {"it_mobile_explan", "it_sell_email", "it_noti_qty"}
@@ -342,7 +344,7 @@ def parse_products(uploaded, *, mode=MODE_CREATE):
     """Read and validate the upload; nothing is saved. Raises SpreadsheetError."""
     from .spreadsheet import SpreadsheetError
 
-    rows = read_csv_upload(uploaded, max_rows=MAX_ROWS + 2)
+    rows = read_upload(uploaded, max_rows=MAX_ROWS + 2)
     start, mapping = _column_map(rows)
     if start is None or "it_id" not in mapping:
         raise SpreadsheetError("항목 이름 행을 찾을 수 없습니다. 내려받은 양식의 1~2행(항목 이름)을 지우지 말고 올려 주세요.")

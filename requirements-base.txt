@@ -39,6 +39,7 @@ django-jsonify==0.3.0
 jsonpickle==4.1.4
 var_dump==1.2
 six==1.17.0
+openpyxl==3.1.5
 
 # Storage / database
 dj-database-url==3.1.2

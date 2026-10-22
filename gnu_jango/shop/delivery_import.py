@@ -2,7 +2,7 @@
 orderdeliveryupdate.php).
 
 The download lists the orders that are 준비 with youngcart's ten columns; the admin fills in
-배송회사 and 운송장번호 and uploads the sheet back. Each order that is still 준비 gets the courier
+배송회사 and 운송장번호 and uploads the sheet back (.xlsx or CSV, shop/spreadsheet.py). Each order that is still 준비 gets the courier
 and invoice and moves to 배송 through the regular order flow (move_order_status), which stamps
 the invoice time, moves the lines and queues the 배송 mail. Any other row is reported and left.
 """
@@ -17,7 +17,7 @@ from .delivery import find_delivery_company
 from .models import ShopOrder
 from .order_flow import canonical_status, move_order_status
 from .order_statuses import STATUS_READY, STATUS_SHIPPING
-from .spreadsheet import ExcelText, SpreadsheetError, read_csv_upload
+from .spreadsheet import ExcelText, SpreadsheetError, read_upload
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,8 @@ HEADERS = (
     "배송회사",
     "운송장번호",
 )
+# the 20-digit order number and the invoice stay text in the .xlsx sheet (no 2.03E+19)
+TEXT_COLUMNS = (HEADERS.index("주문번호"), HEADERS.index("운송장번호"))
 HEADER_ALIASES = {
     "od_id": ("주문번호", "od_id"),
     "company": ("배송회사", "택배사", "od_delivery_company"),
@@ -128,7 +130,7 @@ def normalize_company(value):
 
 
 def parse_deliveries(uploaded):
-    rows = read_csv_upload(uploaded, max_rows=MAX_ROWS + 1)
+    rows = read_upload(uploaded, max_rows=MAX_ROWS + 1)
     mapping = _columns(rows[0])
     if len(mapping) == len(HEADER_ALIASES):
         data = rows[1:]

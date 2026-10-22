@@ -13,20 +13,24 @@
   <div class="g5-admin-panel-header">
     <div>
       <p class="g5-admin-eyebrow">1. 준비 주문 내려받기 · 2. 배송회사·운송장번호 입력 · 3. 미리보기 후 등록</p>
-      <h2>송장 CSV 파일 올리기</h2>
+      <h2>송장 엑셀·CSV 파일 올리기</h2>
     </div>
-    <a class="button btn g5-admin-button-secondary" href="{{ report_path }}?download=template">준비 주문 내려받기 (CSV)</a>
+    <div class="g5-admin-report-filter-actions">
+      <a class="button btn g5-admin-button-secondary" href="{{ report_path }}?download=template&amp;format=xlsx">준비 주문 내려받기 (엑셀)</a>
+      <a class="button btn g5-admin-button-secondary" href="{{ report_path }}?download=template">준비 주문 내려받기 (CSV)</a>
+    </div>
   </div>
   <ul class="g5-admin-report-summary-list">
     <li>영카트 배송일괄처리 엑셀과 같은 열입니다. 첫 행(항목명)을 그대로 두고 <strong>배송회사</strong>와 <strong>운송장번호</strong> 열을 채우세요.</li>
     <li>준비 상태의 주문만 운송장을 등록하고 배송으로 바뀝니다. 배송 상태가 되면 고객에게 배송 안내 메일이 나갑니다.</li>
-    <li>엑셀에서 <strong>CSV UTF-8(쉼표로 분리)</strong>로 저장해 올리세요. 주문번호 열은 텍스트로 두세요 (지수 형식으로 바뀌면 주문을 찾지 못합니다).</li>
+    <li>엑셀 통합 문서(<strong>.xlsx</strong>, 첫 번째 시트만 읽음)나 <strong>CSV UTF-8(쉼표로 분리)</strong> 파일을 올리세요. 예전 형식(.xls)은 .xlsx로 다시 저장해야 합니다.</li>
+    <li>주문번호·운송장번호 열은 텍스트로 두세요. 엑셀 양식은 두 열이 텍스트 서식으로 되어 있습니다 (숫자로 바뀌어 지수 형식이 되면 주문을 찾지 못합니다).</li>
   </ul>
   <form class="g5-admin-report-filter" method="post" enctype="multipart/form-data" action="{{ report_path }}">
     {% csrf_token %}
     <label>
-      <span>CSV 파일</span>
-      <input class="input" type="file" name="file" accept=".csv,text/csv" required>
+      <span>엑셀(.xlsx) 또는 CSV 파일</span>
+      <input class="input" type="file" name="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" required>
     </label>
     <label>
       <input type="checkbox" name="send_sms" value="1">

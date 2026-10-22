@@ -23,7 +23,7 @@ from gnu_jango.shop import delivery_import, product_import
 from gnu_jango.shop.models import ShopCategory, ShopOrder, ShopPersonalPay, ShopProduct, ShopReview
 from gnu_jango.shop.product_counters import recount_product_reviews
 from gnu_jango.shop.shipping import current_shipping_policy
-from gnu_jango.shop.spreadsheet import MAX_UPLOAD_BYTES, SpreadsheetError, csv_download
+from gnu_jango.shop.spreadsheet import MAX_UPLOAD_BYTES, SpreadsheetError, csv_download, xlsx_download
 from gnu_jango.shop.stock_bulk import apply_option_rows, apply_product_rows, option_label, option_rows
 
 PAGE_SIZE = 50
@@ -73,6 +73,18 @@ def product_tool_links(request):
     ]
 
 
+def _template_download(request, basename, header_rows, rows, *, text_columns):
+    """The upload template as .xlsx (``?format=xlsx``) or CSV; a server without openpyxl falls
+    back to the page with the reason."""
+    if request.GET.get("format") != "xlsx":
+        return csv_download(f"{basename}.csv", header_rows, rows)
+    try:
+        return xlsx_download(f"{basename}.xlsx", header_rows, rows, text_columns=text_columns)
+    except SpreadsheetError as exc:
+        messages.error(request, str(exc))
+        return HttpResponseRedirect(request.path)
+
+
 def _report_rows(report, columns):
     return [
         {
@@ -95,7 +107,9 @@ def product_upload_view(model_admin, request):
     can_update = request.user.has_perm("shop.change_shopproduct")
     if request.GET.get("download") == "template":
         headers, rows = product_import.template_rows()
-        return csv_download("shop-product-upload-template.csv", headers, rows)
+        return _template_download(
+            request, "shop-product-upload-template", headers, rows, text_columns=product_import.TEXT_COLUMNS
+        )
     mode = request.POST.get("mode") if request.POST.get("mode") in {product_import.MODE_CREATE, product_import.MODE_UPDATE} else product_import.MODE_CREATE
     report = None
     error = ""
@@ -110,9 +124,9 @@ def product_upload_view(model_admin, request):
 
             def logged(product, item):
                 if item.action == "update":
-                    model_admin.log_change(request, product, "상품 CSV 일괄수정")
+                    model_admin.log_change(request, product, "상품 엑셀 일괄수정")
                 else:
-                    model_admin.log_addition(request, product, "상품 CSV 일괄등록")
+                    model_admin.log_addition(request, product, "상품 엑셀 일괄등록")
 
             product_import.apply_products(report, actor=request.user, on_saved=logged)
             if report.saved_count:
@@ -124,7 +138,7 @@ def product_upload_view(model_admin, request):
         model_admin,
         request,
         title="상품 일괄등록",
-        subtitle="영카트 상품 일괄등록 양식의 CSV 파일로 상품을 한 번에 등록하거나 고칩니다.",
+        subtitle="영카트 상품 일괄등록 양식의 엑셀(.xlsx) 또는 CSV 파일로 상품을 한 번에 등록하거나 고칩니다.",
         parent_url=parent_url,
         parent_label=parent_label,
         tool_links=product_tool_links(request),
@@ -356,7 +370,7 @@ def delivery_upload_view(model_admin, request):
     if request.GET.get("download") == "template":
         policy = current_shipping_policy()
         headers, rows = delivery_import.template_rows(str(policy.de_delivery_company or "").strip())
-        return csv_download("shop-delivery-upload.csv", headers, rows)
+        return _template_download(request, "shop-delivery-upload", headers, rows, text_columns=delivery_import.TEXT_COLUMNS)
     report = None
     error = ""
     if request.method == "POST":
@@ -384,7 +398,7 @@ def delivery_upload_view(model_admin, request):
         model_admin,
         request,
         title="송장 일괄등록",
-        subtitle="준비 상태 주문의 배송회사·운송장번호를 CSV로 한 번에 등록하고 배송으로 바꿉니다.",
+        subtitle="준비 상태 주문의 배송회사·운송장번호를 엑셀(.xlsx) 또는 CSV 파일로 한 번에 등록하고 배송으로 바꿉니다.",
         parent_url=parent_url,
         parent_label=parent_label,
         report=report,
