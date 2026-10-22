@@ -5,13 +5,13 @@ import { Bell } from "lucide-react";
 import { useAuthStore } from "@/store/auth";
 import { formatDate } from "@/lib/utils";
 import { g5ShortHref } from "@/lib/g5-short-url";
+import { watchNotificationStream } from "@/services/notification-stream";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   getNotifications,
   markNotificationsRead,
   type NotificationItem,
 } from "@/services/notifications";
-
-const POLL_INTERVAL = 60_000;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -66,12 +66,14 @@ export function NotificationBell() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [count, setCount] = useState(0);
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const fetchVersion = useRef(0);
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
+    const version = ++fetchVersion.current;
     try {
       const summary = await getNotifications();
+      if (fetchVersion.current !== version || useAuthStore.getState().user?.mb_id !== user.mb_id) return;
       setNotifications(summary.items);
       setCount(summary.count);
     } catch {
@@ -86,25 +88,13 @@ export function NotificationBell() {
       return;
     }
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, POLL_INTERVAL);
-    return () => clearInterval(interval);
+    return watchNotificationStream(fetchNotifications);
   }, [user, fetchNotifications]);
-
-  useEffect(() => {
-    const handler = (event: MouseEvent) => {
-      if (ref.current && !ref.current.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
 
   const handleMarkAllRead = async () => {
     try {
       await markNotificationsRead();
-      setNotifications([]);
-      setCount(0);
+      await fetchNotifications();
     } catch {
       // Keep the current list visible if the server did not accept the update.
     }
@@ -113,10 +103,10 @@ export function NotificationBell() {
   if (!user) return null;
 
   return (
-    <div className="relative" ref={ref}>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
       <button
         type="button"
-        onClick={() => setOpen((value) => !value)}
         className="relative flex h-9 w-9 items-center justify-center rounded-md transition-colors hover:bg-accent"
         aria-label="알림"
         aria-expanded={open}
@@ -128,9 +118,10 @@ export function NotificationBell() {
           </span>
         )}
       </button>
+      </PopoverTrigger>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-80 rounded-lg border bg-popover shadow-lg">
+        <PopoverContent align="end" sideOffset={8} collisionPadding={12} className="w-80 max-w-[calc(100vw-24px)] rounded-lg p-0" aria-label="알림 목록">
           <div className="flex items-center justify-between border-b px-4 py-3">
             <h3 className="text-sm font-semibold">알림</h3>
             {count > 0 && (
@@ -185,8 +176,8 @@ export function NotificationBell() {
               })
             )}
           </div>
-        </div>
+        </PopoverContent>
       )}
-    </div>
+    </Popover>
   );
 }

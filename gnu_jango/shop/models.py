@@ -4,6 +4,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from gnu_jango.site_search.source import SearchIndexedSource
 from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -225,7 +226,7 @@ class ShopShippingCost(models.Model):
         return f"{self.sc_name or self.sc_id}: {self.sc_zip1}–{self.sc_zip2}"
 
 
-class ShopProduct(models.Model):
+class ShopProduct(SearchIndexedSource):
     it_id = models.CharField(max_length=40, primary_key=True)
     category = models.ForeignKey(
         ShopCategory,

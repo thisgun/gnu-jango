@@ -1,0 +1,52 @@
+name: Production search smoke
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-search-smoke
+  cancel-in-progress: true
+
+jobs:
+  public-search:
+    if: ${{ !github.event.repository.private && (github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - name: Skip superseded CI runs
+        id: revision
+        env:
+          EVENT_REVISION: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          current=$(git rev-parse HEAD)
+          echo "sha=$current" >> "$GITHUB_OUTPUT"
+          if [ -n "$EVENT_REVISION" ] && [ "$EVENT_REVISION" != "$current" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-python@v7
+        if: steps.revision.outputs.skip != 'true'
+        with:
+          python-version: '3.12'
+      - name: Wait for this revision on both production sites
+        if: steps.revision.outputs.skip != 'true'
+        run: python scripts/wait_search_release.py --revision "${{ steps.revision.outputs.sha }}"
+      - name: Check public search quality and latency
+        if: steps.revision.outputs.skip != 'true'
+        run: python scripts/assess_search.py --repeats 2 --interval 2 --output search-smoke.json
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.revision.outputs.skip != 'true'
+        with:
+          name: public-search-smoke
+          path: search-smoke.json
+          if-no-files-found: ignore
+          retention-days: 14

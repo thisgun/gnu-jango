@@ -3,6 +3,7 @@ import uuid
 import logging
 from django.core.exceptions import SuspiciousFileOperation, ValidationError
 from django.db import models
+from gnu_jango.site_search.source import SearchIndexedSource
 from django.db.models.functions import Coalesce
 
 # from django.db.models import CharField, Model
@@ -253,7 +254,7 @@ class Board(models.Model):
 #       form = MyInvoiceAdminForm
 
 # https://stackoverflow.com/questions/62337070/django-cannot-resolve-keyword-slug-into-field
-class Post(models.Model):
+class Post(SearchIndexedSource):
     board = models.ForeignKey(
         Board, on_delete=models.CASCADE, related_name="posts", verbose_name=_("게시판")
     )

@@ -43,7 +43,7 @@ from gnu_jango.users.models import Profile, User_Point
 from gnu_jango.utils.users import get_user_level, is_admin as gnu_is_admin
 
 from .access import readable_post_queryset
-from .search import apply_text_search
+from .search import apply_text_search, post_body_match
 from .response import api_error, api_response
 from .member_certify import (
     PasswordCheckThrottle,
@@ -555,24 +555,7 @@ def _body_match(request, board, keyword):
     """Body-text matches the viewer may search. On a board that charges read points only the viewer's own
     posts and the posts they already paid for match by body (a super administrator reads everything):
     otherwise hit / no hit would tell an unpaid reader what a post says. Titles stay searchable for everyone."""
-    body = Q(wr_content__icontains=keyword)
-    if board.bo_read_point >= 0 or not point_ledger.points_enabled():
-        return body
-    user = getattr(request, "user", None)
-    if user and gnu_is_admin(user):
-        return body
-    if not (user and user.is_authenticated):
-        return Q(pk__in=[])
-    paid = {
-        int(rel_id)
-        for rel_id in User_Point.objects.filter(
-            user=user, po_rel_table=board.bo_table, po_rel_action="읽기"
-        ).values_list("po_rel_id", flat=True)
-        if str(rel_id).isdigit()
-    }
-    # point_ledger.post_point_id: the imported wr_id when there is one, else the pk.
-    paid_posts = Q(legacy_wr_id__in=paid) | ((Q(legacy_wr_id__isnull=True) | Q(legacy_wr_id=0)) & Q(pk__in=paid))
-    return body & (Q(user=user) | paid_posts)
+    return post_body_match(request, keyword, Post.objects.filter(board=board))
 
 
 def _search_post_payload(post, request, keyword, previewable_ids):

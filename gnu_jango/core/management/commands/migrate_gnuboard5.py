@@ -15,6 +15,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
 from gnu_jango import defaults
+from gnu_jango.notifications.context import suppress_notification_events
 from gnu_jango.bbs.models import Board, Comment, Group, Post, Post_file
 from gnu_jango.config import signals
 from gnu_jango.config.models import Config
@@ -349,6 +350,7 @@ class Command(BaseCommand):
             help="Do not connect to MySQL for table counts during dry-run.",
         )
 
+    @suppress_notification_events()
     def handle(self, *args, **options):
         source_root = Path(options["source_root"])
         self.source_root = source_root
@@ -806,6 +808,7 @@ class Command(BaseCommand):
             count += 1
         return count
 
+    @suppress_notification_events()
     def import_memos(self, rows):
         count = 0
         for row in rows:
@@ -1109,6 +1112,7 @@ class Command(BaseCommand):
         post.save()
         return post
 
+    @suppress_notification_events()
     def upsert_comment(self, board, post, row):
         legacy_id = integer(row, "wr_id", 0)
         comment = Comment.objects.filter(board=board, post=post, order_num=legacy_id).order_by("pk").first()
@@ -1624,6 +1628,7 @@ class Command(BaseCommand):
             count += len(options)
         return count
 
+    @suppress_notification_events()
     def import_shop_orders(self, rows):
         count = 0
         for row in rows:

@@ -8,6 +8,9 @@ from .base import *
 from .deploy import database_from_env, secret_key_for, vercel_allowed_hosts
 
 DEBUG = False
+# Preview must not subscribe to production channels or reuse its ticket cache.
+NOTIFICATION_WS_ENABLED = False
+CHANNEL_LAYERS = {}
 RECAPTCHA_PUBLIC_KEY = RECAPTCHA_PRIVATE_KEY = ""
 SECRET_KEY = secret_key_for(DEPLOY_ENV, is_production=True)
 ALLOWED_HOSTS = vercel_allowed_hosts(os.environ)

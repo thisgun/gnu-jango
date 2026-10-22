@@ -35,7 +35,7 @@ from gnu_jango.users import point_ledger
 
 from .access import listable_post_queryset, readable_post_queryset, secret_post_session_key
 from .response import api_error, api_response
-from .search import apply_text_search
+from .search import apply_text_search, post_body_match
 from .v1_auth import _auth_user_from_request, _captcha_matches, _consume_captcha, member_payload
 
 IMAGE_EXTENSIONS = {".gif", ".jfif", ".jpg", ".jpeg", ".png", ".webp"}
@@ -671,9 +671,9 @@ def _filter_posts(request, queryset):
         for field in sfl.split("||"):
             lookup = fields.get(field)
             if lookup:
-                search_q |= Q(**{lookup: stx})
+                search_q |= post_body_match(request, stx, queryset) if field == "wr_content" else Q(**{lookup: stx})
         if not search_q:
-            search_q = Q(wr_subject__icontains=stx) | Q(wr_content__icontains=stx)
+            search_q = Q(wr_subject__icontains=stx) | post_body_match(request, stx, queryset)
         selected = set(sfl.split("||"))
         indexed_fields = [name for field, name in (("wr_subject", "title"), ("wr_content", "body")) if field in selected]
         if not selected.intersection(fields):

@@ -1,12 +1,14 @@
 from django.urls import path
 
 from gnu_jango.core import thumbnails
+from gnu_jango.notifications.api import ticket_view
 
 from . import member_lifecycle, page_bootstrap, v1_auth, v1_board, v1_community, v1_docs, v1_search, v1_shop, v1_views
 
 app_name = "api_v1"
 
 urlpatterns = [
+    path("notifications/ticket", ticket_view, name="notifications-ticket"),
     path("status", v1_views.status_view, name="status"),
     path("home", page_bootstrap.community_home_view, name="home"),
     path("shop/home", page_bootstrap.shop_home_view, name="shop-home"),

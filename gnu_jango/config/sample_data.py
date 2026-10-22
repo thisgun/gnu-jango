@@ -15,6 +15,7 @@ from gnu_jango.config import config as site_config
 from gnu_jango.config.models import Config
 from gnu_jango.core.models import ContentPage, FAQItem, FAQMaster, Poll, PollChoice, Site_menu
 from gnu_jango.shop.models import ShopBanner, ShopCategory, ShopProduct
+from gnu_jango.notifications.context import suppress_notification_events
 
 
 MANIFEST_NAME = "g5_sample_data_manifest_v1"
@@ -672,6 +673,7 @@ def _ensure_demo_site_experience(manifest, boards):
     _ensure_home_board_settings(manifest, boards)
 
 
+@suppress_notification_events()
 def _apply_sample_data(require_new):
     sample_asset_summary()
     with transaction.atomic():

@@ -1,0 +1,5 @@
+# Optional ASGI/WebSocket transport. Install after the deployment's normal requirements.
+# WSGI-only PythonAnywhere installations do not need these packages.
+channels==4.3.2
+channels-redis==4.3.0
+uvicorn[standard]==0.49.0

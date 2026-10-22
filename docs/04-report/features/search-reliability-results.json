@@ -1,0 +1,154 @@
+{
+  "measured_on": "2026-10-21",
+  "production_deployed": false,
+  "database": "isolated local PostgreSQL 16",
+  "python": "3.14.6",
+  "cold_start_verified": false,
+  "fixture": "10000 synthetic ContentPages; 20 identifiers x 5 question variants; one broad Korean query",
+  "scope": "Management functions, 3 sequential and 12 concurrent samples with 10 source writes. Other local test processes were active.",
+  "phases": {
+    "before_vectors": {
+      "documents": 10000,
+      "database_vendor": "postgresql",
+      "concurrency": 4,
+      "synthetic": true,
+      "cold_start_verified": false,
+      "quality": {
+        "cases": 100,
+        "hits_top3": 100,
+        "rate": 1.0
+      },
+      "broad_sequential": {
+        "count": 3,
+        "mean_ms": 4469.56,
+        "p95_ms": 5585.64,
+        "max_ms": 5585.64
+      },
+      "broad_concurrent": {
+        "count": 12,
+        "mean_ms": 4160.39,
+        "p95_ms": 5242.79,
+        "max_ms": 5242.79
+      },
+      "broad_total": 10000,
+      "candidate_truncated": true,
+      "index_after_concurrent_writes": {
+        "ready": true,
+        "unready_kinds": [],
+        "documents": 10000,
+        "active_snapshots": 10000,
+        "pending": 0,
+        "stale_builds": 0,
+        "snapshot_mismatches": 0,
+        "source_audit_required": true
+      },
+      "passed": true
+    },
+    "stored_vectors": {
+      "documents": 10000,
+      "database_vendor": "postgresql",
+      "concurrency": 4,
+      "synthetic": true,
+      "cold_start_verified": false,
+      "quality": {
+        "cases": 100,
+        "hits_top3": 100,
+        "rate": 1.0
+      },
+      "broad_sequential": {
+        "count": 3,
+        "mean_ms": 635.12,
+        "p95_ms": 645.87,
+        "max_ms": 645.87
+      },
+      "broad_concurrent": {
+        "count": 12,
+        "mean_ms": 2122.17,
+        "p95_ms": 3071.62,
+        "max_ms": 3071.62
+      },
+      "broad_total": 10000,
+      "candidate_truncated": true,
+      "index_after_concurrent_writes": {
+        "ready": true,
+        "unready_kinds": [],
+        "documents": 10000,
+        "active_snapshots": 10000,
+        "pending": 0,
+        "stale_builds": 0,
+        "snapshot_mismatches": 0,
+        "source_count_difference": 0,
+        "source_audit_required": true
+      },
+      "latency_budget_ms": 2000,
+      "passed": false
+    },
+    "query_statistics": {
+      "documents": 10000,
+      "database_vendor": "postgresql",
+      "concurrency": 4,
+      "synthetic": true,
+      "cold_start_verified": false,
+      "quality": {
+        "cases": 100,
+        "hits_top3": 100,
+        "rate": 1.0
+      },
+      "broad_sequential": {
+        "count": 3,
+        "mean_ms": 800.3,
+        "p95_ms": 829.5,
+        "max_ms": 829.5
+      },
+      "broad_concurrent": {
+        "count": 12,
+        "mean_ms": 1068.52,
+        "p95_ms": 1338.29,
+        "max_ms": 1338.29
+      },
+      "broad_total": 10000,
+      "candidate_truncated": true,
+      "index_after_concurrent_writes": {
+        "ready": true,
+        "unready_kinds": [],
+        "documents": 10000,
+        "active_snapshots": 10000,
+        "pending": 0,
+        "stale_builds": 0,
+        "snapshot_mismatches": 0,
+        "source_count_difference": 0,
+        "source_audit_required": true
+      },
+      "latency_budget_ms": 2000,
+      "passed": true
+    }
+  },
+  "acceptance_notes": {
+    "before_vectors": "The initial command gated correctness and index consistency only; passed=true does not certify the later 2000ms latency budget.",
+    "stored_vectors": "Includes the 2000ms p95 budget; concurrent latency failed.",
+    "query_statistics": "Includes the 2000ms p95 budget; sequential and concurrent latency passed."
+  },
+  "verification": {
+    "sqlite_full": {
+      "tests": 2354,
+      "skipped": 9,
+      "passed": true,
+      "test_only_pbkdf2_iterations": 1000
+    },
+    "postgresql_16_regression": {
+      "tests": 96,
+      "skipped": 1,
+      "passed": true
+    },
+    "sqlite_final_additions": {
+      "tests": 14,
+      "skipped": 1,
+      "passed": true
+    },
+    "existing_data_vector_backfill_and_reverse_forward": true,
+    "anon_retry_table_select_and_insert_denied": true,
+    "temporary_postgres_container_and_volume_removed": true,
+    "production_db_migrations_applied": false,
+    "cloud_workflow_executed": false
+  }
+}

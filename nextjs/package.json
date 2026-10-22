@@ -11,6 +11,7 @@
     "start:server": "node scripts/server-runtime.mjs start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit --incremental false",
+    "test:notifications": "playwright test tests/notification-stream.spec.ts --workers=1",
     "check": "npm run typecheck && npm run lint && npm run test:sanitize && npm run test:order && npm run test:payment && npm run check:design-system && npm run check:g5-url-shape && npm run check:runtime-config && npm run check:scripts && npm run check:static-export-guards && npm run check:file-size",
     "check:design-system": "node scripts/check-design-system.mjs",
     "check:g5-url-shape": "node scripts/check-g5-url-shape.mjs",

@@ -255,7 +255,11 @@ class UnifiedSearchTests(BoardApiTestCase):
         call_command("configure_search_postgres", stdout=StringIO())
         product = ShopProduct.objects.create(it_id="search-fuzzy", it_name="wireless keyboard")
         with override_settings(G5_SEARCH_TRIGRAM=True):
-            response = self.search("wireles keybord", type="product")
+            # A missing suffix is now an indexed prefix match. Use an interior
+            # typo in both words to exercise the actual trigram fallback.
+            prefix = self.search("wireles keybord", type="product")
+            self.assertFalse(prefix["meta"]["fuzzy"])
+            response = self.search("wierless keybord", type="product")
         self.assertTrue(response["meta"]["fuzzy"])
         self.assertIn(product.pk, [row["id"] for row in response["data"]["results"]])
 

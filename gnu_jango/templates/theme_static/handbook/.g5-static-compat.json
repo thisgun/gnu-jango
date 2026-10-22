@@ -1,22 +1,32 @@
 {
   "version": 2,
-  "generation": 23,
+  "generation": 26,
   "keepBuilds": 2,
   "files": [
     {
-      "path": "_next/static/chunks/195lb000ar9q1.js",
-      "sha256": "7a605c1789319286fd3e606a3d47a58725348d21f2aa9b4d2ffeb352813e28be",
-      "retiredAt": 22
+      "path": "_next/static/chunks/1pexn8rrbd-h1.js",
+      "sha256": "33f1f2cd5a34ef3fc72a89e081009d04148f8d82ffbfc96d600d04d9d528137d",
+      "retiredAt": 26
     },
     {
-      "path": "_next/static/chunks/1bbdgxmdl-cxo.js",
-      "sha256": "4640c07d39a8dc5eac8da20f7b1362783ea80d7bf6e765b3f1fb69c702c08621",
-      "retiredAt": 23
+      "path": "_next/static/chunks/209lvh348obc4.js",
+      "sha256": "c8228c317d7093e248101e52e095f48b17c018bd5f9a3db9ae0c5303e2d66a8c",
+      "retiredAt": 25
     },
     {
-      "path": "_next/static/chunks/1w8awrmse7gtl.js",
-      "sha256": "9c3e91251b4e442b7175cd834016505574a13cde7d86f52e5d28f6be2dfd45b8",
-      "retiredAt": 23
+      "path": "_next/static/chunks/2iqbqn_dhk3pc.js",
+      "sha256": "a1f5d98128e7aab733bfe178ebc6d6374d85660f12eefdf9de51305ac7efe8f1",
+      "retiredAt": 25
+    },
+    {
+      "path": "_next/static/chunks/2pqcyz0woqlvg.css",
+      "sha256": "a5c71cfcb3d2bfd6278e3978f33c8b503609e1e5fa29bdaf63f887a509c112ab",
+      "retiredAt": 26
+    },
+    {
+      "path": "_next/static/chunks/2v5lfn_d8ylyp.js",
+      "sha256": "343ed17aa2cc235797fb422fbe9f3682640929db219ee7e3ebb33429a3d44fc6",
+      "retiredAt": 25
     }
   ]
 }

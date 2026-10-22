@@ -532,6 +532,11 @@ UNFOLD = {
                     "link": reverse_lazy("admin:core_notification_changelist"),
                 },
                 {
+                    "title": "공지 알림 발송",
+                    "link": reverse_lazy("admin:core_notification_announce"),
+                    "permission": lambda request: request.user.has_perm("core.add_notification"),
+                },
+                {
                     "title": _("Raw visit logs"),
                     "link": reverse_lazy("admin:core_visitlog_changelist"),
                 },
@@ -724,6 +729,8 @@ G5_DOCS_LLM_TIMEOUT = de_config("G5_DOCS_LLM_TIMEOUT", default=20, cast=int)
 
 # Unified DB search: PostgreSQL FTS or the portable token inverted index.
 G5_SEARCH_ENABLED = bool_config("G5_SEARCH_ENABLED", default=True)
+DEPLOYMENT_REVISION = de_config("VERCEL_GIT_COMMIT_SHA", default="")
+G5_SEARCH_SLOW_MS = max(1, de_config("G5_SEARCH_SLOW_MS", default=1000, cast=int))
 # Install pg_trgm first with configure_search_postgres before opting in.
 G5_SEARCH_TRIGRAM = bool_config("G5_SEARCH_TRIGRAM", default=False)
 G5_SEARCH_CLICK_LOG_ENABLED = bool_config("G5_SEARCH_CLICK_LOG_ENABLED", default=True)
@@ -827,6 +834,7 @@ TEMPLATES = [
 TEMPLATE_STRING_IF_INVALID = "Invalid variable"
 
 WSGI_APPLICATION = "example.wsgi.application"
+ASGI_APPLICATION = "example.asgi.application"
 
 # TEMPLATE_LOADERS = (
 #     'django.template.loaders.app_directories.load_template_source',
@@ -1131,6 +1139,41 @@ LOGOUT_REDIRECT_URL = "/"
 # deployments need a shared backend (db:// -> run `python manage.py createcachetable`, or redis://),
 # otherwise DRF throttles and cooldowns are counted per process.
 CACHES = cache_config(DEPLOY_ENV)
+
+# Durable notifications work without Channels; enable the socket only on an ASGI deployment.
+NOTIFICATION_EVENTS_ENABLED = bool_config("NOTIFICATION_EVENTS_ENABLED", default=True)
+NOTIFICATION_WS_ENABLED = bool_config("NOTIFICATION_WS_ENABLED", default=False)
+NOTIFICATION_REDIS_URL = de_config("NOTIFICATION_REDIS_URL", default="")
+NOTIFICATION_WS_URL = de_config("NOTIFICATION_WS_URL", default="/ws/notifications/")
+NOTIFICATION_WS_ORIGINS = de_config("NOTIFICATION_WS_ORIGINS", default="", cast=csv_config)
+NOTIFICATION_TICKET_TTL = 30
+NOTIFICATION_CONNECTION_TTL = 300
+if NOTIFICATION_WS_ENABLED:
+    from hashlib import sha256 as _notification_sha256
+
+    if not NOTIFICATION_REDIS_URL.startswith(("redis://", "rediss://")):
+        raise ImproperlyConfigured("NOTIFICATION_WS_ENABLED requires NOTIFICATION_REDIS_URL (redis:// or rediss://).")
+    # Separate demo, handbook and preview, even when they share a Redis service.
+    _notification_prefix = "g5.notify." + _notification_sha256(SECRET_KEY.encode()).hexdigest()[:16]
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                # Channels waits up to five seconds in a blocking Redis read even while idle.
+                "hosts": [{"address": NOTIFICATION_REDIS_URL, "socket_connect_timeout": 1, "socket_timeout": 10}],
+                "prefix": _notification_prefix,
+                "expiry": 60,
+                "group_expiry": NOTIFICATION_CONNECTION_TTL + 60,
+                "capacity": 100,
+            },
+        },
+    }
+    CACHES["notifications"] = {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": NOTIFICATION_REDIS_URL,
+        "KEY_PREFIX": _notification_prefix,
+        "OPTIONS": {"socket_connect_timeout": 1, "socket_timeout": 1},
+    }
 
 # Bearer token for GET/POST /api/internal/cron (Vercel Cron sends `Authorization: Bearer $CRON_SECRET`).
 # Empty disables the endpoint (404); system cron can run `manage.py run_scheduled_jobs` instead.

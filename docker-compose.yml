@@ -122,6 +122,13 @@ services:
     volumes:
       - media:/app/media
 
+  notification-worker:
+    profiles: ["realtime"]
+    extends:
+      service: worker
+    command: python manage.py process_notifications --apply --watch
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   media:

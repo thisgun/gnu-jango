@@ -1,15 +1,13 @@
 """Permission-aware indexed retrieval shared by the unified and compatibility APIs."""
 from datetime import timedelta
-from functools import reduce
 from math import log1p
-from operator import or_
 from urllib.parse import quote
 
 from django.conf import settings
 from django.core.cache import cache
 from django.db import connections
-from django.db.models import BigIntegerField, BooleanField, Case, Exists, F, FilteredRelation, FloatField, OuterRef, Q, Subquery, Sum, TextField, Value, When
-from django.db.models.functions import Coalesce, Concat, Lower, Substr
+from django.db.models import BigIntegerField, BooleanField, Case, Exists, F, FilteredRelation, FloatField, Func, IntegerField, JSONField, OuterRef, Q, Subquery, Sum, TextField, Value, When
+from django.db.models.functions import Coalesce, Concat, JSONObject, Length, Lower, Replace, Substr
 from django.utils import timezone
 
 from gnu_jango.api.access import readable_post_queryset
@@ -17,21 +15,24 @@ from gnu_jango.api.shop_common import on_sale_products
 from gnu_jango.bbs.models import Post
 from gnu_jango.bbs.utils import get_pretty_url
 from gnu_jango.core.models import ContentPage
-from gnu_jango.docs_search.ranking import bm25_scores
+from gnu_jango.docs_search.ranking import bm25_from_stats, bm25_scores
 from gnu_jango.docs_search.service import _snippet, docs_group_id
 from gnu_jango.users import point_ledger
 from gnu_jango.users.models import User_Point
 from gnu_jango.utils.users import is_admin
 
-from .indexing import MAX_TEXT_CHARS, encoded, plain_text, terms, unready_kinds
+from .indexing import MAX_TEXT_CHARS, encoded, plain_text, posting_match, postgres_query, prefix_terms, terms, unready_kinds
 from .models import SearchClickDaily, SearchDocument, SearchIndexState, SearchPosting, SearchSnapshot, SearchSnapshotPosting
+from .vectors import vector_reference
 
 CANDIDATE_LIMIT = 200
 MAX_QUERY_TERMS = 24
 
 
-def body_readable_posts(request, queryset):
-    queryset = readable_post_queryset(request, queryset).exclude(wr_option__contains="secret")
+def body_readable_posts(request, queryset, *, include_readable_secrets=False):
+    queryset = readable_post_queryset(request, queryset)
+    if not include_readable_secrets:
+        queryset = queryset.exclude(wr_option__contains="secret")
     user = getattr(request, "user", None)
     if not point_ledger.points_enabled() or (user and is_admin(user)):
         return queryset
@@ -77,23 +78,23 @@ def _matching_tokens(docs, query, *, allowed_body, fields=("title", "body"), sna
         return docs.none().annotate(_search_rank=Value(0.0), _body_allowed=Value(False))
     docs = docs.annotate(_body_allowed=Case(When(allowed_body, then=True), default=False, output_field=BooleanField()))
     if connections[docs.db].vendor == "postgresql":
-        from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
+        from django.contrib.postgres.search import SearchRank
 
-        search = reduce(or_, [SearchQuery(encoded(term), config="simple", search_type="plain") for term in set(query_terms)])
-        docs = docs.alias(_title_vector=SearchVector("title_tokens", config="simple"),
-                          _body_vector=SearchVector("body_tokens", config="simple"))
+        search = postgres_query(query_terms)
+        docs = docs.alias(_title_vector=vector_reference("title_vector"),
+                          _body_vector=vector_reference("body_vector"))
         # Keep title/body retrieval in separate branches. An OR containing the
         # permission subquery can force PostgreSQL to scan every token row.
         indexed = docs.model.objects.using(docs.db)
         branches = []
         title_rank, body_rank = Value(0.0), Value(0.0)
         if "title" in fields:
-            branches.append(indexed.alias(_vector=SearchVector("title_tokens", config="simple")).filter(
+            branches.append(indexed.alias(_vector=vector_reference("title_vector")).filter(
                 _vector=search).order_by().values("pk"))
-            title_rank = SearchRank(SearchVector("title_tokens", config="simple"), search)
+            title_rank = SearchRank(vector_reference("title_vector"), search)
         if "body" in fields:
             branches.append(docs.filter(allowed_body, _body_vector=search).order_by().values("pk"))
-            body_rank = Case(When(allowed_body, then=SearchRank(SearchVector("body_tokens", config="simple"), search)),
+            body_rank = Case(When(allowed_body, then=SearchRank(vector_reference("body_vector"), search)),
                              default=Value(0.0), output_field=FloatField())
         if not branches:
             return docs.none().annotate(_search_rank=Value(0.0))
@@ -102,13 +103,13 @@ def _matching_tokens(docs, query, *, allowed_body, fields=("title", "body"), sna
 
     def frequency(field):
         model, relation = (SearchSnapshotPosting, "snapshot_id") if snapshots else (SearchPosting, "document_id")
-        match = model.objects.filter(**{relation: OuterRef("pk")}, field=field, term__in=set(query_terms))
+        match = model.objects.filter(posting_match(query_terms), **{relation: OuterRef("pk")}, field=field)
         return Coalesce(Subquery(match.order_by().values(relation).annotate(n=Sum("frequency")).values("n")[:1]), 0)
 
     # IN subqueries start at the term/field B-tree index instead of scanning source bodies.
     model, relation = (SearchSnapshotPosting, "snapshot_id") if snapshots else (SearchPosting, "document_id")
-    title_ids = model.objects.filter(field="title", term__in=set(query_terms)).values(relation)
-    body_ids = model.objects.filter(field="body", term__in=set(query_terms)).values(relation)
+    title_ids = model.objects.filter(posting_match(query_terms), field="title").values(relation)
+    body_ids = model.objects.filter(posting_match(query_terms), field="body").values(relation)
     matches = Q(pk__in=[])
     title_rank, body_rank = Value(0.0), Value(0.0)
     if "title" in fields:
@@ -134,11 +135,11 @@ def _active_snapshot_documents(docs, query, *, allowed_body, fields):
         return docs.none().annotate(_search_rank=Value(0.0))
     title_rank, body_rank = Value(0.0), Value(0.0)
     if connections[docs.db].vendor == "postgresql":
-        from django.contrib.postgres.search import SearchQuery, SearchRank, SearchVector
-        search = reduce(or_, [SearchQuery(encoded(term), config="simple", search_type="plain") for term in set(query_terms)])
+        from django.contrib.postgres.search import SearchRank
+        search = postgres_query(query_terms)
         branches = []
         for field in fields:
-            hits = SearchSnapshot.objects.using(docs.db).alias(_vector=SearchVector(f"{field}_tokens", config="simple")).filter(
+            hits = SearchSnapshot.objects.using(docs.db).alias(_vector=vector_reference(f"{field}_vector")).filter(
                 _vector=search,
             )
             if field == "body":
@@ -149,15 +150,15 @@ def _active_snapshot_documents(docs, query, *, allowed_body, fields):
         ids = branches[0].union(*branches[1:]) if len(branches) > 1 else branches[0]
         docs = docs.filter(_live__pk__in=ids)
         if "title" in fields:
-            title_rank = SearchRank(SearchVector("_live__title_tokens", config="simple"), search)
+            title_rank = SearchRank(vector_reference("_live__title_vector"), search)
         if "body" in fields:
-            body_rank = Case(When(allowed_body, then=SearchRank(SearchVector("_live__body_tokens", config="simple"), search)),
+            body_rank = Case(When(allowed_body, then=SearchRank(vector_reference("_live__body_vector"), search)),
                              default=Value(0.0), output_field=FloatField())
     else:
         matches = Q(pk__in=[])
         ranks = {}
         for field in fields:
-            postings = SearchSnapshotPosting.objects.using(docs.db).filter(field=field, term__in=set(query_terms))
+            postings = SearchSnapshotPosting.objects.using(docs.db).filter(posting_match(query_terms), field=field)
             ids = postings.filter(snapshot__generation__in=Subquery(generations)).values("snapshot__document_id")
             matches |= Q(pk__in=ids) & (allowed_body if field == "body" else Q())
             frequency = postings.filter(snapshot_id=OuterRef("_live__pk")).order_by().values("snapshot_id").annotate(n=Sum("frequency"))
@@ -206,8 +207,17 @@ def indexed_queryset(queryset, query, *, kind, fields=("title", "body"), request
             return None
         body = Q(post_id__in=body_readable_posts(request, queryset).values("pk"))
     hits = matching_documents(docs, query, allowed_body=body, fields=fields)
-    return queryset.filter(pk__in=hits.values(f"{kind}_id")).annotate(
-        _search_rank=Subquery(hits.filter(**{f"{kind}_id": OuterRef("pk")}).values("_search_rank")[:1]),
+    matches = Q(pk__in=hits.values(f"{kind}_id"))
+    if kind == "post" and "body" in fields:
+        # Secret bodies never enter the shared index. Preserve the legacy
+        # author's/unlocked-session literal search through live read permissions.
+        secrets = body_readable_posts(request, queryset, include_readable_secrets=True).filter(
+            wr_option__contains="secret", wr_content__icontains=query,
+        )
+        matches |= Q(pk__in=secrets.values("pk"))
+    return queryset.filter(matches).annotate(
+        _search_rank=Coalesce(Subquery(hits.filter(**{f"{kind}_id": OuterRef("pk")}).values("_search_rank")[:1]),
+                              Value(0.0), output_field=FloatField()),
     ).order_by("-_search_rank", "-pk")
 
 
@@ -219,6 +229,30 @@ def popular_terms():
         words = [(row["keyword"], row["cnt"]) for row in popular_keyword_rows(days=7, limit=50)]
         cache.set(key, words, 60)
     return words
+
+
+def _postgres_scoring_fields(hits, query_terms):
+    # Keep raw token fields as SQL aliases, not SELECT columns. Send only query
+    # frequencies and document lengths for the bounded candidate pool to Python.
+    hits = hits.alias(_search_title_tokens=F("_search_title_tokens"), _search_body_tokens=F("_search_body_tokens"))
+    prefixes = prefix_terms(query_terms)
+    stats = {}
+    for field in ("title", "body"):
+        name = f"_search_{field}_tokens"
+        token_text = F(name)
+        frequencies = JSONObject(**{
+            encoded(term): Func(token_text, Value(r"(?<!\S)" + encoded(term) + ("[0-9a-f]*" if term in prefixes else "") + r"(?!\S)"),
+                                function="REGEXP_COUNT", output_field=IntegerField()) for term in sorted(set(query_terms))
+        })
+        length = Case(When(**{name: "", "then": Value(0)}),
+                      default=Length(token_text) - Length(Replace(token_text, Value(" "), Value(""))) + 1,
+                      output_field=IntegerField())
+        if field == "body":
+            frequencies = Case(When(_body_allowed=True, then=frequencies), default=Value({}, output_field=JSONField()))
+            length = Case(When(_body_allowed=True, then=length), default=Value(0), output_field=IntegerField())
+        stats[f"_search_{field}_stats"] = frequencies
+        stats[f"_search_{field}_length"] = length
+    return hits.annotate(**stats)
 
 
 def ranked_results(request, query, *, result_type="all", bo_table="", page=None, limit=20):
@@ -238,14 +272,24 @@ def ranked_results(request, query, *, result_type="all", bo_table="", page=None,
             _search_title_tokens=F("title_tokens"), _search_body_tokens=F("body_tokens"),
         ).order_by("-_search_rank", "-pk")
         total, fuzzy = hits.count(), True
+    query_terms = terms(query, MAX_QUERY_TERMS)
+    # REGEXP_COUNT is available from PostgreSQL 15. PostgreSQL 14 keeps the
+    # equivalent Python token path while still using stored FTS vectors.
+    postgres = connections[docs.db].vendor == "postgresql" and getattr(connections[docs.db], "pg_version", 0) >= 150000
+    if postgres:
+        hits = _postgres_scoring_fields(hits, query_terms)
     group = docs_group_id()
     candidates = list(hits.annotate(_manual=Case(
         When(post__board__group__gr_id=group, then=True), default=False, output_field=BooleanField(),
     )).only("pk", "kind", "title", "post_id", "product_id", "page_id")[:CANDIDATE_LIMIT])
-    query_terms = terms(query, MAX_QUERY_TERMS)
     encoded_query = [encoded(term) for term in query_terms]
-    title_scores = bm25_scores([doc._search_title_tokens.split() for doc in candidates], encoded_query)
-    body_scores = bm25_scores([doc._search_body_tokens.split() if doc._body_allowed else [] for doc in candidates], encoded_query)
+    if postgres:
+        title_scores = bm25_from_stats([doc._search_title_stats for doc in candidates], [doc._search_title_length for doc in candidates], encoded_query)
+        body_scores = bm25_from_stats([doc._search_body_stats for doc in candidates], [doc._search_body_length for doc in candidates], encoded_query)
+    else:
+        prefixes = {encoded(term) for term in prefix_terms(query_terms)}
+        title_scores = bm25_scores([doc._search_title_tokens.split() for doc in candidates], encoded_query, prefixes=prefixes)
+        body_scores = bm25_scores([doc._search_body_tokens.split() if doc._body_allowed else [] for doc in candidates], encoded_query, prefixes=prefixes)
     scores = [title * 4.0 + body for title, body in zip(title_scores, body_scores)]
     clicks = dict(SearchClickDaily.objects.filter(
         query_hash=query_hash(query), document__in=candidates,

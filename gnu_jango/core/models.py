@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.cache import cache
 from django.db import models
+from gnu_jango.site_search.source import SearchIndexedSource
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
@@ -119,7 +120,7 @@ class Editor_attachments(models.Model):
         verbose_name_plural = _("Editor attachments")
 
 
-class ContentPage(models.Model):
+class ContentPage(SearchIndexedSource):
     co_id = models.CharField(max_length=64, primary_key=True)
     co_subject = models.CharField(max_length=255, default="", blank=True)
     co_content = models.TextField(default="", blank=True)
@@ -276,15 +277,49 @@ class Notification(models.Model):
     dday_id = models.CharField(max_length=64, default="", blank=True)
     nt_sent_at = models.DateTimeField(default=timezone.now)
     nt_read_at = models.DateTimeField(null=True, blank=True)
+    event_key = models.CharField(max_length=128, unique=True, null=True, blank=True, editable=False)
 
     def __str__(self):
         return self.nt_title or str(self.nt_id)
 
     class Meta:
         db_table = defaults.DB_PREFIX + "notification"
+        indexes = [models.Index(fields=["user", "nt_read_at", "-nt_sent_at", "-nt_id"], name="notification_unread_idx")]
         verbose_name = _("Notification")
         verbose_name_plural = _("Notifications")
         ordering = ["-nt_sent_at", "-nt_id"]
+
+
+class NotificationWork(models.Model):
+    """Durable retry work; only the worker contacts Redis."""
+
+    event_key = models.CharField(max_length=128, unique=True)
+    kind = models.CharField(max_length=10, choices=(("create", "Create inbox notification"), ("hint", "Publish change hint")))
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    payload = models.JSONField(default=dict)
+    attempts = models.PositiveIntegerField(default=0)
+    error_type = models.CharField(max_length=80, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    available_at = models.DateTimeField(default=timezone.now)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = defaults.DB_PREFIX + "notification_work"
+        indexes = [models.Index(fields=["completed_at", "available_at"], name="notification_work_due_idx")]
+
+
+class NotificationAnnouncement(models.Model):
+    """One committed batch per signed administrator request, independent of caches."""
+
+    request_id = models.CharField(max_length=64, primary_key=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+    content_digest = models.CharField(max_length=64)
+    recipient_count = models.PositiveIntegerField(default=0)
+    status = models.CharField(max_length=10, default="pending", choices=(("pending", "Pending"), ("sent", "Sent")))
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = defaults.DB_PREFIX + "notification_announcement"
 
 
 class MailCampaign(models.Model):
