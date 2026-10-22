@@ -82,6 +82,9 @@ Python 점검은 실제 `db.sqlite3` 대신 기존 외부 작업용 SQLite 설�
 
 이 기록 시점에는 보호된 main의 필수 CI 검사를 진행 중이다. 두 Vercel Preview는 READY이며 데모 Preview 상태 API에서 새 커밋을 확인했다.
 첫 Docker smoke에서 이름 없는 PostgreSQL 설정으로 생성 열 기능 검사를 할 수 없어 실패했으며, CI 전용 인메모리 SQLite 설정을 명시하도록 보완했다.
+이후 PostgreSQL 전체 CI 검사 2,752개(9개 건너뜀), 커버리지 79%, Docker 및 두 테마 검사가 통과했다.
+프런트엔드 타입·린트·결제 반환 검사도 통과했으나 `ubuntu-latest`가 Ubuntu 26.04로 바뀌어 고정된 Playwright의 브라우저 설치가 실패했다.
+브라우저 작업을 지원 플랫폼인 Ubuntu 24.04에 고정하고 다시 검증한다.
 개발 서버 8081과 실제 로컬 DB 및 루트 Vercel 프로젝트 연결은 유지했다.
 
 배포 시 먼저 DB 백업과 마이그레이션 계획을 확인해야 한다.

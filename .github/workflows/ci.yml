@@ -77,7 +77,8 @@ jobs:
   nextjs:
     # CI runs in the public repository only; a private copy of the code skips it.
     if: ${{ !github.event.repository.private }}
-    runs-on: ubuntu-latest
+    # Keep the browser job on a platform supported by the pinned Playwright release.
+    runs-on: ubuntu-24.04
     env:
       NEXT_PUBLIC_APP_URL: http://localhost:3000
       NEXT_PUBLIC_AUTH_MODE: g5-jwt
