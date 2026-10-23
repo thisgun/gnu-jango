@@ -19,6 +19,14 @@ from unfold.admin import ModelAdmin
 
 AUDIT_PAGE_SIZE = 50
 AUDIT_PER_MODEL_LIMIT = 500
+# get_history_type_display() reuses Django's "created" translation, which the Korean locale
+# renders as "생성일시" (a timestamp). The audit screen needs action verbs.
+AUDIT_ACTION_LABELS = {
+    "+": "생성",
+    "~": "변경",
+    "-": "삭제",
+}
+AUDIT_ACTION_CHOICES = tuple(AUDIT_ACTION_LABELS.items())
 
 
 class UnfoldHistoryAdmin(SimpleHistoryAdmin, ModelAdmin):
@@ -145,9 +153,9 @@ def _change_summary(record):
     """
 
     if record.history_type == "+":
-        return str(_("Created"))
+        return AUDIT_ACTION_LABELS["+"]
     if record.history_type == "-":
-        return str(_("Deleted"))
+        return AUDIT_ACTION_LABELS["-"]
     previous = record.prev_record
     if previous is None:
         return ""
@@ -211,7 +219,7 @@ def audit_log_view(request):
                     "model_label": spec["label"],
                     "object_label": spec["object_repr"](record) or "-",
                     "action": record.history_type,
-                    "action_label": record.get_history_type_display(),
+                    "action_label": AUDIT_ACTION_LABELS.get(record.history_type, record.history_type),
                     "user": getattr(record.history_user, "username", "") or _("System"),
                     "history_date": record.history_date,
                     "url": _history_url(model, record),
@@ -242,6 +250,7 @@ def audit_log_view(request):
             "date_from": date_from.isoformat() if date_from else "",
             "date_to": date_to.isoformat() if date_to else "",
         },
+        "action_choices": AUDIT_ACTION_CHOICES,
         "audit_per_model_limit": AUDIT_PER_MODEL_LIMIT,
     }
     return TemplateResponse(request, "admin/core/audit_log.html", context)

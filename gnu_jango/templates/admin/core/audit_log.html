@@ -31,9 +31,9 @@
       <span>{% translate 'Action' %}</span>
       <select name="action">
         <option value="">{% translate 'All actions' %}</option>
-        <option value="+"{% if filters.action == "+" %} selected{% endif %}>{% translate 'Created' %}</option>
-        <option value="~"{% if filters.action == "~" %} selected{% endif %}>{% translate 'Changed' %}</option>
-        <option value="-"{% if filters.action == "-" %} selected{% endif %}>{% translate 'Deleted' %}</option>
+        {% for value, label in action_choices %}
+        <option value="{{ value }}"{% if filters.action == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
       </select>
     </label>
     <label>
