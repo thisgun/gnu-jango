@@ -69,6 +69,20 @@
 
 기존 설치에서는 기본값 `False`를 유지하며 Docker Compose에서는 새 모드를 기본으로 사용한다. 이번 작업에서 공개 데모·핸드북 설정 변경, 운영 DB 마이그레이션, 상시 작업자 배포는 수행하지 않았다.
 
+## 외부 작업자 배포 준비 (2026-10-24)
+
+- 기존 검증·재처리 수정은 `f43bf339e`로 커밋했다.
+- `docker-compose.background.yml`과 저장소 밖 환경 파일용 템플릿을 추가했다. 기존 Vercel·Supabase 사이트의 DB·S3를 이용하며 새 웹·DB 서비스를 생성하지 않는다. 사이트별 Compose 프로젝트와 Redis·Beat 볼륨을 분리한다.
+- 외부 작업자 전용 entrypoint는 PostgreSQL·S3 설정을 요구하고, 호환 설정 및 `migrate --check` 확인 후 시작한다. 누락된 마이그레이션을 자동 적용하지 않는다.
+- 기본 Compose의 웹·작업자·Beat 환경을 공통 매핑으로 합쳤다. 기존에 누락된 SMS·PG·S3 설정을 함께 전달한다. env 파일의 보간만으로 컨테이너 환경 변수가 전달된다고 가정하지 않는다.
+- Vercel 운영 설정의 S3 검사가 비동기 저장소 wrapper를 잘못 거부하던 문제를 수정했다. 실제 원본 저장소가 S3인지 검사하며 로컬 저장소 거부는 유지한다.
+- `.dockerignore`에서 로컬 worktree·도구 설정·가상환경·SQLite를 제외했다. 최종 이미지 안에 `.wt-docs-ask`, `.serena`, `.claude`, 가상환경과 `db.sqlite3`가 없는지 확인했다.
+- 합성 설정으로 기본 Compose, realtime + monitoring, 독립 작업자 + monitoring 구성을 확인했다. 기본 Compose의 웹·각 작업자에 공급자 설정이 동일하게 전달되며 독립 구성에는 웹·DB·공개 Redis 포트가 없는 것을 확인했다.
+- 운영 설정은 Vercel 비동기 켜짐·꺼짐 각각 로딩 및 호환 검사를 통과했고, Vercel 로컬 미디어 설정은 계속 거부했다.
+- 최종 Docker 이미지 빌드, 비특권 사용자 실행, `$`·`#`를 포함한 합성 키의 실제 컨테이너 전달, entrypoint 실행 권한·셸 구문, DB 주소 미설정 시 연결 전에 중단하는 동작을 확인했다. 이번 준비 단계에서 자동 테스트를 추가·재실행하지는 않았다.
+
+실제 서버 주소·SSH 사용자·대상 사이트가 제공되지 않아 원격 배포와 사업자 테스트키 발송·결제 검증은 실행하지 않았다. 기존 개발 서버와 운영 DB·환경 변수는 유지한다. 구체적인 명령과 전환·중단 순서는 [외부 작업자 배포 안내](../../04-deploy/external-background-workers.md)에 기록했다.
+
 ## 문서
 
 - [계획·PRD](../../01-plan/features/celery-beat-background-jobs.plan.md)

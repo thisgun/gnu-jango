@@ -47,7 +47,7 @@ RUN SECRET_KEY=build-only-not-secret ALLOWED_HOSTS=localhost \
 
 RUN mkdir -p /app/media /app/logs /app/runtime/beat /app/runtime/flower \
     && chown -R app:app /app/media /app/logs /app/runtime \
-    && chmod +x /app/docker/entrypoint.sh
+    && chmod +x /app/docker/entrypoint.sh /app/docker/background-entrypoint.sh
 
 USER app
 

@@ -1,0 +1,89 @@
+# Standalone workers for an existing Vercel/Supabase site. Do not merge with docker-compose.yml.
+# Keep one unique BACKGROUND_PROJECT and private env file per site.
+name: ${BACKGROUND_PROJECT:?Set a unique BACKGROUND_PROJECT for this site}
+
+x-background-runtime: &background-runtime
+  build:
+    context: .
+    args:
+      INSTALL_REALTIME: ${BACKGROUND_INSTALL_REALTIME:-0}
+  image: ${BACKGROUND_IMAGE:-gnu-jango-background:local}
+  # raw preserves literal $, # and quotes in existing keys; Compose >= 2.30 is required.
+  env_file:
+    - path: ${BACKGROUND_ENV_FILE:?Set the absolute path to the private worker env file}
+      format: raw
+  environment:
+    DJANGO_SETTINGS_MODULE: example.settings.production
+    ENVIRONMENT: Production
+    DEBUG: "False"
+    RUN_MIGRATIONS: "0"
+    BACKGROUND_JOBS_ENABLED: "True"
+    CELERY_TASK_ALWAYS_EAGER: "False"
+    MEDIA_STORAGE: s3
+    LOG_TO_FILE: "False"
+  entrypoint: ["/app/docker/background-entrypoint.sh"]
+  restart: unless-stopped
+  stop_grace_period: 330s
+  depends_on:
+    redis:
+      condition: service_healthy
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    # No published port: only this site's containers can reach Redis.
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
+  worker:
+    <<: *background-runtime
+    command: celery -A example worker --loglevel=INFO --queues=celery,maintenance,communications,payments --concurrency=2 --max-tasks-per-child=200 --hostname=general@%h
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A example inspect ping --destination=general@$${HOSTNAME} --timeout=3"]
+      interval: 60s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  media-worker:
+    <<: *background-runtime
+    command: celery -A example worker --loglevel=INFO --queues=media --concurrency=1 --max-tasks-per-child=50 --hostname=media@%h
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A example inspect ping --destination=media@$${HOSTNAME} --timeout=3"]
+      interval: 60s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  beat:
+    <<: *background-runtime
+    command: celery -A example beat --loglevel=INFO --schedule=/app/runtime/beat/celerybeat-schedule
+    volumes:
+      - beat_data:/app/runtime/beat
+
+  flower:
+    <<: *background-runtime
+    profiles: ["monitoring"]
+    image: ${BACKGROUND_MONITORING_IMAGE:-gnu-jango-background-monitoring:local}
+    build:
+      context: .
+      args:
+        INSTALL_MONITORING: "1"
+        INSTALL_REALTIME: ${BACKGROUND_INSTALL_REALTIME:-0}
+    command: celery -A example flower --conf=/app/docker/flowerconfig.py
+    ports:
+      - "127.0.0.1:${FLOWER_PORT:-5555}:5555"
+    volumes:
+      - flower_data:/app/runtime/flower
+
+volumes:
+  redis_data:
+  beat_data:
+  flower_data:

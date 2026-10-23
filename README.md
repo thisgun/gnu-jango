@@ -375,6 +375,8 @@ celery -A example beat -l INFO
 
 재시도·타임아웃·실패 작업 재처리·이미지 처리 중 표시·Vercel 외부 작업자 구성은 [백그라운드 작업 운영 가이드](docs/04-deploy/background-jobs.md)를 참고하세요. 새 모드로 전환한 뒤에는 기존 cron 예약을 끄세요. 기존 `python manage.py run_scheduled_jobs`는 수동 점검과 이전 배포 구성을 위한 명령으로 유지합니다.
 
+기존 Vercel·Supabase 사이트에 작업자만 추가하려면 [외부 작업자 배포 안내](docs/04-deploy/external-background-workers.md)를 따르세요. 독립 파일 `docker-compose.background.yml`은 별도 Linux 서버에서 Redis·일반 작업자·이미지 작업자·Beat를 실행하며, 기존 웹·DB를 새로 만들거나 시작 시 마이그레이션을 자동 적용하지 않습니다.
+
 ## 개발 점검
 
 GitHub의 `main` 브랜치는 관리자도 직접 푸시할 수 없도록 보호됩니다. 변경사항은 PR로 올리고 `django`, `nextjs`, `theme-bundles`, `docker` 점검이 모두 통과한 뒤 병합하세요. PR의 기준 브랜치가 최신 상태여야 합니다.

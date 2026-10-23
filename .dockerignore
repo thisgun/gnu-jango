@@ -1,5 +1,15 @@
 .git
 .vercel
+.wt-*
+.worktrees
+.git-worktrees
+.serena
+.claude
+.idea
+.vscode
+.ruff_cache
+.pytest_cache
+gnu_jango.egg-info
 .github
 .env*
 **/.env*
@@ -9,7 +19,12 @@ __pycache__
 *.pyc
 *.log
 db.sqlite3
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
 media
+uploads
 staticfiles
 node_modules
 nextjs/.next
@@ -23,6 +38,7 @@ nextjs
 docs
 scripts
 react_example
+test
 deploy
 .github
 **/tests.py
