@@ -71,7 +71,7 @@ jobs:
   vercel:
     if: >-
       ${{ !github.event.repository.private &&
-          (vars.VERCEL_DEPLOY == 'true' || vars.RUN_DB_MIGRATIONS == 'true') &&
+          (vars.VERCEL_DEPLOY == 'true' || vars.RUN_DB_MIGRATIONS == 'true' || vars.VERCEL_DEPLOY_HOOK == 'true') &&
           (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
     runs-on: ubuntu-latest
     environment: production
@@ -110,6 +110,16 @@ jobs:
           pip install -r requirements.txt
           python manage.py migrate --plan
           python manage.py migrate --noinput
+      - name: Trigger Vercel production deploy
+        if: vars.VERCEL_DEPLOY_HOOK == 'true'
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$VERCEL_DEPLOY_HOOK_URL" ]; then
+            echo "::error::VERCEL_DEPLOY_HOOK_URL is not set"
+            exit 1
+          fi
+          curl --fail --silent --show-error --request POST "$VERCEL_DEPLOY_HOOK_URL"
       - name: Deploy to Vercel (production)
         if: vars.VERCEL_DEPLOY == 'true'
         run: |
