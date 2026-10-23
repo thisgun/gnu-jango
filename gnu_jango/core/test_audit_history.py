@@ -8,6 +8,7 @@ settings history, and that the admin history screen is wired to the Unfold admin
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.db import transaction
 from django.forms.models import model_to_dict
 from django.http import HttpResponse
 from django.test import RequestFactory, TestCase
@@ -17,7 +18,16 @@ from simple_history.middleware import HistoryRequestMiddleware
 
 from gnu_jango.config.models import Config, REDACTED_CONFIG_VALUE
 from gnu_jango.shop.admin.orders import ShopOrderAdmin
-from gnu_jango.shop.models import ShopCouponLog, ShopOrder
+from gnu_jango.shop.models import (
+    ShopCategory,
+    ShopCoupon,
+    ShopCouponLog,
+    ShopOrder,
+    ShopOrderItem,
+    ShopProduct,
+    ShopShippingPolicy,
+)
+from gnu_jango.shop.order_points import save_order_item_status
 from gnu_jango.users.models import User_Point
 
 
@@ -106,6 +116,90 @@ class AuditHistoryModelTests(TestCase):
 
         self.assertEqual(cart.history.count(), 0)
 
+    def test_product_price_change_creates_history(self):
+        product = ShopProduct.objects.create(
+            it_id="AUDIT-PRODUCT",
+            it_name="Audit product",
+            it_price=1000,
+        )
+        self.assertEqual(product.history.count(), 1)
+
+        product.it_price = 2000
+        product.save()
+
+        self.assertEqual(product.history.count(), 2)
+        self.assertEqual(product.history.first().it_price, 2000)
+        self.assertEqual(product.history.first().prev_record.it_price, 1000)
+        self.assertFalse(hasattr(product.history.first(), "it_content"))
+        self.assertFalse(hasattr(product.history.first(), "images"))
+
+    def test_order_line_change_creates_history(self):
+        order = ShopOrder.objects.create(od_id="AUDIT-LINE-ORDER", od_name="Audit line")
+        line = ShopOrderItem.objects.create(
+            order=order,
+            ct_id="1",
+            it_id="AUDIT-PRODUCT",
+            it_name="Audit product",
+            ct_price=1000,
+            ct_qty=1,
+            ct_status="주문",
+        )
+        self.assertEqual(line.history.count(), 1)
+
+        line.ct_qty = 2
+        line.ct_status = "취소"
+        line.save()
+
+        self.assertEqual(line.history.count(), 2)
+        self.assertEqual(line.history.first().ct_qty, 2)
+        self.assertEqual(line.history.first().ct_status, "취소")
+
+    def test_bulk_line_status_helper_writes_history(self):
+        order = ShopOrder.objects.create(od_id="AUDIT-LINE-HELPER", od_name="Audit helper")
+        line = ShopOrderItem.objects.create(
+            order=order,
+            ct_id="1",
+            it_id="AUDIT-PRODUCT",
+            it_name="Audit product",
+            ct_price=1000,
+            ct_qty=1,
+            ct_status="주문",
+        )
+        with transaction.atomic():
+            save_order_item_status(
+                ShopOrderItem.objects.filter(pk=line.pk),
+                "입금",
+                reason="test line transition",
+            )
+
+        self.assertEqual(line.history.count(), 2)
+        self.assertEqual(line.history.first().ct_status, "입금")
+        self.assertEqual(line.history.first().history_change_reason, "test line transition")
+
+    def test_coupon_definition_change_creates_history(self):
+        coupon = ShopCoupon.objects.create(cp_subject="Audit coupon", cp_price=1000)
+        self.assertEqual(coupon.history.count(), 1)
+
+        coupon.cp_price = 2000
+        coupon.save()
+
+        self.assertEqual(coupon.history.count(), 2)
+        self.assertEqual(coupon.history.first().cp_price, 2000)
+        self.assertFalse(hasattr(coupon.history.first(), "cp_used"))
+
+    def test_shipping_policy_change_creates_history(self):
+        policy = ShopShippingPolicy.objects.create(
+            de_delivery_company="Audit courier",
+            de_send_cost_list="3000",
+        )
+        self.assertEqual(policy.history.count(), 1)
+
+        policy.de_send_cost_list = "4000"
+        policy.save()
+
+        self.assertEqual(policy.history.count(), 2)
+        self.assertEqual(policy.history.first().de_send_cost_list, "4000")
+
 
 class AuditHistoryAdminTests(TestCase):
     @classmethod
@@ -130,10 +224,35 @@ class AuditHistoryAdminTests(TestCase):
         )
         cls.coupon_log = ShopCouponLog.objects.create(cl_id=990002, cp_id="AUDIT-ADMIN-COUPON", cp_price=500)
         cls.config = Config.objects.create(name="cf_audit_admin", value="one")
+        cls.category = ShopCategory.objects.create(ca_id="AUD", ca_name="Audit category")
+        cls.product = ShopProduct.objects.create(
+            it_id="AUDIT-ADMIN-PRODUCT",
+            it_name="Audit product",
+            category=cls.category,
+            it_price=1000,
+        )
+        cls.order_item = ShopOrderItem.objects.create(
+            order=cls.order,
+            ct_id="1",
+            it_id=cls.product.it_id,
+            it_name=cls.product.it_name,
+            ct_price=1000,
+            ct_qty=1,
+            ct_status="주문",
+        )
+        cls.coupon = ShopCoupon.objects.create(cp_subject="Audit coupon", cp_price=1000)
+        cls.shipping_policy = ShopShippingPolicy.objects.create(
+            de_delivery_company="Audit courier",
+            de_send_cost_list="3000",
+        )
         cls.order.history.update(history_user=cls.admin_user)
         cls.point.history.update(history_user=cls.admin_user)
         cls.coupon_log.history.update(history_user=cls.admin_user)
         cls.config.history.update(history_user=cls.admin_user)
+        cls.product.history.update(history_user=cls.admin_user)
+        cls.order_item.history.update(history_user=cls.admin_user)
+        cls.coupon.history.update(history_user=cls.admin_user)
+        cls.shipping_policy.history.update(history_user=cls.admin_user)
 
     def setUp(self):
         self.client.force_login(self.admin_user)
@@ -141,8 +260,12 @@ class AuditHistoryAdminTests(TestCase):
     def test_history_pages_render_for_each_audited_model(self):
         for url in (
             reverse("admin:shop_shoporder_history", args=[self.order.pk]),
-            reverse("admin:users_user_point_history", args=[self.point.pk]),
+            reverse("admin:shop_shoporderitem_history", args=[self.order_item.pk]),
+            reverse("admin:shop_shopproduct_history", args=[self.product.pk]),
+            reverse("admin:shop_shopcoupon_history", args=[self.coupon.pk]),
             reverse("admin:shop_shopcouponlog_history", args=[self.coupon_log.pk]),
+            reverse("admin:shop_shopshippingpolicy_history", args=[self.shipping_policy.pk]),
+            reverse("admin:users_user_point_history", args=[self.point.pk]),
             reverse("admin:config_config_history", args=[self.config.pk]),
         ):
             with self.subTest(url=url):
@@ -192,6 +315,8 @@ class AuditHistoryAdminTests(TestCase):
         self.assertContains(response, self.order.od_id)
         self.assertContains(response, self.coupon_log.cp_id)
         self.assertContains(response, self.config.name)
+        self.assertContains(response, self.product.it_id)
+        self.assertContains(response, self.coupon.cp_subject)
         self.assertContains(response, self.admin_user.username)
         self.assertContains(response, "Audit log")
         self.assertContains(

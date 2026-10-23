@@ -194,7 +194,7 @@ def move_order_status(order, target, *, actor="", send_sms=True):
     from gnu_jango.shop.inventory import append_order_history, order_history_line
     from gnu_jango.shop.notifications import queue_order_status_mail
     from gnu_jango.shop.sms.notifications import queue_order_status_sms
-    from gnu_jango.shop.order_points import item_status_update, take_back_order_points
+    from gnu_jango.shop.order_points import save_order_item_status, take_back_order_points
 
     with transaction.atomic():
         locked = ShopOrder.objects.select_for_update().filter(pk=order.pk).first()
@@ -221,6 +221,7 @@ def move_order_status(order, target, *, actor="", send_sms=True):
         locked.od_mod_history = append_order_history(
             locked.od_mod_history, order_history_line(f"주문상태 {previous}→{target} 처리", actor)
         )
+        locked._change_reason = f"주문상태 {previous}→{target}"[:100]
         # youngcart: "에스크로 사용시 배송과의 연동은 되지 않으며" - the Toss escrow delivery is
         # registered by hand in the Toss dashboard, so the order history and the admin say so
         escrow_delivery = target == STATUS_SHIPPING and order_paid_with_escrow(locked)
@@ -229,7 +230,11 @@ def move_order_status(order, target, *, actor="", send_sms=True):
                 locked.od_mod_history, order_history_line(ESCROW_DELIVERY_NOTICE, actor)
             )
         locked.save(update_fields=fields)
-        locked.items.exclude(ct_status__in=CANCELLED_STATUSES).update(**item_status_update(target))
+        save_order_item_status(
+            locked.items.exclude(ct_status__in=CANCELLED_STATUSES),
+            target,
+            reason=f"주문상태 {previous}→{target}",
+        )
         # youngcart orderformcartupdate.php: a paid line that leaves 완료 gives its point back
         take_back_order_points(locked)
         if target == STATUS_COMPLETED:

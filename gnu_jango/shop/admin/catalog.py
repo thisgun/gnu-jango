@@ -37,6 +37,7 @@ from gnu_jango.shop.admin.item_info_form import ItemInfoTextField, clean_item_in
 from gnu_jango.shop.product_copy import copy_product, next_product_id
 from gnu_jango.shop.product_relations import mirror_product_relations
 from gnu_jango.shop.models import ShopProduct, ShopProductRelation, ShopStockAdjustment
+from gnu_jango.core.audit import UnfoldHistoryAdmin
 
 
 PRODUCT_TYPE_FIELDS = (
@@ -241,7 +242,12 @@ class ShopCategoryAdmin(ModelAdmin):
 
 
 @admin.register(ShopProduct)
-class ShopProductAdmin(ModelAdmin):
+class ShopProductAdmin(UnfoldHistoryAdmin):
+    def revert_disabled(self, request, obj=None):
+        # A product revision also carries stock/options; restoring it would bypass the stock
+        # adjustment path and can desync reservations. History is read-only here.
+        return True
+
     form = ShopProductAdminForm
     action_form = ShopProductActionForm
     actions = ("add_selected_to_event", "update_selected_product_type", "copy_selected_products")
@@ -1156,7 +1162,11 @@ class ShopEventItemAdmin(ModelAdmin):
 
 
 @admin.register(ShopOrderItem)
-class ShopOrderItemAdmin(ModelAdmin):
+class ShopOrderItemAdmin(UnfoldHistoryAdmin):
+    def revert_disabled(self, request, obj=None):
+        # Line status/qty changes move stock and purchase points; use the order line tools.
+        return True
+
     list_display = (
         "ct_id",
         "order_link",

@@ -94,6 +94,7 @@ class Command(BaseCommand):
                 locked, _ = cancel_order_with_stock_restore(locked, "Toss virtual account deposit deadline expired")
                 locked.refresh_from_db()
                 locked.od_vbank_status = "CANCELED"
+                locked._change_reason = "Toss vbank deposit deadline expired"
                 locked.save(update_fields=["od_vbank_status"])
             summary["cancelled"] += 1
             self.add_sample(summary, order, "cancelled")
