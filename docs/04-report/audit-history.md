@@ -65,21 +65,38 @@ python manage.py backfill_audit_history --import-order-history
   상태 외 필드는 현재 스냅샷이며 `history_change_reason`에 `od_mod_history import`를 남긴다.
 - `Config` 백필은 실제 설정 접두사(`cf_`, `de_`, `shop_`, `pg_`)만 대상으로 한다. 장바구니
   같은 임시 행은 제외한다.
-- 보관 기간 정책이 필요하면 `Historical*` 테이블에서 `history_date` 기준으로 오래된 행을
-  삭제하는 배치를 별도로 둔다. 삭제 전 개인정보 보관 기간과 분쟁 대응 기간을 함께 검토한다.
+- Audit log의 **CSV 다운로드**는 현재 필터 결과(모델별 최대 500건)를 내려받는다.
+- `Config` 이력 복원은 설정 화면과 같은 필드 타입으로 검증한다. 숫자/이메일/선택지가
+  잘못된 값이나 설정 화면에 없는 이름은 복원되지 않는다.
+- 보관 기간이 지난 이력은 아래 명령으로 삭제한다. 삭제 전 개인정보 보관 기간과 분쟁 대응
+  기간을 함께 검토하고, DB 백업/권한 분리 정책을 먼저 정한다.
+
+```bash
+# 365일보다 오래된 이력 삭제 (dry-run 먼저)
+python manage.py purge_audit_history --days 365 --dry-run
+python manage.py purge_audit_history --days 365
+```
+
+- `purge_audit_history`는 `--models`로 범위를 좁힐 수 있고, `history_date`만 기준으로
+  삭제한다. 기준일 이전의 최신 스냅샷도 예외 없이 삭제되므로, 최신 기준점을 남기려면
+  `--days`를 데이터 보관 정책에 맞게 조정해야 한다. 이력 테이블은 앱 레벨에서 수정
+  가능하므로 법적 불변성이 필요하면 DB 계정 권한/트리거/백업을 별도로 구성해야 한다.
+- `ShopProduct.options` JSON은 옵션별 재고 이력을 위해 포함한다. 고볼륨몰에서는
+  `shop_historicalshopproduct` 행 크기와 증가 속도를 모니터링한다.
 - 통합 감사 로그는 모델별 최근 500건을 스캔해 최신순으로 합친다. 기간·사용자·모델·검색어
   필터로 범위를 좁혀 사용한다.
 
 ## 테스트
 
-`gnu_jango/core/test_audit_history.py`, `test_audit_backfill.py`, `test_audit_api.py`가
-다음을 검증한다.
+`gnu_jango/core/test_audit_history.py`, `test_audit_backfill.py`, `test_audit_api.py`,
+`test_audit_retention.py`가 다음을 검증한다.
 
 - 8개 모델의 생성/수정 이력과 필드 diff
 - 주문/상품 이력에서 민감 필드·대용량 필드 제외
-- 설정 비밀값 마스킹
-- 관리자 이력 화면/통합 감사 로그 접근 권한과 액션 라벨
+- 설정 비밀값 마스킹과 복원 값 타입 검증
+- 관리자 이력 화면/통합 감사 로그 접근 권한·액션 라벨·CSV export
 - 설정 복원, 주문 안전 필드 복원/보호 필드 유지, 원장/카탈로그 복원 차단
 - 백필 초기 스냅샷·idempotency·`od_mod_history` 상태 이벤트 import
+- 보존 기간 초과 이력 삭제와 dry-run
 - JWT API 주문 생성 시 `history_user`가 회원으로 기록되는지
 - `HistoryRequestMiddleware`의 `history_user` 기록

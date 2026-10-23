@@ -5,13 +5,16 @@ admin skin. ``UnfoldHistoryAdmin`` is the one base class the audited ModelAdmins
 history screen, diff view and revert action keep Unfold's layout.
 """
 
+import csv
+
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.http import HttpResponseRedirect
+from django.http import HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, reverse
+from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.utils.translation import gettext_lazy as _
 from simple_history.admin import SimpleHistoryAdmin
@@ -220,6 +223,15 @@ def _change_summary(record):
     return "; ".join(parts)
 
 
+def _csv_safe(value):
+    """Prevent spreadsheet formula injection in exported audit values."""
+
+    text = str(value)
+    if text.startswith(("=", "+", "-", "@")):
+        return "'" + text
+    return text
+
+
 def audit_log_view(request):
     """One screen for every audited model, newest change first.
 
@@ -277,6 +289,27 @@ def audit_log_view(request):
             )
 
     entries.sort(key=lambda entry: entry["history_date"], reverse=True)
+
+    if (request.GET.get("export") or "").lower() == "csv":
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = 'attachment; filename="audit-log.csv"'
+        response.write("\ufeff")
+        writer = csv.writer(response)
+        writer.writerow(["시각", "사용자", "모델", "대상", "작업", "변경 내용", "이력 URL"])
+        for entry in entries:
+            writer.writerow(
+                [
+                    timezone.localtime(entry["history_date"]).strftime("%Y-%m-%d %H:%M:%S"),
+                    _csv_safe(entry["user"]),
+                    _csv_safe(entry["model_label"]),
+                    _csv_safe(entry["object_label"]),
+                    _csv_safe(entry["action_label"]),
+                    _csv_safe(_change_summary(entry["record"])),
+                    _csv_safe(request.build_absolute_uri(entry["url"]) if entry["url"] else ""),
+                ]
+            )
+        return response
+
     paginator = Paginator(entries, AUDIT_PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
     for entry in page_obj.object_list:
