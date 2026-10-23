@@ -99,6 +99,8 @@ INSTALLED_APPS = [
     "django.contrib.sites",
     "django.contrib.humanize",
     "django.contrib.postgres",
+    # Records field-level revisions for the models listed in gnu_jango/core/audit.py.
+    "simple_history",
     "django.contrib.redirects",
     "gnu_jango",  # 이것을 빼면 탬플릿태그가 동작이 안됨
     "gnu_jango.core",
@@ -189,6 +191,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Tags every history row written during a request with request.user.
+    "simple_history.middleware.HistoryRequestMiddleware",
     "gnu_jango.core.middleware.VisitTrackingMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -224,6 +228,11 @@ UNFOLD = {
                         "title": _("Dashboard"),
                         "icon": "dashboard",
                         "link": reverse_lazy("admin:index"),
+                    },
+                    {
+                        "title": _("Audit log"),
+                        "icon": "history",
+                        "link": reverse_lazy("admin-audit-log"),
                     },
                     {
                         "title": _("Shop orders"),

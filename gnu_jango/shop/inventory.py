@@ -2,7 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import ShopOrder, ShopProduct
-from .order_points import item_status_update, take_back_order_points
+from .order_points import save_order_item_status, take_back_order_points
 from .order_statuses import INACTIVE_LINE_STATUSES
 
 
@@ -146,7 +146,11 @@ def cancel_order_with_stock_restore(order, reason="", *, refund_price=0, history
             item.save(update_fields=fields)
 
         # a line already 취소/반품/품절 (a partial change) keeps what it became
-        locked_order.items.exclude(ct_status__in=INACTIVE_LINE_STATUSES).update(**item_status_update(status))
+        save_order_item_status(
+            locked_order.items.exclude(ct_status__in=INACTIVE_LINE_STATUSES),
+            status,
+            reason=history or reason or "order cancelled",
+        )
         # a line that already earned its purchase point gives it back
         take_back_order_points(locked_order)
 
@@ -159,6 +163,7 @@ def cancel_order_with_stock_restore(order, reason="", *, refund_price=0, history
             locked_order.od_mod_history,
             history or order_history_line(f"주문취소 처리{f' - {reason}' if reason else ''}"),
         )
+        locked_order._change_reason = (history or reason or "order cancelled")[:100]
         refund_price = max(0, int(refund_price or 0))
         # youngcart get_order_info: the cancelled goods amount; nothing is owed any more
         locked_order.od_cancel_price = locked_order.od_cart_price

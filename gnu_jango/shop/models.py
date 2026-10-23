@@ -9,6 +9,7 @@ from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import FileExtensionValidator
+from simple_history.models import HistoricalRecords
 
 
 # youngcart 완료: the status whose lines earn their purchase point (ct_complete_time is its clock).
@@ -218,6 +219,9 @@ class ShopShippingPolicy(models.Model):
     def __str__(self):
         return self.de_admin_company_name or self.de_delivery_company or f"Shipping policy #{self.pk}"
 
+    # A single row (pk=1) that feeds shipping fees and the shop phone; keep every revision.
+    history = HistoricalRecords()
+
 
 class ShopShippingCost(models.Model):
     sc_id = models.BigIntegerField(primary_key=True)
@@ -327,6 +331,28 @@ class ShopProduct(SearchIndexedSource):
     options = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Price/stock/option changes are what disputes need; long descriptions, images and
+    # view/sales counters are deliberately left out so a product edit does not copy the
+    # whole catalogue page into the history table.
+    history = HistoricalRecords(
+        excluded_fields=[
+            "it_basic",
+            "it_content",
+            "it_explan",
+            "it_head_html",
+            "it_tail_html",
+            "it_info_value",
+            "images",
+            "image_url",
+            "it_hit",
+            "it_sum_qty",
+            "it_use_cnt",
+            "it_use_avg",
+            "it_update_time",
+            "updated_at",
+        ]
+    )
 
     class Meta:
         ordering = ["-created_at", "it_id"]
@@ -597,6 +623,10 @@ class ShopCoupon(models.Model):
     cp_all_members = models.BooleanField(default=False)
     created_at = models.DateTimeField(default=timezone.now)
 
+    # The issued coupon's rules have to survive later edits; cp_used is usage state and is
+    # covered by ShopCouponLog, so it stays out of the definition history.
+    history = HistoricalRecords(excluded_fields=["cp_used"])
+
     class Meta:
         ordering = ["-created_at", "-cp_id"]
         verbose_name = _("Shop coupon")
@@ -643,6 +673,8 @@ class ShopCouponLog(models.Model):
     od_id = models.CharField(max_length=40, blank=True, default="")
     cp_price = models.IntegerField(default=0)
     cl_datetime = models.DateTimeField(default=timezone.now)
+
+    history = HistoricalRecords()
 
     class Meta:
         ordering = ["-cl_datetime", "-cl_id"]
@@ -759,6 +791,10 @@ class ShopOrder(models.Model):
     od_receipt_time = models.CharField(max_length=100, blank=True, default="")
     od_ip = models.GenericIPAddressField(null=True, blank=True)
 
+    # Field-level audit trail. The IP and the virtual-account secret hash are deliberately
+    # excluded: they are sensitive and never need to be restored from history.
+    history = HistoricalRecords(excluded_fields=["od_ip", "od_vbank_secret_hash"])
+
     class Meta:
         ordering = ["-od_datetime", "-od_id"]
         verbose_name = _("Shop order")
@@ -827,6 +863,8 @@ class ShopOrderItem(models.Model):
         if self.sync_complete_time() and update_fields is not None and "ct_status" in update_fields:
             kwargs["update_fields"] = {*update_fields, "ct_complete_time"}
         super().save(*args, **kwargs)
+
+    history = HistoricalRecords()
 
 
 class ShopOrderData(models.Model):

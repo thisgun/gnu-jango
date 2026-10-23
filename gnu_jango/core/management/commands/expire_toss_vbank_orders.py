@@ -92,7 +92,10 @@ class Command(BaseCommand):
                     continue
                 restore_order_coupons_and_points(locked)
                 locked, _ = cancel_order_with_stock_restore(locked, "Toss virtual account deposit deadline expired")
-                ShopOrder.objects.filter(pk=locked.pk).update(od_vbank_status="CANCELED")
+                locked.refresh_from_db()
+                locked.od_vbank_status = "CANCELED"
+                locked._change_reason = "Toss vbank deposit deadline expired"
+                locked.save(update_fields=["od_vbank_status"])
             summary["cancelled"] += 1
             self.add_sample(summary, order, "cancelled")
 

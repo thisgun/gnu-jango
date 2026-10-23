@@ -613,7 +613,11 @@ def _apply_plan(order, plan, reason, actor):
         # youngcart orderformcartupdate.php: a paid purchase point of a line that leaves 완료 goes back
         take_back_order_points(order)
         for log_pk, price in plan.coupon_log_prices.items():
-            ShopCouponLog.objects.filter(pk=log_pk, order_id=order.pk).update(cp_price=price)
+            coupon_log = ShopCouponLog.objects.filter(pk=log_pk, order_id=order.pk).first()
+            if coupon_log is not None:
+                coupon_log.cp_price = price
+                coupon_log._change_reason = "order line change"[:100]
+                coupon_log.save(update_fields=["cp_price"])
         locked = ShopOrder.objects.select_for_update().get(pk=order.pk)
         locked.od_cart_price = plan.cart_price + plan.cancel_price
         locked.od_cancel_price = plan.cancel_price

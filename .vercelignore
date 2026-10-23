@@ -9,6 +9,12 @@
 /pyproject.toml
 /.tmp-nextjs-runtime/
 /.serena/
+/.wt-docs-ask/
+/.venv/
+/build/
+/dist/
+/node_modules/
+/test/
 /staticfiles/
 /media/
 /uploads/

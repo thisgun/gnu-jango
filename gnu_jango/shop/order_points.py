@@ -97,6 +97,24 @@ def item_status_update(status, now=None):
     }
 
 
+def save_order_item_status(queryset, status, *, reason=""):
+    """Move each line to ``status`` through save() so django-simple-history records it.
+
+    The order cancel/paid/shipping paths used a bulk ``.update()`` here, which bypassed the
+    ShopOrderItem history. Order lines are few, so saving each one is acceptable and keeps the
+    audit trail complete.
+    """
+
+    changed = []
+    for item in queryset.select_for_update():
+        item.ct_status = status
+        item.sync_complete_time()
+        item._change_reason = (reason or f"order line {status}")[:100]
+        item.save(update_fields=["ct_status", "ct_complete_time"])
+        changed.append(item)
+    return changed
+
+
 def _award_content(item, order):
     return f"주문번호 {order.od_id} ({item.ct_id}) 배송완료"
 

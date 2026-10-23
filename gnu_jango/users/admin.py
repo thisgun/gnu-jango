@@ -20,6 +20,7 @@ from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationFo
 
 from gnu_jango.api.auth_sessions import revoke_member_tokens
 from gnu_jango.config.models import Config
+from gnu_jango.core.audit import UnfoldHistoryAdmin
 from gnu_jango.users import point_ledger
 
 from .models import Profile, User_Memo, User_Point, User_Scrap
@@ -433,7 +434,7 @@ class UserPointGrantForm(forms.ModelForm):
         return cleaned
 
 
-class UserPointAdmin(ModelAdmin):
+class UserPointAdmin(UnfoldHistoryAdmin):
     list_display = (
         "id",
         "user_display",
@@ -451,6 +452,12 @@ class UserPointAdmin(ModelAdmin):
     list_select_related = ("user",)
     readonly_fields = ("point_snapshot",)
     list_fullwidth = True
+
+    def revert_disabled(self, request, obj=None):
+        # A point row and Profile.user_point are written as one ledger operation
+        # (point_ledger.insert_point). Restoring just the row would leave the balance and the
+        # ledger disagreeing, so the history screen is read-only; use the grant form instead.
+        return True
 
     def get_form(self, request, obj=None, **kwargs):
         if obj is None:

@@ -52,9 +52,9 @@ from gnu_jango.shop.notifications import queue_order_placed_mails
 from gnu_jango.shop.sms.notifications import queue_order_placed_sms
 from gnu_jango.shop.order_points import (
     item_purchase_point,
-    item_status_update,
     order_line_points_enabled,
     purchase_point_notice,
+    save_order_item_status,
     take_back_order_points,
 )
 from gnu_jango.shop.payment_options import (
@@ -1950,7 +1950,11 @@ def toss_vbank_webhook_view(request):
         )
         if error:
             return error
-        ShopOrder.objects.filter(pk=paid_order.pk).update(od_vbank_status=provider_status)
+        # The webhook is not an admin request, but the vbank state belongs in the order history.
+        paid_order.refresh_from_db()
+        paid_order.od_vbank_status = provider_status
+        paid_order._change_reason = f"Toss vbank {provider_status}"[:100]
+        paid_order.save(update_fields=["od_vbank_status"])
         return api_response(data={"order_id": paid_order.od_id, "status": paid_order.od_status, "processed": True})
 
     if provider_status == "WAITING_FOR_DEPOSIT":
@@ -1967,7 +1971,11 @@ def toss_vbank_webhook_view(request):
                 locked.od_status = ORDER_STATUS_ORDERED
                 locked.od_misu = locked.od_receipt_price
                 locked.od_receipt_time = ""
-                locked.items.exclude(ct_status__in=CANCELLED_STATUSES).update(**item_status_update(ORDER_STATUS_ORDERED))
+                save_order_item_status(
+                    locked.items.exclude(ct_status__in=CANCELLED_STATUSES),
+                    ORDER_STATUS_ORDERED,
+                    reason="Toss vbank waiting for deposit",
+                )
                 take_back_order_points(locked)
                 fields.extend(["od_status", "od_misu", "od_receipt_time"])
             locked.save(update_fields=fields)
@@ -1985,7 +1993,10 @@ def toss_vbank_webhook_view(request):
             if str(locked.od_status or "") not in CANCELLED_STATUSES:
                 restore_order_coupons_and_points(locked)
                 locked, _ = cancel_order_with_stock_restore(locked, f"Toss virtual account {provider_status.lower()}")
-            ShopOrder.objects.filter(pk=locked.pk).update(od_vbank_status=provider_status)
+            locked.refresh_from_db()
+            locked.od_vbank_status = provider_status
+            locked._change_reason = f"Toss vbank {provider_status}"[:100]
+            locked.save(update_fields=["od_vbank_status"])
             record_payment_raw_log(locked, order_id, "toss-vbank", provider_payment_key, raw_data, prefix="toss-vbank")
         return api_response(data={"order_id": order_id, "status": ORDER_STATUS_CANCELLED, "processed": True})
 

@@ -20,6 +20,7 @@ from gnu_jango.config import config as config_cache
 from gnu_jango.shop.admin.bulk import approve_selected_reviews, hide_selected_reviews
 from gnu_jango.shop.product_counters import recount_product_reviews
 from gnu_jango.shop.settings_sync import sync_shop_phone_from_policy
+from gnu_jango.core.audit import UnfoldHistoryAdmin
 
 
 class ShopStockNotificationActionForm(ActionForm):
@@ -516,7 +517,11 @@ class GeneralInquiryAdmin(ModelAdmin):
 
 
 @admin.register(ShopShippingPolicy)
-class ShopShippingPolicyAdmin(ModelAdmin):
+class ShopShippingPolicyAdmin(UnfoldHistoryAdmin):
+    def revert_disabled(self, request, obj=None):
+        # The policy is a singleton copied into Config/checkout caches; edit the live form.
+        return True
+
     list_display = ("id", "de_delivery_company", "de_send_cost_case", "de_send_cost_limit", "de_send_cost_list")
     fields = (
         ("de_admin_company_name", "de_admin_company_tel"),

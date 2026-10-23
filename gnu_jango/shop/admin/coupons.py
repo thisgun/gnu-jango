@@ -8,6 +8,7 @@ from gnu_jango.shop.admin.coupon_forms import (
     ProductTargetAutocompleteView,
     ShopCouponAdminForm,
 )
+from gnu_jango.core.audit import UnfoldHistoryAdmin
 
 
 class CouponMethodFilter(admin.SimpleListFilter):
@@ -112,7 +113,11 @@ class ShopCouponZoneAdmin(ModelAdmin):
 
 
 @admin.register(ShopCoupon)
-class ShopCouponAdmin(ModelAdmin):
+class ShopCouponAdmin(UnfoldHistoryAdmin):
+    def revert_disabled(self, request, obj=None):
+        # Restoring a coupon's old discount rules would change what already-issued coupons mean.
+        return True
+
     form = ShopCouponAdminForm
     list_display = (
         "cp_id", "coupon_recipient", "cp_subject", "coupon_scope", "coupon_status", "coupon_benefit",
@@ -255,7 +260,7 @@ class ShopCouponAdmin(ModelAdmin):
 
 
 @admin.register(ShopCouponLog)
-class ShopCouponLogAdmin(ModelAdmin):
+class ShopCouponLogAdmin(UnfoldHistoryAdmin):
     list_display = ("cl_id", "cp_id", "user", "od_id", "cp_price", "cl_datetime")
     search_fields = ("cp_id", "mb_id", "od_id", "user__username")
     list_filter = ("cl_datetime",)
