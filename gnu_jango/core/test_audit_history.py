@@ -158,6 +158,25 @@ class AuditHistoryAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.admin_user.username)
 
+    def test_history_revert_button_is_bound_to_the_admin_form(self):
+        record = self.config.history.order_by("history_date").first()
+        response = self.client.get(
+            reverse("admin:config_config_simple_history", args=[self.config.pk, record.history_id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        # Unfold renders submit buttons outside the form; without this attribute Revert does nothing.
+        form_id = f"{Config.history.model._meta.model_name}_form"
+        self.assertContains(response, f'form="{form_id}"')
+        self.assertContains(response, 'name="_save"')
+
+    def test_audit_log_uses_action_verbs_not_timestamp_labels(self):
+        response = self.client.get(reverse("admin-audit-log"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "생성")
+        self.assertNotContains(response, "생성일시")
+
     def test_audit_log_lists_each_audited_model_and_the_actor(self):
         response = self.client.get(reverse("admin-audit-log"))
 

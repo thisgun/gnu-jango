@@ -1,0 +1,27 @@
+{% load i18n unfold %}
+
+{# Unfold renders the submit buttons in the page footer, outside the <form>. The stock
+   simple-history submit line has no form attribute, so its Revert button did nothing.
+   Keep Unfold's button component and point each submit at the change form explicitly. #}
+<div class="relative lg:sticky lg:bottom-0 z-40">
+  <div class="rounded-b-default pb-4 px-4 lg:border-t lg:border-base-200 relative lg:scrollable-top lg:py-0 dark:border-base-800">
+    <div class="absolute inset-0 backdrop-blur-xs bg-white/80 dark:bg-base-900/80 z-10"></div>
+    <div class="flex flex-col-reverse gap-3 items-center relative mx-auto lg:flex-row-reverse container lg:h-[64px] z-20">
+      {% if not revert_disabled %}
+        {% component "unfold/components/button.html" with submit=1 form=opts.model_name|add:"_form" name="_save" class="w-full lg:w-auto" %}
+          {% trans "Revert" %}
+        {% endcomponent %}
+      {% endif %}
+      {% if change_history %}
+        {% component "unfold/components/button.html" with submit=1 form=opts.model_name|add:"_form" name="_change_history" variant="default" class="w-full lg:w-auto" %}
+          {% trans "Change History" %}
+        {% endcomponent %}
+      {% endif %}
+      <div class="flex flex-col gap-3 mr-auto w-full lg:flex-row lg:w-auto">
+        {% component "unfold/components/button.html" with href=history_url variant="default" class="w-full lg:w-auto" %}
+          {% trans "Close" %}
+        {% endcomponent %}
+      </div>
+    </div>
+  </div>
+</div>
