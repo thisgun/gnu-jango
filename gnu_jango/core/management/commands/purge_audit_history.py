@@ -44,6 +44,8 @@ class Command(BaseCommand):
                     if not ids:
                         break
                     deleted, _ = history.filter(history_id__in=ids).delete()
+                    if not deleted:
+                        break
                     count += deleted
             total += count
             suffix = " (dry run)" if dry_run else ""
