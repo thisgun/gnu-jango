@@ -1,0 +1,112 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; {{ title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">{% translate 'Operations audit' %}</p>
+    <h1>{{ title }}</h1>
+    <p class="g5-admin-hero-copy">
+      {% blocktranslate %}Every order, point, coupon and settings change with the admin who made it, what changed, and a link to the field diff and restore screen.{% endblocktranslate %}
+    </p>
+  </div>
+  <form class="g5-admin-report-filter" method="get" action="">
+    <label>
+      <span>{% translate 'Model' %}</span>
+      <select name="model">
+        <option value="">{% translate 'All audited models' %}</option>
+        {% for spec in specs %}
+        <option value="{{ spec.value }}"{% if filters.model == spec.value %} selected{% endif %}>{{ spec.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>{% translate 'Action' %}</span>
+      <select name="action">
+        <option value="">{% translate 'All actions' %}</option>
+        <option value="+"{% if filters.action == "+" %} selected{% endif %}>{% translate 'Created' %}</option>
+        <option value="~"{% if filters.action == "~" %} selected{% endif %}>{% translate 'Changed' %}</option>
+        <option value="-"{% if filters.action == "-" %} selected{% endif %}>{% translate 'Deleted' %}</option>
+      </select>
+    </label>
+    <label>
+      <span>{% translate 'User' %}</span>
+      <input type="search" name="user" value="{{ filters.user }}" placeholder="{% translate 'username' %}">
+    </label>
+    <label>
+      <span>{% translate 'Search' %}</span>
+      <input type="search" name="q" value="{{ filters.q }}" placeholder="{% translate 'order, coupon, setting, content' %}">
+    </label>
+    <label>
+      <span>{% translate 'From' %}</span>
+      <input type="date" name="date_from" value="{{ filters.date_from }}">
+    </label>
+    <label>
+      <span>{% translate 'To' %}</span>
+      <input type="date" name="date_to" value="{{ filters.date_to }}">
+    </label>
+    <div class="g5-admin-report-filter-actions">
+      <button class="button" type="submit">{% translate 'Apply' %}</button>
+      <a class="button g5-admin-button-secondary" href="{% url 'admin-audit-log' %}">{% translate 'Reset' %}</a>
+    </div>
+  </form>
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% translate 'Recent changes' %}</p>
+      <h2>{% translate 'Audit entries' %}</h2>
+    </div>
+    <p class="g5-admin-empty">
+      {% blocktranslate %}Newest {{ audit_per_model_limit }} rows per model are scanned. Narrow the filters when the table is large.{% endblocktranslate %}
+    </p>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="g5-admin-mini-table">
+      <thead>
+        <tr>
+          <th scope="col">{% translate 'Time' %}</th>
+          <th scope="col">{% translate 'User' %}</th>
+          <th scope="col">{% translate 'Model' %}</th>
+          <th scope="col">{% translate 'Object' %}</th>
+          <th scope="col">{% translate 'Action' %}</th>
+          <th scope="col">{% translate 'Changed fields' %}</th>
+          <th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in entries %}
+        <tr>
+          <td>{{ entry.history_date|date:"Y-m-d H:i:s" }}</td>
+          <td>{{ entry.user }}</td>
+          <td>{{ entry.model_label }}</td>
+          <td>{{ entry.object_label }}</td>
+          <td>{{ entry.action_label }}</td>
+          <td>{{ entry.changes|default:"-" }}</td>
+          <td>
+            {% if entry.url %}<a class="button btn g5-admin-button-secondary" href="{{ entry.url }}">{% translate 'History / restore' %}</a>{% endif %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="g5-admin-empty">{% translate 'No audit entries match these filters.' %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if page_obj.paginator.num_pages > 1 %}
+  <nav class="g5-admin-export-actions" aria-label="{% translate 'Pages' %}">
+    {% if page_obj.has_previous %}<a class="button btn g5-admin-button-secondary" href="?{% if page_query %}{{ page_query }}&amp;{% endif %}page={{ page_obj.previous_page_number }}">{% translate 'Previous' %}</a>{% endif %}
+    <span>{% blocktranslate with number=page_obj.number total=page_obj.paginator.num_pages count=page_obj.paginator.count %}{{ number }} / {{ total }} pages ({{ count }} rows){% endblocktranslate %}</span>
+    {% if page_obj.has_next %}<a class="button btn g5-admin-button-secondary" href="?{% if page_query %}{{ page_query }}&amp;{% endif %}page={{ page_obj.next_page_number }}">{% translate 'Next' %}</a>{% endif %}
+  </nav>
+  {% endif %}
+</section>
+{% endblock %}

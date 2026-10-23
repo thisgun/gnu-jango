@@ -8,6 +8,7 @@ from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.utils.text import slugify as _slugify
+from simple_history.models import HistoricalRecords
 
 
 from django.contrib.auth import get_user_model
@@ -216,6 +217,9 @@ class User_Point(models.Model):
     po_rel_action = models.CharField(
         _("관련 작업"), max_length=255, null=True, blank=True, default=""
     )
+
+    # Append-only field history: an admin editing a ledger row leaves the old row in history.
+    history = HistoricalRecords()
 
     class Meta:
         verbose_name = _("회원포인트")

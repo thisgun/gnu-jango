@@ -9,6 +9,7 @@ from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.core.validators import FileExtensionValidator
+from simple_history.models import HistoricalRecords
 
 
 # youngcart 완료: the status whose lines earn their purchase point (ct_complete_time is its clock).
@@ -644,6 +645,8 @@ class ShopCouponLog(models.Model):
     cp_price = models.IntegerField(default=0)
     cl_datetime = models.DateTimeField(default=timezone.now)
 
+    history = HistoricalRecords()
+
     class Meta:
         ordering = ["-cl_datetime", "-cl_id"]
         verbose_name = _("Shop coupon log")
@@ -758,6 +761,10 @@ class ShopOrder(models.Model):
     od_datetime = models.DateTimeField(default=timezone.now)
     od_receipt_time = models.CharField(max_length=100, blank=True, default="")
     od_ip = models.GenericIPAddressField(null=True, blank=True)
+
+    # Field-level audit trail. The IP and the virtual-account secret hash are deliberately
+    # excluded: they are sensitive and never need to be restored from history.
+    history = HistoricalRecords(excluded_fields=["od_ip", "od_vbank_secret_hash"])
 
     class Meta:
         ordering = ["-od_datetime", "-od_id"]

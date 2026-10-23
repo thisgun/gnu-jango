@@ -4,22 +4,25 @@ from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect
 from django.utils.encoding import force_str
 from django.utils.translation import gettext_lazy as _
-from unfold.admin import ModelAdmin
 
 from gnu_jango.utils.admin import admin_url
 from gnu_jango.config import config
+from gnu_jango.core.audit import UnfoldHistoryAdmin, history_record_for
 from gnu_jango.shop.settings_sync import sync_shop_phone_from_config
 
 from .Configforms import ConfigsForm
-from .models import Config
+from .models import Config, is_secret_config_name
 
 
-class TestConfigAdmin(ModelAdmin):
+class TestConfigAdmin(UnfoldHistoryAdmin):
 
+    # The settings screen is the custom changelist below. This fieldset is what the
+    # simple-history revert form renders for a single Config row.
     fieldsets = [
-        # (None,               {'fields': ['question_text']}),
-        (_("기본환경"), {"fields": ["cf_title", "cf_theme", "cf_admin"], "classes": ["collapse"]}),
+        (None, {"fields": ["name", "value"]}),
     ]
+    # Reverting changes the value, never the setting key.
+    readonly_fields = ("name",)
 
     change_list_template = "admin/config/change_list.html"
 
@@ -37,6 +40,21 @@ class TestConfigAdmin(ModelAdmin):
 
     def change_view(self, *args, **kwargs):
         return self.changelist_redirect()
+
+    def revert_disabled(self, request, obj=None):
+        if super().revert_disabled(request, obj):
+            return True
+        record = history_record_for(obj)
+        # Secret values are stored as a mask in history; restoring one would overwrite the
+        # real credential with "********".
+        return bool(record and is_secret_config_name(record.name))
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        # The settings form keeps the legacy shop phone column in step; a history revert has
+        # to do the same or the two admin screens would show different numbers.
+        if obj.name == "de_admin_company_tel":
+            sync_shop_phone_from_config(obj.value)
 
     @csrf_protect_m
     def changelist_view(self, request, extra_context=None):

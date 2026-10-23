@@ -1950,7 +1950,10 @@ def toss_vbank_webhook_view(request):
         )
         if error:
             return error
-        ShopOrder.objects.filter(pk=paid_order.pk).update(od_vbank_status=provider_status)
+        # The webhook is not an admin request, but the vbank state belongs in the order history.
+        paid_order.refresh_from_db()
+        paid_order.od_vbank_status = provider_status
+        paid_order.save(update_fields=["od_vbank_status"])
         return api_response(data={"order_id": paid_order.od_id, "status": paid_order.od_status, "processed": True})
 
     if provider_status == "WAITING_FOR_DEPOSIT":
@@ -1985,7 +1988,9 @@ def toss_vbank_webhook_view(request):
             if str(locked.od_status or "") not in CANCELLED_STATUSES:
                 restore_order_coupons_and_points(locked)
                 locked, _ = cancel_order_with_stock_restore(locked, f"Toss virtual account {provider_status.lower()}")
-            ShopOrder.objects.filter(pk=locked.pk).update(od_vbank_status=provider_status)
+            locked.refresh_from_db()
+            locked.od_vbank_status = provider_status
+            locked.save(update_fields=["od_vbank_status"])
             record_payment_raw_log(locked, order_id, "toss-vbank", provider_payment_key, raw_data, prefix="toss-vbank")
         return api_response(data={"order_id": order_id, "status": ORDER_STATUS_CANCELLED, "processed": True})
 
