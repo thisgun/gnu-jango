@@ -96,7 +96,7 @@ class AuditHistoryModelTests(TestCase):
         self.assertEqual(coupon_log.history.first().cp_price, 1500)
 
     def test_config_change_creates_history_rows(self):
-        setting = Config.objects.create(name="cf_audit_sample", value="first")
+        setting = Config.objects.create(name="cf_title", value="first")
         self.assertEqual(setting.history.count(), 1)
 
         setting.value = "second"
@@ -223,7 +223,7 @@ class AuditHistoryAdminTests(TestCase):
             po_mb_point=10,
         )
         cls.coupon_log = ShopCouponLog.objects.create(cl_id=990002, cp_id="AUDIT-ADMIN-COUPON", cp_price=500)
-        cls.config = Config.objects.create(name="cf_audit_admin", value="one")
+        cls.config = Config.objects.create(name="cf_title", value="one")
         cls.category = ShopCategory.objects.create(ca_id="AUD", ca_name="Audit category")
         cls.product = ShopProduct.objects.create(
             it_id="AUDIT-ADMIN-PRODUCT",
@@ -307,6 +307,16 @@ class AuditHistoryAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "생성")
         self.assertNotContains(response, "생성일시")
+
+    def test_audit_log_can_be_exported_as_csv(self):
+        response = self.client.get(reverse("admin-audit-log"), {"export": "csv"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response["Content-Type"].startswith("text/csv"))
+        body = response.content.decode("utf-8-sig")
+        self.assertIn("시각,사용자,모델,대상,작업,변경 내용,이력 URL", body)
+        self.assertIn(self.order.od_id, body)
+        self.assertIn(self.product.it_id, body)
 
     def test_audit_log_lists_each_audited_model_and_the_actor(self):
         response = self.client.get(reverse("admin-audit-log"))
@@ -396,6 +406,36 @@ class AuditHistoryAdminTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.config.refresh_from_db()
         self.assertEqual(self.config.value, "one")
+
+    def test_config_history_revert_rejects_an_invalid_value_type(self):
+        setting = Config.objects.create(name="cf_point_term", value="30")
+        original = setting.history.order_by("history_date").first()
+        setting.value = "60"
+        setting.save()
+
+        response = self.client.post(
+            reverse("admin:config_config_simple_history", args=[setting.pk, original.history_id]),
+            {"name": setting.name, "value": "not-an-integer", "_save": "Revert"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        setting.refresh_from_db()
+        self.assertEqual(setting.value, "60")
+
+    def test_config_history_revert_rejects_an_unknown_setting(self):
+        setting = Config.objects.create(name="cf_audit_unknown", value="one")
+        original = setting.history.order_by("history_date").first()
+        setting.value = "two"
+        setting.save()
+
+        response = self.client.post(
+            reverse("admin:config_config_simple_history", args=[setting.pk, original.history_id]),
+            {"name": setting.name, "value": "one", "_save": "Revert"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        setting.refresh_from_db()
+        self.assertEqual(setting.value, "two")
 
     def test_secret_config_history_cannot_be_reverted(self):
         secret = Config.objects.create(name="cf_toss_secret_key", value="live-secret")

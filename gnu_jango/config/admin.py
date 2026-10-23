@@ -1,6 +1,6 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.contrib.admin.options import csrf_protect_m
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import HttpResponseRedirect
 from django.utils.encoding import force_str
 from django.utils.translation import gettext_lazy as _
@@ -48,6 +48,40 @@ class TestConfigAdmin(UnfoldHistoryAdmin):
         # Secret values are stored as a mask in history; restoring one would overwrite the
         # real credential with "********".
         return bool(record and is_secret_config_name(record.name))
+
+    def history_form_view(self, request, object_id, version_id, extra_context=None):
+        if request.method == "POST":
+            record = self._history_record_for_restore(object_id, version_id)
+            if record is not None and not self.revert_disabled(request, record.instance):
+                error = self._history_value_error(
+                    record.name,
+                    request.POST.get("value", record.value),
+                )
+                if error:
+                    messages.error(request, error)
+                    return HttpResponseRedirect(request.path)
+        return super().history_form_view(request, object_id, version_id, extra_context)
+
+    def _history_value_error(self, name, value):
+        """Validate a historical setting with the same field type as the settings screen.
+
+        The simple-history form is a plain Config ModelForm, so without this check a crafted
+        POST could restore an invalid theme, number, email or choice that never came from a
+        valid settings submission.
+        """
+
+        field = ConfigsForm().fields.get(name)
+        if field is None:
+            return _("%(name)s is not a recognized setting and cannot be restored from history.") % {"name": name}
+        try:
+            field.clean(value)
+        except ValidationError as exc:
+            message = exc.messages[0] if exc.messages else str(exc)
+            return _("The historical value for %(name)s is invalid: %(message)s") % {
+                "name": name,
+                "message": message,
+            }
+        return ""
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)

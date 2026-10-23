@@ -69,6 +69,9 @@
       {% blocktranslate %}Newest {{ audit_per_model_limit }} rows per model are scanned. Narrow the filters when the table is large.{% endblocktranslate %}
     </p>
   </div>
+  <nav class="g5-admin-export-actions" aria-label="{% translate 'Export' %}">
+    <a class="button btn g5-admin-button-secondary" href="?{% if page_query %}{{ page_query }}&amp;{% endif %}export=csv">{% translate 'Download CSV' %}</a>
+  </nav>
   <div class="g5-admin-report-table-wrap">
     <table class="g5-admin-mini-table">
       <thead>
