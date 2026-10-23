@@ -272,6 +272,27 @@ class AuditHistoryAdminTests(TestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
 
+    def test_bulk_product_type_action_creates_history(self):
+        before = self.product.history.count()
+
+        response = self.client.post(
+            reverse("admin:shop_shopproduct_changelist"),
+            {
+                "action": "update_selected_product_type",
+                "_selected_action": [str(self.product.pk)],
+                "product_type": "1",
+                "product_type_operation": "show",
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.it_type1, "1")
+        self.assertEqual(self.product.history.count(), before + 1)
+        latest = self.product.history.order_by("-history_date", "-history_id").first()
+        self.assertEqual(latest.history_change_reason, "admin bulk product type change")
+
     def test_history_list_uses_action_verbs_for_created_rows(self):
         response = self.client.get(reverse("admin:shop_shoporder_history", args=[self.order.pk]))
 

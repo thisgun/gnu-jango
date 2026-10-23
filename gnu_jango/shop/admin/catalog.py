@@ -918,9 +918,14 @@ class ShopProductAdmin(UnfoldHistoryAdmin):
         desired_value = "1" if operation == "show" else ""
         selected_count = queryset.count()
         with transaction.atomic():
-            changed_count = queryset.exclude(**{type_field: desired_value}).update(
-                **{type_field: desired_value, "updated_at": timezone.now()}
-            )
+            changed = list(queryset.exclude(**{type_field: desired_value}))
+            changed_at = timezone.now()
+            for product in changed:
+                setattr(product, type_field, desired_value)
+                product.updated_at = changed_at
+                product._change_reason = "admin bulk product type change"
+                product.save(update_fields=[type_field, "updated_at"])
+            changed_count = len(changed)
         unchanged_count = selected_count - changed_count
         self.message_user(
             request,

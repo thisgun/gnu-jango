@@ -87,6 +87,27 @@ jobs:
           for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
             if [ -z "${!name}" ]; then echo "::error::secret $name is not set"; exit 1; fi
           done
+      - name: Set up Python for database migrations
+        if: vars.RUN_DB_MIGRATIONS == 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Apply production database migrations
+        if: vars.RUN_DB_MIGRATIONS == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          DJANGO_SETTINGS_MODULE: example.settings.development
+          ENVIRONMENT: Development
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::PRODUCTION_DATABASE_URL is not set"
+            exit 1
+          fi
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python manage.py migrate --plan
+          python manage.py migrate --noinput
       - name: Deploy to Vercel (production)
         run: |
           npx --yes vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
