@@ -113,7 +113,11 @@ class ShopCouponZoneAdmin(ModelAdmin):
 
 
 @admin.register(ShopCoupon)
-class ShopCouponAdmin(ModelAdmin):
+class ShopCouponAdmin(UnfoldHistoryAdmin):
+    def revert_disabled(self, request, obj=None):
+        # Restoring a coupon's old discount rules would change what already-issued coupons mean.
+        return True
+
     form = ShopCouponAdminForm
     list_display = (
         "cp_id", "coupon_recipient", "cp_subject", "coupon_scope", "coupon_status", "coupon_benefit",

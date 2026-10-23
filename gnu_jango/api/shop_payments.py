@@ -26,7 +26,7 @@ from gnu_jango.shop.models import (
 )
 from gnu_jango.shop.notifications import STATUS_PAID as MAIL_STATUS_PAID, queue_order_placed_mails, queue_order_status_mail
 from gnu_jango.shop.sms.notifications import queue_order_placed_sms, queue_order_status_sms
-from gnu_jango.shop.order_points import item_status_update, take_back_order_points
+from gnu_jango.shop.order_points import save_order_item_status, take_back_order_points
 from gnu_jango.shop.payment_options import online_payment_preferences
 from gnu_jango.shop.pg_settings import (
     MODE_LABELS,
@@ -1299,7 +1299,11 @@ def confirm_order_payment(order_id, amount, pg_service, transaction_id, raw_data
         if transaction_id:
             order.od_tno = transaction_id
         order.save(update_fields=update_fields)
-        order.items.exclude(ct_status__in=CANCELLED_STATUSES).update(**item_status_update(ORDER_STATUS_PAID))
+        save_order_item_status(
+            order.items.exclude(ct_status__in=CANCELLED_STATUSES),
+            ORDER_STATUS_PAID,
+            reason="order payment confirmed",
+        )
         take_back_order_points(order)
         for log in order.coupon_logs.select_related("coupon").all():
             if log.coupon_id:

@@ -79,39 +79,88 @@ def audit_model_specs():
     """
 
     from gnu_jango.config.models import Config
-    from gnu_jango.shop.models import ShopCouponLog, ShopOrder
+    from gnu_jango.shop.models import (
+        ShopCoupon,
+        ShopCouponLog,
+        ShopOrder,
+        ShopOrderItem,
+        ShopProduct,
+        ShopShippingPolicy,
+    )
     from gnu_jango.users.models import User_Point
 
     return (
         {
             "model": ShopOrder,
-            "label": _("Shop order"),
+            "label": "주문",
             "search_fields": ("od_id", "od_name", "od_b_name", "od_hp", "od_tno"),
             "object_repr": lambda record: " · ".join(
                 part for part in (record.od_id, record.od_name) if part
             ),
+            "restore": True,
         },
         {
-            "model": User_Point,
-            "label": _("Member point"),
-            "search_fields": ("po_content", "po_rel_action", "po_rel_table"),
+            "model": ShopOrderItem,
+            "label": "주문 상품",
+            "search_fields": ("it_name", "it_id", "ct_id", "order__od_id"),
             "object_repr": lambda record: " · ".join(
-                part for part in (str(record.user_id or ""), record.po_content or "") if part
+                part for part in (record.order_id, record.it_name, record.ct_status) if part
             ),
+            "restore": False,
+        },
+        {
+            "model": ShopProduct,
+            "label": "상품",
+            "search_fields": ("it_id", "it_name", "it_brand", "it_maker"),
+            "object_repr": lambda record: " · ".join(
+                part for part in (record.it_id, record.it_name) if part
+            ),
+            "restore": False,
+        },
+        {
+            "model": ShopCoupon,
+            "label": "쿠폰",
+            "search_fields": ("cp_id", "cp_subject", "cp_target"),
+            "object_repr": lambda record: " · ".join(
+                part for part in (record.cp_id, record.cp_subject) if part
+            ),
+            "restore": False,
         },
         {
             "model": ShopCouponLog,
-            "label": _("Coupon usage"),
+            "label": "쿠폰 사용",
             "search_fields": ("cp_id", "od_id", "mb_id"),
             "object_repr": lambda record: " · ".join(
                 part for part in (record.cp_id, record.od_id) if part
             ),
+            "restore": False,
+        },
+        {
+            "model": ShopShippingPolicy,
+            "label": "배송 정책",
+            "search_fields": ("de_admin_company_name", "de_delivery_company"),
+            "object_repr": lambda record: (
+                record.de_admin_company_name
+                or record.de_delivery_company
+                or f"Shipping policy #{record.id}"
+            ),
+            "restore": False,
+        },
+        {
+            "model": User_Point,
+            "label": "회원 포인트",
+            "search_fields": ("po_content", "po_rel_action", "po_rel_table"),
+            "object_repr": lambda record: " · ".join(
+                part for part in (str(record.user_id or ""), record.po_content or "") if part
+            ),
+            "restore": False,
         },
         {
             "model": Config,
-            "label": _("Site setting"),
+            "label": "사이트 설정",
             "search_fields": ("name",),
             "object_repr": lambda record: record.name,
+            "restore": True,
         },
     )
 
@@ -220,6 +269,7 @@ def audit_log_view(request):
                     "object_label": spec["object_repr"](record) or "-",
                     "action": record.history_type,
                     "action_label": AUDIT_ACTION_LABELS.get(record.history_type, record.history_type),
+                    "can_restore": bool(spec.get("restore")),
                     "user": getattr(record.history_user, "username", "") or _("System"),
                     "history_date": record.history_date,
                     "url": _history_url(model, record),

@@ -92,7 +92,7 @@
           <td>{{ entry.action_label }}</td>
           <td>{{ entry.changes|default:"-" }}</td>
           <td>
-            {% if entry.url %}<a class="button btn g5-admin-button-secondary" href="{{ entry.url }}">{% translate 'History / restore' %}</a>{% endif %}
+            {% if entry.url %}<a class="button btn g5-admin-button-secondary" href="{{ entry.url }}">{% if entry.can_restore %}{% translate 'History / restore' %}{% else %}{% translate 'History' %}{% endif %}</a>{% endif %}
           </td>
         </tr>
         {% empty %}

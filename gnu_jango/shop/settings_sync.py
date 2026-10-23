@@ -6,7 +6,12 @@ from .models import ShopShippingPolicy
 
 
 def sync_shop_phone_from_config(value):
-    ShopShippingPolicy.objects.filter(pk=1).update(de_admin_company_tel=str(value or "")[:30])
+    policy = ShopShippingPolicy.objects.filter(pk=1).first()
+    if policy is None:
+        return
+    policy.de_admin_company_tel = str(value or "")[:30]
+    policy._change_reason = "synced from Config de_admin_company_tel"[:100]
+    policy.save(update_fields=["de_admin_company_tel"])
 
 
 def sync_shop_phone_from_policy(value):
