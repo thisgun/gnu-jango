@@ -5,6 +5,8 @@ four models the shop needs for dispute handling are tracked, that credentials ne
 settings history, and that the admin history screen is wired to the Unfold admin.
 """
 
+from unittest.mock import patch
+
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -338,6 +340,23 @@ class AuditHistoryAdminTests(TestCase):
         self.assertIn("시각,사용자,모델,대상,작업,변경 내용,이력 URL", body)
         self.assertIn(self.order.od_id, body)
         self.assertIn(self.product.it_id, body)
+
+    def test_audit_log_paginates_history_beyond_one_page(self):
+        for index in range(55):
+            Config.objects.create(name=f"cf_audit_page_{index}", value=str(index))
+
+        response = self.client.get(reverse("admin-audit-log"), {"page": 2})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(response.context["page_obj"].paginator.num_pages, 1)
+        self.assertTrue(response.context["entries"])
+
+    def test_audit_log_export_refuses_more_than_the_row_limit(self):
+        with patch("gnu_jango.core.audit.AUDIT_EXPORT_LIMIT", 1):
+            response = self.client.get(reverse("admin-audit-log"), {"export": "csv"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, "Too many audit rows", status_code=400)
 
     def test_audit_log_lists_each_audited_model_and_the_actor(self):
         response = self.client.get(reverse("admin-audit-log"))

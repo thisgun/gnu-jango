@@ -70,7 +70,8 @@ jobs:
 
   vercel:
     if: >-
-      ${{ !github.event.repository.private && vars.VERCEL_DEPLOY == 'true' &&
+      ${{ !github.event.repository.private &&
+          (vars.VERCEL_DEPLOY == 'true' || vars.RUN_DB_MIGRATIONS == 'true') &&
           (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
     runs-on: ubuntu-latest
     environment: production
@@ -83,6 +84,7 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
       - name: Check the Vercel secrets
+        if: vars.VERCEL_DEPLOY == 'true'
         run: |
           for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
             if [ -z "${!name}" ]; then echo "::error::secret $name is not set"; exit 1; fi
@@ -109,6 +111,7 @@ jobs:
           python manage.py migrate --plan
           python manage.py migrate --noinput
       - name: Deploy to Vercel (production)
+        if: vars.VERCEL_DEPLOY == 'true'
         run: |
           npx --yes vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
           npx --yes vercel@latest build --prod --token="$VERCEL_TOKEN"
