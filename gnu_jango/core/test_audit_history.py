@@ -149,6 +149,14 @@ class AuditHistoryAdminTests(TestCase):
                 response = self.client.get(url)
                 self.assertEqual(response.status_code, 200)
 
+    def test_history_list_uses_action_verbs_for_created_rows(self):
+        response = self.client.get(reverse("admin:shop_shoporder_history", args=[self.order.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "생성")
+        self.assertNotContains(response, "생성일시")
+        self.assertNotContains(response, "Project override")
+
     def test_history_record_view_renders_and_attributes_the_admin_user(self):
         record = self.order.history.first()
         response = self.client.get(
