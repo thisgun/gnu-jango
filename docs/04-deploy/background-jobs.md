@@ -166,6 +166,20 @@ python manage.py process_background_jobs --dispatch --limit 100
 5. 관리자에서 pending이 줄고 성공/실패가 기록되는지 확인합니다. Flower에서 두 작업자가 표시되는지 확인합니다.
 6. 기능을 끌 때는 새 요청 유입을 멈추고 남은 대기 작업을 먼저 처리하세요. 원본을 비공개로 둔 이미지 작업이 남은 채로 끄면 임시 이미지가 유지됩니다. 대기열을 비우기 위해 테이블이나 Redis 데이터를 임의로 삭제하지 마세요.
 
+## 9. 변경 후 회귀 테스트
+
+개발·CI의 테스트용 설정에서 다음 명령을 실행하세요. Django 테스트 실행기가 별도의 테스트 DB를 만들고 종료 시 삭제합니다. 운영 DB 계정과 환경 파일을 사용하지 마세요. 기존 동기 경로의 회귀 테스트를 함께 실행할 때는 기본 설정을 `BACKGROUND_JOBS_ENABLED=False`, 로컬 캐시로 두세요. 새 테스트는 필요한 경우에만 비동기 설정을 적용합니다.
+
+```bash
+python manage.py test gnu_jango.core.test_background_jobs gnu_jango.core.test_toss_vbank gnu_jango.core.test_shop_sms gnu_jango.core.test_thumbnails gnu_jango.core.test_image_privacy gnu_jango.core.test_shop_mails gnu_jango.core.test_deploy_profiles --noinput
+```
+
+병렬 옵션 없이 실행합니다. 동시 claim과 RLS 검사는 PostgreSQL에서 실행해야 합니다. 외부 전송은 테스트에서 대체하므로 실제 메일·SMS·PG 접수나 운영 인프라 연결까지 검증하는 명령은 아닙니다.
+
+실제 작업자 점검은 외부 발송 대상과 DB를 분리한 환경에서 SMTP·SMS 테스트 수신 서버, PG 샌드박스, 별도 Redis로 수행하세요. UUID 중복 전달, Redis 연결 중단, 임대 만료 복구, 발송 접수 후 작업자 종료를 포함합니다. 특히 `delivery_uncertain` 작업은 사업자 기록 확인 없이 재전송하면 안 됩니다. 실제 운영 Redis에서 데이터 삭제로 장애를 재현하지 마세요.
+
+2026-10-24 격리 환경의 실행 결과와 검증 한계는 [구현·검증 보고서](../04-report/features/celery-beat-background-jobs.report.md)에 기록했습니다.
+
 ## 참고
 
 - [Celery 정기 작업: 단일 Beat와 스케줄 설정](https://docs.celeryq.dev/en/stable/userguide/periodic-tasks.html)

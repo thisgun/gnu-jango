@@ -168,19 +168,24 @@ def execute_job(job_id):
 
 
 def replay(job, *, allow_uncertain=False):
-    if job.status != "dead" or not job.payload or job.error_code in {"payload_expired", "source_deleted"}:
-        return False
-    if job.error_code == "delivery_uncertain" and not allow_uncertain:
-        return False
-    active_key = None
-    if job.kind == "scheduled":
-        active_key = f"scheduled:{job.payload['name']}"
-    elif job.kind == "thumbnail":
-        from .thumbnails import thumbnail_artifact_name
-        active_key = f"thumbnail:{thumbnail_artifact_name(**job.payload)}"
     try:
         with transaction.atomic():
-            return bool(BackgroundJob.objects.filter(pk=job.pk, status="dead").update(
+            # Admin/CLI instances can be stale after another replay, delivery failure or
+            # retention sweep. Validate the current row under the same lock as the update.
+            current = BackgroundJob.objects.select_for_update().filter(pk=job.pk).first()
+            if current is None or current.status != "dead" or not current.payload:
+                return False
+            if current.error_code in {"payload_expired", "source_deleted"}:
+                return False
+            if current.error_code == "delivery_uncertain" and not allow_uncertain:
+                return False
+            active_key = None
+            if current.kind == "scheduled":
+                active_key = f"scheduled:{current.payload['name']}"
+            elif current.kind == "thumbnail":
+                from .thumbnails import thumbnail_artifact_name
+                active_key = f"thumbnail:{thumbnail_artifact_name(**current.payload)}"
+            return bool(BackgroundJob.objects.filter(pk=current.pk, status="dead").update(
                 status="pending", attempts=0, available_at=timezone.now(), dispatched_at=None,
                 finished_at=None, error_code="", updated_at=timezone.now(), active_key=active_key))
     except IntegrityError:
