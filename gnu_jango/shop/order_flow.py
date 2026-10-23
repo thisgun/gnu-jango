@@ -343,7 +343,9 @@ def _cancel_locked_order(current, reason, actor):
         logger.exception("order %s: Toss cancelled the payment but the local cancellation failed", current.od_id)
         return StatusChange(False, "PG 결제는 승인취소됐지만 주문을 취소 상태로 바꾸지 못했습니다. 주문을 확인해 주세요.")
     if vbank_waiting:
-        ShopOrder.objects.filter(pk=current.pk).update(od_vbank_status="CANCELED")
+        current.refresh_from_db()
+        current.od_vbank_status = "CANCELED"
+        current.save(update_fields=["od_vbank_status"])
 
     if manual_refund:
         message = f"주문 {current.od_id}을(를) 취소했습니다. 결제금액 {paid:,}원은 직접 환불해야 합니다.{note}"

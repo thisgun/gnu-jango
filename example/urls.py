@@ -21,6 +21,7 @@ from django.conf.urls.static import static
 from gnu_jango.api import v1_auth
 from gnu_jango.config import theme_admin
 from gnu_jango.config import sample_data_admin
+from gnu_jango.core.audit import audit_log_view
 from gnu_jango.shop import admin_settings
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
@@ -28,6 +29,11 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, Spec
 # and their address /admin moves there (APPEND_SLASH is off for the Next.js routes).
 urlpatterns = [
     path("admin", RedirectView.as_view(pattern_name="admin:index", permanent=True, query_string=True)),
+    path(
+        "admin/audit-log/",
+        admin.site.admin_view(audit_log_view),
+        name="admin-audit-log",
+    ),
     path(
         "admin/shop-settings/",
         admin.site.admin_view(admin_settings.shop_settings),

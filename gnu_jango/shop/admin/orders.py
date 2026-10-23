@@ -16,6 +16,7 @@ from unfold.forms import ActionForm
 from unfold.widgets import UnfoldAdminSelectWidget
 
 from gnu_jango.api.shop_common import CANCELLED_STATUSES
+from gnu_jango.core.audit import UnfoldHistoryAdmin, history_record_for
 from gnu_jango.shop.admin.bulk import copy_selected_personal_pays, create_personal_pay_for_balance, order_tool_urls
 from gnu_jango.shop.admin.cash_receipts import order_cash_receipt_page
 from gnu_jango.shop.cash_receipts import admin_risk as cash_receipt_admin_risk
@@ -64,6 +65,45 @@ ORDER_MONEY_FIELDS = {
     "od_coupon",
     "od_send_coupon",
 }
+
+# A status/amount is not just a column: changing it moves stock, coupons, points and the PG
+# refund. Reverting those columns from a history row would desync all of them, so the order
+# history screen only restores descriptive fields (address, memo, invoice, hope date, ...).
+ORDER_HISTORY_LOCKED_FIELDS = (
+    "od_status",
+    "uid",
+    "od_settle_case",
+    "od_pg",
+    "od_test",
+    "od_cart_price",
+    "od_send_cost",
+    "od_send_cost2",
+    "od_receipt_price",
+    "od_cancel_price",
+    "od_refund_price",
+    "od_misu",
+    "od_receipt_point",
+    "od_point",
+    "od_coupon",
+    "od_send_coupon",
+    "od_tax_mny",
+    "od_vat_mny",
+    "od_free_mny",
+    "od_tno",
+    "od_app_no",
+    "od_bank_account",
+    "od_vbank_status",
+    "od_vbank_account",
+    "od_vbank_due_date",
+    "od_receipt_time",
+    "od_mod_history",
+    "od_tax_invoice_request",
+    "od_cash_request",
+    "od_cash_no",
+    "od_cash_res",
+    "od_ip",
+    "od_vbank_secret_hash",
+)
 
 HOPE_DATE_LABEL = "희망배송일"
 KOREAN_WEEKDAYS = ("월", "화", "수", "목", "금", "토", "일")
@@ -149,7 +189,7 @@ class OrderStatusActionForm(ActionForm):
 
 
 @admin.register(ShopOrder)
-class ShopOrderAdmin(ModelAdmin):
+class ShopOrderAdmin(UnfoldHistoryAdmin):
     list_before_template = "admin/shop/order_list_before.html"
     change_form_before_template = "admin/shop/order_change_before.html"
     list_display = (
@@ -279,7 +319,18 @@ class ShopOrderAdmin(ModelAdmin):
         return field
 
     def save_model(self, request, obj, form, change):
+        history_restore = self._restore_safe_history_fields(obj)
         changed = set(getattr(form, "changed_data", ()) or ())
+        if history_restore:
+            # Protected fields were reset to the live row above; do not let the generic
+            # status/money handling treat them as submitted changes.
+            changed -= set(ORDER_HISTORY_LOCKED_FIELDS)
+            self.message_user(
+                request,
+                "주문 상태·결제·환불·포인트·이력 필드는 현재 값이 유지됩니다. "
+                "해당 값은 주문 처리 흐름으로만 변경할 수 있습니다.",
+                messages.INFO,
+            )
         if obj.od_invoice and not obj.od_invoice_time:
             obj.od_invoice_time = timezone.localtime().strftime("%Y-%m-%d %H:%M:%S")
         if change and "od_status" in changed:
@@ -291,6 +342,23 @@ class ShopOrderAdmin(ModelAdmin):
         if change and changed & ORDER_MONEY_FIELDS:
             obj.od_misu = order_misu(obj)
         super().save_model(request, obj, form, change)
+
+    def _restore_safe_history_fields(self, obj):
+        """Let a history revert restore descriptive fields, never order-flow state.
+
+        The historical snapshot also carries the old status and amounts. Copying those back
+        would desync stock, coupons, points and the PG refund, so they are replaced with the
+        live row's values before the historical instance is saved.
+        """
+
+        if history_record_for(obj) is None:
+            return False
+        current = ShopOrder.objects.filter(pk=obj.pk).values(*ORDER_HISTORY_LOCKED_FIELDS).first()
+        if current is None:
+            raise PermissionDenied("삭제된 주문은 이력 화면에서 복원할 수 없습니다.")
+        for field in ORDER_HISTORY_LOCKED_FIELDS:
+            setattr(obj, field, current[field])
+        return True
 
     def save_related(self, request, form, formsets, change):
         super().save_related(request, form, formsets, change)

@@ -8,6 +8,7 @@ from gnu_jango.shop.admin.coupon_forms import (
     ProductTargetAutocompleteView,
     ShopCouponAdminForm,
 )
+from gnu_jango.core.audit import UnfoldHistoryAdmin
 
 
 class CouponMethodFilter(admin.SimpleListFilter):
@@ -255,7 +256,7 @@ class ShopCouponAdmin(ModelAdmin):
 
 
 @admin.register(ShopCouponLog)
-class ShopCouponLogAdmin(ModelAdmin):
+class ShopCouponLogAdmin(UnfoldHistoryAdmin):
     list_display = ("cl_id", "cp_id", "user", "od_id", "cp_price", "cl_datetime")
     search_fields = ("cp_id", "mb_id", "od_id", "user__username")
     list_filter = ("cl_datetime",)
