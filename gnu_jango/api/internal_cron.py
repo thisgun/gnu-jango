@@ -47,7 +47,15 @@ def cron_view(request):
     if not _has_valid_bearer(request, secret):
         return api_error("Invalid or missing cron credentials.", status=401, code="unauthorized")
 
-    report = scheduled_jobs.run_scheduled_jobs(dry_run=_is_truthy(request.query_params.get("dry_run")))
+    from gnu_jango.core.background import enabled, enqueue_scheduled
+    dry_run = _is_truthy(request.query_params.get("dry_run"))
+    if enabled() and not dry_run:
+        # Compatibility trigger: the HTTP request only stores work; Beat/worker executes it.
+        from django.db import transaction
+        with transaction.atomic():
+            ids = [str(enqueue_scheduled(job.name).pk) for job in scheduled_jobs.SCHEDULED_JOBS]
+        return api_response({"queued": True, "job_ids": ids}, status=202)
+    report = scheduled_jobs.run_scheduled_jobs(dry_run=dry_run)
     if report["failed"]:
         errors = {job["name"]: job["error"] for job in report["jobs"] if job["status"] == "failed"}
         return api_response(report, errors=errors, status=500, ok=False)

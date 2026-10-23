@@ -47,7 +47,10 @@ def _default_cache(settings_obj):
 
 
 def _media_backend(settings_obj):
-    return ((_setting(settings_obj, "STORAGES", {}) or {}).get("default", {}) or {}).get("BACKEND", "")
+    storages = _setting(settings_obj, "STORAGES", {}) or {}
+    # The queue wrapper delegates to exactly the same configured local/S3 storage.
+    selected = storages.get("background_media_source") or storages.get("default", {})
+    return selected.get("BACKEND", "")
 
 
 def database_cache_table_exists(table):
@@ -237,6 +240,12 @@ def check_writable_paths(settings_obj):
 
 
 def check_background_tasks(settings_obj):
+    if _setting(settings_obj, "BACKGROUND_JOBS_ENABLED", False):
+        return _result(
+            "background_tasks", "Background tasks", "warn",
+            "Requests use a durable DB outbox; Vercel web functions do not run the configured Beat and workers.",
+            "Provision external worker, media-worker and one Beat with the same DB/storage/settings. See docs/04-deploy/background-jobs.md.",
+        )
     if not _setting(settings_obj, "CELERY_TASK_ALWAYS_EAGER", False):
         return _result(
             "background_tasks",

@@ -30,21 +30,22 @@ class ScheduledJob:
     name: str
     apply_args: tuple[str, ...]
     dry_run_args: tuple[str, ...]
+    interval_seconds: int = 300
 
     def args(self, dry_run: bool) -> tuple[str, ...]:
         return self.dry_run_args if dry_run else self.apply_args
 
 
 SCHEDULED_JOBS: tuple[ScheduledJob, ...] = (
-    ScheduledJob("expire_pending_payment_orders", ("--apply", "--json"), ("--json",)),
-    ScheduledJob("expire_pending_email_members", ("--apply", "--json"), ("--json",)),
-    ScheduledJob("expire_toss_vbank_orders", ("--apply", "--json"), ("--json",)),
+    ScheduledJob("expire_pending_payment_orders", ("--apply", "--json"), ("--json",), 60),
+    ScheduledJob("expire_pending_email_members", ("--apply", "--json"), ("--json",), 3600),
+    ScheduledJob("expire_toss_vbank_orders", ("--apply", "--json"), ("--json",), 60),
     # This one applies by default and takes --dry-run instead of --apply.
-    ScheduledJob("cleanup_admin_privacy", (), ("--dry-run",)),
-    ScheduledJob("cleanup_search_clicks", ("--json",), ("--dry-run", "--json")),
-    ScheduledJob("process_notifications", ("--apply", "--json"), ("--json",)),
-    ScheduledJob("retry_search_index", ("--apply", "--json"), ("--json",)),
-    ScheduledJob("check_search_health", ("--json",), ("--json", "--audit-limit", "0")),
+    ScheduledJob("cleanup_admin_privacy", (), ("--dry-run",), 86400),
+    ScheduledJob("cleanup_search_clicks", ("--json",), ("--dry-run", "--json"), 86400),
+    ScheduledJob("process_notifications", ("--apply", "--json"), ("--json",), 10),
+    ScheduledJob("retry_search_index", ("--apply", "--json"), ("--json",), 30),
+    ScheduledJob("check_search_health", ("--json",), ("--json", "--audit-limit", "0"), 600),
     ScheduledJob("save_order_points", ("--apply", "--json"), ("--json",)),
 )
 JOB_NAMES = tuple(job.name for job in SCHEDULED_JOBS)

@@ -15,6 +15,10 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: redis-server --appendonly yes
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -60,6 +64,7 @@ services:
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
       CELERY_TASK_ALWAYS_EAGER: ${CELERY_TASK_ALWAYS_EAGER:-False}
+      BACKGROUND_JOBS_ENABLED: ${BACKGROUND_JOBS_ENABLED:-True}
       # Deployment profile switches (docs/04-deploy/deployment-profiles.md). gunicorn runs several
       # workers, so the cache is shared through the redis service instead of per-process locmem.
       DEPLOY_PROFILE: ${DEPLOY_PROFILE:-vps}
@@ -81,8 +86,11 @@ services:
 
   worker:
     build: .
-    command: celery -A example worker --loglevel=INFO
+    command: celery -A example worker --loglevel=INFO --queues=celery,maintenance,communications,payments --concurrency=2 --max-tasks-per-child=200
+    restart: unless-stopped
     depends_on:
+      web:
+        condition: service_healthy
       db:
         condition: service_healthy
       redis:
@@ -116,11 +124,40 @@ services:
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/0}
       CELERY_TASK_ALWAYS_EAGER: ${CELERY_TASK_ALWAYS_EAGER:-False}
+      BACKGROUND_JOBS_ENABLED: ${BACKGROUND_JOBS_ENABLED:-True}
       CACHE_URL: ${CACHE_URL:-redis://redis:6379/1}
       MEDIA_STORAGE: ${MEDIA_STORAGE:-local}
       MEDIA_ROOT: ${MEDIA_ROOT:-/app/media}
     volumes:
       - media:/app/media
+
+  beat:
+    extends:
+      service: worker
+    command: celery -A example beat --loglevel=INFO --schedule=/app/runtime/beat/celerybeat-schedule
+    volumes:
+      - beat_data:/app/runtime/beat
+
+  media-worker:
+    extends:
+      service: worker
+    command: celery -A example worker --loglevel=INFO --queues=media --concurrency=1 --max-tasks-per-child=50 --hostname=media@%h
+
+  flower:
+    profiles: ["monitoring"]
+    extends:
+      service: worker
+    build:
+      context: .
+      args:
+        INSTALL_MONITORING: "1"
+    command: celery -A example flower --conf=/app/docker/flowerconfig.py
+    environment:
+      FLOWER_BASIC_AUTH: ${FLOWER_BASIC_AUTH:-}
+    ports:
+      - "127.0.0.1:${FLOWER_PORT:-5555}:5555"
+    volumes:
+      - flower_data:/app/runtime/flower
 
   notification-worker:
     profiles: ["realtime"]
@@ -132,3 +169,6 @@ services:
 volumes:
   postgres_data:
   media:
+  redis_data:
+  beat_data:
+  flower_data:

@@ -9,11 +9,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 ARG INSTALL_REALTIME=0
-COPY requirements.txt requirements-realtime.txt /tmp/
+ARG INSTALL_MONITORING=0
+COPY requirements.txt requirements-realtime.txt requirements-monitoring.txt /tmp/
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --upgrade pip \
     && /opt/venv/bin/pip install -r /tmp/requirements.txt \
-    && if [ "$INSTALL_REALTIME" = "1" ]; then /opt/venv/bin/pip install -r /tmp/requirements-realtime.txt; fi
+    && if [ "$INSTALL_REALTIME" = "1" ]; then /opt/venv/bin/pip install -r /tmp/requirements-realtime.txt; fi \
+    && if [ "$INSTALL_MONITORING" = "1" ]; then /opt/venv/bin/pip install -r /tmp/requirements-monitoring.txt; fi
 
 
 FROM python:3.12-slim
@@ -43,8 +45,8 @@ RUN SECRET_KEY=build-only-not-secret ALLOWED_HOSTS=localhost \
     EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend \
     python manage.py collectstatic --noinput
 
-RUN mkdir -p /app/media /app/logs \
-    && chown app:app /app/media /app/logs \
+RUN mkdir -p /app/media /app/logs /app/runtime/beat /app/runtime/flower \
+    && chown -R app:app /app/media /app/logs /app/runtime \
     && chmod +x /app/docker/entrypoint.sh
 
 USER app

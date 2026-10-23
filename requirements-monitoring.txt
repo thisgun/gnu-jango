@@ -1,0 +1,2 @@
+# Optional worker monitoring; not installed in Vercel/PythonAnywhere web-only environments.
+flower==2.2.0

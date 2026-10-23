@@ -67,16 +67,16 @@ def _note_on_order(order, title, outcomes):
     ShopOrder.objects.filter(pk=order.pk).update(od_shop_memo=Concat(Value(note), "od_shop_memo"))
 
 
-def _send_all(order, title, messages, current):
+def _send_all(order, title, messages, current, *, background_parent=""):
     outcomes = []
     for label, phone, text in messages:
-        result = send_message(phone, text, current=current, purpose=f"{title} {order.od_id} {label}")
+        result = send_message(phone, text, current=current, purpose=f"{title} {order.od_id} {label}", background_parent=background_parent)
         outcomes.append((label, phone, result))
     _note_on_order(order, title, outcomes)
     return outcomes
 
 
-def send_order_placed_sms(order_id):
+def send_order_placed_sms(order_id, *, background_parent=""):
     """주문시 고객님께 발송 (slot 2), 주문시 관리자에게 발송 (slot 3) and the bank account text."""
     current = sms_settings()
     if not current.enabled:
@@ -95,10 +95,10 @@ def send_order_placed_sms(order_id):
     account_text = _bank_account_text(order, current) if customer_on and order.od_hp else ""
     if account_text:
         messages.append(("입금계좌", order.od_hp, account_text))
-    return _send_all(order, "주문안내", messages, current)
+    return _send_all(order, "주문안내", messages, current, background_parent=background_parent)
 
 
-def send_order_status_sms(order_id, status):
+def send_order_status_sms(order_id, status, *, background_parent=""):
     """입금확인시 (slot 4) / 상품배송시 (slot 5) 고객님께 발송, with conv_sms_contents' variables."""
     slot = STATUS_SLOTS.get(status)
     current = sms_settings()
@@ -111,10 +111,10 @@ def send_order_status_sms(order_id, status):
     if order is None or not order.od_hp:
         return []
     text = render_template(template, order_variables(order, current))
-    return _send_all(order, STATUS_TITLES[status], [("고객", order.od_hp, text)], current)
+    return _send_all(order, STATUS_TITLES[status], [("고객", order.od_hp, text)], current, background_parent=background_parent)
 
 
-def send_member_join_sms(user_id):
+def send_member_join_sms(user_id, *, background_parent=""):
     """회원가입시 고객님께 발송 (slot 1) to the member's mobile number, when the member left one."""
     from django.contrib.auth import get_user_model
 
@@ -129,7 +129,7 @@ def send_member_join_sms(user_id):
         return None
     name = getattr(profile, "realname", "") or getattr(profile, "nickname", "") or user.get_username()
     text = render_template(template, {"이름": name, "회원아이디": user.get_username(), "회사명": current.company_name})
-    return send_message(phone, text, current=current, purpose=f"회원가입 {user.pk}")
+    return send_message(phone, text, current=current, purpose=f"회원가입 {user.pk}", background_parent=background_parent)
 
 
 def _run_safely(callback, *args):
@@ -140,6 +140,10 @@ def _run_safely(callback, *args):
 
 
 def queue_order_placed_sms(order):
+    from gnu_jango.core.background import enabled, enqueue
+    if enabled():
+        enqueue("sms_event", {"event": "order_placed", "args": [order.pk]}, dedupe_key=f"sms-order-placed:{order.pk}")
+        return
     order_id = order.pk
     transaction.on_commit(lambda: _run_safely(send_order_placed_sms, order_id))
 
@@ -147,10 +151,18 @@ def queue_order_placed_sms(order):
 def queue_order_status_sms(order, status):
     if status not in STATUS_SLOTS:
         return
+    from gnu_jango.core.background import enabled, enqueue
+    if enabled():
+        enqueue("sms_event", {"event": "order_status", "args": [order.pk, status]})
+        return
     order_id = order.pk
     transaction.on_commit(lambda: _run_safely(send_order_status_sms, order_id, status))
 
 
 def queue_member_join_sms(user):
+    from gnu_jango.core.background import enabled, enqueue
+    if enabled():
+        enqueue("sms_event", {"event": "member_join", "args": [user.pk]}, dedupe_key=f"sms-member-join:{user.pk}")
+        return
     user_id = user.pk
     transaction.on_commit(lambda: _run_safely(send_member_join_sms, user_id))

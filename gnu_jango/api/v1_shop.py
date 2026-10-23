@@ -1923,6 +1923,22 @@ def toss_vbank_webhook_view(request):
             code="toss_vbank_webhook_forbidden",
         )
 
+    from gnu_jango.core.background import enabled, enqueue
+    if enabled():
+        job = enqueue("payment_webhook", {"provider": "toss-vbank", "order_id": order_id,
+                                         "transaction_key": str(event_data.get("transactionKey") or "")})
+        return api_response({"order_id": order_id, "queued": True, "processed": False, "job_id": str(job.pk)})
+    return process_toss_vbank_notification(order_id, str(event_data.get("transactionKey") or ""))
+
+
+def process_toss_vbank_notification(order_id, transaction_key=""):
+    """Run after request authentication; reconcile against Toss, never trust event status/amount."""
+    event_type = "DEPOSIT_CALLBACK"
+    event_data = {"orderId": order_id, "transactionKey": transaction_key}
+    event = {"eventType": event_type, "data": event_data}
+    order = ShopOrder.objects.filter(pk=order_id, od_pg="toss").first()
+    if order is None:
+        return api_error("Order not found.", status=404, code="order_not_found")
     toss_payment, error = toss_api_get_payment_by_order(order_id, order=order)
     if error:
         record_payment_raw_log(order, order_id, "toss-vbank", event_data.get("transactionKey"), event, prefix="toss-vbank-retry")
@@ -2052,6 +2068,24 @@ def payment_callback_view(request, provider):
             code="payment_callback_not_success",
         )
 
+    from gnu_jango.core.background import enabled, enqueue
+    if enabled():
+        # Authentication and signature verification have completed on the request path.
+        # Store only normalized payment facts, never callback credentials or arbitrary URLs.
+        normalized = {"order_id": payment_order_id(data), "amount": payment_amount(data),
+                      "transaction_id": payment_transaction_id(data), "success": True}
+        import json
+        digest = hashlib.sha256(json.dumps([provider, normalized], sort_keys=True).encode()).hexdigest()
+        job = enqueue("payment_webhook", {"provider": provider, "data": normalized},
+                      dedupe_key=f"payment-callback:{digest}")
+        state = job.status
+        return api_response({"order_id": normalized["order_id"], "queued": state in {"pending", "running"},
+                             "job_id": str(job.pk), "job_status": state}, status=503 if state == "dead" else 200)
+    return process_payment_callback(provider, data)
+
+
+def process_payment_callback(provider, data):
+    """Apply a previously authenticated server callback with the existing locked payment flow."""
     order, error = confirm_order_payment(
         payment_order_id(data),
         payment_amount(data),

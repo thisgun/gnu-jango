@@ -6,8 +6,8 @@
 | 프로필 | `DEPLOY_PROFILE` | 용도 | DB | 업로드 파일 | 캐시 | 예약 작업 |
 |--------|------------------|------|----|-------------|------|-----------|
 | 1. Vercel + Supabase | `vercel` | 무료 데모 | Supabase Postgres(`DATABASE_URL`) | Supabase Storage(S3 호환) | DB(`CACHE_URL=db://`) | Vercel Cron 또는 Supabase pg_cron → `/api/internal/cron` |
-| 2. VPS | `vps` | 운영 | Postgres 또는 SQLite | 로컬 디스크(nginx가 `/media/` 서빙) | redis 또는 DB | 시스템 cron → `manage.py run_scheduled_jobs` |
-| 3. 분리형 | `split` | 운영 | (API 서버 = VPS와 동일) | 로컬 디스크 | redis 또는 DB | 시스템 cron |
+| 2. VPS | `vps` | 운영 | Postgres 또는 SQLite | 로컬 디스크(nginx가 `/media/` 서빙) | redis 또는 DB | Beat + 작업자 (이전 모드: 시스템 cron) |
+| 3. 분리형 | `split` | 운영 | (API 서버 = VPS와 동일) | 로컬 디스크 | redis 또는 DB | API 서버의 Beat + 작업자 또는 기존 시스템 cron |
 
 환경 변수 템플릿(값은 모두 자리표시자):
 
@@ -256,7 +256,9 @@ python manage.py run_scheduled_jobs --job cleanup_admin_privacy --json
 같은 실행이 겹치면 캐시 락으로 건너뜁니다(공유 캐시에서만 프로세스 간 유효). 각 작업은 행 잠금으로
 멱등하게 동작하므로 cron이 같은 실행을 두 번 보내도 안전합니다.
 
-HTTP 엔드포인트 `GET`/`POST /api/internal/cron`은 같은 작업을 실행합니다.
+`BACKGROUND_JOBS_ENABLED=True`이면 Beat가 작업을 등록하며 HTTP 엔드포인트 `GET`/`POST /api/internal/cron`은 명령을 직접 실행하지 않고 DB 대기열에 같은 작업을 등록합니다. 이 모드에서는 웹과 별도로 작업자·이미지 작업자·Beat 하나를 실행하고, 아래의 기존 cron 예약을 중복으로 유지하지 마세요. Docker Compose는 새 모드를 기본으로 사용합니다. 자세한 전환·재시도·실패 큐·Flower 사용법은 [백그라운드 작업 가이드](background-jobs.md)를 참고하세요.
+
+이하 cron 구성과 HTTP 직접 실행 설명은 `BACKGROUND_JOBS_ENABLED=False`인 기존 모드를 기준으로 합니다.
 
 - `CRON_SECRET`이 비어 있거나 16자 미만이면 404, `Authorization: Bearer <CRON_SECRET>`이 맞지 않으면 401(상수 시간 비교).
 - 응답은 `api_response` 봉투에 작업별 결과(`status`, `duration_ms`, 건수 요약, `error`)를 담고, 실패가 있으면 500.
