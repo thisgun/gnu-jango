@@ -110,6 +110,19 @@ jobs:
           pip install -r requirements.txt
           python manage.py migrate --plan
           python manage.py migrate --noinput
+      - name: Apply handbook database migrations
+        if: vars.RUN_DB_MIGRATIONS == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.HANDBOOK_DATABASE_URL }}
+          DJANGO_SETTINGS_MODULE: example.settings.development
+          ENVIRONMENT: Development
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "handbook migrations skipped: HANDBOOK_DATABASE_URL is not set"
+            exit 0
+          fi
+          python manage.py migrate --plan
+          python manage.py migrate --noinput
       - name: Trigger Vercel production deploys
         if: vars.VERCEL_DEPLOY_HOOK == 'true'
         env:
