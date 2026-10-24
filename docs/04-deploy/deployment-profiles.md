@@ -368,5 +368,5 @@ aws s3 sync ./media "s3://<bucket>/" \
   - `v1.2.3` 같은 태그를 push하면 `:1.2.3`·`:latest` 이미지와 GitHub Release를 만듭니다.
   - Vercel 자동 배포(선택): 저장소 변수 `VERCEL_DEPLOY=true`와 비밀값 `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`를 넣으면 CI 통과 후 프로덕션으로 배포합니다. 설정하지 않으면 이 단계는 건너뜁니다.
   - 운영 DB 마이그레이션(선택): 저장소 변수 `RUN_DB_MIGRATIONS=true`와 **Production 환경 Secret** `PRODUCTION_DATABASE_URL`(Supabase **세션 풀러 5432** URL)을 넣으면 CD에서 `manage.py migrate --plan`과 `manage.py migrate --noinput`을 실행합니다. 백필은 자동 실행하지 않으므로 필요할 때 별도로 실행하고, 마이그레이션 전에는 DB 스냅샷/백업을 확보합니다.
-  - 배포 순서 고정(선택): `vercel.json`의 `git.deploymentEnabled.main=false`로 `main` push의 자동 Production 배포를 끄고, 저장소 변수 `VERCEL_DEPLOY_HOOK=true`와 Production 환경 Secret `VERCEL_DEPLOY_HOOK_URL`을 설정하면 CD가 **마이그레이션 후 Deploy Hook을 호출**합니다. Hook은 Vercel이 서버 측에서 빌드하므로 Secret 환경변수를 CLI로 끌어오지 않아도 됩니다. 기존 `VERCEL_DEPLOY=true` CLI 배포 경로는 대안으로 남겨 둡니다.
+  - 배포 순서 고정(선택): `vercel.json`의 `git.deploymentEnabled.main=false`로 `main` push의 자동 Production 배포를 끄고, 저장소 변수 `VERCEL_DEPLOY_HOOK=true`와 Production 환경 Secret `VERCEL_DEPLOY_HOOK_URL`(demo), `VERCEL_HANDBOOK_DEPLOY_HOOK_URL`(handbook)을 설정하면 CD가 **마이그레이션 후 두 Deploy Hook을 호출**합니다. Hook은 Vercel이 서버 측에서 빌드하므로 Secret 환경변수를 CLI로 끌어오지 않아도 됩니다. 기존 `VERCEL_DEPLOY=true` CLI 배포 경로는 대안으로 남겨 둡니다.
 - 비밀값은 저장소 Settings → Secrets and variables → Actions에 넣고, 포크에서 온 PR에는 전달되지 않습니다.

@@ -110,16 +110,20 @@ jobs:
           pip install -r requirements.txt
           python manage.py migrate --plan
           python manage.py migrate --noinput
-      - name: Trigger Vercel production deploy
+      - name: Trigger Vercel production deploys
         if: vars.VERCEL_DEPLOY_HOOK == 'true'
         env:
           VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+          VERCEL_HANDBOOK_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_HANDBOOK_DEPLOY_HOOK_URL }}
         run: |
-          if [ -z "$VERCEL_DEPLOY_HOOK_URL" ]; then
-            echo "::error::VERCEL_DEPLOY_HOOK_URL is not set"
-            exit 1
-          fi
+          for name in VERCEL_DEPLOY_HOOK_URL VERCEL_HANDBOOK_DEPLOY_HOOK_URL; do
+            if [ -z "${!name}" ]; then
+              echo "::error::secret $name is not set"
+              exit 1
+            fi
+          done
           curl --fail --silent --show-error --request POST "$VERCEL_DEPLOY_HOOK_URL"
+          curl --fail --silent --show-error --request POST "$VERCEL_HANDBOOK_DEPLOY_HOOK_URL"
       - name: Deploy to Vercel (production)
         if: vars.VERCEL_DEPLOY == 'true'
         run: |
