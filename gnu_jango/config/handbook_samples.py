@@ -20,6 +20,14 @@ from gnu_jango.bbs.utils import get_next_num
 from gnu_jango.notifications.context import suppress_notification_events
 
 from .models import Config
+from .handbook_audit_content import (
+    AUDIT_BOOK_PARTS,
+    AUDIT_BOOK_TABLE,
+    AUDIT_BOOK_TITLE,
+    AUDIT_LINK_HTML,
+    AUDIT_LINK_MARKER,
+    AUDIT_LINK_TITLES,
+)
 from .handbook_content import LEGACY_SAMPLE_MARKER, chapter_body
 
 GROUP_ID = "manual"
@@ -108,6 +116,11 @@ BOOKS = (
             ("품질과 보안", ("한국어 분석과 오타 검색 설정", "검색 권한과 비공개 자료 점검", "검색 순위와 클릭 기록 관리")),
             ("개발과 운영", ("통합 검색 API 연결하기", "검색 오류 해결하기", "검색 품질과 속도 점검")),
         ),
+    ),
+    Book(
+        AUDIT_BOOK_TABLE,
+        AUDIT_BOOK_TITLE,
+        AUDIT_BOOK_PARTS,
     ),
 )
 
@@ -226,6 +239,23 @@ def _chapters(board, book, created_at, *, refresh=False):
     return len(missing), updated
 
 
+def _add_audit_links():
+    """Point key existing chapters at the audit book without replacing their content."""
+    added = 0
+    posts = Post.objects.filter(
+        board__bo_table__in=_book_table_names(),
+        wr_subject__in=AUDIT_LINK_TITLES,
+    )
+    for post in posts:
+        content = post.wr_content or ""
+        if AUDIT_LINK_MARKER in content:
+            continue
+        post.wr_content = content.rstrip() + "\n" + AUDIT_LINK_HTML + "\n" + AUDIT_LINK_MARKER
+        post.save(update_fields=("wr_content",))
+        added += 1
+    return added
+
+
 def _clear_config_cache():
     from . import config as site_config
 
@@ -253,6 +283,7 @@ def ensure_samples(*, stable_dates=False, refresh=False):
         created_count, updated_count = _chapters(board, book, now, refresh=refresh)
         created += created_count
         updated += updated_count
+    links_added = _add_audit_links()
     docs_group, _created = Config.objects.get_or_create(name=DOCS_GROUP_KEY, defaults={"value": GROUP_ID})
     if not (docs_group.value or "").strip():
         # Point the theme at the samples only when no manual group was chosen yet.
@@ -264,6 +295,7 @@ def ensure_samples(*, stable_dates=False, refresh=False):
         "books": len(BOOKS),
         "chapters_created": created,
         "chapters_updated": updated,
+        "links_added": links_added,
     }
 
 
