@@ -1,12 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
+  ArrowRight,
   Bike,
   Boxes,
-  ChevronLeft,
-  ChevronRight,
   Coffee,
   Gem,
   House,
@@ -36,12 +35,18 @@ function categoryIcon(name: string) {
   return categoryIcons.find(([pattern]) => pattern.test(name))?.[1] ?? Boxes;
 }
 
+function categoryGridColumns(count: number) {
+  if (count <= 1) return "grid-cols-1";
+  if (count === 2) return "grid-cols-2";
+  if (count === 3) return "grid-cols-2 sm:grid-cols-3";
+  if (count === 4) return "grid-cols-2 sm:grid-cols-4";
+  if (count === 5) return "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5";
+  return "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6";
+}
+
 export function ShopHomeCategories({ categories }: { categories: ShopCategory[] }) {
   const [runtimeCategories, setRuntimeCategories] = useState<ShopCategory[] | null>(null);
   const visibleCategories = runtimeCategories ?? categories;
-  const carouselRef = useRef<HTMLDivElement>(null);
-  const [scrollPosition, setScrollPosition] = useState({ canGoBack: false, canGoForward: false, progress: 0 });
-
   useEffect(() => {
     let active = true;
     getShopHomeData().then((home) => {
@@ -51,67 +56,15 @@ export function ShopHomeCategories({ categories }: { categories: ShopCategory[] 
     return () => { active = false; };
   }, []);
 
-  const updateScrollPosition = () => {
-    const element = carouselRef.current;
-    if (!element) return;
-    const maxScroll = Math.max(0, element.scrollWidth - element.clientWidth);
-    const next = {
-      canGoBack: element.scrollLeft > 2,
-      canGoForward: element.scrollLeft + element.clientWidth < element.scrollWidth - 2,
-      progress: maxScroll > 0 ? element.scrollLeft / maxScroll : 0,
-    };
-    setScrollPosition((current) =>
-      current.canGoBack === next.canGoBack &&
-      current.canGoForward === next.canGoForward &&
-      Math.abs(current.progress - next.progress) < 0.005
-        ? current
-        : next
-    );
-  };
-
-  useEffect(() => {
-    const element = carouselRef.current;
-    if (!element) return;
-    updateScrollPosition();
-    element.addEventListener("scroll", updateScrollPosition, { passive: true });
-    window.addEventListener("resize", updateScrollPosition);
-    return () => {
-      element.removeEventListener("scroll", updateScrollPosition);
-      window.removeEventListener("resize", updateScrollPosition);
-    };
-  }, [visibleCategories.length]);
-
-  const scrollCarousel = (direction: -1 | 1) => {
-    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
-    carouselRef.current?.scrollBy({
-      left: direction * Math.max(220, (carouselRef.current?.clientWidth ?? 0) * 0.82),
-      behavior,
-    });
-  };
-
-  const handleCarouselKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      scrollCarousel(-1);
-    } else if (event.key === "ArrowRight") {
-      event.preventDefault();
-      scrollCarousel(1);
-    }
-  };
-
   if (visibleCategories.length === 0) return null;
+  const singleCategory = visibleCategories.length === 1;
 
   return (
     <section className="site-container px-0 pb-0 pt-[19px] md:pb-0 md:pt-9" aria-label="상품 카테고리">
       <div
-        ref={carouselRef}
-        className="carousel carousel-center scrollbar-hide w-full gap-3 overflow-x-auto overscroll-x-contain"
-        role="region"
+        className={`grid w-full gap-3 ${categoryGridColumns(visibleCategories.length)}`}
+        role="group"
         aria-label="상품 카테고리 목록"
-        aria-keyshortcuts="ArrowLeft ArrowRight"
-        tabIndex={0}
-        onScroll={updateScrollPosition}
-        onKeyDown={handleCarouselKeyDown}
       >
         {visibleCategories.map((category, index) => {
           const Icon = categoryIcon(category.ca_name);
@@ -119,55 +72,29 @@ export function ShopHomeCategories({ categories }: { categories: ShopCategory[] 
             <Link
               key={category.ca_id}
               href={`/shop/list-${encodeURIComponent(category.ca_id)}`}
-              className={`carousel-item card relative h-[126px] min-h-0 w-[min(44vw,154px)] shrink-0 snap-start items-center justify-center gap-2 rounded-box border bg-base-100 px-2 text-center transition-colors md:h-[144px] sm:w-[min(30vw,213px)] lg:w-[91px] ${index === 0 ? "border-success text-success" : "border-base-300 text-base-content hover:border-primary hover:bg-base-200"}`}
+              className={`card relative w-full min-w-0 rounded-box border bg-base-100 transition-colors ${singleCategory ? "col-span-full h-[112px] flex-row justify-between px-5 text-left md:h-[120px]" : "min-h-[126px] items-center justify-center gap-2 px-2 text-center md:min-h-[144px]"} ${index === 0 ? "border-success text-success" : "border-base-300 text-base-content hover:border-primary hover:bg-base-200"}`}
             >
-              <span className={`flex size-12 items-center justify-center rounded-full border ${index === 0 ? "border-success/40 bg-base-200 text-success" : "border-base-300 bg-base-200 text-base-content"}`}>
-                <Icon aria-hidden="true" className="size-5" />
+              <span className={`flex min-w-0 items-center ${singleCategory ? "gap-4" : "flex-col gap-2"}`}>
+                <span className={`flex size-12 shrink-0 items-center justify-center rounded-full border ${index === 0 ? "border-success/40 bg-base-200 text-success" : "border-base-300 bg-base-200 text-base-content"}`}>
+                  <Icon aria-hidden="true" className="size-5" />
+                </span>
+                <span className={singleCategory ? "min-w-0" : "text-center"}>
+                  <span className={`block line-clamp-1 text-sm font-semibold ${index === 0 ? "text-success" : "text-base-content"}`}>
+                    {category.ca_name}
+                  </span>
+                  {singleCategory && (
+                    <span className="mt-1 block text-xs text-base-content/60">
+                      {typeof category.item_count === "number" ? `${category.item_count.toLocaleString()}개 상품을 둘러보세요.` : "상품을 둘러볼 분류입니다."}
+                    </span>
+                  )}
+                </span>
               </span>
-              <span className={`line-clamp-1 text-sm font-semibold ${index === 0 ? "text-success" : "text-base-content"}`}>
-                {category.ca_name}
-              </span>
-              {index === 0 && <span aria-hidden="true" className="absolute inset-x-10 bottom-0 h-0.5 rounded-full bg-success" />}
+              {singleCategory && <ArrowRight aria-hidden="true" className="size-5 shrink-0 text-base-content/60" />}
+              {index === 0 && <span aria-hidden="true" className={`absolute bottom-0 h-0.5 rounded-full bg-success ${singleCategory ? "inset-x-5" : "inset-x-10"}`} />}
             </Link>
           );
         })}
       </div>
-      {(scrollPosition.canGoBack || scrollPosition.canGoForward) && (
-        <div className="mt-[18px] flex items-center gap-3" aria-label="카테고리 이동">
-          <button
-            type="button"
-            className="btn btn-circle btn-sm size-9 border border-base-300 bg-base-100 text-base-content"
-            aria-label="이전 카테고리"
-            disabled={!scrollPosition.canGoBack}
-            onClick={() => scrollCarousel(-1)}
-          >
-            <ChevronLeft aria-hidden="true" className="size-4" />
-          </button>
-          <div
-            className="relative h-1 min-w-0 flex-1 rounded-full bg-base-300"
-            role="progressbar"
-            aria-label="카테고리 스크롤 위치"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(scrollPosition.progress * 100)}
-          >
-            <span
-              aria-hidden="true"
-              className="absolute inset-y-0 left-0 w-[12%] rounded-full bg-success"
-              style={{ left: `${scrollPosition.progress * 88}%` }}
-            />
-          </div>
-          <button
-            type="button"
-            className="btn btn-circle btn-sm size-9 border border-base-300 bg-base-100 text-base-content"
-            aria-label="다음 카테고리"
-            disabled={!scrollPosition.canGoForward}
-            onClick={() => scrollCarousel(1)}
-          >
-            <ChevronRight aria-hidden="true" className="size-4" />
-          </button>
-        </div>
-      )}
     </section>
   );
 }

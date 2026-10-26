@@ -6,6 +6,44 @@ import { cn } from "@/lib/utils";
 import { getShopHomeData } from "@/services/shop-home";
 import { ArrowRight, ChevronLeft, ChevronRight, Pause, Play } from "lucide-react";
 
+const DEMO_SAMPLE_BANNER_ALT = "차분한 일상을 위한 데모 스토어";
+
+const DEMO_SAMPLE_BANNER_FALLBACKS: ShopBanner[] = [
+  {
+    bn_id: -2,
+    bn_alt: "DESK OBJECTS|책상 위를 더 가볍게",
+    bn_url: "/shop/type-1",
+    bn_position: "메인",
+    bn_device: "both",
+    bn_border: 0,
+    bn_new_win: 0,
+    bn_order: 2,
+    image_url: "/sample-data/product-02.webp",
+  },
+  {
+    bn_id: -3,
+    bn_alt: "SLOW KITCHEN|매일 쓰는 도구의 온기",
+    bn_url: "/shop/type-2",
+    bn_position: "메인",
+    bn_device: "both",
+    bn_border: 0,
+    bn_new_win: 0,
+    bn_order: 3,
+    image_url: "/sample-data/product-04.webp",
+  },
+];
+
+function withDemoSampleRotation(banners: ShopBanner[]) {
+  if (banners.length !== 1 || banners[0].bn_alt.trim() !== DEMO_SAMPLE_BANNER_ALT) {
+    return banners;
+  }
+
+  return [
+    { ...banners[0], bn_alt: `DESK NOTES|${DEMO_SAMPLE_BANNER_ALT}` },
+    ...DEMO_SAMPLE_BANNER_FALLBACKS,
+  ];
+}
+
 function isExternalUrl(url: string): boolean {
   return /^https?:\/\//i.test(url);
 }
@@ -20,7 +58,7 @@ export function ShopHomeBanners({ banners }: { banners: ShopBanner[] }) {
   const [reducedMotion, setReducedMotion] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [failedBannerIds, setFailedBannerIds] = useState<number[]>([]);
-  const allBanners = (runtimeBanners ?? banners).filter(
+  const allBanners = withDemoSampleRotation(runtimeBanners ?? banners).filter(
     (banner) => banner.image_url && !failedBannerIds.includes(banner.bn_id)
   );
   const deviceBanners = allBanners.filter((banner) =>
@@ -34,7 +72,7 @@ export function ShopHomeBanners({ banners }: { banners: ShopBanner[] }) {
     let active = true;
     getShopHomeData()
       .then((home) => {
-        if (active) setRuntimeBanners(home.banners);
+        if (active) setRuntimeBanners(withDemoSampleRotation(home.banners));
       }).catch(() => undefined);
 
     return () => { active = false; };
