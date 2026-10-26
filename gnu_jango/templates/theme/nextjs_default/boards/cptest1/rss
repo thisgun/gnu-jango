@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>복사복사</title>
+    <link>http://localhost:3000/bbs/cptest1</link>
+    <description></description>
+    <language>ko-KR</language>
+    <atom:link href="http://localhost:3000/rss/cptest1" rel="self" type="application/rss+xml"/>
+    <lastBuildDate>Mon, 26 Oct 2026 05:12:48 GMT</lastBuildDate>
+    <item>
+      <title>test</title>
+      <link>http://localhost:3000/bbs/cptest1/178</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/178</guid>
+      <description></description>
+      <author>test</author>
+      <pubDate>Tue, 19 Aug 2025 08:04:20 GMT</pubDate>
+    </item>
+    <item>
+      <title>12345</title>
+      <link>http://localhost:3000/bbs/cptest1/177</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/177</guid>
+      <description></description>
+      <author>dwe</author>
+      <pubDate>Fri, 15 Aug 2025 01:26:05 GMT</pubDate>
+    </item>
+    <item>
+      <title>GDㅂㅂㅂㅂㅂ</title>
+      <link>http://localhost:3000/bbs/cptest1/169</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/169</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 18 Dec 2024 07:38:59 GMT</pubDate>
+    </item>
+    <item>
+      <title>fdsa</title>
+      <link>http://localhost:3000/bbs/cptest1/168</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/168</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 18 Dec 2024 07:38:40 GMT</pubDate>
+    </item>
+    <item>
+      <title>12</title>
+      <link>http://localhost:3000/bbs/cptest1/165</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/165</guid>
+      <description></description>
+      <author>12</author>
+      <pubDate>Mon, 08 Jan 2024 07:49:46 GMT</pubDate>
+    </item>
+    <item>
+      <title>ㅇㄻㅇㄹ</title>
+      <link>http://localhost:3000/bbs/cptest1/161</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/161</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 08 Nov 2023 00:47:57 GMT</pubDate>
+    </item>
+    <item>
+      <title>“On the third day there was a wedding in Cana of Galilee, and the mother of Jesus was there. Now both Jesus and His disciples were invited to the wedding. And when they ran out of wine, the mother of Jesus said to Him, “They have no wine.”</title>
+      <link>http://localhost:3000/bbs/cptest1/158</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/158</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Mon, 06 Mar 2023 15:01:23 GMT</pubDate>
+    </item>
+    <item>
+      <title>sdfasdfewfdfeaewf</title>
+      <link>http://localhost:3000/bbs/cptest1/157</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/157</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 28 Dec 2022 05:29:03 GMT</pubDate>
+    </item>
+    <item>
+      <title>되는건가요</title>
+      <link>http://localhost:3000/bbs/cptest1/156</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/156</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 14 Dec 2022 05:44:17 GMT</pubDate>
+    </item>
+    <item>
+      <title>글쓰기 연습</title>
+      <link>http://localhost:3000/bbs/cptest1/155</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/155</guid>
+      <description></description>
+      <author>공지사항</author>
+      <pubDate>Sat, 04 Feb 2023 15:37:40 GMT</pubDate>
+    </item>
+    <item>
+      <title>오늘도ㅈ</title>
+      <link>http://localhost:3000/bbs/cptest1/148</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/148</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Mon, 28 Nov 2022 07:34:36 GMT</pubDate>
+    </item>
+    <item>
+      <title>aaaa</title>
+      <link>http://localhost:3000/bbs/cptest1/143</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/143</guid>
+      <description></description>
+      <author>ㄹㅇㄴ</author>
+      <pubDate>Tue, 03 May 2022 06:14:32 GMT</pubDate>
+    </item>
+    <item>
+      <title>000000000</title>
+      <link>http://localhost:3000/bbs/cptest1/141</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/141</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Wed, 25 Aug 2021 05:09:38 GMT</pubDate>
+    </item>
+    <item>
+      <title>sdsd</title>
+      <link>http://localhost:3000/bbs/cptest1/138</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/138</guid>
+      <description></description>
+      <author>ㄴㄴ</author>
+      <pubDate>Wed, 02 Dec 2020 05:22:37 GMT</pubDate>
+    </item>
+    <item>
+      <title>Zcde</title>
+      <link>http://localhost:3000/bbs/cptest1/136</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/136</guid>
+      <description></description>
+      <author>Qqq</author>
+      <pubDate>Wed, 22 Jul 2020 09:05:01 GMT</pubDate>
+    </item>
+    <item>
+      <title>ㄹㅇㅎ</title>
+      <link>http://localhost:3000/bbs/cptest1/132</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/132</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Mon, 17 Feb 2020 09:01:33 GMT</pubDate>
+    </item>
+    <item>
+      <title>aaaa</title>
+      <link>http://localhost:3000/bbs/cptest1/130</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/130</guid>
+      <description></description>
+      <author>aaa</author>
+      <pubDate>Thu, 16 Jan 2020 04:45:05 GMT</pubDate>
+    </item>
+    <item>
+      <title>testwcccc</title>
+      <link>http://localhost:3000/bbs/cptest1/125</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/125</guid>
+      <description></description>
+      <author>영카트5</author>
+      <pubDate>Fri, 26 Apr 2019 06:01:58 GMT</pubDate>
+    </item>
+    <item>
+      <title>3123</title>
+      <link>http://localhost:3000/bbs/cptest1/122</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/122</guid>
+      <description></description>
+      <author>test</author>
+      <pubDate>Wed, 04 Sep 2019 06:25:58 GMT</pubDate>
+    </item>
+    <item>
+      <title>111</title>
+      <link>http://localhost:3000/bbs/cptest1/121</link>
+      <guid isPermaLink="true">http://localhost:3000/bbs/cptest1/121</guid>
+      <description></description>
+      <author>111</author>
+      <pubDate>Tue, 07 May 2019 03:29:41 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

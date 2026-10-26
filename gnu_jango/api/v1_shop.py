@@ -1751,7 +1751,8 @@ def payment_prepare_view(request):
         # youngcart od_test: the key pair (테스트 / 실결제) this payment is made with, so its
         # confirm, cancel and refunds use that pair even after 결제 테스트 changes
         order.od_test = current_toss_mode_flag()
-        ShopOrder.objects.filter(pk=order.pk).update(od_test=order.od_test)
+        order._change_reason = "Toss test mode recorded at checkout"
+        order.save(update_fields=["od_test"])
     escrow_products = toss_escrow_products(order) if pg_service == "toss" and toss_escrow_applies(order.od_settle_case) else []
     use_escrow = bool(escrow_products)
     tax_flag = 1 if order.od_tax_flag else 0

@@ -66,7 +66,7 @@
       <h2>{% translate 'Audit entries' %}</h2>
     </div>
     <p class="g5-admin-empty">
-      {% blocktranslate %}Newest {{ audit_per_model_limit }} rows per model are scanned. Narrow the filters when the table is large.{% endblocktranslate %}
+      {% blocktranslate %}All matching audit entries are paginated. CSV export is limited to {{ audit_export_limit }} rows; narrow the filters if needed.{% endblocktranslate %}
     </p>
   </div>
   <nav class="g5-admin-export-actions" aria-label="{% translate 'Export' %}">

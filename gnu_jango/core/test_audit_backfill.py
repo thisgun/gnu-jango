@@ -79,7 +79,18 @@ class BackfillAuditHistoryTests(TestCase):
         call_command("backfill_audit_history", models=["config.Config"], stdout=StringIO())
 
         self.assertEqual(Config.history.filter(name="cf_backfill_setting").count(), 1)
+        self.assertEqual(Config.history.get(name="cf_backfill_setting").value, "one")
         self.assertEqual(Config.history.filter(name="auth_cart_backfill").count(), 0)
+
+    def test_config_backfill_redacts_secret_values(self):
+        Config.objects.create(name="cf_backfill_secret", value="plain-secret")
+        Config.history.filter(name="cf_backfill_secret").delete()
+
+        call_command("backfill_audit_history", models=["config.Config"], stdout=StringIO())
+
+        row = Config.history.get(name="cf_backfill_secret")
+        self.assertEqual(row.value, "********")
+        self.assertIn("credential value redacted", row.history_change_reason)
 
     def test_order_history_import_creates_status_events(self):
         get_user_model().objects.create_user(username="backfill-admin", password="pw")

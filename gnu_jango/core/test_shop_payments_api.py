@@ -296,6 +296,15 @@ class PaymentPrepareTests(PaymentTestBase):
         self.assertEqual(self.stock(), 9)
 
     @override_settings(**FAKE_TOSS)
+    def test_prepare_records_the_toss_test_mode_in_order_history(self):
+        order = self.prepared_order()
+
+        latest = order.history.order_by("-history_date", "-history_id").first()
+        self.assertGreaterEqual(order.history.count(), 2)
+        self.assertEqual(latest.od_test, order.od_test)
+        self.assertEqual(latest.history_change_reason, "Toss test mode recorded at checkout")
+
+    @override_settings(**FAKE_TOSS)
     def test_prepare_empties_the_cart_rows_it_ordered(self):
         self.prepared_order()
 

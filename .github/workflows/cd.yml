@@ -70,7 +70,8 @@ jobs:
 
   vercel:
     if: >-
-      ${{ !github.event.repository.private && vars.VERCEL_DEPLOY == 'true' &&
+      ${{ !github.event.repository.private &&
+          (vars.VERCEL_DEPLOY == 'true' || vars.RUN_DB_MIGRATIONS == 'true' || vars.VERCEL_DEPLOY_HOOK == 'true') &&
           (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
     runs-on: ubuntu-latest
     environment: production
@@ -83,11 +84,61 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.ref }}
       - name: Check the Vercel secrets
+        if: vars.VERCEL_DEPLOY == 'true'
         run: |
           for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
             if [ -z "${!name}" ]; then echo "::error::secret $name is not set"; exit 1; fi
           done
+      - name: Set up Python for database migrations
+        if: vars.RUN_DB_MIGRATIONS == 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Apply production database migrations
+        if: vars.RUN_DB_MIGRATIONS == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          DJANGO_SETTINGS_MODULE: example.settings.development
+          ENVIRONMENT: Development
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::PRODUCTION_DATABASE_URL is not set"
+            exit 1
+          fi
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python manage.py migrate --plan
+          python manage.py migrate --noinput
+      - name: Apply handbook database migrations
+        if: vars.RUN_DB_MIGRATIONS == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.HANDBOOK_DATABASE_URL }}
+          DJANGO_SETTINGS_MODULE: example.settings.development
+          ENVIRONMENT: Development
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "handbook migrations skipped: HANDBOOK_DATABASE_URL is not set"
+            exit 0
+          fi
+          python manage.py migrate --plan
+          python manage.py migrate --noinput
+      - name: Trigger Vercel production deploys
+        if: vars.VERCEL_DEPLOY_HOOK == 'true'
+        env:
+          VERCEL_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_DEPLOY_HOOK_URL }}
+          VERCEL_HANDBOOK_DEPLOY_HOOK_URL: ${{ secrets.VERCEL_HANDBOOK_DEPLOY_HOOK_URL }}
+        run: |
+          for name in VERCEL_DEPLOY_HOOK_URL VERCEL_HANDBOOK_DEPLOY_HOOK_URL; do
+            if [ -z "${!name}" ]; then
+              echo "::error::secret $name is not set"
+              exit 1
+            fi
+          done
+          curl --fail --silent --show-error --request POST "$VERCEL_DEPLOY_HOOK_URL"
+          curl --fail --silent --show-error --request POST "$VERCEL_HANDBOOK_DEPLOY_HOOK_URL"
       - name: Deploy to Vercel (production)
+        if: vars.VERCEL_DEPLOY == 'true'
         run: |
           npx --yes vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
           npx --yes vercel@latest build --prod --token="$VERCEL_TOKEN"

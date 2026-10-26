@@ -1,100 +1,166 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { LucideIcon } from "lucide-react";
-import {
-  ArrowRight,
-  Bike,
-  Boxes,
-  Coffee,
-  Gem,
-  House,
-  LampDesk,
-  PencilLine,
-  Shirt,
-  Sparkles,
-  Utensils,
-} from "lucide-react";
+import { useEffect, useRef, useState, type Ref } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import type { ShopCategory } from "@/lib/api";
+import { assignCategoryIcons } from "@/lib/shop-category-icons";
+import { useDynamicSwiper } from "@/lib/use-dynamic-swiper";
+import { cn } from "@/lib/utils";
 import { getShopHomeData } from "@/services/shop-home";
 
-const categoryIcons: Array<[RegExp, LucideIcon]> = [
-  [/의류|패션|옷|팬츠|상의|하의|티셔츠/i, Shirt],
-  [/주방|식품|푸드|식기|요리/i, Utensils],
-  [/문구|펜|사무|테스트/i, PencilLine],
-  [/가구|리빙|홈|생활/i, House],
-  [/커피|음료|차|카페/i, Coffee],
-  [/조명|램프|등/i, LampDesk],
-  [/자전거|스포츠|레저/i, Bike],
-  [/주얼리|보석|액세서리/i, Gem],
-  [/뷰티|화장품|케어/i, Sparkles],
-];
+/* 분류 칩 자리 수 — 넓은 화면의 한 화면 칸 수(10)보다 많게 두어 넘김 막대 자리도 잡는다. */
+const CATEGORY_SKELETON_CHIPS = 12;
 
-function categoryIcon(name: string) {
-  return categoryIcons.find(([pattern]) => pattern.test(name))?.[1] ?? Boxes;
+function categoryHref(category: ShopCategory) {
+  return `/shop/list-${encodeURIComponent(category.ca_id)}`;
 }
 
-function categoryGridColumns(count: number) {
-  if (count <= 1) return "grid-cols-1";
-  if (count === 2) return "grid-cols-2";
-  if (count === 3) return "grid-cols-2 sm:grid-cols-3";
-  if (count === 4) return "grid-cols-2 sm:grid-cols-4";
-  if (count === 5) return "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5";
-  return "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6";
+/** 칩 아래 넘김 표시 — 화살표 둘과 끌 수 있는 막대. Swiper 가 서기 전에는 흐린 자리(-reserve)로 둔다. */
+function CategoryPager({
+  ready,
+  prevRef,
+  nextRef,
+  scrollbarRef,
+}: {
+  ready: boolean;
+  prevRef?: Ref<HTMLButtonElement>;
+  nextRef?: Ref<HTMLButtonElement>;
+  scrollbarRef?: Ref<HTMLDivElement>;
+}) {
+  return (
+    <div className={cn("solune-catrow-pager", !ready && "solune-catrow-pager-reserve")} aria-hidden={ready ? undefined : true}>
+      <button ref={prevRef} type="button" className="solune-catrow-nav solune-catrow-prev" aria-label="이전 분류" tabIndex={ready ? undefined : -1}>
+        <ChevronLeft size={16} aria-hidden />
+      </button>
+      <div ref={scrollbarRef} className="solune-catrow-scrollbar" />
+      <button ref={nextRef} type="button" className="solune-catrow-nav solune-catrow-next" aria-label="다음 분류" tabIndex={ready ? undefined : -1}>
+        <ChevronRight size={16} aria-hidden />
+      </button>
+    </div>
+  );
 }
 
+/** 분류를 받는 동안의 자리 — 진짜 줄과 같은 마크업 · 클래스라 응답 뒤에 아래 진열이 밀리지 않는다. */
+function ShopCategoryRowSkeleton() {
+  return (
+    <div className="ondam-catrow site-container px-0" aria-hidden="true">
+      <div className="swiper solune-catrow-swiper">
+        <div className="swiper-wrapper">
+          {Array.from({ length: CATEGORY_SKELETON_CHIPS }, (_, index) => (
+            <div key={index} className="swiper-slide">
+              <a>
+                <span className="ondam-catrow-icon skeleton" />
+                <span className="ondam-catrow-label">
+                  <span className={cn("skeleton inline-block h-3 align-middle", index % 2 === 0 ? "w-12" : "w-9")} />
+                </span>
+              </a>
+            </div>
+          ))}
+        </div>
+      </div>
+      <CategoryPager ready={false} />
+    </div>
+  );
+}
+
+/**
+ * 분류 칩 줄 — 레퍼런스 shop-home-swipers.tsx 의 .solune-catrow-swiper 값 그대로: 좁은 폭 2칸에서
+ * 640 · 780 · 1080 · 1280 마다 3 · 4 · 8 · 10칸, 간격 14, 칩 아래에 화살표 둘과 끌 수 있는 막대.
+ * 한 줄에 다 들어가면 Swiper 가 막대를 잠그고 CSS 가 통째로 감춘다. 첫 칩은 레퍼런스처럼 강조(is-featured)한다.
+ * 키보드로 화면 밖 칩에 초점이 가면 A11y 모듈이 그 칩을 끌어온다(watchSlidesProgress 로 보이는 칩은 그대로).
+ */
+function ShopCategoryCarousel({ categories }: { categories: ShopCategory[] }) {
+  const swiperElRef = useRef<HTMLDivElement>(null);
+  const prevRef = useRef<HTMLButtonElement>(null);
+  const nextRef = useRef<HTMLButtonElement>(null);
+  const scrollbarRef = useRef<HTMLDivElement>(null);
+  const [ready, setReady] = useState(false);
+  const icons = assignCategoryIcons(categories.map((category) => category.ca_id));
+
+  useDynamicSwiper(
+    swiperElRef,
+    () => ({
+      slidesPerView: 2,
+      spaceBetween: 14,
+      speed: 320,
+      watchOverflow: true,
+      watchSlidesProgress: true,
+      a11y: { prevSlideMessage: "이전 분류", nextSlideMessage: "다음 분류" },
+      navigation: { prevEl: prevRef.current, nextEl: nextRef.current },
+      scrollbar: { el: scrollbarRef.current, draggable: true, hide: false },
+      breakpoints: {
+        640: { slidesPerView: 3 },
+        780: { slidesPerView: 4 },
+        1080: { slidesPerView: 8 },
+        1280: { slidesPerView: 10 },
+      },
+      on: {
+        init() {
+          setReady(true);
+        },
+      },
+    }),
+    [],
+    { modules: (modules) => [modules.A11y, modules.Navigation, modules.Scrollbar] }
+  );
+
+  return (
+    <nav className="ondam-catrow site-container px-0" aria-label="상품 카테고리">
+      <div ref={swiperElRef} className="swiper solune-catrow-swiper">
+        <div className="swiper-wrapper">
+          {categories.map((category, index) => {
+            const Icon = icons[index];
+            return (
+              <div key={category.ca_id} className="swiper-slide">
+                <Link href={categoryHref(category)} className={index === 0 ? "is-featured" : undefined}>
+                  <span className="ondam-catrow-icon" aria-hidden>
+                    <Icon size={22} strokeWidth={1.6} />
+                  </span>
+                  <span className="ondam-catrow-label">{category.ca_name}</span>
+                </Link>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <CategoryPager ready={ready} prevRef={prevRef} nextRef={nextRef} scrollbarRef={scrollbarRef} />
+    </nav>
+  );
+}
+
+/**
+ * 쇼핑 홈 분류 줄. 서버 모드는 분류를 HTML 에 구워 받고(categories), 정적 내보내기는 브라우저가 쇼핑 홈
+ * 묶음(getShopHomeData)에서 받는다. 분류 묶음이 바뀌면 key 로 캐러셀을 새로 세운다.
+ */
 export function ShopHomeCategories({ categories }: { categories: ShopCategory[] }) {
   const [runtimeCategories, setRuntimeCategories] = useState<ShopCategory[] | null>(null);
   const visibleCategories = runtimeCategories ?? categories;
+
   useEffect(() => {
     let active = true;
-    getShopHomeData().then((home) => {
-      if (active) setRuntimeCategories(home.categories);
-    }).catch(() => undefined);
-
-    return () => { active = false; };
+    getShopHomeData()
+      .then((home) => {
+        if (active) setRuntimeCategories(home.categories);
+      })
+      .catch(() => {
+        // 받지 못하면 서버가 구운 분류로 둔다(없으면 줄을 감춘다).
+        if (active) setRuntimeCategories((current) => current ?? categories);
+      });
+    return () => {
+      active = false;
+    };
+    // 처음 붙을 때 한 번 받는다. categories 는 서버가 구운 첫 값이다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  if (runtimeCategories === null && categories.length === 0) return <ShopCategoryRowSkeleton />;
   if (visibleCategories.length === 0) return null;
-  const singleCategory = visibleCategories.length === 1;
 
   return (
-    <section className="site-container px-0 pb-0 pt-[19px] md:pb-0 md:pt-9" aria-label="상품 카테고리">
-      <div
-        className={`grid w-full gap-3 ${categoryGridColumns(visibleCategories.length)}`}
-        role="group"
-        aria-label="상품 카테고리 목록"
-      >
-        {visibleCategories.map((category, index) => {
-          const Icon = categoryIcon(category.ca_name);
-          return (
-            <Link
-              key={category.ca_id}
-              href={`/shop/list-${encodeURIComponent(category.ca_id)}`}
-              className={`card relative w-full min-w-0 rounded-box border bg-base-100 transition-colors ${singleCategory ? "col-span-full h-[112px] flex-row justify-between px-5 text-left md:h-[120px]" : "min-h-[126px] items-center justify-center gap-2 px-2 text-center md:min-h-[144px]"} ${index === 0 ? "border-success text-success" : "border-base-300 text-base-content hover:border-primary hover:bg-base-200"}`}
-            >
-              <span className={`flex min-w-0 items-center ${singleCategory ? "gap-4" : "flex-col gap-2"}`}>
-                <span className={`flex size-12 shrink-0 items-center justify-center rounded-full border ${index === 0 ? "border-success/40 bg-base-200 text-success" : "border-base-300 bg-base-200 text-base-content"}`}>
-                  <Icon aria-hidden="true" className="size-5" />
-                </span>
-                <span className={singleCategory ? "min-w-0" : "text-center"}>
-                  <span className={`block line-clamp-1 text-sm font-semibold ${index === 0 ? "text-success" : "text-base-content"}`}>
-                    {category.ca_name}
-                  </span>
-                  {singleCategory && (
-                    <span className="mt-1 block text-xs text-base-content/60">
-                      {typeof category.item_count === "number" ? `${category.item_count.toLocaleString()}개 상품을 둘러보세요.` : "상품을 둘러볼 분류입니다."}
-                    </span>
-                  )}
-                </span>
-              </span>
-              {singleCategory && <ArrowRight aria-hidden="true" className="size-5 shrink-0 text-base-content/60" />}
-              {index === 0 && <span aria-hidden="true" className={`absolute bottom-0 h-0.5 rounded-full bg-success ${singleCategory ? "inset-x-5" : "inset-x-10"}`} />}
-            </Link>
-          );
-        })}
-      </div>
-    </section>
+    <ShopCategoryCarousel
+      key={visibleCategories.map((category) => category.ca_id).join(",")}
+      categories={visibleCategories}
+    />
   );
 }

@@ -1,7 +1,7 @@
 """The handbook (manual) theme reads books from a board group and chapters from a board's posts.
 
 cf_docs_group names that group in /api/v1/settings; ensure_handbook_samples builds a small manual
-(a group, four boards as books, their categories as parts, posts as chapters) for demos and QA.
+(a group, several boards as books, their categories as parts, posts as chapters) for demos and QA.
 """
 
 import io
@@ -14,6 +14,7 @@ from rest_framework.test import APIClient
 from gnu_jango.bbs.models import Board, Group, Post
 from gnu_jango.config import config as site_config
 from gnu_jango.config import handbook_samples as samples
+from gnu_jango.config.handbook_audit_content import AUDIT_LINK_MARKER, AUDIT_LINK_TITLES
 from gnu_jango.config.models import Config
 
 API = "/api/v1"
@@ -85,6 +86,77 @@ class HandbookSamplesTests(TestCase):
         samples.ensure_samples()
 
         self.assertGreaterEqual(sum(len(self.chapters(book.table)) for book in samples.BOOKS), 20)
+
+    def test_order_restore_chapter_marks_tracking_number_as_protected(self):
+        body = samples.chapter_body("이전 상태 복원과 복원할 수 없는 항목")
+
+        self.assertIn("운송장 번호", body)
+        self.assertIn("od_tno", body)
+        self.assertNotIn("메모·송장·희망", body)
+
+    def test_the_audit_book_has_operator_and_developer_parts(self):
+        samples.ensure_samples()
+
+        book = Board.objects.get(bo_table="hb_audit")
+        chapters = self.chapters("hb_audit")
+
+        self.assertEqual(book.bo_subject, "운영 지원 · 감사 로그와 변경 이력")
+        self.assertEqual(book.bo_category_list.split("|"), ["운영자용", "개발·운영용"])
+        self.assertEqual(len(chapters), 12)
+        self.assertEqual(chapters[0]["ca_name"], "운영자용")
+        self.assertEqual(chapters[7]["ca_name"], "개발·운영용")
+
+    def test_the_audit_book_points_to_related_shop_member_and_dev_guides(self):
+        samples.ensure_samples()
+        book = Board.objects.get(bo_table="hb_audit")
+        chapter = Post.objects.get(board=book, wr_subject="관리자에서 변경 이력 찾기")
+        detail = APIClient().get(f"{API}/posts/hb_audit/{chapter.pk}").json()["data"]
+
+        self.assertIn('href="/bbs/hb_shop"', detail["wr_content"])
+        self.assertIn('href="/bbs/hb_member"', detail["wr_content"])
+        self.assertIn('href="/bbs/hb_dev"', detail["wr_content"])
+
+    def test_audit_link_is_appended_without_replacing_admin_text(self):
+        samples.ensure_samples()
+        target = Post.objects.get(wr_subject="상품과 분류 등록하기")
+        target.wr_content = "<p>admin-sentinel-401</p>"
+        target.save(update_fields=("wr_content",))
+
+        samples.ensure_samples()
+
+        target.refresh_from_db()
+        self.assertIn("admin-sentinel-401", target.wr_content)
+        self.assertIn("/bbs/hb_audit", target.wr_content)
+        self.assertEqual(target.wr_content.count(AUDIT_LINK_MARKER), 1)
+
+    def test_audit_chapters_are_searchable_after_reindex(self):
+        samples.ensure_samples()
+        call_command("rebuild_search_index", stdout=io.StringIO())
+
+        response = APIClient().get(
+            f"{API}/search/unified",
+            {"q": "감사", "type": "document", "limit": 10},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        results = response.json()["data"]["results"]
+        self.assertTrue(results, results)
+        self.assertTrue(any("감사 로그란 무엇인가" in item.get("title", "") for item in results), results)
+
+    def test_related_existing_chapters_link_to_the_audit_book_once(self):
+        samples.ensure_samples()
+
+        for title in AUDIT_LINK_TITLES:
+            with self.subTest(title=title):
+                target = Post.objects.get(wr_subject=title)
+                self.assertIn("/bbs/hb_audit", target.wr_content)
+                self.assertEqual(target.wr_content.count(AUDIT_LINK_MARKER), 1)
+
+        samples.ensure_samples()
+        for title in AUDIT_LINK_TITLES:
+            with self.subTest(title=title):
+                target = Post.objects.get(wr_subject=title)
+                self.assertEqual(target.wr_content.count(AUDIT_LINK_MARKER), 1)
 
     def test_running_it_again_adds_nothing(self):
         samples.ensure_samples()

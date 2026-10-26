@@ -912,6 +912,10 @@ ADMIN_VISIT_LOG_RETENTION_DAYS = de_config("ADMIN_VISIT_LOG_RETENTION_DAYS", def
 ADMIN_VISIT_LOG_MASK_IP = bool_config("ADMIN_VISIT_LOG_MASK_IP", default=True)
 ADMIN_VISIT_LOG_EXCLUDE_BOTS = bool_config("ADMIN_VISIT_LOG_EXCLUDE_BOTS", default=True)
 
+# Audit history retention is opt-in. 0 keeps every revision indefinitely; a positive value
+# lets run_scheduled_jobs purge rows older than that many days.
+AUDIT_RETENTION_DAYS = de_config("AUDIT_RETENTION_DAYS", default=0, cast=int)
+
 
 INTERNAL_IPS = [
     "127.0.0.1",

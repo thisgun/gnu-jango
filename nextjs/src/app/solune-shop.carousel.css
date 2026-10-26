@@ -60,6 +60,8 @@
 @media (min-width: 1080px) { .solune-shop-page .ondam-catrow:not(:has(.swiper-slide:nth-child(9))) .solune-catrow-pager-reserve { display: none; } }
 @media (min-width: 1280px) { .solune-shop-page .ondam-catrow:not(:has(.swiper-slide:nth-child(11))) .solune-catrow-pager-reserve { display: none; } }
 .solune-shop-page .solune-catrow-pager-reserve { pointer-events: none; }
+/* 막대 자리의 단추는 진짜 단추와 같은 모양을 흐리게(아직 넘길 수 없음) 둔다. */
+.solune-shop-page .solune-catrow-pager-reserve .solune-catrow-nav { opacity: 0.35; }
 
 /* Swiper 가 서기 전(첫 로딩 자리 잡기 · 넘김 스크립트가 붙기 전)에는 제 CSS 의 .swiper-slide { width: 100% } 가 남아
    한 장이 줄을 통째로 차지한다. 분류 · 진열 · 후기 줄은 그 틈에도 칸 폭과 간격을 세워진 뒤와 같게 둔다 — 칸이 글자
@@ -164,4 +166,4 @@
 .solune-shop-page .solune-review-swiper { position: relative; overflow: hidden; }
 .solune-shop-page .ondam-review-grid { display: flex; }
 .solune-shop-page .solune-review-swiper .swiper-slide { display: flex; height: auto; }
-.solune-shop-page .solune-review-swiper .swiper-slide >
+.solune-shop-page .solune-review-swiper .swiper-slide > .ondam-review-card { flex: 1; }

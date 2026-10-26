@@ -1,7 +1,10 @@
+from copy import copy
+
 from django.db import models
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.utils.translation import gettext_lazy as _
+from simple_history.manager import HistoryManager
 from simple_history.models import HistoricalRecords
 from simple_history.signals import pre_create_historical_record
 
@@ -58,6 +61,42 @@ def is_secret_config_name(name):
     return lowered in SECRET_CONFIG_NAMES or any(part in lowered for part in SECRET_CONFIG_NAME_PARTS)
 
 
+class ConfigHistoryManager(HistoryManager):
+    """Redact credentials for bulk history writes too.
+
+    ``HistoryManager.bulk_history_create()`` builds historical rows directly. Unlike a normal
+    ``Config.save()``, it does not go through ``pre_create_historical_record``, so the backfill
+    command would otherwise copy a live credential into ``config_historicalconfig.value``.
+    """
+
+    def bulk_history_create(
+        self,
+        objs,
+        batch_size=None,
+        update=False,
+        default_user=None,
+        default_change_reason="",
+        default_date=None,
+        custom_historical_attrs=None,
+    ):
+        snapshots = []
+        for instance in objs:
+            if is_secret_config_name(getattr(instance, "name", "")):
+                instance = copy(instance)
+                instance.value = REDACTED_CONFIG_VALUE
+                instance._change_reason = "credential value redacted"
+            snapshots.append(instance)
+        return super().bulk_history_create(
+            snapshots,
+            batch_size=batch_size,
+            update=update,
+            default_user=default_user,
+            default_change_reason=default_change_reason,
+            default_date=default_date,
+            custom_historical_attrs=custom_historical_attrs,
+        )
+
+
 class Config(models.Model):
     """
     Stores values for ``gnu_jango.conf`` that can be edited via the admin.
@@ -67,7 +106,7 @@ class Config(models.Model):
 
     # Admin settings changes are part of the audit trail. Historical values for credentials are
     # replaced by REDACTED_CONFIG_VALUE in the pre_create_historical_record receiver below.
-    history = ConfigHistoryRecords()
+    history = ConfigHistoryRecords(history_manager=ConfigHistoryManager)
 
     class Meta:
         # Django names tables `<app_label>_<model>`, and this app's label is

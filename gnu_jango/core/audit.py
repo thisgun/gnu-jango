@@ -10,8 +10,8 @@ import csv
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
-from django.db.models import Q
-from django.http import HttpResponse, HttpResponseRedirect
+from django.db.models import CharField, F, Q, Value
+from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
@@ -21,7 +21,7 @@ from simple_history.admin import SimpleHistoryAdmin
 from unfold.admin import ModelAdmin
 
 AUDIT_PAGE_SIZE = 50
-AUDIT_PER_MODEL_LIMIT = 500
+AUDIT_EXPORT_LIMIT = 1000
 # get_history_type_display() reuses Django's "created" translation, which the Korean locale
 # renders as "생성일시" (a timestamp). The audit screen needs action verbs.
 AUDIT_ACTION_LABELS = {
@@ -232,27 +232,24 @@ def _csv_safe(value):
     return text
 
 
-def audit_log_view(request):
-    """One screen for every audited model, newest change first.
+def _audit_history_rows(
+    specs,
+    *,
+    selected_model,
+    selected_action,
+    selected_user,
+    selected_query,
+    date_from,
+    date_to,
+):
+    """Return the common columns of the filtered history tables as one ordered queryset.
 
-    Rows link to the model's simple-history page, where the field diff is shown and the
-    model-specific revert rules apply (settings: yes, orders: safe fields only, ledgers: no).
+    Each model has its own history table and its own search fields, so filters are applied per
+    model first. ``union(all=True)`` then gives the whole audit log one global ordering instead
+    of truncating each model to a fixed number of rows.
     """
 
-    if not request.user.is_active or not request.user.is_staff:
-        raise PermissionDenied
-
-    specs = [spec for spec in audit_model_specs() if _can_view_audit_model(request.user, spec["model"])]
-    for spec in specs:
-        spec["value"] = spec["model"]._meta.label_lower
-    selected_model = (request.GET.get("model") or "").strip()
-    selected_action = (request.GET.get("action") or "").strip()
-    selected_user = (request.GET.get("user") or "").strip()
-    selected_query = (request.GET.get("q") or "").strip()
-    date_from = parse_date(request.GET.get("date_from") or "")
-    date_to = parse_date(request.GET.get("date_to") or "")
-
-    entries = []
+    querysets = []
     for spec in specs:
         model = spec["model"]
         if selected_model and selected_model != model._meta.label_lower:
@@ -271,26 +268,107 @@ def audit_log_view(request):
             for field in spec["search_fields"]:
                 query |= Q(**{f"{field}__icontains": selected_query})
             queryset = queryset.filter(query)
-        queryset = queryset.select_related("history_user").order_by("-history_date")[:AUDIT_PER_MODEL_LIMIT]
-        for record in queryset:
-            entries.append(
-                {
-                    "record": record,
-                    "model": model,
-                    "model_label": spec["label"],
-                    "object_label": spec["object_repr"](record) or "-",
-                    "action": record.history_type,
-                    "action_label": AUDIT_ACTION_LABELS.get(record.history_type, record.history_type),
-                    "can_restore": bool(spec.get("restore")),
-                    "user": getattr(record.history_user, "username", "") or _("System"),
-                    "history_date": record.history_date,
-                    "url": _history_url(model, record),
-                }
+        querysets.append(
+            queryset.order_by().values(
+                model_label=Value(model._meta.label_lower, output_field=CharField()),
+                audit_history_id=F("history_id"),
+                audit_history_date=F("history_date"),
+                audit_history_type=F("history_type"),
             )
+        )
 
-    entries.sort(key=lambda entry: entry["history_date"], reverse=True)
+    if not querysets:
+        return None
+    if len(querysets) == 1:
+        return querysets[0].order_by("-audit_history_date", "-audit_history_id")
+    return querysets[0].union(*querysets[1:], all=True).order_by(
+        "-audit_history_date", "-audit_history_id"
+    )
+
+
+def _audit_entries_from_rows(rows, specs_by_label):
+    """Load the real historical rows for the page/export window and build display entries."""
+
+    ids_by_label = {}
+    for row in rows:
+        ids_by_label.setdefault(row["model_label"], []).append(row["audit_history_id"])
+
+    records_by_label = {}
+    for label, history_ids in ids_by_label.items():
+        spec = specs_by_label.get(label)
+        if spec is None:
+            continue
+        records = {}
+        # SQLite's parameter limit is below 1,000; keep the IN lists chunked for it too.
+        for offset in range(0, len(history_ids), 500):
+            chunk = history_ids[offset : offset + 500]
+            for record in spec["model"].history.filter(history_id__in=chunk).select_related("history_user"):
+                records[record.history_id] = record
+        records_by_label[label] = records
+
+    entries = []
+    for row in rows:
+        spec = specs_by_label.get(row["model_label"])
+        record = records_by_label.get(row["model_label"], {}).get(row["audit_history_id"])
+        if spec is None or record is None:
+            continue
+        entries.append(
+            {
+                "record": record,
+                "model": spec["model"],
+                "model_label": spec["label"],
+                "object_label": spec["object_repr"](record) or "-",
+                "action": record.history_type,
+                "action_label": AUDIT_ACTION_LABELS.get(record.history_type, record.history_type),
+                "can_restore": bool(spec.get("restore")),
+                "user": getattr(record.history_user, "username", "") or _("System"),
+                "history_date": record.history_date,
+                "url": _history_url(spec["model"], record),
+            }
+        )
+    return entries
+
+
+def audit_log_view(request):
+    """One screen for every audited model, newest change first.
+
+    Rows link to the model's simple-history page, where the field diff is shown and the
+    model-specific revert rules apply (settings: yes, orders: safe fields only, ledgers: no).
+    """
+
+    if not request.user.is_active or not request.user.is_staff:
+        raise PermissionDenied
+
+    specs = [spec for spec in audit_model_specs() if _can_view_audit_model(request.user, spec["model"])]
+    for spec in specs:
+        spec["value"] = spec["model"]._meta.label_lower
+    specs_by_label = {spec["model"]._meta.label_lower: spec for spec in specs}
+    selected_model = (request.GET.get("model") or "").strip()
+    selected_action = (request.GET.get("action") or "").strip()
+    selected_user = (request.GET.get("user") or "").strip()
+    selected_query = (request.GET.get("q") or "").strip()
+    date_from = parse_date(request.GET.get("date_from") or "")
+    date_to = parse_date(request.GET.get("date_to") or "")
+
+    rows = _audit_history_rows(
+        specs,
+        selected_model=selected_model,
+        selected_action=selected_action,
+        selected_user=selected_user,
+        selected_query=selected_query,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
     if (request.GET.get("export") or "").lower() == "csv":
+        total = rows.count() if rows is not None else 0
+        if total > AUDIT_EXPORT_LIMIT:
+            return HttpResponseBadRequest(
+                _("Too many audit rows to export; narrow the filters (limit: %(limit)s).")
+                % {"limit": AUDIT_EXPORT_LIMIT}
+            )
+        export_rows = list(rows[:AUDIT_EXPORT_LIMIT]) if rows is not None else []
+        entries = _audit_entries_from_rows(export_rows, specs_by_label)
         response = HttpResponse(content_type="text/csv; charset=utf-8")
         response["Content-Disposition"] = 'attachment; filename="audit-log.csv"'
         response.write("\ufeff")
@@ -310,19 +388,21 @@ def audit_log_view(request):
             )
         return response
 
-    paginator = Paginator(entries, AUDIT_PAGE_SIZE)
+    paginator = Paginator(rows if rows is not None else [], AUDIT_PAGE_SIZE)
     page_obj = paginator.get_page(request.GET.get("page"))
-    for entry in page_obj.object_list:
+    entries = _audit_entries_from_rows(list(page_obj.object_list), specs_by_label)
+    for entry in entries:
         entry["changes"] = _change_summary(entry["record"])
 
     query_params = request.GET.copy()
     query_params.pop("page", None)
+    query_params.pop("export", None)
     context = {
         **admin.site.each_context(request),
         "title": _("Audit log"),
         "opts": None,
         "specs": specs,
-        "entries": page_obj.object_list,
+        "entries": entries,
         "page_obj": page_obj,
         "page_query": query_params.urlencode(),
         "filters": {
@@ -334,6 +414,6 @@ def audit_log_view(request):
             "date_to": date_to.isoformat() if date_to else "",
         },
         "action_choices": AUDIT_ACTION_CHOICES,
-        "audit_per_model_limit": AUDIT_PER_MODEL_LIMIT,
+        "audit_export_limit": AUDIT_EXPORT_LIMIT,
     }
     return TemplateResponse(request, "admin/core/audit_log.html", context)

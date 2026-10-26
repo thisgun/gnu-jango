@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from io import StringIO
 
+from django.conf import settings
 from django.core.cache import cache
 from django.core.management import call_command
 
@@ -48,6 +49,22 @@ SCHEDULED_JOBS: tuple[ScheduledJob, ...] = (
     ScheduledJob("check_search_health", ("--json",), ("--json", "--audit-limit", "0"), 600),
     ScheduledJob("save_order_points", ("--apply", "--json"), ("--json",)),
 )
+
+try:
+    _AUDIT_RETENTION_DAYS = max(0, int(getattr(settings, "AUDIT_RETENTION_DAYS", 0) or 0))
+except (TypeError, ValueError):
+    _AUDIT_RETENTION_DAYS = 0
+
+if _AUDIT_RETENTION_DAYS:
+    _AUDIT_RETENTION_DAYS_TEXT = str(_AUDIT_RETENTION_DAYS)
+    SCHEDULED_JOBS += (
+        ScheduledJob(
+            "purge_audit_history",
+            ("--days", _AUDIT_RETENTION_DAYS_TEXT),
+            ("--days", _AUDIT_RETENTION_DAYS_TEXT, "--dry-run"),
+        ),
+    )
+
 JOB_NAMES = tuple(job.name for job in SCHEDULED_JOBS)
 
 
