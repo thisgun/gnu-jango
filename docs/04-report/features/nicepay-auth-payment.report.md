@@ -64,7 +64,7 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
 ## 테스트 결과
 
 - `manage.py check`: 통과 (기존 silenced 1개)
-- `gnu_jango.core.test_shop_nicepay`: **43개 통과** (관리자 설정 상속 회귀 포함)
+- `gnu_jango.core.test_shop_nicepay`: **44개 통과** (관리자 설정 상속 회귀 포함)
 - `manage.py test` 전체: **2,900개 통과**, 23개 skip
 - Next.js `npm run typecheck`: 통과
 - Next.js `npm run lint`: 통과
