@@ -1,9 +1,28 @@
+from datetime import timedelta
+
 from django.contrib import admin, messages
 from django.contrib.admin.models import CHANGE, LogEntry
+from django.utils import timezone
 from unfold.admin import ModelAdmin
 
-from gnu_jango.core.background import replay
+from gnu_jango.core.background import enabled, replay
 from gnu_jango.core.background_models import BackgroundJob
+
+# Beat dispatches every 10 seconds; a due job still pending after this long means nothing runs it.
+STALE_PENDING_MINUTES = 15
+
+
+def stale_pending_warning():
+    """Name a backlog that no worker is draining, so it is not discovered by missing texts."""
+    cutoff = timezone.now() - timedelta(minutes=STALE_PENDING_MINUTES)
+    stale = BackgroundJob.objects.filter(status="pending", available_at__lte=cutoff).count()
+    if not stale:
+        return ""
+    if not enabled():
+        return (f"백그라운드 작업이 꺼져 있어 대기 작업 {stale}개를 처리할 작업자가 없습니다. "
+                "운영자 명령 process_background_jobs --apply 로 남은 작업을 처리하세요.")
+    return (f"{STALE_PENDING_MINUTES}분 넘게 대기 중인 작업이 {stale}개 있습니다. "
+            "Celery 작업자와 Beat가 같은 DB·브로커로 실행 중인지 확인하세요.")
 
 
 @admin.register(BackgroundJob)
@@ -30,6 +49,12 @@ class BackgroundJobAdmin(ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+    def changelist_view(self, request, extra_context=None):
+        warning = stale_pending_warning()
+        if warning:
+            self.message_user(request, warning, messages.WARNING)
+        return super().changelist_view(request, extra_context)
 
     @admin.action(description="선택한 최종 실패 작업을 재처리 대기열로 이동", permissions=["view"])
     def requeue_failed(self, request, queryset):
