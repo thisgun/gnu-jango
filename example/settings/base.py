@@ -246,6 +246,18 @@ UNFOLD = {
                         "link": reverse_lazy("admin:shop_shoporder_changelist"),
                     },
                     {
+                        "title": "분류관리",
+                        "icon": "category",
+                        "link": reverse_lazy("admin:shop_shopcategory_changelist"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopcategory"),
+                    },
+                    {
+                        "title": "상품관리",
+                        "icon": "inventory_2",
+                        "link": reverse_lazy("admin:shop_shopproduct_changelist"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopproduct"),
+                    },
+                    {
                         "title": _("쇼핑몰 설정"),
                         "icon": "storefront",
                         "link": reverse_lazy("admin-shop-settings"),
