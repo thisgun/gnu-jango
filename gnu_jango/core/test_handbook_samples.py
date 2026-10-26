@@ -87,6 +87,13 @@ class HandbookSamplesTests(TestCase):
 
         self.assertGreaterEqual(sum(len(self.chapters(book.table)) for book in samples.BOOKS), 20)
 
+    def test_order_restore_chapter_marks_tracking_number_as_protected(self):
+        body = samples.chapter_body("이전 상태 복원과 복원할 수 없는 항목")
+
+        self.assertIn("운송장 번호", body)
+        self.assertIn("od_tno", body)
+        self.assertNotIn("메모·송장·희망", body)
+
     def test_the_audit_book_has_operator_and_developer_parts(self):
         samples.ensure_samples()
 
