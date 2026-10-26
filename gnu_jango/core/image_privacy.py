@@ -70,6 +70,10 @@ def _cleaned_bytes(image, source_format):
 
 def strip_image_metadata(uploaded_file):
     """The upload without photo metadata, or the same object when nothing needs removing."""
+    from .background import enabled, executing
+    if enabled() and not executing():
+        # The queued storage publishes a placeholder and stores the source in the private DB.
+        return uploaded_file
     _rewind(uploaded_file)
     try:
         with Image.open(uploaded_file) as image:

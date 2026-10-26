@@ -279,6 +279,10 @@ def avatar_url(user, width=50, height=50, gravatar_only=False):
         # .name, not .path: remote storages (MEDIA_STORAGE=s3) have no local filesystem path.
         and default_storage.exists(user.profile.avatar.name)
     ):
+        from gnu_jango.core.background import enabled
+        if enabled():
+            from gnu_jango.core.thumbnails import thumbnail_url
+            return thumbnail_url(user.profile.avatar.url, 240, storage_path=user.profile.avatar.name)
         im = get_thumbnail(
             user.profile.avatar,
             "%sx%s" % (width, height),

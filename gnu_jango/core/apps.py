@@ -9,3 +9,4 @@ class CoreConfig(AppConfig):
 
     def ready(self):
         from gnu_jango.notifications import checks, signals  # noqa: F401
+        from . import background_checks  # noqa: F401

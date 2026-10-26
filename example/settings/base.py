@@ -235,9 +235,27 @@ UNFOLD = {
                         "link": reverse_lazy("admin-audit-log"),
                     },
                     {
+                        "title": _("백그라운드 작업 / 실패 큐"),
+                        "icon": "pending_actions",
+                        "link": reverse_lazy("admin:core_backgroundjob_changelist"),
+                        "permission": lambda request: request.user.is_superuser and BACKGROUND_JOBS_ENABLED,
+                    },
+                    {
                         "title": _("Shop orders"),
                         "icon": "receipt_long",
                         "link": reverse_lazy("admin:shop_shoporder_changelist"),
+                    },
+                    {
+                        "title": "분류관리",
+                        "icon": "category",
+                        "link": reverse_lazy("admin:shop_shopcategory_changelist"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopcategory"),
+                    },
+                    {
+                        "title": "상품관리",
+                        "icon": "inventory_2",
+                        "link": reverse_lazy("admin:shop_shopproduct_changelist"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopproduct"),
                     },
                     {
                         "title": _("쇼핑몰 설정"),
@@ -726,6 +744,8 @@ PASSWORD_RESET_TIMEOUT = de_config("PASSWORD_RESET_TIMEOUT", default=60 * 60 * 3
 # are unchanged, so existing deployments need no new configuration.
 # Leading-underscore names are not exported by `from .base import *`, so they
 # stay local helpers instead of becoming settings.
+BACKGROUND_JOBS_ENABLED = bool_config("BACKGROUND_JOBS_ENABLED", default=False)
+
 _EMAIL_BACKEND = de_config(
     "EMAIL_BACKEND",
     default=(
@@ -756,6 +776,9 @@ MAILERS = {
         "OPTIONS": _SMTP_MAILER_OPTIONS if _IS_SMTP_MAILER else {},
     }
 }
+if BACKGROUND_JOBS_ENABLED:
+    MAILERS["delivery"] = {**MAILERS["default"]}
+    MAILERS["default"] = {"BACKEND": "gnu_jango.core.queued_mail.EmailBackend", "OPTIONS": {}}
 
 DEFAULT_FROM_EMAIL = de_config("DEFAULT_FROM_EMAIL", default=_EMAIL_HOST_USER or "webmaster@localhost")
 SERVER_EMAIL = de_config("SERVER_EMAIL", default=DEFAULT_FROM_EMAIL)
@@ -1017,6 +1040,46 @@ CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+if BACKGROUND_JOBS_ENABLED:
+    # The request path never runs tasks eagerly, including in local development.
+    CELERY_TASK_ALWAYS_EAGER = False
+    CELERY_TASK_TIME_LIMIT = 300
+    CELERY_TASK_SOFT_TIME_LIMIT = 270
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_TRACK_STARTED = True
+CELERY_WORKER_SEND_TASK_EVENTS = True
+CELERY_TASK_SEND_SENT_EVENT = True
+CELERY_RESULT_EXPIRES = 3600
+CELERY_BROKER_CONNECTION_TIMEOUT = 3
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 600, "socket_connect_timeout": 3, "socket_timeout": 5}
+if BACKGROUND_JOBS_ENABLED:
+    from hashlib import sha256 as _background_sha256
+    _background_prefix = "g5.jobs." + _background_sha256(SECRET_KEY.encode()).hexdigest()[:16] + "."
+    CELERY_BROKER_TRANSPORT_OPTIONS["global_keyprefix"] = _background_prefix
+    CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {"global_keyprefix": _background_prefix}
+BACKGROUND_JOB_LEASE = 360  # Must exceed the worker hard time limit.
+BACKGROUND_DISPATCH_LEASE = 60
+CELERY_TASK_ROUTES = {
+    "core.dispatch_background_jobs": {"queue": "maintenance"},
+    "core.enqueue_scheduled_job": {"queue": "maintenance"},
+    "core.purge_background_jobs": {"queue": "maintenance"},
+}
+CELERY_BEAT_SCHEDULE = {}
+if BACKGROUND_JOBS_ENABLED:
+    from gnu_jango.core.scheduled_jobs import SCHEDULED_JOBS
+    CELERY_BEAT_SCHEDULE = {
+        f"maintenance-{job.name}": {
+            "task": "core.enqueue_scheduled_job", "schedule": float(job.interval_seconds),
+            "args": (job.name,), "options": {"expires": job.interval_seconds},
+        } for job in SCHEDULED_JOBS
+    }
+    CELERY_BEAT_SCHEDULE["background-outbox-dispatch"] = {
+        "task": "core.dispatch_background_jobs", "schedule": 10.0, "options": {"expires": 30},
+    }
+    CELERY_BEAT_SCHEDULE["background-retention"] = {
+        "task": "core.purge_background_jobs", "schedule": 86400.0,
+    }
 
 LOCALE_PATHS = [
     BASE_DIR / "locale",
@@ -1200,6 +1263,20 @@ STORAGES = {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
 }
+if BACKGROUND_JOBS_ENABLED:
+    _original_media_storage = STORAGES["default"]
+    STORAGES["background_media_source"] = _original_media_storage
+    _s3_media = _original_media_storage["BACKEND"] == "storages.backends.s3.S3Storage"
+    STORAGES["background_media_writer"] = {
+        "BACKEND": _original_media_storage["BACKEND"],
+        "OPTIONS": {**_original_media_storage.get("OPTIONS", {}),
+                    ("file_overwrite" if _s3_media else "allow_overwrite"): True},
+    }
+    STORAGES["default"] = {
+        **_original_media_storage,
+        "BACKEND": ("gnu_jango.core.queued_s3_storage.QueuedS3Storage" if _s3_media
+                    else "gnu_jango.core.queued_storage.QueuedFileSystemStorage"),
+    }
 
 # 로그인 성공후 이동하는 URL
 LOGIN_REDIRECT_URL = "/"

@@ -138,6 +138,10 @@ def user_icon_url(user, width=20, height=20):
         # .name, not .path: remote storages (MEDIA_STORAGE=s3) have no local filesystem path.
         and default_storage.exists(user.profile.icon.name)
     ):
+        from gnu_jango.core.background import enabled
+        if enabled():
+            from gnu_jango.core.thumbnails import thumbnail_url
+            return thumbnail_url(user.profile.icon.url, 240, storage_path=user.profile.icon.name)
         im = get_thumbnail(
             user.profile.icon,
             "%sx%s" % (width, height),

@@ -600,7 +600,9 @@ def test_sms(request):
         action_flag=CHANGE,
         change_message=f"SMS 테스트 발송 ({result.status}, {result.provider_code})"[:200],
     )
-    if result.status == "accepted":
+    if result.status == "queued":
+        messages.success(request, "테스트 문자를 발송 대기열에 등록했습니다. 백그라운드 작업에서 최종 결과를 확인하세요.")
+    elif result.status == "accepted":
         messages.success(request, f"테스트 문자를 관리자 휴대폰번호로 보냈습니다. (아이코드 접수번호 {result.provider_code})")
     elif result.status == "unknown":
         messages.warning(request, "아이코드 응답을 확인하지 못했습니다. 문자가 도착했는지 휴대폰에서 확인하세요.")

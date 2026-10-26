@@ -54,7 +54,18 @@ python manage.py check_deploy_profile --profile vercel
 - `/api/v1/settings` 의 `theme_settings.docs.group` 이 `manual` 이어야 합니다.
 - 응답 헤더 `X-Vercel-Id` 의 두 번째 값이 `icn1` 이어야 합니다.
 
-## 5. 매뉴얼 질문 검색
+## 5. 실시간 알림 안내
+
+실시간 알림 안내는 다음 위치에 포함됩니다. 샘플 원본은 `gnu_jango/config/handbook_notification_content.py`입니다.
+
+- **개발자 안내서 → 알림과 연동 → 실시간 알림과 WebSocket**: 이벤트별 동작, API·접속권, 보안, 재접속, 관리자 공지와 Expo 푸시 준비 범위.
+- **서버에 올리기 → 실시간 알림 → 실시간 알림 설정과 운영**: 선택 패키지, 환경 변수, Uvicorn·알림 작업자, Docker, 대기열·장애 대응.
+- **서버에 올리기 → 실시간 알림 → Vercel에서 Redis와 작업자 연결**: 현재 데모 상태, TCP/TLS Redis, ASGI·Daemons 도입 절차와 베타 한도.
+
+기존 매뉴얼에는 `ensure_handbook_samples`의 일반 실행으로 빠진 장을 추가할 수 있습니다. `--refresh`는 기존 샘플 제목의 본문까지 바꾸므로,
+새 장만 추가할 때는 사용하지 않습니다. 공개 핸드북 반영 시에는 대상 장의 중복·권한·백업과 검색 색인 반영을 함께 확인하세요.
+
+## 6. 매뉴얼 질문 검색
 
 핸드북 검색 창은 `/api/v1/docs/ask?q=질문`으로 문단을 찾습니다. 검색은 서버 안에서 실행되므로 Vercel 사이트에서도 외부 API 키나
 추가 데이터베이스가 필요하지 않습니다. 첫 요청은 매뉴얼 문단 색인을 만들 수 있고, 따뜻한 인스턴스는 메모리 색인을 재사용합니다.

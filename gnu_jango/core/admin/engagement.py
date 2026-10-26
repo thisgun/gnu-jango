@@ -181,7 +181,12 @@ class NotificationAdmin(ModelAdmin):
 
     def queue_mail_campaign(self, request, campaign, recipient_rows, success_message):
         try:
-            send_mail_campaign_task.delay(campaign.pk, recipient_rows)
+            from gnu_jango.core.background import enabled
+            if enabled():
+                from gnu_jango.core.queued_mail import queue_campaign
+                queue_campaign(campaign.pk, recipient_rows)
+            else:
+                send_mail_campaign_task.delay(campaign.pk, recipient_rows)
         except Exception as exc:
             campaign.status = "failed"
             campaign.failed_count = campaign.recipient_count

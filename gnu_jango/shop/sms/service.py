@@ -6,17 +6,16 @@ the recipient masked, so an order, a status change or a signup never fails becau
 
 Every text passes ``_send_guard`` first, so all callers (guest checkout, signup, Toss confirm,
 status moves, restock alerts) share the same limits: a per-recipient and a site-wide hourly cap
-and a circuit breaker that skips the gateway for a while after a connect/read timeout. Texts stay
-synchronous (on_commit on the request thread) on purpose: a background thread is not reliable on
-Vercel, which may freeze the function once the response is sent, and a queue would need a worker
-the VPS profile does not have. Tight socket timeouts (icode.py) plus the breaker bound the delay
-instead: at most one slow attempt per breaker window.
+and a circuit breaker that skips the gateway for a while after a connect/read timeout.
+With BACKGROUND_JOBS_ENABLED, send_message only stores a durable outbox row and returns queued.
+The worker uses _send_message_now and retains all rate limits and transport timeouts. Legacy
+installs retain synchronous delivery until a worker and Beat are explicitly configured.
 """
 
 import hashlib
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 from django.conf import settings
 from django.core.cache import cache
@@ -40,7 +39,7 @@ DEFAULT_HOURLY_LIMIT = 300
 DEFAULT_BREAKER_SECONDS = 300
 # transport failures that mean the gateway is unreachable or hanging (icode._exchange)
 BREAKER_CODES = {"connect_timeout", "timeout", "socket_error"}
-STATUS_LABELS = {"accepted": "접수", "rejected": "실패", "unknown": "확인필요"}
+STATUS_LABELS = {"accepted": "접수", "queued": "발송 대기", "rejected": "실패", "unknown": "확인필요"}
 
 
 @dataclass(frozen=True)
@@ -161,13 +160,31 @@ def _trip_breaker(result):
         )
 
 
-def send_message(recipient, message, *, current=None, subject="", purpose="sms"):
+def send_message(recipient, message, *, current=None, subject="", purpose="sms", background_parent=""):
+    from gnu_jango.core.background import enabled, enqueue
+    if not enabled():
+        return _send_message_now(recipient, message, current=current, subject=subject, purpose=purpose)
+    current = current or sms_settings()
+    payload = {"recipient": str(recipient), "message": str(message), "settings": asdict(current),
+               "subject": str(subject), "purpose": str(purpose)}
+    key = None
+    if background_parent:
+        digest = hashlib.sha256(f"{recipient}:{message}:{purpose}".encode()).hexdigest()
+        key = f"sms:{background_parent}:{digest}"
+    job = enqueue("sms", payload, dedupe_key=key)
+    return ICodeSendResult("queued", str(job.pk))
+
+
+def _send_message_now(recipient, message, *, current=None, subject="", purpose="sms"):
     """Send one text to ``recipient`` with the shop's callback number. Never raises."""
     current = current or sms_settings()
     try:
         # the operator's test text goes through a paused gateway, to see whether it is back
         blocked = _send_guard(recipient, current, check_breaker=purpose != "test")
-    except Exception:  # noqa: BLE001 - a cache outage must not stop the shop's texts
+    except Exception:  # noqa: BLE001
+        from gnu_jango.core.background import enabled
+        if enabled():
+            return ICodeSendResult("rejected", "guard_unavailable", "SMS rate-limit storage is unavailable.")
         logger.exception("Shop SMS limits could not be checked; sending %s anyway", purpose)
         blocked = None
     if blocked is not None:

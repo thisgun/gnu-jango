@@ -10,6 +10,7 @@ from django.utils import timezone
 from django.utils.encoding import force_str
 
 from gnu_jango.core.models import MailCampaign, MailSendLog
+from . import background_tasks  # noqa: F401
 
 
 ALLOWED_BACKGROUND_COMMANDS = {
@@ -43,6 +44,10 @@ def _normalise_recipients(recipient_rows: list[dict[str, Any]]) -> list[dict[str
 
 @shared_task(name="core.send_mail_campaign")
 def send_mail_campaign_task(campaign_id: int, recipient_rows: list[dict[str, Any]]) -> dict[str, int | str]:
+    from .background import enabled
+    if enabled():
+        from .queued_mail import queue_campaign
+        return {"status": "queued", "queued": queue_campaign(campaign_id, recipient_rows)}
     campaign = MailCampaign.objects.get(pk=campaign_id)
     recipients = _normalise_recipients(recipient_rows)
 

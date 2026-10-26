@@ -149,7 +149,7 @@ npm run build:theme:handbook         # handbook
 | 방식 | 구성 | 안내 |
 |---|---|---|
 | Vercel + Supabase | Django Python 함수, Supabase PostgreSQL·Storage, 공유 캐시와 Vercel Cron | [배포 프로필](docs/04-deploy/deployment-profiles.md), [환경변수 예시](deploy/env/vercel-supabase.env.example) |
-| VPS | Docker Compose의 Django, PostgreSQL, Redis, Celery worker; 또는 기존 운영 서버 구성 | [배포 프로필](docs/04-deploy/deployment-profiles.md), [환경변수 예시](deploy/env/vps.env.example) |
+| VPS | Docker Compose의 Django, PostgreSQL, Redis, Celery 작업자·Beat; 또는 기존 운영 서버 구성 | [배포 프로필](docs/04-deploy/deployment-profiles.md), [환경변수 예시](deploy/env/vps.env.example) |
 | 분리형 | VPS의 Django API와 별도 Node 기반 Next.js 프런트엔드 | [배포 프로필](docs/04-deploy/deployment-profiles.md), [환경변수 예시](deploy/env/split-api.env.example) |
 | PythonAnywhere | Django와 저장소에 포함된 빌드 테마를 사용하는 가벼운 데모 | [아래 설치·업데이트 안내](#pythonanywhere에-데모-올리기) |
 
@@ -356,20 +356,26 @@ Channels + Redis 전송은 선택 기능입니다. `requirements-realtime.txt` �
 
 ## 백그라운드 작업
 
-메일 캠페인과 정기 유지보수 작업에는 Celery와 Redis를 사용합니다. 개발 환경은 기본적으로 작업을 요청 안에서 실행하므로 Redis 없이도 기본 개발 서버를 사용할 수 있습니다. 운영에서는 worker를 별도 프로세스로 실행하거나 Docker Compose의 `worker` 서비스를 사용합니다.
+`BACKGROUND_JOBS_ENABLED=True`이면 메일·SMS·서버 결제 웹훅·이미지 변환을 DB 대기열에 저장하고 Celery 작업자가 처리합니다. Beat가 정기 유지보수 명령과 대기 작업 전달을 예약합니다. 기존 설치의 기본값은 `False`이며 Redis 없이 개발할 수 있습니다. 새 모드는 마이그레이션과 작업자·Beat 준비 후 켜세요. Docker Compose는 기본으로 새 모드를 사용합니다.
 
 ```bash
-docker compose up --build
-docker compose logs -f worker
+docker compose up -d --build web worker media-worker beat
+docker compose logs -f worker media-worker beat
 ```
 
-Docker Compose를 사용하지 않을 때는 Django 서버와 별도 프로세스에서 worker를 시작합니다.
+Docker Compose를 사용하지 않을 때는 웹과 같은 DB·스토리지·발송 설정을 적용하고 다음 프로세스를 각각 실행합니다. Beat는 하나만 실행합니다.
 
 ```bash
-celery -A example worker --loglevel=INFO
+celery -A example worker -l INFO -Q celery,maintenance,communications,payments --concurrency=2
+celery -A example worker -l INFO -Q media --concurrency=1 --hostname=media@%h
+celery -A example beat -l INFO
 ```
 
-예약 유지보수 작업은 `python manage.py run_scheduled_jobs`로 실행하며, 프로필별 예약 설정은 [배포 프로필 안내](docs/04-deploy/deployment-profiles.md)를 참고하세요.
+관리자 **운영 → 백그라운드 작업 / 실패 큐**에서 최종 실패와 시도 횟수를 확인할 수 있습니다. Flower는 `FLOWER_BASIC_AUTH`를 별도로 설정한 뒤 `docker compose --profile monitoring up -d --build flower`로 실행하며 기본 주소는 `http://127.0.0.1:5555/`입니다.
+
+재시도·타임아웃·실패 작업 재처리·이미지 처리 중 표시·Vercel 외부 작업자 구성은 [백그라운드 작업 운영 가이드](docs/04-deploy/background-jobs.md)를 참고하세요. 새 모드로 전환한 뒤에는 기존 cron 예약을 끄세요. 기존 `python manage.py run_scheduled_jobs`는 수동 점검과 이전 배포 구성을 위한 명령으로 유지합니다.
+
+기존 Vercel·Supabase 사이트에 작업자만 추가하려면 [외부 작업자 배포 안내](docs/04-deploy/external-background-workers.md)를 따르세요. 독립 파일 `docker-compose.background.yml`은 별도 Linux 서버에서 Redis·일반 작업자·이미지 작업자·Beat를 실행하며, 기존 웹·DB를 새로 만들거나 시작 시 마이그레이션을 자동 적용하지 않습니다.
 
 ## 개발 점검
 

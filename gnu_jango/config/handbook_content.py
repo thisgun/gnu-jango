@@ -5,6 +5,7 @@ import re
 
 from .handbook_audit_content import AUDIT_GUIDES
 from .handbook_search_content import SEARCH_GUIDES
+from .handbook_notification_content import NOTIFICATION_GUIDES
 
 
 # The marker lets ensure_handbook_samples refresh old demo text without replacing
@@ -922,6 +923,7 @@ GUIDES = {
 
 
 GUIDES.update(SEARCH_GUIDES)
+GUIDES.update(NOTIFICATION_GUIDES)
 GUIDES.update(AUDIT_GUIDES)
 
 

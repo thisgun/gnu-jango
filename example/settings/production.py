@@ -106,7 +106,10 @@ STORAGES = {
 }
 
 if os.environ.get("VERCEL") == "1":
-    if STORAGES["default"].get("BACKEND") != "storages.backends.s3.S3Storage":
+    # Background processing wraps S3 while retaining the real source storage alias.
+    # Validate that backing storage, not the queue wrapper's class name.
+    _media_source = STORAGES.get("background_media_source") or STORAGES["default"]
+    if _media_source.get("BACKEND") != "storages.backends.s3.S3Storage":
         raise ImproperlyConfigured(
             "Vercel requires MEDIA_STORAGE=s3 so uploaded files persist across function instances."
         )

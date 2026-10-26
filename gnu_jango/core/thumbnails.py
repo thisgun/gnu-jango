@@ -10,12 +10,13 @@ out; it never opens an arbitrary media name (an attachment of a secret post stay
 """
 
 import re
+import hashlib
 from pathlib import PurePosixPath
 from urllib.parse import quote, unquote, urlsplit
 
 from django.conf import settings
 from django.core.files.storage import FileSystemStorage, default_storage
-from django.http import Http404, HttpResponse, HttpResponseRedirect
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseRedirect
 from django.utils.crypto import constant_time_compare, salted_hmac
 from django.views.decorators.http import require_safe
 
@@ -186,6 +187,11 @@ def _original_redirect(kind, path):
     return response
 
 
+def thumbnail_artifact_name(kind, path, width, image_format):
+    digest = hashlib.sha256(f"v1:{kind}:{path}:{width}:{image_format}".encode()).hexdigest()
+    return f"background-thumbnails/{digest}.{image_format.lower()}"
+
+
 @require_safe
 def thumbnail_view(request, signature, width, kind, path):
     clean = _clean_path(path)
@@ -202,6 +208,19 @@ def thumbnail_view(request, signature, width, kind, path):
         raise Http404("Thumbnail not found")
 
     image_format, content_type = _output_format(request, clean)
+    from .background import enabled, enqueue
+    if enabled():
+        payload = {"kind": kind, "path": clean, "width": width, "image_format": image_format}
+        artifact = thumbnail_artifact_name(**payload)
+        if default_storage.exists(artifact):
+            response = FileResponse(default_storage.open(artifact, "rb"), content_type=content_type)
+            response["Cache-Control"] = THUMBNAIL_CACHE_CONTROL
+            response["Vary"] = "Accept"
+            response["X-Content-Type-Options"] = "nosniff"
+            return response
+        # Only the request path is signed; workers cannot fetch user-supplied remote URLs.
+        enqueue("thumbnail", payload, active_key=f"thumbnail:{artifact}")
+        return _original_redirect(kind, clean)
     try:
         content = _make_copy(*source, width, image_format)
     except Exception:  # noqa: BLE001 - a broken, huge or hostile upload must not become a 500

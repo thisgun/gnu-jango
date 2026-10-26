@@ -37,6 +37,9 @@ STORAGES = {
     "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
 }
 MAILERS = {"default": {"BACKEND": "django.core.mail.backends.locmem.EmailBackend"}}
+BACKGROUND_JOBS_ENABLED = False
+CELERY_BEAT_SCHEDULE = {}
+CELERY_TASK_ALWAYS_EAGER = True
 CRON_SECRET = ""
 SHOP_TOSS_CLIENT_KEY = SHOP_TOSS_SECRET_KEY = ""
 SHOP_TOSS_ADMIN_KEYS_ENABLED = False
