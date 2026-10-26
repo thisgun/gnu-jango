@@ -231,3 +231,5 @@ test/
 celerybeat-schedule*
 flower.db*
 /runtime/
+.vercel
+.env*
