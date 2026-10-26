@@ -124,7 +124,7 @@ export async function requestPreparedOrderPayment({
   if (preparedPgService === "bank") {
     throw new Error("PG 결제 설정을 확인할 수 없습니다. 주문 화면을 새로고침한 후 다시 시도해주세요.");
   }
-  if (preparedPgService !== "toss") {
+  if (preparedPgService !== "toss" && preparedPgService !== "nicepay") {
     throw new Error("현재 결제 화면에서 시작할 수 없는 PG입니다. 상점 관리자에게 문의해주세요.");
   }
 

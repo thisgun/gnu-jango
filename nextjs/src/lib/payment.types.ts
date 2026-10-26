@@ -59,6 +59,10 @@ export interface NicepayExtra {
   return_url?: string;
   script_url?: string;
   mobile_url?: string;
+  /** One-time server attempt token; the browser never sees the MerchantKey or AuthToken. */
+  attempt_token?: string;
+  req_reserved?: string;
+  pay_method?: string;
   wap_url?: string;
   isp_cancel_url?: string;
   vbank_exp_date?: string;

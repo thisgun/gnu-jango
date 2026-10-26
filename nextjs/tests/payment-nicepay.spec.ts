@@ -445,11 +445,14 @@ test.describe("Nicepay payment helpers", () => {
     });
   });
 
-  test("submits Nicepay mobile forms with EUC-KR charset", async () => {
-    await withNicepayDom(async ({ submittedForms }) => {
+  test("opens the mobile payment window through the official goPay SDK", async () => {
+    await withNicepayDom(async ({ submittedForms, win }) => {
+      let openedForm: HTMLFormElement | undefined;
+      win.goPay = (form) => {
+        openedForm = form;
+      };
       const mobileNicepay = nicepay({
         module_type: "mobile",
-        mobile_url: "https://web.nicepay.co.kr/v3/v3Payment.jsp",
         return_url: "https://shop.example.com/api/v1/shop/payment/nicepay-return",
         wap_url: "myshop://nicepay-return",
         isp_cancel_url: "https://shop.example.com/payments/nicepay/isp-cancel",
@@ -462,15 +465,19 @@ test.describe("Nicepay payment helpers", () => {
 
       await requestNicepayPayment(req);
 
-      expect(submittedForms).toHaveLength(1);
-      const form = submittedForms[0];
-      expect(form.action).toBe("https://web.nicepay.co.kr/v3/v3Payment.jsp");
-      expect(form.acceptCharset).toBe("euc-kr");
-      expect(form.elements.namedItem("CharSet")?.value).toBe("euc-kr");
-      expect(form.elements.namedItem("WapUrl")?.value).toBe(
-        "myshop://nicepay-return"
+      expect(submittedForms).toHaveLength(0);
+      expect(openedForm?.action).toBe(
+        "https://shop.example.com/api/v1/shop/payment/nicepay-return"
       );
-      expect(form.elements.namedItem("IspCancelUrl")?.value).toBe(
+      expect(openedForm?.acceptCharset).toBe("euc-kr");
+      const field = (name: string) =>
+        openedForm?.elements.namedItem(name) as HTMLInputElement | null;
+      expect(field("CharSet")?.value).toBe("euc-kr");
+      expect(field("ReturnURL")?.value).toBe(
+        "https://shop.example.com/api/v1/shop/payment/nicepay-return"
+      );
+      expect(field("WapUrl")?.value).toBe("myshop://nicepay-return");
+      expect(field("IspCancelUrl")?.value).toBe(
         "https://shop.example.com/payments/nicepay/isp-cancel"
       );
     });

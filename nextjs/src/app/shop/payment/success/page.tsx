@@ -70,6 +70,50 @@ function PaymentSuccessContent() {
     };
 
     const confirm = async () => {
+      // NICEPAY mobile returns POST to the Django ReturnURL. That endpoint already approved
+      // the payment and redirects here with a signed server outcome, so the browser must not
+      // call /confirm a second time (and must not treat a query-string flag as proof by itself:
+      // the backend only adds it after its own approval checks).
+      if (sp.get("nicepay") === "1") {
+        const orderId = sp.get("order_id") || "";
+        const uid = sp.get("uid") || "";
+        const outcome = (sp.get("payment_status") || "error").toLowerCase();
+        const backendMessage = sp.get("message") || "";
+        const paidAmount = Number(sp.get("amount") || 0);
+        const orderDetailUrl = orderId ? paymentOrderDetailUrl(orderId, uid) : "/shop/cart";
+        if (outcome === "paid") {
+          gaPurchase({
+            transaction_id: orderId,
+            value: Number.isFinite(paidAmount) ? paidAmount : 0,
+          });
+          setStatus("success");
+          setMessage(backendMessage || "결제가 완료되었습니다.");
+          notifyHost(paymentSuccessHostPayload(orderId, uid));
+          if (isPopup) {
+            setTimeout(() => window.close(), 800);
+          } else if (!isEmbedded) {
+            setTimeout(() => runtimeRouterPush(router, orderDetailUrl), 1500);
+          }
+          return;
+        }
+        if (outcome === "pending") {
+          setStatus("pending");
+          setMessage(backendMessage || "가상계좌가 발급되었습니다. 입금 확인을 기다려 주세요.");
+          notifyHost(paymentPendingHostPayload(orderId, uid));
+          if (isPopup) {
+            setTimeout(() => window.close(), 1800);
+          } else if (!isEmbedded && orderId) {
+            setTimeout(() => runtimeRouterPush(router, orderDetailUrl), 2500);
+          }
+          return;
+        }
+        setStatus("error");
+        setMessage(backendMessage || "NICEPAY 결제 승인에 실패했습니다.");
+        notifyHost(paymentErrorHostPayload(backendMessage || "NICEPAY 결제 승인에 실패했습니다."));
+        if (isPopup) setTimeout(() => window.close(), 1800);
+        return;
+      }
+
       const parsed = parsePaymentSuccessParams(sp);
 
       if (!parsed.ok) {
