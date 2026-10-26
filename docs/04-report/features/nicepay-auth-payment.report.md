@@ -64,27 +64,17 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
 ## 테스트 결과
 
 - `manage.py check`: 통과 (기존 silenced 1개)
-- `gnu_jango.core.test_shop_nicepay`: **32개 통과** (관리자 설정 상속 회귀 포함)
-- `gnu_jango.core.test_shop_payments_api`: **154개 통과**
-- `test_shop_payments_api` + `test_shop_nicepay` 동시 실행: **186개 통과**
-- `gnu_jango.core.test_shop_pg_settings`: **41개 통과**
-- `gnu_jango.core.test_shop_personal_pay_checkout`: 별도 회귀 예정
-- `gnu_jango.core.test_shop_partial_cancel`, `test_shop_partial_qty_cancel`,
-  `test_shop_admin_order_processing`, `test_shop_vbank_expiry`,
-  `test_shop_personal_pay_checkout`: **115개 통과**
+- `gnu_jango.core.test_shop_nicepay`: **43개 통과** (관리자 설정 상속 회귀 포함)
+- `manage.py test` 전체: **2,900개 통과**, 23개 skip
 - Next.js `npm run typecheck`: 통과
 - Next.js `npm run lint`: 통과
 - `npx playwright test tests/payment-nicepay.spec.ts --workers=1`: **10개 통과**
 - `nextjs_default` 정적 테마 빌드: 통과
 - `handbook` 정적 테마 빌드: 통과
-  - 공개 API URL을 비우고 G5/APP URL은 로컬 fallback을 피하기 위해 HTTPS 운영 문서
-    주소로 빌드했습니다.
-  - 그러나 `NEXT_PUBLIC_API_URL`이 비어 있을 때 `config.ts`의 개발 fallback
-    (`127.0.0.9`)과 라이브러리 코드의 `localhost` 문자열이 번들에 남는 것을 확인했습니다.
-    따라서 저장소 규칙에 따라 **생성 테마 결과물은 커밋하지 않았습니다.** 운영 URL을 확정한
-    뒤 다시 빌드해야 합니다. 로컬 경로·로컬 게시판 페이지는 생성되지 않았습니다.
-  - 이번 작업은 요청대로 커밋·push·PR·배포를 하지 않았으므로 생성 테마 파일은 작업 트리에만
-    남아 있습니다.
+  - 일회용 DB(`migrate` + `ensure_handbook_samples --stable-dates`)와 빈 공개 URL로 빌드
+  - `check:theme-sync`, `check:theme-sync:handbook`: 통과
+  - `git diff origin/main`에서 새 금지 문자열(127.0.0.1, 8000/8081/8090, 로컬 경로,
+    로컬 DB 게시판) 없음 확인
 
 실제 NICEPAY 테스트 가맹점 정보가 없어 실제 결제창·승인·취소·가상계좌 입금통보는
 수행하지 못했습니다. 모의 테스트 통과를 실제 연동 성공으로 보고하지 않습니다.
@@ -94,6 +84,29 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
 - `gnu_jango/shop/migrations/0036_shoppaymentattempt.py`
 - `ShopPaymentAttempt` 테이블 생성. 운영 DB와 데모/핸드북 Supabase에는 병합 전에 별도
   적용이 필요합니다. 이번 작업에서는 운영/로컬 DB에 migrate하지 않았습니다.
+
+## 코드 리뷰 반영 (PR #84)
+
+- **H1 이중 결제 방지**: 새 attempt 생성 시 주문 row를 `select_for_update(of=("self",))`로
+  잠그고 이전 open attempt를 `superseded`로 닫습니다. 승인 전에도 주문 상태/`od_tno`를
+  잠금 하에 확인하며, 승인 후 다른 TID가 이미 기록되어 있으면 해당 승인을 망취소하고
+  `superseded`로 남깁니다.
+- **H2 가상계좌 통보**: 운영(`DEBUG=False`)에서 IP 허용 목록이 비면 403; 공식 NICEPAY
+  통보 IP(`121.133.126.10`, `121.133.126.11`, `211.33.136.39`)를 문서화했습니다.
+  `ResultCode=4110`/`StateCd=0`/`PayMethod=VBANK`를 확인하고, 거래조회의 TID/MID/주문번호/
+  금액/결제수단(존재하는 경우)을 대조합니다. 동일 TID 재통보는 아무 것도 바꾸지 않습니다.
+- **M1**: `approved_local_failed`는 다음 복귀/확인에서 `recover_nicepay_attempt`로 로컬
+  반영만 재시도합니다.
+- **M2**: `recover_nicepay_attempts` 관리 명령을 추가하고 `run_scheduled_jobs`의 5분 주기
+  작업에 등록했습니다. 오래된 `approving`/`uncertain`/`approved_local_failed`를 거래조회로
+  정리합니다.
+- **M3**: 취소 한도를 `od_receipt_price - od_refund_price` 잔액으로 제한하고, 취소 응답
+  유실 시 거래조회 `Status=1`을 확인한 뒤 전체취소만 already-canceled로 인정합니다.
+  `SHOP_NICEPAY_TAX_FREE_CANCEL_ENABLED` 계약 옵션이 켜진 경우 `TaxFreeAmt`를 보냅니다.
+- **LOW**: 취소 로그에서 환불 계좌/예금주/SignData를 마스킹하고, 인증 오류 상태 변경을
+  row lock 하에서 수행하며, attempt FK를 `SET_NULL`로 바꿔 결제 기록이 주문 삭제와 함께
+  사라지지 않게 했습니다.
+- 마이그레이션은 기존 `0036_shoppaymentattempt.py`를 수정했습니다(아직 병합 전).
 
 ## 남은 작업·제한
 
@@ -120,7 +133,7 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
 
 ## 이번 작업에서 하지 않은 것
 
-- 커밋, push, PR 생성·병합, 배포
+- PR 병합·배포 (리뷰 반영 커밋과 push, PR 생성은 수행)
 - 운영 DB/로컬 8081 DB 변경 및 8081 서버 재시작
 - 실제 결제·환불·NICEPAY 테스트 승인
 - 실제 테스트 가맹점 키 입력 또는 하드코딩

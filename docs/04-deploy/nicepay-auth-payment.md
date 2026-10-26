@@ -86,6 +86,7 @@ Django + Next.js 쇼핑몰에 연결한 구현의 운영·전환 안내입니다
 | PG 선택 | `SHOP_PAYMENT_PROVIDER=nicepay` |
 | 관리자 키 사용 | `SHOP_NICEPAY_ADMIN_KEYS_ENABLED` (미리보기에서는 `False`) |
 | 가상계좌 | `SHOP_NICEPAY_VBANK_ENABLED` |
+| 복합과세 취소 | `SHOP_NICEPAY_TAX_FREE_CANCEL_ENABLED` (계약 시에만) |
 | 모바일/PC 복귀 | `SHOP_NICEPAY_RETURN_URL` |
 | 결과 페이지 | `SHOP_NICEPAY_SUCCESS_URL` 또는 `SHOP_NICEPAY_FRONTEND_URL` |
 | 입금통보 IP 제한 | `SHOP_NICEPAY_VBANK_NOTIFY_ALLOWED_IPS` (쉼표 구분, 선택) |
@@ -107,6 +108,11 @@ NICEPAY 상점관리자에 아래 공개 HTTPS URL을 등록합니다.
 - 가상계좌 입금통보:
   `https://<쇼핑몰-API-호스트>/api/v1/shop/payment/nicepay/vbank/notification`
   (NICEPAY 상점관리자 결제통보 URL/IP)
+  - NICEPAY 공식 결제통보 서버 IP: `121.133.126.10`, `121.133.126.11`, `211.33.136.39`
+  - `SHOP_NICEPAY_VBANK_NOTIFY_ALLOWED_IPS`를 비우면 개발(`DEBUG=True`)에서만 수신하고
+    운영(`DEBUG=False`)에서는 403으로 거절합니다. 운영에서는 위 IP를 명시하세요.
+  - 통보의 `ResultCode=4110`, `StateCd=0`, `PayMethod=VBANK`를 확인하고, 거래조회의
+    `Status=0`과 조회 응답에 포함된 TID/MID/주문번호/금액/결제수단도 대조합니다.
 - 취소·망취소·거래조회 endpoint는 NICEPAY가 인증 응답/문서로 제공하는 호스트만 사용하며,
   관리자가 임의 URL을 넣을 수 없습니다.
 
