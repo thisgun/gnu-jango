@@ -1,11 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useId, useRef } from "react";
 import { ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import type { ShopProduct } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
-import { shopRowItemClass, shopRowLimit, shopRowStyle, type ShopHomeSectionDisplay } from "@/lib/shop-display";
+import {
+  columnSteps,
+  shopRowItemClass,
+  shopRowLimit,
+  shopRowStyle,
+  type ShopHomeSectionDisplay,
+} from "@/lib/shop-display";
+import { useDynamicSwiper } from "@/lib/use-dynamic-swiper";
 import { cn } from "@/lib/utils";
 import { SoluneProductCard } from "./SoluneProductCard";
 
@@ -27,17 +34,6 @@ interface ShopProductRowProps {
   display?: ShopHomeSectionDisplay;
   className?: string;
 }
-
-interface TrackState {
-  canPrev: boolean;
-  canNext: boolean;
-  /** 한 화면에 다 들어가 넘길 것이 없다 — 화살표와 진행 막대를 감춘다(Swiper 의 lock 과 같다). */
-  locked: boolean;
-  /** 진행 막대 채움(0~1) — Swiper progressbar 처럼 (현재 칸 + 1) / 넘김 칸 수. */
-  progress: number;
-}
-
-const INITIAL_STATE: TrackState = { canPrev: false, canNext: false, locked: true, progress: 0 };
 
 const SKELETON_CARD_COUNT = 6;
 
@@ -114,19 +110,10 @@ export function ShopProductRowSkeleton({
   );
 }
 
-/** 한 칸 넘김 폭 — 칸 너비 + 칸 사이 간격(오른쪽 여백). */
-function slideStep(track: HTMLElement): number {
-  const slide = track.querySelector<HTMLElement>(".swiper-slide");
-  if (!slide) return track.clientWidth;
-  return slide.getBoundingClientRect().width + (Number.parseFloat(getComputedStyle(slide).marginRight) || 0);
-}
-
 /**
  * 쇼핑 홈의 진열 한 줄 — 레퍼런스 테마 shop-row.tsx(solune_shop_product_section)와 같은 마크업:
  * 왼쪽에 눈썹 · 제목 · 전체 보기, 오른쪽 끝에 네모 화살표 둘, 머리 아래 선 위에 진행 막대, 그 아래 상품 카드 줄.
- * 레퍼런스는 Swiper 로 넘기지만 이 앱은 Swiper 를 싣지 않는다. 칸 폭 · 간격은 Swiper 가 서기 전 규칙
- * (solune-shop.carousel.css 의 --pre-spv · --pre-gap)이 레퍼런스와 같은 값으로 세우고, 넘김은 가로 스크롤
- * (스냅)로 한다. 화살표는 한 칸씩 넘기고, 넘길 것이 없으면 Swiper 처럼 화살표와 막대를 잠근다.
+ * Swiper 가 칸 폭·간격·화살표·진행 막대를 맡고, 관리자 진열 설정의 칸 수는 slidesPerView 로 전달한다.
  */
 export function ShopProductRow({
   eyebrow,
@@ -141,51 +128,52 @@ export function ShopProductRow({
 }: ShopProductRowProps) {
   const headingId = useId();
   const trackRef = useRef<HTMLDivElement>(null);
-  const [state, setState] = useState<TrackState>(INITIAL_STATE);
+  const prevRef = useRef<HTMLButtonElement>(null);
+  const nextRef = useRef<HTMLButtonElement>(null);
+  const paginationRef = useRef<HTMLDivElement>(null);
+  const shown = display ? products.slice(0, shopRowLimit(display)) : products;
+  const baseSlidesPerView = display
+    ? columnSteps(display.mobile_cols, display.pc_cols)
+    : [2, 3, 4, 5];
+  const slidesPerView = peek
+    ? baseSlidesPerView.map((value) => value + 0.5)
+    : baseSlidesPerView;
+  const loop = Boolean(peek && shown.length >= Math.ceil(slidesPerView[3]) * 2);
 
-  const sync = useCallback(() => {
-    const track = trackRef.current;
-    if (!track) return;
-    const step = slideStep(track);
-    const maxScroll = track.scrollWidth - track.clientWidth;
-    const locked = maxScroll <= 2 || step <= 0;
-    // Swiper 의 넘김 칸 수와 같게 올림한다 — 6장 · 5.5칸이면 반 칸만 남아도 두 칸(처음 · 끝)이다.
-    const snapCount = locked ? 1 : Math.ceil(maxScroll / step - 0.05) + 1;
-    const atEnd = track.scrollLeft >= maxScroll - 2;
-    const index = locked ? 0 : atEnd ? snapCount - 1 : Math.min(snapCount - 1, Math.round(track.scrollLeft / step));
-    const next: TrackState = {
-      canPrev: !locked && track.scrollLeft > 2,
-      canNext: !locked && track.scrollLeft < maxScroll - 2,
-      locked,
-      progress: (index + 1) / snapCount,
-    };
-    setState((previous) =>
-      previous.canPrev === next.canPrev &&
-      previous.canNext === next.canNext &&
-      previous.locked === next.locked &&
-      previous.progress === next.progress
-        ? previous
-        : next
-    );
-  }, []);
-
-  useEffect(() => {
-    sync();
-    const track = trackRef.current;
-    if (!track || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(sync);
-    observer.observe(track);
-    return () => observer.disconnect();
-  }, [products.length, sync]);
-
-  const move = (direction: -1 | 1) => {
-    const track = trackRef.current;
-    if (!track) return;
-    track.scrollBy({ left: direction * slideStep(track), behavior: "smooth" });
-  };
+  useDynamicSwiper(
+    trackRef,
+    () => ({
+      slidesPerView: slidesPerView[0],
+      spaceBetween: 14,
+      speed: 320,
+      loop,
+      watchSlidesProgress: peek,
+      watchOverflow: true,
+      observer: true,
+      resizeObserver: true,
+      keyboard: { enabled: true },
+      a11y: {
+        prevSlideMessage: `${title} 이전`,
+        nextSlideMessage: `${title} 다음`,
+      },
+      navigation: {
+        prevEl: prevRef.current,
+        nextEl: nextRef.current,
+      },
+      pagination: {
+        el: paginationRef.current,
+        type: "progressbar",
+      },
+      breakpoints: {
+        640: { slidesPerView: slidesPerView[1], spaceBetween: 16 },
+        900: { slidesPerView: slidesPerView[2], spaceBetween: 20 },
+        1200: { slidesPerView: slidesPerView[3], spaceBetween: 20 },
+      },
+    }),
+    [shown.length, display, peek]
+  );
 
   if (products.length === 0) return null;
-  const shown = display ? products.slice(0, shopRowLimit(display)) : products;
 
   return (
     <section className={cn("solune-shop-product-section solune-shop-row", className)} aria-labelledby={headingId}>
@@ -200,39 +188,31 @@ export function ShopProductRow({
         </Link>
         <div className="solune-shop-swiper-nav">
           <button
+            ref={prevRef}
             type="button"
-            className={cn("solune-shop-swiper-prev", !state.canPrev && "swiper-button-disabled", state.locked && "swiper-button-lock")}
+            className="solune-shop-swiper-prev"
             aria-label={`${title} 이전`}
-            disabled={!state.canPrev}
-            onClick={() => move(-1)}
           >
             <ChevronLeft size={18} aria-hidden />
           </button>
           <button
+            ref={nextRef}
             type="button"
-            className={cn("solune-shop-swiper-next", !state.canNext && "swiper-button-disabled", state.locked && "swiper-button-lock")}
+            className="solune-shop-swiper-next"
             aria-label={`${title} 다음`}
-            disabled={!state.canNext}
-            onClick={() => move(1)}
           >
             <ChevronRight size={18} aria-hidden />
           </button>
         </div>
         {subtitle ? <p className="solune-shop-section-sub">{subtitle}</p> : null}
-        <div className={cn("solune-shop-swiper-progress", state.locked && "swiper-pagination-lock")} aria-hidden>
-          <span
-            className="swiper-pagination-progressbar-fill"
-            style={{ transform: `scaleX(${state.progress})`, transition: "transform 0.32s ease" }}
-          />
-        </div>
+        <div ref={paginationRef} className="solune-shop-swiper-progress" aria-hidden />
       </header>
       <div
         ref={trackRef}
-        className="swiper solune-shop-swiper solune-shop-scroll-track"
+        className="swiper solune-shop-swiper"
         data-solune-swiper-peek={peek ? "1" : undefined}
         data-solune-row-display={display ? "1" : undefined}
         style={display ? shopRowStyle(display, peek) : undefined}
-        onScroll={sync}
       >
         <div className="swiper-wrapper sct">
           {shown.map((product, index) => (
