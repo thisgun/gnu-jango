@@ -274,6 +274,11 @@ def admin_cancel_order(order, reason="", *, actor=""):
 
 def _cancel_locked_order(current, reason, actor):
     from gnu_jango.api.shop_common import CANCELLED_STATUSES
+    from gnu_jango.api.shop_nicepay import (
+        cancel_pending_nicepay_vbank,
+        nicepay_api_cancel_payment,
+        order_paid_through_nicepay,
+    )
     from gnu_jango.api.shop_payments import (
         PaymentCancelError,
         cancel_pending_toss_vbank,
@@ -309,26 +314,41 @@ def _cancel_locked_order(current, reason, actor):
     if paid <= 0:
         if settle_case_is_vbank(current.od_settle_case) and current.od_tno:
             # the customer could still deposit into the issued account: close it first
-            if cancel_pending_toss_vbank(current, reason or "쇼핑몰 운영자 취소") is not None:
+            if str(current.od_pg or "").lower() == "nicepay":
+                if cancel_pending_nicepay_vbank(current, reason or "쇼핑몰 운영자 취소") is not None:
+                    return StatusChange(
+                        False,
+                        "NICEPAY 가상계좌를 취소하지 못해 주문을 그대로 두었습니다. 잠시 후 다시 시도하세요.",
+                    )
+            elif cancel_pending_toss_vbank(current, reason or "쇼핑몰 운영자 취소") is not None:
                 return StatusChange(
                     False, "토스페이먼츠 가상계좌를 취소하지 못해 주문을 그대로 두었습니다. 잠시 후 다시 시도하세요."
                 )
             vbank_waiting = True
-    elif order_paid_through_toss(current):
+    elif order_paid_through_toss(current) or order_paid_through_nicepay(current):
         try:
-            canceled = toss_api_cancel_payment(current, reason or "쇼핑몰 운영자 승인 취소")
+            if order_paid_through_nicepay(current):
+                canceled = nicepay_api_cancel_payment(current, reason or "쇼핑몰 운영자 승인 취소")
+            else:
+                canceled = toss_api_cancel_payment(current, reason or "쇼핑몰 운영자 승인 취소")
         except PaymentCancelError as exc:
             return StatusChange(False, f"결제 취소에 실패해 주문을 취소하지 않았습니다. {exc}")
         note = f" PG {current.od_settle_case or '결제'} 승인취소 처리"
         pg_cancelled = True
+        provider = "nicepay" if order_paid_through_nicepay(current) else "toss"
         try:
             # a savepoint: a failed log write must not break the cancellation that follows
             with transaction.atomic():
                 record_payment_raw_log(
-                    current, current.od_id, "toss", current.od_tno, {"toss_cancel": canceled}, prefix="toss-cancel"
+                    current,
+                    current.od_id,
+                    provider,
+                    current.od_tno,
+                    {f"{provider}_cancel": canceled},
+                    prefix=f"{provider}-cancel",
                 )
-        except Exception:  # noqa: BLE001 - Toss refunded already; the order must still be cancelled
-            logger.exception("order %s: could not record the Toss cancel response", current.od_id)
+        except Exception:  # noqa: BLE001 - PG refunded already; the order must still be cancelled
+            logger.exception("order %s: could not record the %s cancel response", current.od_id, provider)
     else:
         manual_refund = True
         if settle_case_is_bank(current.od_settle_case):
@@ -345,12 +365,19 @@ def _cancel_locked_order(current, reason, actor):
         if not pg_cancelled:
             raise
         # the money went back already: the admin has to finish the order by hand
-        logger.exception("order %s: Toss cancelled the payment but the local cancellation failed", current.od_id)
+        logger.exception("order %s: the PG cancelled the payment but the local cancellation failed", current.od_id)
         return StatusChange(False, "PG 결제는 승인취소됐지만 주문을 취소 상태로 바꾸지 못했습니다. 주문을 확인해 주세요.")
     if vbank_waiting:
         current.refresh_from_db()
         current.od_vbank_status = "CANCELED"
         current.save(update_fields=["od_vbank_status"])
+    if str(current.od_pg or "").strip().lower() == "nicepay":
+        from gnu_jango.shop.models import ShopPaymentAttempt
+
+        ShopPaymentAttempt.objects.filter(
+            order_id=current.pk, provider="nicepay",
+            state__in={"prepared", "authenticated", "pending_deposit", "approved"},
+        ).update(state="canceled")
 
     if manual_refund:
         message = f"주문 {current.od_id}을(를) 취소했습니다. 결제금액 {paid:,}원은 직접 환불해야 합니다.{note}"

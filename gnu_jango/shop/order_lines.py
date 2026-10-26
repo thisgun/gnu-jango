@@ -54,6 +54,7 @@ LINE_SOURCES = {
 }
 REFUND_NONE = "none"
 REFUND_TOSS = "toss"
+REFUND_NICEPAY = "nicepay"
 REFUND_MANUAL = "manual"
 
 
@@ -134,11 +135,12 @@ def _refund_method(order, refund, *, paid, refunded, all_inactive):
     Through Toss goes at most what the order's own Toss payment still holds: personal pay
     receipts credited to the order were paid on other transactions, so that part is refunded by
     hand ("환불 필요 (수동, 개인결제분)")."""
+    from gnu_jango.api.shop_nicepay import order_paid_through_nicepay
     from gnu_jango.api.shop_payments import order_paid_through_toss, settle_case_is_bank, settle_case_is_vbank
 
     if refund <= 0:
         return REFUND_NONE, "", 0, False
-    if order_paid_through_toss(order):
+    if order_paid_through_toss(order) or order_paid_through_nicepay(order):
         own_payment = max(0, paid - personal_pay_receipts(order))
         pg_refund = min(refund, max(0, own_payment - refunded))
         manual = refund - pg_refund
@@ -148,7 +150,8 @@ def _refund_method(order, refund, *, paid, refunded, all_inactive):
             note += f" PG {order.od_settle_case or '결제'} {'승인취소' if full else '부분취소'} {pg_refund:,}원"
         if manual:
             note += f" 환불 필요 (수동, 개인결제분) {manual:,}원"
-        return (REFUND_TOSS if pg_refund else REFUND_MANUAL), note, pg_refund, full and pg_refund > 0
+        method = REFUND_NICEPAY if order_paid_through_nicepay(order) else REFUND_TOSS
+        return (method if pg_refund else REFUND_MANUAL), note, pg_refund, full and pg_refund > 0
     if settle_case_is_bank(order.od_settle_case):
         return REFUND_MANUAL, f" 무통장 환불 필요 (수동) {refund:,}원", 0, False
     if settle_case_is_vbank(order.od_settle_case):
@@ -468,8 +471,12 @@ def refund_tax_free(order, plan):
     return min(dropped, max(0, int(plan.pg_refund or 0)))
 
 
-def _refund_at_toss(order, plan, reason):
-    """Refund the Toss part of ``plan`` before anything is applied; returns the plan to apply."""
+def _refund_at_pg(order, plan, reason):
+    """Refund the Toss/NICEPAY part of ``plan`` before anything is applied."""
+    from gnu_jango.api.shop_nicepay import (
+        nicepay_api_cancel_payment,
+        nicepay_api_partial_cancel_payment,
+    )
     from gnu_jango.api.shop_payments import (
         PaymentCancelError,
         toss_api_cancel_payment,
@@ -477,8 +484,20 @@ def _refund_at_toss(order, plan, reason):
     )
 
     cancel_reason = reason or f"쇼핑몰 운영자 {plan.target} 처리"
+    provider = "nicepay" if plan.method == REFUND_NICEPAY else "toss"
     try:
-        if plan.full_pg_cancel:
+        if provider == "nicepay":
+            if plan.full_pg_cancel:
+                answer = nicepay_api_cancel_payment(order, cancel_reason)
+            else:
+                answer = nicepay_api_partial_cancel_payment(
+                    order,
+                    plan.pg_refund,
+                    cancel_reason,
+                    idempotency_key=plan.idempotency_key,
+                    tax_free_amount=refund_tax_free(order, plan),
+                )
+        elif plan.full_pg_cancel:
             answer = toss_api_cancel_payment(order, cancel_reason)
         else:
             answer = toss_api_partial_cancel_payment(
@@ -491,9 +510,9 @@ def _refund_at_toss(order, plan, reason):
     except PaymentCancelError as exc:
         raise _ChangeRefused(f"결제 환불에 실패해 아무것도 바꾸지 않았습니다. {exc}") from exc
     if answer.get("already_canceled"):
-        # cancelled in the Toss dashboard already: the money went back there, record it here
-        plan = replace(plan, note=f"{plan.note} (토스페이먼츠에서 이미 취소된 결제 - 환불 기록만 반영, 확인 필요)")
-    _record_toss_answer(order, plan, answer)
+        label = "NICEPAY" if provider == "nicepay" else "토스페이먼츠"
+        plan = replace(plan, note=f"{plan.note} ({label}에서 이미 취소된 결제 - 환불 기록만 반영, 확인 필요)")
+    _record_pg_answer(order, plan, answer, provider=provider)
     return plan
 
 
@@ -504,8 +523,8 @@ def change_locked_order_lines(order, line_ids, target, reason="", *, actor="", q
         # a savepoint: a split line is put back when the change is refused or Toss refuses the refund
         with transaction.atomic():
             plan = _split_and_plan(order, line_ids, target, quantities, expected)
-            if plan.method == REFUND_TOSS:
-                plan = _refund_at_toss(order, plan, reason)
+            if plan.method in {REFUND_TOSS, REFUND_NICEPAY}:
+                plan = _refund_at_pg(order, plan, reason)
                 pg_refunded = True
     except _ChangeRefused as exc:
         return StatusChange(False, str(exc))
@@ -525,7 +544,7 @@ def change_locked_order_lines(order, line_ids, target, reason="", *, actor="", q
     return StatusChange(True, _success_message(order, plan), manual_refund=plan.manual_refund > 0)
 
 
-def _record_toss_answer(order, plan, answer):
+def _record_pg_answer(order, plan, answer, *, provider="toss"):
     from gnu_jango.api.shop_payments import record_payment_raw_log
 
     try:
@@ -533,13 +552,13 @@ def _record_toss_answer(order, plan, answer):
             record_payment_raw_log(
                 order,
                 order.od_id,
-                "toss",
+                provider,
                 plan.idempotency_key.rsplit("-", 1)[-1][:12],
-                {"toss_partial_cancel": answer, "cancelAmount": plan.pg_refund},
-                prefix="tpc",
+                {f"{provider}_partial_cancel": answer, "cancelAmount": plan.pg_refund},
+                prefix="npc" if provider == "nicepay" else "tpc",
             )
-    except Exception:  # noqa: BLE001 - Toss refunded already; the change must still be applied
-        logger.exception("order %s: could not record the Toss partial cancel response", order.od_id)
+    except Exception:  # noqa: BLE001 - the PG refunded already; the change must still be applied
+        logger.exception("order %s: could not record the %s partial cancel response", order.od_id, provider)
 
 
 def _record_refund_only(order, plan, actor):
@@ -652,12 +671,13 @@ def _success_message(order, plan):
         head = f"주문 {order.od_id}의 모든 상품이 {plan.target} 처리되어 주문이 '{plan.order_status}' 상태가 되었습니다."
     else:
         head = f"주문 {order.od_id}의 상품 {count}건을 {plan.target} 처리했습니다."
-    if plan.method == REFUND_TOSS:
+    if plan.method in {REFUND_TOSS, REFUND_NICEPAY}:
+        label = "NICEPAY" if plan.method == REFUND_NICEPAY else "토스페이먼츠"
         tail = f" {plan.pg_refund:,}원을 PG에서 환불(승인취소)했습니다."
         if plan.manual_refund:
             tail += f" 개인결제로 받은 {plan.manual_refund:,}원은 직접 환불해야 합니다."
         if "이미 취소된 결제" in plan.note:
-            tail += " 토스페이먼츠에서 이미 취소된 결제여서 환불 기록만 반영했습니다. 상점관리자에서 확인하세요."
+            tail += f" {label}에서 이미 취소된 결제여서 환불 기록만 반영했습니다. 상점관리자에서 확인하세요."
     elif plan.method == REFUND_MANUAL:
         tail = f" {plan.refund:,}원은 직접 환불해야 합니다.{plan.note}"
     elif plan.misu:

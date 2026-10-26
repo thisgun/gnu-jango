@@ -167,6 +167,15 @@ from .shop_reviews import (
     review_summary_view,  # noqa: F401 - re-exported for existing importers
     reviews_view,  # noqa: F401 - re-exported for existing importers
 )
+from .shop_nicepay import (
+    NICEPAY_SCRIPT_URL,
+    NicepayConfigError,
+    cancel_pending_nicepay_vbank,
+    confirm_nicepay_payment,
+    create_nicepay_attempt,
+    nicepay_cancel_payment,
+    order_paid_through_nicepay,
+)
 from .shop_payments import (
     cancel_pending_toss_vbank,
     checkout_payment_methods,
@@ -202,6 +211,7 @@ from .shop_payments import (
     TOSS_ESCROW_METHODS,
 )
 from gnu_jango.shop.pg_settings import escrow_enabled as pg_escrow_enabled
+from gnu_jango.shop.pg_settings import nicepay_payment_config
 from gnu_jango.shop.pg_settings import stored_rows as pg_stored_rows
 
 
@@ -1651,28 +1661,54 @@ def payment_config_view(request):
     # one Config read and one unseal per key for the whole (public, frequently hit) response
     pg_rows = pg_stored_rows()
     toss_config = toss_payment_config(rows=pg_rows)
+    nicepay_config = nicepay_payment_config(rows=pg_rows)
     adapter_config = payment_adapter_config()
-    pg_service = configured_payment_provider(rows=pg_rows, toss_config=toss_config)
-    # The external adapter can confirm a payment, but this checkout flow does
-    # not yet prepare the provider-specific client payload needed to start one.
-    # Only advertise the native Toss flow while its client and server keys exist.
-    pg_enabled = pg_service == "toss" and toss_config["enabled"]
+    pg_service = configured_payment_provider(
+        rows=pg_rows, toss_config=toss_config, nicepay_config=nicepay_config
+    )
+    # The external adapter can confirm a payment, but this checkout flow does not prepare the
+    # provider-specific client payload needed to start one. Only advertise a native flow whose
+    # client and server settings are complete.
+    pg_enabled = (
+        (pg_service == "toss" and toss_config["enabled"])
+        or (pg_service == "nicepay" and nicepay_config["enabled"])
+    )
     bank_accounts = configured_bank_accounts()
-    methods = checkout_payment_methods(toss_config=toss_config, pg_service=pg_service, bank_accounts=bank_accounts)
+    methods = checkout_payment_methods(
+        toss_config=toss_config,
+        nicepay_config=nicepay_config,
+        pg_service=pg_service,
+        bank_accounts=bank_accounts,
+    )
     cash_receipt = cash_receipt_preferences()
-    escrow_on = bool(pg_enabled and pg_escrow_enabled(pg_rows))
+    escrow_on = bool(pg_enabled and pg_service == "toss" and pg_escrow_enabled(pg_rows))
+    if pg_service == "nicepay":
+        client = {
+            "client_key": "",
+            "mid": nicepay_config["mid"] if pg_enabled else "",
+            "script_url": NICEPAY_SCRIPT_URL,
+        }
+        is_test_mode = nicepay_config["is_test_mode"]
+    else:
+        client = {
+            "client_key": toss_config["client_key"] if pg_enabled else "",
+            "mid": "",
+            "script_url": "",
+        }
+        is_test_mode = toss_config["is_test_mode"]
     return api_response(
         data={
             "pg_service": pg_service,
-            "client": {"client_key": toss_config["client_key"] if pg_enabled else "", "mid": "", "script_url": ""},
+            "client": client,
             "payment_methods": methods,
             "cash_receipt": cash_receipt,
-            "easy_pay_services": ["tosspay"] if methods["easy_pay"] else [],
+            "easy_pay_services": ["tosspay"] if pg_service == "toss" and methods["easy_pay"] else [],
             "bank_accounts": bank_accounts,
             "hope_date": hope_date_range(),
             "guest_privacy": guest_privacy_html(),
-            "is_test_mode": toss_config["is_test_mode"],
-            # youngcart de_escrow_use: Toss transfers and virtual accounts are escrow payments
+            "is_test_mode": is_test_mode,
+            # youngcart de_escrow_use: Toss transfers and virtual accounts are escrow payments.
+            # NICEPAY escrow needs a separate contract/configuration and is not advertised here.
             "escrow": {"enabled": escrow_on, "methods": list(TOSS_ESCROW_METHODS) if escrow_on else []},
             "purchase_point": purchase_point_notice(),
             "providers": {
@@ -1680,6 +1716,13 @@ def payment_config_view(request):
                     "enabled": toss_config["enabled"],
                     "has_client_key": bool(toss_config["client_key"]),
                     "has_secret_key": bool(toss_config["has_secret_key"]),
+                },
+                "nicepay": {
+                    "enabled": nicepay_config["enabled"],
+                    "mid": nicepay_config["mid"],
+                    "has_merchant_key": nicepay_config["has_merchant_key"],
+                    "mode": nicepay_config["key_status"],
+                    "vbank_enabled": nicepay_config["vbank_enabled"],
                 },
                 "adapter": {
                     "enabled": adapter_config["enabled"],
@@ -1690,6 +1733,17 @@ def payment_config_view(request):
     )
 
 
+def _nicepay_method_code(settle_case):
+    normalized = str(settle_case or "").strip().lower().replace(" ", "").replace("_", "").replace("-", "")
+    if normalized in {"vbank", "virtualaccount", "가상계좌"}:
+        return "VBANK"
+    if normalized in {"iche", "transfer", "계좌이체", "실시간계좌이체"}:
+        return "BANK"
+    if normalized in {"hp", "mobilephone", "휴대폰", "휴대폰결제"}:
+        return "CELLPHONE"
+    return "CARD"
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -1698,13 +1752,31 @@ def payment_prepare_view(request):
     settle_case = str(data.get("od_settle_case") or data.get("payment_method") or "bank").strip()
     requested_pg = str(data.get("pg_service") or data.get("od_pg") or "").strip().lower()
     toss_config = toss_payment_config()
+    nicepay_config = nicepay_payment_config()
+    configured_provider = configured_payment_provider(
+        toss_config=toss_config, nicepay_config=nicepay_config
+    )
     if settle_case_is_vbank(settle_case):
-        pg_service = requested_pg or configured_payment_provider()
-        if pg_service != "toss" or not toss_config["vbank_enabled"]:
+        pg_service = requested_pg or configured_provider
+        if pg_service == "toss":
+            if not toss_config["vbank_enabled"]:
+                return api_error(
+                    "Toss virtual account payments are not enabled.",
+                    status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
+                    code="toss_vbank_unconfigured",
+                )
+        elif pg_service == "nicepay":
+            if not nicepay_config["vbank_enabled"]:
+                return api_error(
+                    "NICEPAY virtual account payments are not enabled.",
+                    status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
+                    code="nicepay_vbank_unconfigured",
+                )
+        else:
             return api_error(
-                "Toss virtual account payments are not enabled.",
+                "The selected virtual account provider is not configured.",
                 status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
-                code="toss_vbank_unconfigured",
+                code="payment_vbank_unconfigured",
             )
     elif settle_case_is_bank(settle_case):
         pg_service = requested_pg or "bank"
@@ -1715,31 +1787,50 @@ def payment_prepare_view(request):
                 code="payment_method_mismatch",
             )
     else:
-        pg_service = requested_pg or configured_payment_provider()
+        pg_service = requested_pg or configured_provider
         if pg_service == "toss" and not toss_config["enabled"]:
             return api_error(
                 "Toss Payments is not configured.",
                 status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
                 code="toss_payment_unconfigured",
             )
-        if pg_service in PAYMENT_ADAPTER_PROVIDERS and not payment_adapter_enabled(pg_service):
+        if pg_service == "nicepay" and not nicepay_config["enabled"]:
+            return api_error(
+                "NICEPAY payments are not configured.",
+                status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
+                code="nicepay_payment_unconfigured",
+            )
+        if (
+            pg_service in PAYMENT_ADAPTER_PROVIDERS
+            and pg_service not in {"toss", "nicepay"}
+            and not payment_adapter_enabled(pg_service)
+        ):
             return api_error(
                 "The selected payment provider is not configured.",
                 status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
                 code="payment_adapter_unconfigured",
             )
-        if pg_service not in PAYMENT_ADAPTER_PROVIDERS and pg_service != "toss":
+        if pg_service not in PAYMENT_ADAPTER_PROVIDERS and pg_service not in {"toss", "nicepay"}:
             return api_error(
                 "The selected payment provider is not supported.",
                 status=drf_status.HTTP_400_BAD_REQUEST,
                 code="payment_provider_unsupported",
             )
-    if pg_service == "toss" and configured_payment_provider() == "bank":
-        # 결제대행사 "사용안함" (or no usable keys): a client asking for Toss is refused here too
+    if pg_service in {"toss", "nicepay"} and configured_provider == "bank":
+        # 결제대행사 "사용안함" (or no usable keys): a client asking for the PG is refused here too
+        code = "toss_payment_unconfigured" if pg_service == "toss" else "nicepay_payment_unconfigured"
         return api_error(
-            "Toss Payments is not configured.",
+            "The selected payment provider is not configured.",
             status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
-            code="toss_payment_unconfigured",
+            code=code,
+        )
+    if pg_service in {"toss", "nicepay"} and configured_provider != pg_service:
+        # A browser cannot switch to another native PG than the shop selected (even if that
+        # provider's keys happen to be present for historical transactions).
+        return api_error(
+            "The selected payment provider is not enabled for this shop.",
+            status=drf_status.HTTP_400_BAD_REQUEST,
+            code="payment_provider_not_selected",
         )
     order_id = generate_numeric_order_id()
     try:
@@ -1753,9 +1844,27 @@ def payment_prepare_view(request):
         order.od_test = current_toss_mode_flag()
         order._change_reason = "Toss test mode recorded at checkout"
         order.save(update_fields=["od_test"])
+    elif pg_service == "nicepay":
+        # Pin the mode and provider for approval/cancel/recovery even after admin settings change.
+        order.od_test = "1" if nicepay_config["selected_mode"] == "test" else "0"
+        order.od_pg = "nicepay"
+        order._change_reason = "NICEPAY test mode and provider recorded at checkout"
+        order.save(update_fields=["od_test", "od_pg"])
     escrow_products = toss_escrow_products(order) if pg_service == "toss" and toss_escrow_applies(order.od_settle_case) else []
     use_escrow = bool(escrow_products)
     tax_flag = 1 if order.od_tax_flag else 0
+    pg_extra = {}
+    if pg_service == "nicepay":
+        try:
+            _, pg_extra["nicepay"] = create_nicepay_attempt(
+                order, _nicepay_method_code(settle_case), request=request
+            )
+        except NicepayConfigError as exc:
+            return api_error(
+                str(exc),
+                status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
+                code="nicepay_payment_unconfigured",
+            )
     return api_response(
         data={
             "order_id": order.od_id,
@@ -1766,7 +1875,9 @@ def payment_prepare_view(request):
             "tax_flag": tax_flag,
             "comm_tax_mny": order.od_tax_mny if tax_flag else 0,
             "comm_vat_mny": order.od_vat_mny if tax_flag else 0,
-            "comm_free_mny": toss_tax_free_amount(order) if tax_flag else 0,
+            "comm_free_mny": (
+                toss_tax_free_amount(order) if pg_service == "toss" else order.od_free_mny
+            ) if tax_flag else 0,
             # 에스크로 사용 (de_escrow_use): Toss transfer / virtual account with escrowProducts
             "use_escrow": use_escrow,
             "escrow_products": escrow_products,
@@ -1787,7 +1898,7 @@ def payment_prepare_view(request):
                 else ""
             ),
             "pg_service": pg_service,
-            "pg_extra": {},
+            "pg_extra": pg_extra,
         }
     )
 
@@ -1822,9 +1933,18 @@ def payment_cancel_view(request):
     toss_cancel_error = cancel_pending_toss_vbank(order, cancel_reason)
     if toss_cancel_error:
         return toss_cancel_error
+    nicepay_cancel_error = cancel_pending_nicepay_vbank(order, cancel_reason)
+    if nicepay_cancel_error:
+        return nicepay_cancel_error
     order, _, cancel_error = cancel_shop_order_locally(order.pk, cancel_reason)
     if cancel_error:
         return cancel_error
+    if str(order.od_pg or "").strip().lower() == "nicepay":
+        from gnu_jango.shop.models import ShopPaymentAttempt
+
+        ShopPaymentAttempt.objects.filter(
+            order=order, provider="nicepay", state__in={"prepared", "authenticated"}
+        ).update(state="canceled")
     restored_rows = restore_order_cart_snapshot(request, order)
     return api_response(data={"order_id": order.od_id, "uid": order.uid, "status": order.od_status, "restored_rows": restored_rows})
 
@@ -1844,7 +1964,7 @@ def payment_confirm_view(request):
     authorized_order_id = str(order.od_id)
     payment_status = ""
 
-    if pg_service != "toss" and pg_service not in PAYMENT_ADAPTER_PROVIDERS:
+    if pg_service not in {"toss", "nicepay"} and pg_service not in PAYMENT_ADAPTER_PROVIDERS:
         record_payment_raw_log(
             order,
             order_id,
@@ -1882,6 +2002,32 @@ def payment_confirm_view(request):
                     "due_date": pending_order.od_vbank_due_date,
                 },
             })
+    elif pg_service == "nicepay":
+        attempt, error = confirm_nicepay_payment(data)
+        if error:
+            return error
+        payment_status = "WAITING_FOR_DEPOSIT" if attempt.state == "pending_deposit" else "DONE"
+        attempt.refresh_from_db()
+        confirmed_order = attempt.order
+        if payment_status == "WAITING_FOR_DEPOSIT":
+            return api_response(data={
+                "order_id": confirmed_order.od_id,
+                "uid": confirmed_order.uid,
+                "status": confirmed_order.od_status,
+                "payment_status": payment_status,
+                "vbank": {
+                    "bank_code": confirmed_order.od_vbank_bank_code,
+                    "account_number": confirmed_order.od_vbank_account,
+                    "customer_name": confirmed_order.od_vbank_customer_name,
+                    "due_date": confirmed_order.od_vbank_due_date,
+                },
+            })
+        return api_response(data={
+            "order_id": confirmed_order.od_id,
+            "uid": confirmed_order.uid,
+            "status": confirmed_order.od_status,
+            "payment_status": payment_status,
+        })
     elif pg_service in PAYMENT_ADAPTER_PROVIDERS:
         order_id, amount, transaction_id, data, error = confirm_adapter_payment(pg_service, data)
         if error:
