@@ -806,6 +806,9 @@ SHOP_NICEPAY_MID = de_config("SHOP_NICEPAY_MID", default="")
 SHOP_NICEPAY_MERCHANT_KEY = de_config("SHOP_NICEPAY_MERCHANT_KEY", default="")
 SHOP_NICEPAY_ADMIN_KEYS_ENABLED = bool_config("SHOP_NICEPAY_ADMIN_KEYS_ENABLED", default=True)
 SHOP_NICEPAY_VBANK_ENABLED = bool_config("SHOP_NICEPAY_VBANK_ENABLED", default=True)
+# Send TaxFreeAmt on cancellation for merchants whose NICEPAY contract exposes the mixed-tax
+# cancellation option. Off by default because the published cancel request does not require it.
+SHOP_NICEPAY_TAX_FREE_CANCEL_ENABLED = bool_config("SHOP_NICEPAY_TAX_FREE_CANCEL_ENABLED", default=False)
 # Absolute URLs registered with NICEPAY. RETURN_URL is the merchant return endpoint (mobile POST);
 # SUCCESS_URL is the Next.js page the backend redirects to after approval.
 SHOP_NICEPAY_RETURN_URL = de_config("SHOP_NICEPAY_RETURN_URL", default="")

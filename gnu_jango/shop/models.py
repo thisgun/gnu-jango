@@ -917,11 +917,18 @@ class ShopPaymentAttempt(models.Model):
         ("approved_local_failed", "승인 후 주문 저장 실패"),
         ("uncertain", "승인 결과 불명확"),
         ("net_canceled", "망취소 완료"),
+        ("superseded", "다른 결제 시도로 대체됨"),
         ("failed", "실패"),
         ("canceled", "취소됨"),
     )
 
-    order = models.ForeignKey(ShopOrder, on_delete=models.CASCADE, related_name="payment_attempts")
+    order = models.ForeignKey(
+        ShopOrder,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_attempts",
+    )
     od_id = models.CharField(max_length=40, db_index=True)
     provider = models.CharField(max_length=20, default="nicepay")
     mode = models.CharField(max_length=4, default="test")

@@ -41,6 +41,7 @@ class Migration(migrations.Migration):
                             ("approved_local_failed", "승인 후 주문 저장 실패"),
                             ("uncertain", "승인 결과 불명확"),
                             ("net_canceled", "망취소 완료"),
+                            ("superseded", "다른 결제 시도로 대체됨"),
                             ("failed", "실패"),
                             ("canceled", "취소됨"),
                         ],
@@ -56,7 +57,9 @@ class Migration(migrations.Migration):
                 (
                     "order",
                     models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
                         related_name="payment_attempts",
                         to="shop.shoporder",
                     ),
