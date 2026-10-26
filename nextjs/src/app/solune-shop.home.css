@@ -23,16 +23,32 @@ html[data-shop-cats="0"] .solune-shop-cats-reserve { display: none; }
 @media (min-width: 1024px) { .solune-shop-page .solune-shop-banner { --solune-banner-gutter: 2rem; } }
 .solune-shop-page #main_bn { position: relative; margin: 0; border: 0; }
 .solune-shop-page .solune-banner-swiper { overflow: hidden; background: var(--solune-surface-soft); }
-/* 높이는 화면 폭을 따른다(시안 1920x920). 사진은 그 틀을 덮게 자른다. 뼈대(.solune-banner-stage)도 같은 높이. */
+/* 배너가 첫 화면 대부분을 차지하지 않도록 너비에 비례시켜 최대 760px로 제한한다(레퍼런스 2026-10 값 — 1440 폭에서 576px).
+   사진은 틀을 덮게 자르고, 뼈대(.solune-banner-stage)도 같은 높이를 쓴다. */
 .solune-shop-page .solune-banner-stage,
 .solune-shop-page .solune-banner-slide,
 .solune-shop-page .solune-banner-slide > a {
-  height: min(940px, 48vw);
+  height: min(760px, 40vw);
   min-height: 260px;
 }
 .solune-shop-page .solune-banner-stage { position: relative; }
 .solune-shop-page .solune-banner-slide { position: relative; overflow: hidden; }
 .solune-shop-page .solune-banner-slide > a { display: block; }
+/* 배너 폼의 "테두리" 설정(bn_border). 위아래 가는 선 — 사진 안쪽에 그어 높이는 그대로다. */
+.solune-shop-page .solune-banner-slide.has-border::after {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-block: 1px solid var(--solune-border);
+  pointer-events: none;
+  content: "";
+}
+/* Swiper 가 붙기 전(서버 HTML · 스크립트를 받는 동안)에는 활성 장이 없어 글이 숨는다. 첫 장의 글은 그때도 보인다 —
+   붙은 뒤 첫 장이 활성이 되어도 그대로라 깜박이지 않는다. */
+.solune-shop-page .is-multi .solune-banner-swiper:not(.swiper-initialized) .swiper-slide:first-child .solune-banner-caption-inner > * {
+  opacity: 1;
+  transform: none;
+}
 .solune-shop-page .solune-banner-img {
   display: block;
   width: 100%;

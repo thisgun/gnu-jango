@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { GalleryThumbnail } from "@/app/boards/[bo_table]/GalleryThumbnail";
 import { ProductImageFallback } from "@/components/shop/ProductImageFallback";
@@ -8,7 +8,8 @@ import { G5Link as Link } from "@/components/ui/g5-link";
 import type { ShopReview } from "@/lib/api";
 import { plainTextSummary } from "@/lib/client-metadata";
 import { shopProductHref } from "@/lib/product-url";
-import { cn, truncate } from "@/lib/utils";
+import { useDynamicSwiper } from "@/lib/use-dynamic-swiper";
+import { truncate } from "@/lib/utils";
 import { getShopHomeData } from "@/services/shop-home";
 
 const HEADING_ID = "shop-home-reviews-title";
@@ -17,24 +18,6 @@ const REVIEW_LIMIT = 12;
 function stars(score: number): string {
   const full = Math.max(0, Math.min(5, Math.round(score)));
   return "★".repeat(full) + "☆".repeat(5 - full);
-}
-
-interface PagerState {
-  pages: number;
-  page: number;
-}
-
-/** 한 칸 넘김 폭 — 칸 너비 + 칸 사이 간격(오른쪽 여백). */
-function slideStep(track: HTMLElement): number {
-  const slide = track.querySelector<HTMLElement>(".swiper-slide");
-  if (!slide) return track.clientWidth;
-  return slide.getBoundingClientRect().width + (Number.parseFloat(getComputedStyle(slide).marginRight) || 0);
-}
-
-/** 한 쪽에 보이는 칸 수(레퍼런스 1 · 2 · 3 · 4장) — 칸 폭은 CSS(--pre-spv)가 정한다. */
-function slidesPerPage(track: HTMLElement): number {
-  const step = slideStep(track);
-  return step > 0 ? Math.max(1, Math.round((track.clientWidth + 1) / step)) : 1;
 }
 
 /**
@@ -47,8 +30,10 @@ export function ShopHomeReviews() {
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
-  const [pager, setPager] = useState<PagerState>({ pages: 1, page: 0 });
   const trackRef = useRef<HTMLDivElement>(null);
+  const prevRef = useRef<HTMLButtonElement>(null);
+  const nextRef = useRef<HTMLButtonElement>(null);
+  const paginationRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -69,38 +54,39 @@ export function ShopHomeReviews() {
     return () => { active = false; };
   }, [retryKey]);
 
-  const syncPager = useCallback(() => {
-    const track = trackRef.current;
-    if (!track) return;
-    const perPage = slidesPerPage(track);
-    const count = track.querySelectorAll(".swiper-slide").length;
-    const pages = Math.max(1, Math.ceil(count / perPage));
-    const atEnd = track.scrollLeft >= track.scrollWidth - track.clientWidth - 2;
-    const page = atEnd ? pages - 1 : Math.min(pages - 1, Math.round(track.scrollLeft / (slideStep(track) * perPage)));
-    setPager((previous) => (previous.pages === pages && previous.page === page ? previous : { pages, page }));
-  }, []);
-
-  useEffect(() => {
-    syncPager();
-    const track = trackRef.current;
-    if (!track || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(syncPager);
-    observer.observe(track);
-    return () => observer.disconnect();
-  }, [reviews.length, syncPager]);
-
-  const goToPage = (page: number) => {
-    const track = trackRef.current;
-    if (!track) return;
-    const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
-    track.scrollTo({ left: page * slideStep(track) * slidesPerPage(track), behavior });
-  };
-
-  const handleTrackKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    event.preventDefault();
-    goToPage(Math.max(0, Math.min(pager.pages - 1, pager.page + (event.key === "ArrowLeft" ? -1 : 1))));
-  };
+  useDynamicSwiper(
+    trackRef,
+    () => ({
+      slidesPerView: 1,
+      slidesPerGroup: 1,
+      spaceBetween: 22,
+      speed: 320,
+      longSwipesRatio: 0.2,
+      watchOverflow: true,
+      observer: true,
+      resizeObserver: true,
+      keyboard: { enabled: true },
+      a11y: {
+        prevSlideMessage: "이전 후기",
+        nextSlideMessage: "다음 후기",
+        paginationBulletMessage: "{{index}}번째 후기로 이동",
+      },
+      navigation: {
+        prevEl: prevRef.current,
+        nextEl: nextRef.current,
+      },
+      pagination: {
+        el: paginationRef.current,
+        clickable: true,
+      },
+      breakpoints: {
+        640: { slidesPerView: 2, slidesPerGroup: 2 },
+        900: { slidesPerView: 3, slidesPerGroup: 3 },
+        1200: { slidesPerView: 4, slidesPerGroup: 4 },
+      },
+    }),
+    [reviews.length]
+  );
 
   return (
     <section className="solune-shop-product-section solune-shop-review-section" aria-labelledby={HEADING_ID}>
@@ -137,65 +123,40 @@ export function ShopHomeReviews() {
       ) : reviews.length === 0 ? (
         <p className="sct_noitem">아직 등록된 상품 후기가 없습니다.</p>
       ) : (
-        <>
-          <div className="swiper solune-review-swiper">
-            <div
-              ref={trackRef}
-              className="solune-review-track"
-              role="region"
-              aria-label="최근 상품 후기"
-              aria-roledescription="carousel"
-              aria-keyshortcuts="ArrowLeft ArrowRight"
-              tabIndex={0}
-              onKeyDown={handleTrackKeyDown}
-              onScroll={syncPager}
-            >
-              <div className="swiper-wrapper ondam-review-grid">
-                {reviews.slice(0, REVIEW_LIMIT).map((review) => (
-                  <div key={review.is_id} className="swiper-slide">
-                    <ReviewCard review={review} />
-                  </div>
-                ))}
+        <div
+          ref={trackRef}
+          className="swiper solune-review-swiper"
+          role="region"
+          aria-label="최근 상품 후기"
+          aria-roledescription="carousel"
+          aria-keyshortcuts="ArrowLeft ArrowRight"
+          tabIndex={0}
+        >
+          <div className="swiper-wrapper ondam-review-grid">
+            {reviews.slice(0, REVIEW_LIMIT).map((review) => (
+              <div key={review.is_id} className="swiper-slide">
+                <ReviewCard review={review} />
               </div>
-            </div>
-            {pager.pages > 1 ? (
-              <>
-                <button
-                  type="button"
-                  className="solune-banner-nav solune-review-prev"
-                  aria-label="이전 후기"
-                  disabled={pager.page <= 0}
-                  onClick={() => goToPage(pager.page - 1)}
-                >
-                  <ChevronLeft size={16} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  className="solune-banner-nav solune-review-next"
-                  aria-label="다음 후기"
-                  disabled={pager.page >= pager.pages - 1}
-                  onClick={() => goToPage(pager.page + 1)}
-                >
-                  <ChevronRight size={16} aria-hidden />
-                </button>
-              </>
-            ) : null}
+            ))}
           </div>
-          {pager.pages > 1 ? (
-            <div className="solune-review-pagination swiper-pagination">
-              {Array.from({ length: pager.pages }).map((_, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  className={cn("swiper-pagination-bullet", index === pager.page && "swiper-pagination-bullet-active")}
-                  aria-label={`${index + 1}쪽으로 가기`}
-                  aria-current={index === pager.page ? "true" : undefined}
-                  onClick={() => goToPage(index)}
-                />
-              ))}
-            </div>
-          ) : null}
-        </>
+          <button
+            ref={prevRef}
+            type="button"
+            className="solune-banner-nav solune-review-prev"
+            aria-label="이전 후기"
+          >
+            <ChevronLeft size={16} aria-hidden />
+          </button>
+          <button
+            ref={nextRef}
+            type="button"
+            className="solune-banner-nav solune-review-next"
+            aria-label="다음 후기"
+          >
+            <ChevronRight size={16} aria-hidden />
+          </button>
+          <div ref={paginationRef} className="solune-review-pagination swiper-pagination" />
+        </div>
       )}
     </section>
   );
