@@ -1,6 +1,6 @@
 """Unified shop settings, ordered like youngcart adm/shop_admin/configform.php: 사업자정보,
-진열, 결제설정, 배송설정, 기타 설정, SMS 설정. The Toss keys entered here are sealed in Config
-(shop/admin_pg_settings.py); server environment keys still win over them."""
+진열, 결제설정, 배송설정, 기타 설정, SMS 설정. Toss and NICEPAY credentials entered here are
+sealed in Config (shop/admin_pg_settings.py); server environment keys still win over them."""
 
 import re
 
@@ -26,11 +26,14 @@ from gnu_jango.api.shop_payments import (
 )
 from gnu_jango.config import signals
 from gnu_jango.config.models import Config
+from gnu_jango.shop.pg_settings import nicepay_payment_config
 
 from .admin_pg_settings import (
     UNSUPPORTED_ROWS,
     add_pg_fields,
     clean_pg_fields,
+    nicepay_notify_url,
+    nicepay_return_url_help,
     pg_field_order,
     pg_status,
     save_pg_changes,
@@ -490,16 +493,22 @@ def shop_settings(request):
 
 GATEWAY_LABELS = {
     "missing": "키 미등록", "incomplete": "키 한 개 누락", "invalid_prefix": "키 형식 확인 필요",
+    "invalid_mid": "MID 형식 확인 필요", "invalid_key": "MerchantKey 형식 확인 필요",
     "mode_mismatch": "테스트·실결제 키 혼합", "test": "테스트 키 쌍", "live": "실결제 키 쌍",
 }
-PROVIDER_LABELS = {"toss": "토스페이먼츠", "bank": "온라인 PG 미선택 (무통장입금만)"}
+PROVIDER_LABELS = {
+    "toss": "토스페이먼츠", "nicepay": "NICEPAY 인증결제",
+    "bank": "온라인 PG 미선택 (무통장입금만)",
+}
 
 
-def payment_method_status(toss, provider, methods):
+def payment_method_status(toss, nicepay, provider, methods):
     preferences = {"bank": config_flag(Config.objects.filter(name="de_bank_use").values_list("value", flat=True).first())}
     # Missing legacy rows preserve the historical enabled default for online methods.
     saved_options = dict(Config.objects.filter(name__in=PAYMENT_OPTION_FIELDS.values()).values_list("name", "value"))
     preferences.update({method: config_flag(saved_options.get(field_name, "1")) for method, field_name in PAYMENT_OPTION_FIELDS.items()})
+    active = nicepay if provider == "nicepay" else toss
+    active_label = "NICEPAY" if provider == "nicepay" else "토스페이먼츠"
     rows = []
     for method, label in {"bank": "무통장입금", **PAYMENT_LABELS}.items():
         enabled = bool(methods[method])
@@ -511,12 +520,12 @@ def payment_method_status(toss, provider, methods):
                 detail = "입금계좌 없음"
         elif not preferences[method]:
             detail = "관리자 중지"
-        elif not toss["enabled"]:
-            detail = GATEWAY_LABELS[toss["key_status"]]
-        elif provider != "toss":
-            detail = "토스페이먼츠가 주문 결제사로 선택되지 않음"
-        elif method == "vbank" and not toss["vbank_enabled"]:
-            detail = "서버 플래그 비활성 · 웹훅 등록 확인 필요"
+        elif not active["enabled"]:
+            detail = GATEWAY_LABELS[active["key_status"]]
+        elif provider not in {"toss", "nicepay"}:
+            detail = f"{active_label}가 주문 결제사로 선택되지 않음"
+        elif method == "vbank" and not active["vbank_enabled"]:
+            detail = "서버 플래그 비활성 · 입금통보 URL 등록 확인 필요"
         else:
             detail = "사용 가능"
         rows.append({"name": label, "enabled": enabled, "detail": detail})
@@ -528,12 +537,15 @@ def payment_status_context(request):
     presence and modes reach the template, never a key or adapter secret."""
     rows = pg_stored_rows()
     toss = toss_payment_config(rows=rows)
+    nicepay = nicepay_payment_config(rows=rows)
     adapter = payment_adapter_config()
-    provider = configured_payment_provider()
-    methods = checkout_payment_methods(toss_config=toss, pg_service=provider)
+    provider = configured_payment_provider(rows=rows, toss_config=toss, nicepay_config=nicepay)
+    methods = checkout_payment_methods(
+        toss_config=toss, nicepay_config=nicepay, pg_service=provider
+    )
     receipt_preferences = cash_receipt_preferences()
     return {
-        "payment_status": payment_method_status(toss, provider, methods),
+        "payment_status": payment_method_status(toss, nicepay, provider, methods),
         "has_payment_method": any(methods.values()),
         "cash_receipt": {
             "enabled": receipt_preferences["enabled"],
@@ -545,15 +557,12 @@ def payment_status_context(request):
         },
         "payment_provider_label": PROVIDER_LABELS.get(provider, f"{provider} 확인 어댑터 (주문 결제 시작 미지원)"),
         "gateway": {
-            "enabled": toss["enabled"], "has_client_key": bool(toss["client_key"]),
-            "has_secret_key": toss["has_secret_key"], "vbank_enabled": toss["vbank_enabled"],
-            "mode": GATEWAY_LABELS[toss["key_status"]],
-            "key_status": toss["key_status"],
-            "native_checkout": provider == "toss" and toss["enabled"],
             "adapter_enabled": adapter["enabled"],
-            **pg_status(toss, provider, rows),
+            **pg_status(toss, provider, rows, nicepay),
         },
         "webhook_url": webhook_url(request),
+        "nicepay_notify_url": nicepay_notify_url(request),
+        "nicepay_return_url": nicepay_return_url_help(request),
         "unsupported_rows": UNSUPPORTED_ROWS,
     }
 

@@ -22,31 +22,36 @@
     </div>
     <dl>
       <div><dt>주문 결제 연동</dt><dd>{{ payment_provider_label }}{% if gateway.provider_locked %} · 서버 환경 변수로 설정됨{% endif %}</dd></div>
-      <div><dt>토스페이먼츠 키 상태</dt><dd>{{ gateway.mode }}{% if gateway.enabled and not gateway.native_checkout %} · 주문 화면의 PG로 선택되지 않음{% endif %}</dd></div>
-      <div><dt>클라이언트 키</dt><dd>{% if gateway.has_client_key %}등록됨{% else %}미등록{% endif %}</dd></div>
-      <div><dt>시크릿 키</dt><dd>{% if gateway.has_secret_key %}등록됨{% else %}미등록{% endif %}</dd></div>
-      <div><dt>에스크로</dt><dd>{% if gateway.escrow_enabled %}에스크로결제 사용 (계좌이체·가상계좌) · 배송 등록은 토스페이먼츠 상점관리자에서{% else %}일반결제{% endif %}</dd></div>
-      <div><dt>가상계좌 서버 설정</dt><dd>{% if gateway.vbank_enabled %}플래그 켜짐 · 웹훅 등록은 별도 확인{% else %}비활성{% endif %}</dd></div>
+      <div><dt>선택한 PG 키 상태</dt><dd>{{ gateway.mode }}{% if gateway.enabled and not gateway.native_checkout %} · 주문 화면의 PG로 선택되지 않음{% endif %}</dd></div>
+      <div><dt>{% if gateway.provider == "nicepay" %}MID{% else %}클라이언트 키{% endif %}</dt><dd>{% if gateway.has_client_key %}등록됨{% else %}미등록{% endif %}</dd></div>
+      <div><dt>{% if gateway.provider == "nicepay" %}MerchantKey{% else %}시크릿 키{% endif %}</dt><dd>{% if gateway.has_secret_key %}등록됨{% else %}미등록{% endif %}</dd></div>
+      <div><dt>에스크로</dt><dd>{% if gateway.escrow_enabled %}에스크로결제 사용 (계좌이체·가상계좌) · 배송 등록은 토스페이먼츠 상점관리자에서{% else %}일반결제 또는 별도 계약 필요{% endif %}</dd></div>
+      <div><dt>가상계좌 서버 설정</dt><dd>{% if gateway.vbank_enabled %}사용 설정 · 입금통보 URL 등록 확인{% else %}비활성{% endif %}</dd></div>
       <div><dt>현금영수증 신청</dt><dd>{% if cash_receipt.enabled %}허용 · {{ cash_receipt.methods|join:" · " }}{% else %}중지{% endif %}</dd></div>
     </dl>
-    <p>무통장입금의 현금영수증 요청은 주문에 기록되며 관리자가 수동 발급합니다. 토스 가상계좌·계좌이체는 고객이 요청한 경우에만 발급 옵션을 보내고, PG 응답의 발급 정보가 있으면 주문에 저장합니다.</p>
+    <p>무통장입금의 현금영수증 요청은 주문에 기록되며 관리자가 수동 발급합니다. 토스 가상계좌·계좌이체는 고객이 요청한 경우에만 발급 옵션을 보내고, PG 응답의 발급 정보가 있으면 주문에 저장합니다. NICEPAY 가상계좌는 입금통보를 거래조회 API로 검증한 뒤에만 결제완료로 바꿉니다.</p>
     <div class="shop-pg-check-form">
-      <button class="btn" type="submit" form="shop-pg-check-form"{% if not gateway.enabled %} disabled{% endif %}>토스 서버 인증 확인</button>
-      <small>읽기 전용 API 조회만 수행하며 결제나 취소는 실행하지 않습니다.</small>
+      <button class="btn" type="submit" form="shop-pg-check-form"{% if not gateway.enabled or gateway.provider != "toss" %} disabled{% endif %}>토스 서버 인증 확인</button>
+      <small>토스에서만 읽기 전용 API 조회를 수행합니다. NICEPAY는 결제창 인증 후 서버 승인 단계에서 검증합니다.</small>
     </div>
     {% if gateway.adapter_enabled %}
-    <p>외부 PG 어댑터가 설정되어 있습니다. 현재 주문 화면에서 직접 시작할 수 있는 온라인 결제는 토스페이먼츠입니다.</p>
+    <p>외부 PG 어댑터가 설정되어 있습니다. 현재 주문 화면에서 직접 시작할 수 있는 온라인 결제는 선택한 네이티브 PG입니다.</p>
     {% endif %}
     <details>
       <summary>서버 환경 변수로 PG 연결하기</summary>
       <p>아래 결제대행사 항목에 키를 등록하는 대신 호스팅 서비스의 환경 변수로 등록할 수도 있습니다. 환경 변수가 있으면 관리자 화면의 키보다 우선합니다. Vercel에서는 프로젝트의 Settings → Environment Variables에서 등록한 뒤 다시 배포하세요.</p>
       <ul>
-        <li><code>SHOP_TOSS_CLIENT_KEY</code>: 토스페이먼츠 클라이언트 키</li>
-        <li><code>SHOP_TOSS_SECRET_KEY</code>: 토스페이먼츠 시크릿 키</li>
-        <li><code>SHOP_PAYMENT_PROVIDER=toss</code>: 토스페이먼츠 선택 (설정하면 아래 결제대행사 선택보다 우선)</li>
+        <li><code>SHOP_TOSS_CLIENT_KEY</code>, <code>SHOP_TOSS_SECRET_KEY</code>: 토스페이먼츠 키</li>
+        <li><code>SHOP_NICEPAY_TEST_MID</code>, <code>SHOP_NICEPAY_TEST_MERCHANT_KEY</code>: NICEPAY 테스트 가맹점 키</li>
+        <li><code>SHOP_NICEPAY_MID</code>, <code>SHOP_NICEPAY_MERCHANT_KEY</code>: NICEPAY 실결제 가맹점 키</li>
+        <li><code>SHOP_PAYMENT_PROVIDER=toss|nicepay</code>: 사용할 PG 선택 (설정하면 아래 결제대행사 선택보다 우선)</li>
+        <li><code>SHOP_NICEPAY_RETURN_URL</code>: NICEPAY 모바일/PC 복귀 URL (HTTPS)</li>
+        <li><code>SHOP_NICEPAY_SUCCESS_URL</code> 또는 <code>SHOP_NICEPAY_FRONTEND_URL</code>: 승인 후 이동할 프런트 URL</li>
       </ul>
-      <p>테스트 키끼리 또는 실결제 키끼리 등록하세요. 클라이언트 키와 시크릿 키의 모드가 다르거나 키 형식이 맞지 않으면 결제 수단을 사용할 수 없습니다.</p>
-      <p>가상계좌는 아래 가상계좌 입금통보 URL을 토스페이먼츠 웹훅에 등록하고 입금 통지를 확인한 후 <code>SHOP_TOSS_VBANK_ENABLED=True</code>도 설정해야 합니다.</p>
+      <p>토스는 테스트·실결제 키의 접두사가 다르므로 같은 모드끼리 등록하세요. NICEPAY는 MID와 MerchantKey를 같은 테스트/실결제 모드로 등록해야 하며, MerchantKey는 저장 후 다시 표시하지 않습니다.</p>
+      <p>가상계좌 입금통보 URL: <code>{{ nicepay_notify_url }}</code></p>
+      <p>NICEPAY 복귀 URL: <code>{{ nicepay_return_url }}</code> · 토스 가상계좌 웹훅: <code>{{ webhook_url }}</code></p>
+      <p>가상계좌는 NICEPAY 상점관리자에 입금통보 URL을 등록하고, <code>SHOP_NICEPAY_VBANK_ENABLED</code>를 확인해야 합니다. 토스는 <code>SHOP_TOSS_VBANK_ENABLED=True</code>가 필요합니다.</p>
     </details>
   </div>
 </section>

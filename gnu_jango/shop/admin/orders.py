@@ -2338,3 +2338,23 @@ class ShopPersonalPayAdmin(ModelAdmin):
             ],
         }
 
+
+@admin.register(ShopPaymentAttempt)
+class ShopPaymentAttemptAdmin(ModelAdmin):
+    list_display = ("od_id", "provider", "mode", "state", "amount", "tid", "created_at", "updated_at")
+    search_fields = ("od_id", "tid", "mid", "attempt_token_hash")
+    list_filter = ("provider", "mode", "state")
+    readonly_fields = (
+        "order", "od_id", "provider", "mode", "mid", "key_fingerprint", "amount",
+        "pay_method", "tid", "state", "provider_data", "last_error", "created_at", "updated_at",
+    )
+    ordering = ("-created_at",)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

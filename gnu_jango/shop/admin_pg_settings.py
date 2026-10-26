@@ -1,13 +1,15 @@
-"""The 결제대행사 / 토스페이먼츠 키 / 결제 테스트 / 에스크로 part of the shop settings page
+"""The 결제대행사 / PG 키 / 결제 테스트 / 에스크로 part of the shop settings page
 (youngcart adm/shop_admin/configform.php 결제설정 and configformupdate.php).
 
 Secret keys are write-only: the inputs never render a stored value, the page only says
 등록됨/미등록, and a key is replaced by typing a new one or removed with its 삭제 box. Client
-keys show masked (prefix and last four characters). When the server environment sets the keys
-(SHOP_TOSS_CLIENT_KEY / SHOP_TOSS_SECRET_KEY) or the provider (SHOP_PAYMENT_PROVIDER), the
-matching inputs are disabled: the environment wins."""
+keys show masked (prefix and last four characters); a NICEPAY MID is shown because it is the
+public merchant identifier, while its MerchantKey is never echoed. When the server environment
+sets the keys or the provider (SHOP_PAYMENT_PROVIDER), the matching inputs are disabled: the
+environment wins."""
 
 from django import forms
+from django.conf import settings
 from django.urls import reverse
 from django.views.decorators.debug import sensitive_variables
 
@@ -19,23 +21,33 @@ from .pg_settings import (
     KEY_KINDS,
     KEY_MODES,
     MODE_LABELS,
+    NICEPAY_KEY_ROWS,
     PG_SERVICE_CHOICES,
     PG_SERVICE_FIELD,
+    PG_SERVICE_NICEPAY,
     TOSS_KEY_ROWS,
     UNSUPPORTED_PG_SERVICES,
     admin_keys,
     admin_keys_enabled,
+    admin_nicepay_values,
     admin_pg_service,
     unreadable_key_rows,
     card_test_enabled,
     env_keys_set,
+    env_nicepay_keys,
+    env_nicepay_keys_set,
     env_payment_provider,
     escrow_enabled,
     key_family,
     key_label,
     key_prefix_error,
     mask_key,
+    nicepay_admin_keys_enabled,
+    nicepay_seal_context,
+    nicepay_unreadable_key_rows,
+    nicepay_value_error,
     seal_key,
+    seal_nicepay_value,
 )
 
 ENV_LOCKED_HELP = "서버 환경 변수로 설정됨 (여기서 변경 불가)"
@@ -73,6 +85,9 @@ def pg_field_order():
         for kind in KEY_KINDS:
             name = TOSS_KEY_ROWS[(mode, kind)]
             names += [name, f"{name}_delete"]
+        for kind in ("mid", "merchant_key"):
+            name = NICEPAY_KEY_ROWS[(mode, kind)]
+            names += [name, f"{name}_delete"]
     return [*names, CARD_TEST_FIELD, ESCROW_FIELD]
 
 
@@ -90,7 +105,8 @@ def add_pg_fields(form, rows):
             f"{ENV_LOCKED_HELP} · SHOP_PAYMENT_PROVIDER"
             if provider_locked
             else "쇼핑몰에서 사용할 결제대행사를 선택합니다. 사용안함이면 무통장입금만 받습니다. "
-            f"영카트의 {' · '.join(UNSUPPORTED_PG_SERVICES)}는 지원하지 않습니다."
+            f"NICEPAY는 MID·MerchantKey 기반 인증결제 상품만 지원하며, 영카트의 "
+            f"{' · '.join(UNSUPPORTED_PG_SERVICES)}는 지원하지 않습니다."
         ),
     )
     form.initial[PG_SERVICE_FIELD] = admin_pg_service(rows)
@@ -156,6 +172,58 @@ def add_pg_fields(form, rows):
             )
     form.stored_toss_keys = stored
 
+    nicepay_stored = admin_nicepay_values(rows)
+    nicepay_unreadable = set(nicepay_unreadable_key_rows(rows))
+    nicepay_keys_off = not nicepay_admin_keys_enabled()
+    for mode in KEY_MODES:
+        env_mid, env_merchant_key = env_nicepay_keys(mode)
+        nicepay_env_locked = bool(env_mid or env_merchant_key)
+        for kind in ("mid", "merchant_key"):
+            name = NICEPAY_KEY_ROWS[(mode, kind)]
+            current = nicepay_stored[mode][kind]
+            label = "MID" if kind == "mid" else "MerchantKey"
+            if nicepay_env_locked:
+                state = ENV_LOCKED_HELP
+                help_text = f"{ENV_LOCKED_HELP} · SHOP_NICEPAY_{'TEST_' if mode == 'test' else ''}{label.upper()}"
+                displayed = ""
+            elif nicepay_keys_off:
+                state, help_text, displayed = "사용 안 함", "이 서버는 관리자 화면의 NICEPAY 키를 사용하지 않습니다.", ""
+            else:
+                registered = current if kind == "mid" and current else ("등록됨" if current else "미등록")
+                state = registered
+                help_text = (
+                    f"현재: {registered}. NICEPAY 상점관리자에서 발급한 {label}입니다. "
+                    "MerchantKey는 저장 후 다시 표시하지 않습니다."
+                )
+                displayed = current if kind == "mid" else ""
+            if mode in nicepay_unreadable and kind == "merchant_key" and not (nicepay_env_locked or nicepay_keys_off):
+                state = "저장된 MerchantKey를 읽을 수 없음 - 다시 입력하세요"
+                help_text = state
+                displayed = ""
+            widget = (
+                forms.TextInput(attrs={"autocomplete": "off", "spellcheck": "false", "placeholder": state})
+                if kind == "mid"
+                else forms.PasswordInput(
+                    render_value=False,
+                    attrs={"autocomplete": "new-password", "spellcheck": "false", "placeholder": state},
+                )
+            )
+            form.fields[name] = forms.CharField(
+                label=f"NICEPAY {MODE_LABELS[mode]} {label}",
+                required=False,
+                max_length=200 if kind == "merchant_key" else 10,
+                widget=widget,
+                disabled=nicepay_env_locked or nicepay_keys_off,
+                help_text=help_text,
+            )
+            form.initial[name] = displayed
+            form.fields[f"{name}_delete"] = forms.BooleanField(
+                label=f"NICEPAY {MODE_LABELS[mode]} {label} 삭제",
+                required=False,
+                disabled=nicepay_env_locked or nicepay_keys_off or not current,
+            )
+    form.stored_nicepay_keys = nicepay_stored
+
 
 @sensitive_variables("cleaned", "value", "result", "client", "secret", "stored")
 def clean_pg_fields(form, cleaned):
@@ -188,6 +256,27 @@ def clean_pg_fields(form, cleaned):
                 "(API 개별 연동 키 ck/sk 또는 결제위젯 연동 키 gck/gsk)로 등록하세요.",
             )
 
+    stored_nicepay = getattr(form, "stored_nicepay_keys", {})
+    for mode in KEY_MODES:
+        result = dict(stored_nicepay.get(mode) or {"mid": "", "merchant_key": ""})
+        changed = invalid = False
+        for kind in ("mid", "merchant_key"):
+            name = NICEPAY_KEY_ROWS[(mode, kind)]
+            value = str(cleaned.get(name) or "").strip()
+            cleaned[name] = value
+            if value and value != result.get(kind, ""):
+                error = nicepay_value_error(mode, kind, value)
+                if error:
+                    form.add_error(name, error)
+                    invalid = True
+                result[kind] = value
+                changed = True
+            elif cleaned.get(f"{name}_delete"):
+                result[kind] = ""
+                changed = True
+        # One value may be removed on its own; the status card flags the incomplete pair instead
+        # of making the delete box unusable. A newly entered value is still format-checked above.
+
 
 @sensitive_variables("cleaned", "value")
 def pg_changes(form):
@@ -217,6 +306,20 @@ def pg_changes(form):
             elif cleaned.get(f"{name}_delete") and form.stored_toss_keys.get((mode, kind)):
                 deleted.append(name)
                 changes.append(f"{key_label(mode, kind)} 삭제")
+    for mode in KEY_MODES:
+        for kind in ("mid", "merchant_key"):
+            name = NICEPAY_KEY_ROWS[(mode, kind)]
+            if form.fields[name].disabled:
+                continue
+            value = str(cleaned.get(name) or "").strip()
+            stored = (form.stored_nicepay_keys.get(mode) or {}).get(kind, "")
+            label = f"NICEPAY {MODE_LABELS[mode]} {'MID' if kind == 'mid' else 'MerchantKey'}"
+            if value and value != stored:
+                values[name] = seal_nicepay_value(mode, kind, value) if kind == "merchant_key" else value
+                changes.append(f"{label} 등록")
+            elif cleaned.get(f"{name}_delete") and stored:
+                deleted.append(name)
+                changes.append(f"{label} 삭제")
     return values, deleted, changes
 
 
@@ -233,43 +336,94 @@ def webhook_url(request):
     return request.build_absolute_uri(reverse(WEBHOOK_PATH_NAME))
 
 
-def pg_status(toss, provider, rows):
-    """What the 결제 연결 상태 card shows about the keys and modes (never a key value), and the
-    warnings for settings that contradict each other."""
+def nicepay_notify_url(request):
+    return request.build_absolute_uri(reverse("api_v1:shop-payment-nicepay-vbank-notification"))
+
+
+def nicepay_return_url_help(request):
+    configured = str(getattr(settings, "SHOP_NICEPAY_RETURN_URL", "") or "").strip()
+    return configured or request.build_absolute_uri(reverse("api_v1:shop-payment-nicepay-return"))
+
+
+def pg_status(toss, provider, rows, nicepay=None):
+    """The 결제 연결 상태 card: presence/mode only, never a key value, plus contradictions."""
+    nicepay = nicepay or {}
     card_test = card_test_enabled(rows)
     source_labels = {"env": "서버 환경 변수", "admin": "관리자 설정", "none": "미등록"}
-    effective_mode = {"test": "테스트결제", "live": "실결제"}.get(toss["key_status"], "결제 불가")
+    active = nicepay if provider == "nicepay" else toss
+    active_name = "NICEPAY" if provider == "nicepay" else "토스페이먼츠"
+    key_status = active.get("key_status", "missing")
+    enabled = bool(active.get("enabled"))
+    effective_mode = {"test": "테스트결제", "live": "실결제"}.get(key_status, "결제 불가")
     warnings = []
     if admin_keys_enabled() and unreadable_key_rows(rows):
         warnings.append("저장된 결제 키를 읽을 수 없습니다 — SECRET_KEY 변경 여부를 확인하고 키를 다시 입력하세요.")
-    if toss["source"] == "env" and toss["enabled"] and toss["is_test_mode"] != card_test:
+    if nicepay_admin_keys_enabled() and nicepay_unreadable_key_rows(rows):
+        warnings.append("저장된 NICEPAY MerchantKey를 읽을 수 없습니다 — SECRET_KEY 변경 여부를 확인하고 다시 입력하세요.")
+    source = active.get("source", "none")
+    if source == "env" and enabled and active.get("is_test_mode") != card_test:
         warnings.append(
-            f"결제 테스트가 '{'테스트결제' if card_test else '실결제'}'로 설정되어 있지만 서버 환경 변수의 키는 "
-            f"{'테스트' if toss['is_test_mode'] else '실결제'} 키입니다. 환경 변수 키로 결제합니다."
+            f"결제 테스트가 '{'테스트결제' if card_test else '실결제'}'로 설정되어 있지만 "
+            f"서버 환경 변수의 키는 {'테스트' if active.get('is_test_mode') else '실결제'} 키입니다. "
+            "환경 변수 키로 결제합니다."
         )
-    other_mode = "live" if toss["selected_mode"] == "test" else "test"
-    other_pair_saved = toss["source"] == "none" and admin_keys_enabled() and any(
-        admin_keys(rows)[(other_mode, kind)] for kind in KEY_KINDS
-    )
-    if (toss["source"] == "admin" and not toss["enabled"]) or other_pair_saved:
+    if not enabled and source != "env":
+        if provider == "nicepay":
+            warnings.append(
+                f"결제 테스트가 '{'테스트결제' if card_test else '실결제'}'이므로 NICEPAY "
+                f"{MODE_LABELS.get(active.get('selected_mode'), '')} MID와 MerchantKey를 모두 등록해야 결제할 수 있습니다."
+            )
+        else:
+            warnings.append(
+                f"결제 테스트가 '{'테스트결제' if card_test else '실결제'}'이므로 "
+                f"{MODE_LABELS.get(active.get('selected_mode'), '')} 키 쌍(클라이언트 키·시크릿 키)을 모두 등록해야 결제할 수 있습니다."
+            )
+    if provider == "nicepay" and enabled:
+        if not getattr(settings, "SHOP_NICEPAY_RETURN_URL", ""):
+            warnings.append(
+                "NICEPAY 모바일 복귀 URL(SHOP_NICEPAY_RETURN_URL)이 비어 있습니다. "
+                "운영에서는 가맹점 서버의 HTTPS 복귀 URL을 등록해야 합니다."
+            )
+        if not nicepay_success_url_for_admin():
+            warnings.append(
+                "NICEPAY 결제 완료 후 이동할 프런트 URL(SHOP_NICEPAY_SUCCESS_URL 또는 "
+                "SHOP_NICEPAY_FRONTEND_URL)이 비어 있습니다."
+            )
+    if toss.get("enabled") and key_family(toss.get("client_key", "")) == "widget":
         warnings.append(
-            f"결제 테스트가 '{'테스트결제' if card_test else '실결제'}'이므로 "
-            f"{MODE_LABELS[toss['selected_mode']]} 키 쌍(클라이언트 키·시크릿 키)을 모두 등록해야 결제할 수 있습니다."
+            "토스페이먼츠 결제위젯 연동 키(gck)가 등록되어 있습니다. 이 쇼핑몰은 결제창(API 개별 연동)을 "
+            "사용하므로 API 개별 연동 키(ck/sk)를 등록하세요."
         )
-    if toss["enabled"] and key_family(toss["client_key"]) == "widget":
-        warnings.append(
-            "결제위젯 연동 키(gck)가 등록되어 있습니다. 이 쇼핑몰은 결제창(API 개별 연동)을 사용하므로 "
-            "API 개별 연동 키(ck/sk)를 등록하세요."
-        )
-    if toss["enabled"] and provider == "bank" and not env_payment_provider() and admin_pg_service(rows) != "toss":
-        warnings.append("결제대행사가 '사용안함'이라 토스페이먼츠 키가 있어도 온라인 결제를 받지 않습니다.")
+    if provider == "bank" and not env_payment_provider() and admin_pg_service(rows) != "none":
+        warnings.append("결제대행사 '사용안함'이라 저장된 PG 키가 있어도 온라인 결제를 받지 않습니다.")
     return {
-        "source": toss["source"],
-        "source_label": source_labels.get(toss["source"], "미등록"),
+        "provider": provider,
+        "provider_label": "NICEPAY 인증결제" if provider == "nicepay" else "토스페이먼츠",
+        "source": source,
+        "source_label": source_labels.get(source, "미등록"),
         "card_test_label": "테스트결제" if card_test else "실결제",
         "effective_mode_label": effective_mode,
-        "is_test_mode": toss["is_test_mode"],
-        "escrow_enabled": escrow_enabled(rows),
+        "is_test_mode": bool(active.get("is_test_mode")) if provider == "nicepay" else bool(toss.get("is_test_mode")),
+        "mode": {
+            "missing": "키 미등록", "incomplete": "키 한 개 누락", "invalid_mid": "MID 형식 확인 필요",
+            "invalid_key": "MerchantKey 형식 확인 필요", "invalid_prefix": "키 형식 확인 필요",
+            "mode_mismatch": "테스트·실결제 키 혼합", "test": "테스트 키 쌍", "live": "실결제 키 쌍",
+        }.get(key_status, key_status),
+        "key_status": key_status,
+        "enabled": enabled,
+        "has_client_key": bool(nicepay.get("mid")) if provider == "nicepay" else bool(toss.get("client_key")),
+        "has_secret_key": bool(nicepay.get("has_merchant_key")) if provider == "nicepay" else bool(toss.get("has_secret_key")),
+        "vbank_enabled": bool(active.get("vbank_enabled")),
+        "native_checkout": (provider == "nicepay" and enabled) or (provider == "toss" and enabled),
+        "escrow_enabled": escrow_enabled(rows) and provider == "toss",
         "provider_locked": bool(env_payment_provider()),
         "warnings": warnings,
     }
+
+
+def nicepay_success_url_for_admin():
+    configured = str(getattr(settings, "SHOP_NICEPAY_SUCCESS_URL", "") or "").strip()
+    if configured:
+        return configured
+    frontend = str(getattr(settings, "SHOP_NICEPAY_FRONTEND_URL", "") or "").strip().rstrip("/")
+    return f"{frontend}/shop/payment/success" if frontend else ""
