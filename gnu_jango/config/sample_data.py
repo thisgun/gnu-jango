@@ -127,6 +127,13 @@ PRODUCTS = (
     ("데일리 글라스 머그", 16000, "가볍고 투명한 유리로 만든 데일리 머그입니다."),
     ("스테인리스 드립 포트", 54000, "물을 천천히 따르기 좋은 작은 드립 포트입니다."),
 )
+SHOP_SAMPLE_CATEGORY_NAMES = ("문구", "데스크", "리빙", "티 & 커피", "주방")
+SHOP_SAMPLE_PRODUCT_CATEGORY_SLOTS = (2, 3, 4, 3, 5, 6)
+SHOP_SAMPLE_BANNER_SPECS = (
+    (SAMPLE_BANNER, "DESK NOTES|기록이 시작되는 책상", 3),
+    ("product-02.webp", "DESK OBJECTS|책상 위를 더 가볍게", 3),
+    ("product-04.webp", "SLOW KITCHEN|매일 쓰는 도구의 온기", 6),
+)
 DISCOUNTED_SAMPLE_PRODUCT_NUMBERS = frozenset({2, 5})
 
 
@@ -161,6 +168,8 @@ def empty_manifest():
     return {
         "version": MANIFEST_VERSION,
         "created_at": timezone.now().isoformat(),
+        "shop_category_slots": {},
+        "shop_banner_slots": {},
         **{field: [] for field in MANIFEST_LIST_FIELDS},
     }
 
@@ -179,6 +188,9 @@ def _decode_manifest(config_row):
         manifest.setdefault(field, [])
         if not isinstance(manifest.get(field), list):
             raise SampleDataError("샘플 데이터 관리 기록의 형식이 올바르지 않습니다.")
+    for field in ("shop_category_slots", "shop_banner_slots", "shop_product_slots"):
+        if not isinstance(manifest.get(field), dict):
+            manifest[field] = {}
     return manifest
 
 
@@ -405,17 +417,50 @@ def _create_comment(post, content, created_at, manifest):
 def _ensure_shop_samples(manifest):
     """Restore only tracked shop content; retain edited prices, stock, text and images."""
     now, token = timezone.now(), uuid.uuid4().hex
-    result = {"created": 0, "updated": 0}
-    category = ShopCategory.objects.select_for_update().filter(
-        pk__in=_ids(manifest, "categories"), ca_parent="",
-    ).order_by("ca_id").first()
-    if category is None:
-        category = ShopCategory.objects.create(ca_id=_free_root_category_id(), ca_name="데모 스토어", ca_order=1, ca_use=True)
-        if category.pk not in manifest["categories"]:
+    result = {"created": 0, "updated": 0, "categories_created": 0, "banners_created": 0}
+
+    tracked_category_ids = _ids(manifest, "categories")
+    tracked_categories = list(
+        ShopCategory.objects.select_for_update()
+        .filter(pk__in=tracked_category_ids)
+        .order_by("ca_order", "ca_id")
+    )
+    category_by_id = {category.pk: category for category in tracked_categories}
+    root_category_ids = {category.pk for category in tracked_categories if not category.ca_parent}
+    raw_category_slots = manifest.get("shop_category_slots")
+    if isinstance(raw_category_slots, dict) and raw_category_slots:
+        category_slots = {
+            str(slot): category_id
+            for slot, category_id in raw_category_slots.items()
+            if str(slot) in {str(index) for index in range(1, len(SHOP_SAMPLE_CATEGORY_NAMES) + 2)}
+            and category_id in root_category_ids
+        }
+    else:
+        category_slots = {
+            str(index): category.pk
+            for index, category in enumerate(
+                (category for category in tracked_categories if not category.ca_parent),
+                start=1,
+            )
+        }
+
+    manifest["categories"] = list(category_by_id)
+    for slot, name in enumerate(("데모 스토어", *SHOP_SAMPLE_CATEGORY_NAMES), start=1):
+        category = category_by_id.get(category_slots.get(str(slot)))
+        if category is None:
+            category = ShopCategory.objects.create(
+                ca_id=_free_root_category_id(), ca_name=name, ca_order=slot, ca_use=True,
+            )
+            category_by_id[category.pk] = category
             manifest["categories"].append(category.pk)
-    elif not category.ca_use:
-        category.ca_use = True
-        category.save(update_fields=["ca_use"])
+            result["categories_created"] += 1
+        elif not category.ca_use:
+            category.ca_use = True
+            category.save(update_fields=["ca_use"])
+        category_slots[str(slot)] = category.pk
+
+    manifest["shop_category_slots"] = category_slots
+    category = category_by_id[category_slots["1"]]
 
     tracked = _ids(manifest, "products")
     products = {product.pk: product for product in ShopProduct.objects.select_for_update().filter(pk__in=tracked)}
@@ -425,10 +470,11 @@ def _ensure_shop_samples(manifest):
     manifest["products"] = [pk for pk in tracked if pk in products]
     for number, (name, price, description) in enumerate(PRODUCTS, start=1):
         product = products.get(slots.get(str(number)))
+        secondary_category = category_by_id[category_slots[str(SHOP_SAMPLE_PRODUCT_CATEGORY_SLOTS[number - 1])]]
         if product is None:
             image_url = f"/sample-data/{SAMPLE_IMAGES[number - 1]}"
             product = ShopProduct.objects.create(
-                it_id=f"SAMPLE{token[:8]}{number:02d}", category=category,
+                it_id=f"SAMPLE{token[:8]}{number:02d}", category=category, category2=secondary_category,
                 it_name=name, it_seo_title=f"demo-product-{number:02d}-{token[:5]}", it_brand="SOLUNE",
                 it_price=price, it_basic_price=price, **_sample_product_fields(number, price),
                 it_hit=12 + number * 7, it_update_time=now - timedelta(hours=number), it_order=number,
@@ -440,7 +486,12 @@ def _ensure_shop_samples(manifest):
             result["created"] += 1
         else:
             # Applying visibility is explicit. Do not reset inventory or overwrite real content.
-            fields = {**_sample_product_fields(number, product.it_price), "it_use": "1", "category_id": category.pk}
+            fields = {
+                **_sample_product_fields(number, product.it_price),
+                "it_use": "1",
+                "category_id": category.pk,
+                "category2_id": secondary_category.pk,
+            }
             changed = [field for field, value in fields.items() if getattr(product, field) != value]
             if changed:
                 for field in changed:
@@ -448,13 +499,50 @@ def _ensure_shop_samples(manifest):
                 product.save(update_fields=changed)
                 result["updated"] += 1
     manifest["shop_product_slots"] = slots
-    if not ShopBanner.objects.filter(pk__in=_ids(manifest, "banners")).exists():
-        banner = ShopBanner.objects.create(
-            bn_alt="차분한 일상을 위한 데모 스토어", bn_url=f"/shop/list-{category.pk}",
-            bn_position="메인", bn_device="both", bn_order=1,
-            image_url=f"/sample-data/{SAMPLE_BANNER}", is_active=True,
-        )
-        manifest["banners"] = [banner.pk]
+
+    tracked_banner_ids = _ids(manifest, "banners")
+    tracked_banners = list(
+        ShopBanner.objects.select_for_update()
+        .filter(pk__in=tracked_banner_ids)
+        .order_by("bn_order", "bn_id")
+    )
+    banner_by_id = {banner.pk: banner for banner in tracked_banners}
+    raw_banner_slots = manifest.get("shop_banner_slots")
+    if isinstance(raw_banner_slots, dict) and raw_banner_slots:
+        banner_slots = {
+            str(slot): banner_id
+            for slot, banner_id in raw_banner_slots.items()
+            if str(slot) in {"1", "2", "3"} and banner_id in banner_by_id
+        }
+    else:
+        banner_slots = {
+            str(index): banner.pk
+            for index, banner in enumerate(tracked_banners, start=1)
+        }
+
+    manifest["banners"] = list(banner_by_id)
+    for slot, (image_name, alt, category_slot) in enumerate(SHOP_SAMPLE_BANNER_SPECS, start=1):
+        banner = banner_by_id.get(banner_slots.get(str(slot)))
+        if banner is None:
+            banner_category = category_by_id[category_slots[str(category_slot)]]
+            banner = ShopBanner.objects.create(
+                bn_alt=alt,
+                bn_url=f"/shop/list-{banner_category.pk}",
+                bn_position="메인",
+                bn_device="both",
+                bn_order=slot,
+                image_url=f"/sample-data/{image_name}",
+                is_active=True,
+            )
+            banner_by_id[banner.pk] = banner
+            manifest["banners"].append(banner.pk)
+            result["banners_created"] += 1
+        elif slot == 1 and banner.bn_alt == "차분한 일상을 위한 데모 스토어":
+            banner.bn_alt = alt
+            banner.save(update_fields=["bn_alt"])
+        banner_slots[str(slot)] = banner.pk
+
+    manifest["shop_banner_slots"] = banner_slots
     return result
 
 
@@ -956,6 +1044,17 @@ def remove_sample_data():
             "categories": retained_categories,
             "products": retained_products,
             "banners": [],
+            "shop_category_slots": {
+                str(slot): category_id
+                for slot, category_id in manifest.get("shop_category_slots", {}).items()
+                if category_id in retained_categories
+            },
+            "shop_product_slots": {
+                str(slot): product_id
+                for slot, product_id in manifest.get("shop_product_slots", {}).items()
+                if product_id in retained_products
+            },
+            "shop_banner_slots": {},
             "faq_masters": retained_masters,
             "faq_items": [],
             "polls": retained_polls,
