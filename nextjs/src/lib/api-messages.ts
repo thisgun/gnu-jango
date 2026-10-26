@@ -180,6 +180,8 @@ const API_MESSAGES: Record<string, string> = {
   "NICEPAY payment attempt not found.": "NICEPAY 결제 시도 정보를 찾을 수 없습니다.",
   "NICEPAY payments are not configured.": "NICEPAY 결제가 설정되지 않았습니다.",
   "NICEPAY virtual account payments are not enabled.": "NICEPAY 가상계좌 결제를 사용할 수 없습니다.",
+  "NICEPAY notification has an invalid result code.": "NICEPAY 입금통보 결과 코드가 올바르지 않습니다.",
+  "NICEPAY notification is not a completed virtual account deposit.": "NICEPAY 가상계좌 입금이 완료되지 않았습니다.",
   "Coupon not found.": "쿠폰을 찾을 수 없습니다.",
   "Coupon is not applicable to this cart item.": "이 상품에는 적용할 수 없는 쿠폰입니다.",
   "Order quantity must be greater than zero.": "주문 수량은 1개 이상이어야 합니다.",
