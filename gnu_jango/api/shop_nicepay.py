@@ -72,6 +72,14 @@ NICEPAY_NET_CANCEL_URLS = {
     "dc2-api.nicepay.co.kr": "/webapi/cancel_process.jsp",
     "webapi.nicepay.co.kr": "/webapi/cancel_process.jsp",
 }
+# Fixed endpoints: the provider response only selects one of these constants. The request URL
+# itself is never built from a host or path supplied by the response (CodeQL SSRF guard).
+NICEPAY_APPROVAL_ENDPOINTS = {
+    host: f"https://{host}{path}" for host, path in NICEPAY_APPROVAL_URLS.items()
+}
+NICEPAY_NET_CANCEL_ENDPOINTS = {
+    host: f"https://{host}{path}" for host, path in NICEPAY_NET_CANCEL_URLS.items()
+}
 NICEPAY_CANCEL_URL = "https://pg-api.nicepay.co.kr/webapi/cancel_process.jsp"
 NICEPAY_LOOKUP_URL = "https://webapi.nicepay.co.kr/webapi/inquery/trans_status.jsp"
 NICEPAY_SUCCESS_CODES = {"CARD": "3001", "BANK": "4000", "VBANK": "4100", "CELLPHONE": "A000"}
@@ -176,6 +184,18 @@ def nicepay_approval_url_allowed(value):
 
 def nicepay_net_cancel_url_allowed(value):
     return _allowed_url(value, NICEPAY_NET_CANCEL_URLS)
+
+
+def _canonical_endpoint(value, allowed_urls, endpoints):
+    """Map a provider URL to one of our fixed endpoint constants, or "".
+
+    The response may choose dc1/dc2/legacy webapi, but the actual request URL never contains a
+    host or path copied from it.
+    """
+    if not _allowed_url(value, allowed_urls):
+        return ""
+    host = (urlsplit(str(value)).hostname or "").lower()
+    return endpoints.get(host, "")
 
 
 def _decode_response(raw):
@@ -744,8 +764,14 @@ def _net_cancel_attempt(attempt, reason="approval result unknown"):
         if not auth_token or not attempt.net_cancel_url:
             _mark_attempt(attempt, "uncertain", error="NICEPAY net-cancel data is incomplete.")
             return None, "NICEPAY 망취소에 필요한 인증 정보가 없습니다."
+        endpoint = _canonical_endpoint(
+            attempt.net_cancel_url, NICEPAY_NET_CANCEL_URLS, NICEPAY_NET_CANCEL_ENDPOINTS
+        )
+        if not endpoint:
+            _mark_attempt(attempt, "uncertain", error="NICEPAY net-cancel URL is not allowed.")
+            return None, "NICEPAY 망취소 URL이 허용 목록에 없습니다."
         response, status = _nicepay_post(
-            attempt.net_cancel_url,
+            endpoint,
             _net_cancel_payload(attempt, keys, auth_token),
             allowed_urls=NICEPAY_NET_CANCEL_URLS,
         )
@@ -841,9 +867,20 @@ def confirm_nicepay_payment(data):
         ])
         attempt = locked
 
+    endpoint = _canonical_endpoint(
+        attempt.next_app_url, NICEPAY_APPROVAL_URLS, NICEPAY_APPROVAL_ENDPOINTS
+    )
+    if not endpoint:
+        _mark_attempt(attempt, "failed", error="NICEPAY approval URL is not allowed.")
+        _record_attempt_log(attempt, {"error": "approval URL not allowed"}, prefix="nicepay-reject")
+        return None, api_error(
+            "NICEPAY 승인 URL이 허용 목록에 없습니다.",
+            status=drf_status.HTTP_400_BAD_REQUEST,
+            code="nicepay_approval_url_invalid",
+        )
     try:
         response, response_status = _nicepay_post(
-            attempt.next_app_url,
+            endpoint,
             _approval_payload(attempt, keys, auth_token),
             allowed_urls=NICEPAY_APPROVAL_URLS,
         )
