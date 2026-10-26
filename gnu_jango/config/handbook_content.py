@@ -3,6 +3,7 @@
 from html import escape
 import re
 
+from .handbook_audit_content import AUDIT_GUIDES
 from .handbook_search_content import SEARCH_GUIDES
 
 
@@ -921,6 +922,7 @@ GUIDES = {
 
 
 GUIDES.update(SEARCH_GUIDES)
+GUIDES.update(AUDIT_GUIDES)
 
 
 def _inline_text(value):
@@ -943,6 +945,16 @@ def _render_section(section):
         parts.append(f"<pre><code>{escape(section['code'].rstrip())}</code></pre>")
     if section.get("note"):
         parts.append(f"<p><strong>참고:</strong> {_inline_text(section['note'])}</p>")
+    links = section.get("links", ())
+    if links:
+        parts.append(
+            "<ul>"
+            + "".join(
+                f'<li><a href="{escape(link["href"], quote=True)}">{_inline_text(link["label"])}</a></li>'
+                for link in links
+            )
+            + "</ul>"
+        )
     return "".join(parts)
 
 
