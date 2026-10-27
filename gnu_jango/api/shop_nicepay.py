@@ -34,17 +34,9 @@ from django.views.decorators.http import require_http_methods
 from rest_framework import status as drf_status
 
 from gnu_jango.shop.models import ShopOrder, ShopPaymentAttempt
-from gnu_jango.shop.notifications import (
-    STATUS_PAID as MAIL_STATUS_PAID,
-    queue_order_placed_mails,
-    queue_order_status_mail,
-)
+from gnu_jango.shop.notifications import queue_order_placed_mails
 from gnu_jango.shop.pg_settings import MODE_LABELS, effective_nicepay_keys, order_key_mode
-from gnu_jango.shop.sms.notifications import (
-    STATUS_PAID as SMS_STATUS_PAID,
-    queue_order_placed_sms,
-    queue_order_status_sms,
-)
+from gnu_jango.shop.sms.notifications import queue_order_placed_sms
 from gnu_jango.utils.lib import get_client_ip
 
 from .response import api_error
@@ -385,6 +377,11 @@ def _clear_recovery_failures(attempt):
     if int(attempt.recovery_attempts or 0):
         attempt.recovery_attempts = 0
         attempt.save(update_fields=["recovery_attempts", "updated_at"])
+
+
+def _touch_attempt_checked(attempt):
+    attempt.last_checked_at = timezone.now()
+    attempt.save(update_fields=["last_checked_at"])
 
 
 def _attempt_token():
@@ -1318,6 +1315,95 @@ def _lookup_transaction(tid, mode=None):
     return response
 
 
+def _cancel_vbank_order_for_status(attempt, lookup, *, reason, log_prefix):
+    """Cancel the local order only when this attempt is still its current payment.
+
+    The lookup says the transaction was cancelled. That must never cancel an order paid by a
+    different transaction, so the order is locked and both the current TID and payment state are
+    rechecked. The attempt is marked cancelled only after the local cancellation succeeds.
+    """
+    order = attempt.order
+    if order is None:
+        _mark_attempt(attempt, "uncertain", provider_data=lookup, error="NICEPAY order no longer exists.")
+        return attempt, api_error(
+            "NICEPAY 가상계좌를 연결할 주문이 없습니다.",
+            status=drf_status.HTTP_409_CONFLICT,
+            code="nicepay_order_missing",
+        )
+    try:
+        with transaction.atomic():
+            locked_order = (
+                ShopOrder.objects.select_for_update(of=("self",)).filter(pk=attempt.od_id).first()
+            )
+            if locked_order is None:
+                _mark_attempt(attempt, "uncertain", provider_data=lookup, error="NICEPAY order no longer exists.")
+                return attempt, api_error(
+                    "NICEPAY 가상계좌를 연결할 주문이 없습니다.",
+                    status=drf_status.HTTP_409_CONFLICT,
+                    code="nicepay_order_missing",
+                )
+            if str(locked_order.od_status or "") in CANCELLED_STATUSES:
+                _mark_attempt(attempt, "canceled", provider_data=lookup)
+                _record_attempt_log(attempt, {"nicepay_vbank_cancel": lookup}, prefix=log_prefix)
+                return attempt, None
+            if str(locked_order.od_status or "") in PAID_STATUSES:
+                _mark_attempt(
+                    attempt,
+                    "uncertain",
+                    provider_data=lookup,
+                    error="The order is already paid; cancellation needs admin review.",
+                )
+                _record_attempt_log(attempt, {"nicepay_vbank_cancel": lookup}, prefix=f"{log_prefix}-paid")
+                return attempt, api_error(
+                    "이미 결제된 주문이라 NICEPAY 가상계좌 취소를 반영하지 않았습니다.",
+                    status=drf_status.HTTP_409_CONFLICT,
+                    code="nicepay_vbank_cancel_paid_order",
+                )
+            if str(locked_order.od_tno or "").strip() != str(attempt.tid):
+                # This is an old attempt, not the order's current payment. Do not touch the order.
+                _mark_attempt(attempt, "canceled", provider_data=lookup)
+                _record_attempt_log(attempt, {"nicepay_vbank_cancel": lookup}, prefix=f"{log_prefix}-old")
+                return attempt, None
+            if str(locked_order.od_status or "") not in ORDERED_STATUSES:
+                _mark_attempt(
+                    attempt,
+                    "uncertain",
+                    provider_data=lookup,
+                    error="The order is not in a cancellable unpaid state.",
+                )
+                return attempt, api_error(
+                    "결제 대기 상태가 아닌 주문입니다.",
+                    status=drf_status.HTTP_409_CONFLICT,
+                    code="nicepay_vbank_cancel_state",
+                )
+            from .v1_shop import cancel_order_and_refund_benefits
+
+            cancel_order_and_refund_benefits(locked_order, reason, history=reason)
+            locked_order.refresh_from_db()
+            if settle_case_is_vbank(locked_order.od_settle_case):
+                locked_order.od_vbank_status = "CANCELED"
+                locked_order._change_reason = reason[:100]
+                locked_order.save(update_fields=["od_vbank_status"])
+            _mark_attempt(attempt, "canceled", provider_data=lookup)
+            _clear_recovery_failures(attempt)
+            _record_attempt_log(attempt, {"nicepay_vbank_cancel": lookup}, prefix=log_prefix)
+            return attempt, None
+    except Exception as exc:  # noqa: BLE001 - keep provider evidence and alert admins
+        logger.exception("order %s: NICEPAY vbank cancellation failed", attempt.od_id)
+        _mark_attempt(
+            attempt,
+            "uncertain",
+            provider_data=lookup,
+            error=f"NICEPAY vbank cancellation failed: {type(exc).__name__}",
+        )
+        _record_attempt_log(attempt, {"nicepay_vbank_cancel_error": str(exc)[:300]}, prefix=f"{log_prefix}-error")
+        return attempt, api_error(
+            "NICEPAY 가상계좌 취소를 로컬 주문에 반영하지 못했습니다. 관리자에게 문의하세요.",
+            status=drf_status.HTTP_409_CONFLICT,
+            code="nicepay_vbank_cancel_failed",
+        )
+
+
 def _recover_vbank_deposit(attempt, lookup):
     """Apply a confirmed virtual-account deposit during recovery.
 
@@ -1437,13 +1523,26 @@ def _recover_vbank_deposit(attempt, lookup):
             )
             return attempt, error
         paid_order.refresh_from_db()
+        if (
+            str(paid_order.od_tno or "").strip() != str(attempt.tid)
+            or str(paid_order.od_status or "") not in PAID_STATUSES
+        ):
+            _mark_attempt(
+                attempt,
+                "uncertain",
+                provider_data=lookup,
+                error="NICEPAY vbank recovery found a different current transaction.",
+            )
+            return attempt, api_error(
+                "NICEPAY 가상계좌 입금을 주문의 현재 거래와 대조하지 못했습니다.",
+                status=drf_status.HTTP_409_CONFLICT,
+                code="nicepay_vbank_tid_mismatch",
+            )
         paid_order.od_vbank_status = "DONE"
         paid_order._change_reason = "NICEPAY vbank deposit recovered"
         paid_order.save(update_fields=["od_vbank_status"])
         _mark_attempt(attempt, "approved", provider_data=lookup)
         _clear_recovery_failures(attempt)
-        queue_order_status_mail(paid_order, MAIL_STATUS_PAID)
-        queue_order_status_sms(paid_order, SMS_STATUS_PAID)
         _record_attempt_log(
             attempt,
             {"nicepay_vbank_recovery": lookup},
@@ -1459,6 +1558,7 @@ def recover_nicepay_attempt(attempt):
     source of truth, so an unknown or missing transaction stays for admin review.
     """
     attempt.refresh_from_db()
+    _touch_attempt_checked(attempt)
     if attempt.state == "approved_local_failed":
         error = _apply_approved_payment(attempt, {})
         attempt.refresh_from_db()
@@ -1511,31 +1611,12 @@ def recover_nicepay_attempt(attempt):
             _clear_recovery_failures(attempt)
         return attempt, error
     if status == "1":
-        was_pending_deposit = attempt.state == "pending_deposit"
-        _mark_attempt(attempt, "canceled", provider_data=lookup)
-        if was_pending_deposit and attempt.order is not None:
-            order = attempt.order
-            if str(order.od_status or "") not in CANCELLED_STATUSES and str(order.od_status or "") not in PAID_STATUSES:
-                try:
-                    from .v1_shop import cancel_order_and_refund_benefits
-
-                    cancel_order_and_refund_benefits(
-                        order,
-                        "NICEPAY 가상계좌 취소 조회",
-                        history="NICEPAY 가상계좌 취소 조회",
-                    )
-                except Exception:  # noqa: BLE001 - keep the provider evidence and alert admins
-                    logger.exception(
-                        "order %s: NICEPAY vbank cancellation during recovery failed",
-                        attempt.od_id,
-                    )
-            _record_attempt_log(
-                attempt,
-                {"nicepay_vbank_recovery": lookup},
-                prefix="nicepay-vbank-recovery-canceled",
-            )
-        _clear_recovery_failures(attempt)
-        return attempt, None
+        return _cancel_vbank_order_for_status(
+            attempt,
+            lookup,
+            reason="NICEPAY 거래조회 취소",
+            log_prefix="nicepay-recovery-canceled",
+        )
     if status == "9":
         if attempt.state == "pending_deposit":
             _record_attempt_log(
@@ -1694,18 +1775,14 @@ def process_nicepay_vbank_notification(data):
     status = str(lookup.get("Status") or "").strip()
     raw = {"notification": data, "lookup": lookup}
     if status == "1":
-        _mark_attempt(attempt, "canceled", provider_data=lookup)
-        if str(order.od_status or "") not in CANCELLED_STATUSES and str(order.od_status or "") not in PAID_STATUSES:
-            try:
-                from .v1_shop import cancel_order_and_refund_benefits
-
-                cancel_order_and_refund_benefits(
-                    order, "NICEPAY 가상계좌 취소 통보", history="NICEPAY 가상계좌 취소 통보"
-                )
-            except Exception:  # noqa: BLE001 - the payment log still records the provider state
-                logger.exception("order %s: NICEPAY vbank cancellation could not cancel locally", order_id)
+        _, cancel_error = _cancel_vbank_order_for_status(
+            attempt,
+            lookup,
+            reason="NICEPAY 가상계좌 취소 통보",
+            log_prefix="nicepay-vbank-canceled",
+        )
         record_payment_raw_log(order, order_id, "nicepay-vbank", tid, raw, prefix="nicepay-vbank-canceled")
-        return None
+        return cancel_error
     if status == "9" and result_code == NICEPAY_VBANK_DEPOSIT_CODE:
         # A deposit notification can arrive before the lookup reflects the deposit. Acknowledge
         # nothing here: return 503 so NICEPAY retries rather than silently losing the payment.
@@ -1751,8 +1828,6 @@ def process_nicepay_vbank_notification(data):
     if str(order.od_status or "") in CANCELLED_STATUSES:
         record_payment_raw_log(order, order_id, "nicepay-vbank", tid, raw, prefix="nicepay-vbank-late-paid")
         return None
-    if str(order.od_status or "") in PAID_STATUSES:
-        return None
     paid_order, error = confirm_order_payment(
         order.pk,
         authoritative_amount,
@@ -1763,14 +1838,38 @@ def process_nicepay_vbank_notification(data):
     )
     if error:
         return error
-    paid_order.refresh_from_db()
-    paid_order.od_vbank_status = "DONE"
-    paid_order._change_reason = "NICEPAY vbank deposit confirmed"
-    paid_order.save(update_fields=["od_vbank_status"])
-    _mark_attempt(attempt, "approved", provider_data=lookup)
-    queue_order_status_mail(paid_order, MAIL_STATUS_PAID)
-    queue_order_status_sms(paid_order, SMS_STATUS_PAID)
-    record_payment_raw_log(paid_order, order_id, "nicepay-vbank", tid, raw, prefix="nicepay-vbank")
+    # confirm_order_payment already queues the paid mail/SMS exactly once when it changes the
+    # order. Recheck the current transaction under the order lock before marking this attempt
+    # approved, including replayed webhooks.
+    with transaction.atomic():
+        locked_order = (
+            ShopOrder.objects.select_for_update(of=("self",)).filter(pk=order_id).first()
+        )
+        if (
+            locked_order is None
+            or str(locked_order.od_tno or "").strip() != str(attempt.tid)
+            or str(locked_order.od_status or "") not in PAID_STATUSES
+        ):
+            _mark_attempt(
+                attempt,
+                "uncertain",
+                provider_data=lookup,
+                error="NICEPAY vbank deposit found a different current transaction.",
+            )
+            record_payment_raw_log(
+                order, order_id, "nicepay-vbank", tid, raw, prefix="nicepay-vbank-tid-mismatch"
+            )
+            return api_error(
+                "NICEPAY 가상계좌 입금을 주문의 현재 거래와 대조하지 못했습니다.",
+                status=drf_status.HTTP_409_CONFLICT,
+                code="nicepay_vbank_tid_mismatch",
+            )
+        if str(locked_order.od_vbank_status or "") != "DONE":
+            locked_order.od_vbank_status = "DONE"
+            locked_order._change_reason = "NICEPAY vbank deposit confirmed"
+            locked_order.save(update_fields=["od_vbank_status"])
+        _mark_attempt(attempt, "approved", provider_data=lookup)
+    record_payment_raw_log(order, order_id, "nicepay-vbank", tid, raw, prefix="nicepay-vbank")
     return None
 
 

@@ -2343,15 +2343,17 @@ class ShopPersonalPayAdmin(ModelAdmin):
 class ShopPaymentAttemptAdmin(ModelAdmin):
     list_display = (
         "od_id", "provider", "mode", "state", "amount", "tid",
-        "recovery_signal", "created_at", "updated_at",
+        "recovery_signal", "last_checked_at", "created_at", "updated_at",
     )
     search_fields = ("od_id", "tid", "mid", "attempt_token_hash")
     list_filter = ("provider", "mode", "state")
     readonly_fields = (
         "order", "od_id", "provider", "mode", "mid", "key_fingerprint", "amount",
         "pay_method", "tid", "state", "provider_data", "last_error",
-        "recovery_attempts", "created_at", "updated_at",
+        "recovery_attempts", "last_checked_at", "created_at", "updated_at",
     )
+    # Provider secrets and presigned/auth URLs must never render in the admin form.
+    exclude = ("auth_token_sealed", "attempt_token_hash", "next_app_url", "net_cancel_url")
     ordering = ("-created_at",)
     actions = ("recover_selected_attempts",)
 
@@ -2362,8 +2364,28 @@ class ShopPaymentAttemptAdmin(ModelAdmin):
             return badge(_("확인 필요 %(count)s회") % {"count": count}, "danger")
         return str(count)
 
+    def has_recovery_permission(self, request):
+        return bool(
+            request.user
+            and request.user.is_active
+            and request.user.has_perm("shop.change_shoppaymentattempt")
+        )
+
+    def get_actions(self, request):
+        if not self.has_recovery_permission(request):
+            return {}
+        actions = super().get_actions(request)
+        if actions:
+            return actions
+        action = self.get_action("recover_selected_attempts")
+        if action is not None:
+            actions[action[0].__name__] = action
+        return actions
+
     @admin.action(description=_("NICEPAY 거래조회로 복구"))
     def recover_selected_attempts(self, request, queryset):
+        if not self.has_recovery_permission(request):
+            raise PermissionDenied
         from gnu_jango.api.shop_nicepay import recover_nicepay_attempt
 
         recovered = failed = skipped = 0
@@ -2402,8 +2424,8 @@ class ShopPaymentAttemptAdmin(ModelAdmin):
         return False
 
     def has_change_permission(self, request, obj=None):
-        # Read-only fields; change permission is required to expose the recovery action.
-        return super().has_change_permission(request, obj)
+        # No direct field editing; the recovery action has its own permission check.
+        return False
 
     def has_delete_permission(self, request, obj=None):
         return False

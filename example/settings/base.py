@@ -659,6 +659,8 @@ REST_FRAMEWORK = {
         # personal pay lookups, payer checks and payments, per address (pp_id can be guessed)
         "shop-personalpay": "30/min",
         "order-lookup": "10/min",
+        # result-page NICEPAY recovery; keyed by client address + order id
+        "nicepay-recovery": "20/min",
         # guest checkouts per address (each may text the phone number it was given)
         "shop-guest-order": "20/hour",
         # cash receipt requests after the order (each try may reach the Toss cash receipt API)

@@ -200,8 +200,9 @@ fail-open이 아닙니다.
   ```
   기본 `--limit`은 20이고, `SHOP_NICEPAY_RECOVERY_TIME_BUDGET`(기본 40초)을 넘으면 다음
   실행으로 넘깁니다. Vercel 함수 제한(60초) 안에서 동작하도록 55초를 넘기지 않습니다.
-  명령은 시도 하나의 예외가 다음 시도를 막지 않게 격리하고, 주문이 삭제된 시도는 `failed`로
-  기록합니다.
+  명령은 `last_checked_at`이 오래된 순서(미조회 우선)로 선택하므로, 미입금
+  `pending_deposit`이 많아도 `approving`/`approved_local_failed`가 굶지 않습니다. 시도 하나의
+  예외가 다음 시도를 막지 않게 격리하고, 주문이 삭제된 시도는 `failed`로 기록합니다.
 - 관리자 `ShopPaymentAttempt` 목록에서 **NICEPAY 거래조회로 복구** 액션을 선택하면 변경
   권한이 있는 관리자가 조회만으로 복구할 수 있습니다. 이 액션은 재승인을 호출하지 않습니다.
 - 같은 망취소/조회 실패가 반복되면 시도의 `recovery_attempts`가 증가하고 목록의
@@ -233,6 +234,11 @@ fail-open이 아닙니다.
 - TLS 인증서 검증을 유지하고 연결/읽기 타임아웃을 둡니다.
 - 승인·취소·조회 요청은 서버에서만 수행하며 MerchantKey/AuthToken을 브라우저에 보내지
   않습니다. 로그에는 `AuthToken`, `Signature`, `MerchantKey`, 구매자 개인정보를 마스킹합니다.
+- 관리자 `ShopPaymentAttempt` 화면은 `auth_token_sealed`, `attempt_token_hash`,
+  `next_app_url`, `net_cancel_url`을 표시·수정하지 않습니다. 직접 수정은 막고, 변경 권한이
+  있는 사용자에게만 **거래조회로 복구** 액션을 허용합니다.
+- 결과 페이지 복구 endpoint는 클라이언트 IP+주문번호 기준 DRF throttle
+  (`nicepay-recovery`, 기본 20/min)을 적용합니다.
 - 외부 콜백인 Return URL과 가상계좌 통보만 CSRF 예외로 두고, 관리자·주문 API의 기존 인증과
   CSRF 보호는 유지합니다.
 - 장바구니/주문 금액은 서버가 확정합니다. 프런트가 보낸 `amount`는 승인 판단에 사용하지

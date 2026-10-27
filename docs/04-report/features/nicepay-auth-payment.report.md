@@ -16,9 +16,10 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
   - 전체/부분취소, 가상계좌 발급, 거래조회, 입금통보 검증
   - NextAppURL/NetCancelURL HTTPS 호스트·경로 allow-list, EUC-KR form, 타임아웃
   - 비회원 모바일 복귀용 일회성 attempt token과 `ReqReserved`
-- `gnu_jango/shop/models.py` + migration `0036_shoppaymentattempt.py`
+- `gnu_jango/shop/models.py` + migrations `0036_shoppaymentattempt.py`,
+  `0037_shoppaymentattempt_last_checked_at.py`
   - `ShopPaymentAttempt`: 모드·MID·금액·결제수단·TID·암호화 AuthToken·승인 URL·키 지문·
-    상태·마지막 오류·응답 스냅샷
+    상태·마지막 오류·응답 스냅샷·복구 조회 시각(`last_checked_at`)
 - `gnu_jango/shop/pg_settings.py`
   - NICEPAY MID/MerchantKey 설정, 테스트/실결제 모드, 환경 변수 우선순위, 봉인 저장,
     키 지문, 설정 상태
@@ -71,8 +72,8 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
 ## 테스트 결과
 
 - `manage.py check`: 통과 (기존 silenced 1개)
-- `gnu_jango.core.test_shop_nicepay`: **53개 통과** (관리자 설정 상속 회귀 포함)
-- `manage.py test` 전체: **2,909개 통과**, 23개 skip
+- `gnu_jango.core.test_shop_nicepay`: **59개 통과** (관리자 설정 상속 회귀 포함)
+- `manage.py test` 전체: **2,915개 통과**, 23개 skip
 - Next.js `npm run typecheck`: 통과
 - Next.js `npm run lint`: 통과
 - `npx playwright test tests/payment-nicepay.spec.ts --workers=1`: **10개 통과**
@@ -96,9 +97,12 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
 ## 마이그레이션
 
 - `gnu_jango/shop/migrations/0036_shoppaymentattempt.py`
-- `ShopPaymentAttempt` 테이블 생성(2차 리뷰에서 `recovery_attempts` 필드 추가). 운영 DB와
+- `gnu_jango/shop/migrations/0037_shoppaymentattempt_last_checked_at.py`
+- `ShopPaymentAttempt` 테이블 생성 + `recovery_attempts`, `last_checked_at` 추가. 운영 DB와
   데모/핸드북 Supabase에는 병합 전에 별도 적용이 필요합니다. 이번 작업에서는 운영/로컬 DB에
   migrate하지 않았습니다.
+- 로컬 SQLite DB 확인 결과 `shop.0036`/`shop.0037`은 적용되어 있지 않았습니다. 운영/데모
+  Supabase는 이 저장소에서 확인할 수 없습니다.
 
 ## 코드 리뷰 반영 (PR #84)
 
@@ -137,7 +141,26 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
 - **LOW**: 취소 로그에서 환불 계좌/예금주/SignData를 마스킹하고, 인증 오류 상태 변경을
   row lock 하에서 수행하며, attempt FK를 `SET_NULL`로 바꿔 결제 기록이 주문 삭제와 함께
   사라지지 않게 했습니다.
-- 마이그레이션은 기존 `0036_shoppaymentattempt.py`를 수정했습니다(아직 병합 전).
+- 3차 리뷰에서는 `0036`을 제자리에서 고치지 않고
+  `0037_shoppaymentattempt_last_checked_at.py`로 `last_checked_at`을 추가했습니다. 복구
+  명령은 `last_checked_at`이 오래된 순서(미조회 NULL 포함)로 선택해 `pending_deposit`이
+  `approving`/`approved_local_failed` 복구를 굶기지 않게 합니다.
+
+### 3차 재검토 반영
+
+- **M1**: `last_checked_at`과 `0037` 마이그레이션을 추가하고, 복구 명령을
+  `(last_checked_at NULL 우선, updated_at, pk)` 순으로 정렬했습니다. `Status=9`인
+  `pending_deposit`도 조회 후 체크 시각이 갱신되어 다른 시도를 굶기지 않습니다.
+- **M2**: `Status=1` 주문 취소는 주문 row를 `select_for_update(of=("self",))`로 잠근 뒤
+  현재 `od_tno == attempt.tid`이고 미결제 상태일 때만 수행합니다. 취소 성공 후에만 attempt를
+  `canceled`로 바꾸고, 실패/불일치 시 `uncertain`으로 남깁니다.
+- **M3**: 관리자 attempt 수정 화면에서 `auth_token_sealed`/`attempt_token_hash`/
+  `next_app_url`/`net_cancel_url`을 `exclude`했습니다. 직접 수정은 막고, 변경 권한이 있는
+  사용자에게만 복구 액션을 별도로 노출합니다.
+- **M4**: `confirm_order_payment`가 결제완료 메일/SMS를 보내므로 가상계좌 통보·복구에서
+  중복 발송을 제거했습니다. 결제 후 현재 TID/상태를 주문 잠금 아래 재확인합니다.
+- **LOW**: 결과 페이지 복구 endpoint에 IP+주문 기준 DRF throttle을 추가했습니다.
+- 실제 테스트 MID로 비인증 가상계좌 발급(`4100`)과 발급 직후 조회 `Status=9`를 확인했습니다.
 
 ## 남은 작업·제한
 

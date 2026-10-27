@@ -6,6 +6,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import F
 from django.utils import timezone
 
 from gnu_jango.api.shop_nicepay import recover_nicepay_attempt
@@ -20,8 +21,8 @@ MAX_TIME_BUDGET = 55
 
 class Command(BaseCommand):
     help = (
-        "Reconcile stale NICEPAY approving/uncertain/approved_local_failed attempts through the "
-        "official transaction lookup. It never calls the approval API again."
+        "Reconcile stale NICEPAY approving/uncertain/approved_local_failed/pending_deposit "
+        "attempts through the official transaction lookup. It never calls the approval API again."
     )
 
     def add_arguments(self, parser):
@@ -58,7 +59,11 @@ class Command(BaseCommand):
                 provider="nicepay",
                 state__in=RECOVERY_STATES,
                 updated_at__lt=cutoff,
-            ).order_by("updated_at")[:limit]
+            ).order_by(
+                F("last_checked_at").asc(nulls_first=True),
+                "updated_at",
+                "pk",
+            )[:limit]
         )
         summary = {
             "applied": bool(options["apply"]),
@@ -84,6 +89,7 @@ class Command(BaseCommand):
                     state="failed",
                     last_error="NICEPAY recovery skipped because the order was deleted.",
                     recovery_attempts=attempt.recovery_attempts + 1,
+                    last_checked_at=timezone.now(),
                 )
                 summary["failed"] += 1
                 self._sample(summary, attempt, "failed:order_missing")
@@ -94,10 +100,13 @@ class Command(BaseCommand):
                 ShopPaymentAttempt.objects.filter(pk=attempt.pk).update(
                     last_error=str(exc)[:4000],
                     recovery_attempts=attempt.recovery_attempts + 1,
+                    last_checked_at=timezone.now(),
                 )
                 summary["failed"] += 1
                 self._sample(summary, attempt, f"failed:exception:{type(exc).__name__}"[:200])
                 continue
+            # Rotate attempts even when the provider still reports "not deposited" (Status=9).
+            ShopPaymentAttempt.objects.filter(pk=attempt.pk).update(last_checked_at=timezone.now())
             if error is None:
                 summary["recovered"] += 1
                 self._sample(summary, recovered, f"recovered:{recovered.state}")

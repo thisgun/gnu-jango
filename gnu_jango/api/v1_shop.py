@@ -2043,9 +2043,26 @@ def payment_confirm_view(request):
     return api_response(data={"order_id": order.od_id, "uid": order.uid, "status": order.od_status, "payment_status": payment_status})
 
 
+class NicepayRecoveryThrottle(SimpleRateThrottle):
+    """Limit result-page recovery by client address and order id."""
+
+    scope = "nicepay-recovery"
+
+    def get_cache_key(self, request, view):
+        if request.method != "POST":
+            return None
+        data = getattr(request, "data", {}) or {}
+        order_id = str(data.get("order_id") or data.get("od_id") or "").strip()[:40]
+        return self.cache_format % {
+            "scope": self.scope,
+            "ident": f"{self.get_ident(request)}:{order_id}",
+        }
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
+@throttle_classes([NicepayRecoveryThrottle])
 def nicepay_recovery_view(request):
     """On-demand recovery when a customer reopens the NICEPAY result page.
 
