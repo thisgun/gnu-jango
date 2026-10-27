@@ -12,15 +12,18 @@ from django.http import Http404
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
+from import_export.admin import ImportExportMixin
 from unfold.forms import ActionForm
 from unfold.widgets import UnfoldAdminSelectWidget
 
 from gnu_jango.api.shop_common import CANCELLED_STATUSES
 from gnu_jango.core.audit import UnfoldHistoryAdmin, history_record_for
+from gnu_jango.shop import delivery_import
 from gnu_jango.shop.admin.bulk import copy_selected_personal_pays, create_personal_pay_for_balance, order_tool_urls
 from gnu_jango.shop.admin.cash_receipts import order_cash_receipt_page
 from gnu_jango.shop.cash_receipts import admin_risk as cash_receipt_admin_risk
 from gnu_jango.shop.delivery import delivery_company_form_field
+from gnu_jango.shop.import_export_resources import ShopOrderResource
 from gnu_jango.shop.models import ORDER_ITEM_STATUS_COMPLETED
 from gnu_jango.shop.order_flow import (
     ADMIN_ORDER_STATUSES,
@@ -186,10 +189,19 @@ class OrderStatusActionForm(ActionForm):
         required=False,
         choices=[("", "상태 선택")] + [(status, status) for status in ADMIN_ORDER_STATUSES],
     )
+    od_delivery_company = forms.CharField(label=_("Delivery company"), required=False)
+    od_invoice = forms.CharField(label=_("Invoice number"), required=False)
+    send_sms = forms.BooleanField(label=_("Send delivery SMS"), required=False)
 
 
 @admin.register(ShopOrder)
-class ShopOrderAdmin(UnfoldHistoryAdmin):
+class ShopOrderAdmin(ImportExportMixin, UnfoldHistoryAdmin):
+    resource_classes = [ShopOrderResource]
+
+    def has_import_permission(self, request):
+        # Order imports update existing descriptive rows; only superusers may use the importer.
+        return request.user.is_superuser
+
     list_before_template = "admin/shop/order_list_before.html"
     change_form_before_template = "admin/shop/order_change_before.html"
     list_display = (
@@ -224,6 +236,7 @@ class ShopOrderAdmin(UnfoldHistoryAdmin):
     list_filter_submit = True
     actions = (
         "change_selected_order_status",
+        "set_selected_shipping",
         "export_selected_orders_csv",
         "export_selected_receipts_csv",
         create_personal_pay_for_balance,
@@ -260,6 +273,61 @@ class ShopOrderAdmin(UnfoldHistoryAdmin):
             shown = ", ".join(order_ids[:5]) + (f" 외 {len(order_ids) - 5}건" if len(order_ids) > 5 else "")
             self.message_user(
                 request, f"주문 {len(order_ids)}건은 바꾸지 않았습니다 ({shown}): {message}", messages.WARNING
+            )
+
+    @admin.action(description=_("Register carrier and invoice for selected orders"), permissions=["change"])
+    def set_selected_shipping(self, request, queryset):
+        company, listed = delivery_import.normalize_company(request.POST.get("od_delivery_company"))
+        invoice = " ".join(str(request.POST.get("od_invoice") or "").split())
+        if not company or not invoice:
+            self.message_user(request, _("Enter both a delivery company and an invoice number."), messages.WARNING)
+            return
+        if len(company) > 100 or len(invoice) > delivery_import.MAX_INVOICE_LENGTH:
+            self.message_user(request, _("The delivery company or invoice number is too long."), messages.WARNING)
+            return
+
+        rows = [
+            delivery_import.DeliveryRow(
+                line=index,
+                od_id=order.od_id,
+                company=company,
+                invoice=invoice,
+                customer=order.od_b_name or order.od_name,
+            )
+            for index, order in enumerate(queryset.order_by("od_id"), start=1)
+        ]
+        report = delivery_import.DeliveryReport(rows=rows)
+
+        def logged(order, item):
+            self.log_change(request, order, f"배송정보 일괄등록: {item.company} {item.invoice}")
+
+        delivery_import.apply_deliveries(
+            report,
+            actor=request.user.get_username(),
+            on_saved=logged,
+            send_sms=request.POST.get("send_sms") in {"1", "on", "true"},
+        )
+        if report.saved_count:
+            self.message_user(
+                request,
+                _("%(count)s orders were moved to shipping.") % {"count": report.saved_count},
+                messages.SUCCESS,
+            )
+        if not listed:
+            self.message_user(
+                request,
+                _("The delivery company is not in the configured carrier list; tracking links may not be built."),
+                messages.WARNING,
+            )
+        if report.error_count:
+            examples = ", ".join(
+                f"{row.od_id}: {row.errors[0]}" for row in report.rows if row.errors
+            )[:500]
+            self.message_user(
+                request,
+                _("%(count)s orders were not changed: %(examples)s")
+                % {"count": report.error_count, "examples": examples},
+                messages.WARNING,
             )
 
     def has_delete_permission(self, request, obj=None):

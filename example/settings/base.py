@@ -91,6 +91,7 @@ INSTALLED_APPS = [
     "unfold.contrib.forms",
     "unfold.contrib.inlines",
     "django.contrib.admin",
+    "import_export",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -179,6 +180,13 @@ BLEACH_DEFAULT_WIDGET = "django.forms.Textarea"
 
 SITE_ID = 1
 
+# Import/export runs in a transaction and keeps import results in the admin log. The per-admin
+# permission checks decide who may import; member and order imports are superuser-only.
+IMPORT_EXPORT_USE_TRANSACTIONS = True
+IMPORT_EXPORT_SKIP_ADMIN_LOG = False
+# Keep exported names/memos from becoming spreadsheet formulas when opened in Excel.
+IMPORT_EXPORT_ESCAPE_FORMULAE_ON_EXPORT = True
+
 # https://django-debug-toolbar.readthedocs.io/en/latest/installation.html
 
 MIDDLEWARE = [
@@ -191,6 +199,8 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Keep a support impersonation session read-only until it is explicitly stopped.
+    "gnu_jango.users.middleware.ImpersonationReadOnlyMiddleware",
     # Tags every history row written during a request with request.user.
     "simple_history.middleware.HistoryRequestMiddleware",
     "gnu_jango.core.middleware.VisitTrackingMiddleware",

@@ -12,7 +12,7 @@ from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, Ou
 
 from gnu_jango.core.models import MailCampaign, MailSendLog, SearchKeyword, VisitLog
 from gnu_jango.api.community_common import GENERAL_QA_PRODUCT_ID
-from gnu_jango.shop.models import ShopOrder, ShopOrderData, ShopPersonalPay, ShopQA
+from gnu_jango.shop.models import ShopOrder, ShopOrderData, ShopPersonalPay, ShopProduct, ShopQA
 from gnu_jango.users.models import Profile, User_Memo, User_Point
 from gnu_jango.utils.admin_display import format_number, money_sum
 
@@ -163,6 +163,10 @@ def _build_admin_ops_summary():
     now = timezone.now()
     orders = ShopOrder.objects.all()
     today_orders = orders.filter(od_datetime__date=today)
+    today_sales = money_sum(today_orders, "od_receipt_price") - money_sum(today_orders, "od_refund_price")
+    products = ShopProduct.objects.all()
+    low_stock = products.filter(it_use="1", it_stock_qty__lte=5)
+    sold_out = products.filter(it_use="1", it_stock_qty__lte=0)
     outstanding_orders = orders.filter(od_misu__gt=0)
     pending_shipping = orders.filter(od_receipt_price__gt=0, od_cancel_price__lte=0).filter(od_invoice="")
     cash_receipt_orders = orders.exclude(od_cash_no="")
@@ -204,6 +208,20 @@ def _build_admin_ops_summary():
 
     return {
         "metrics": [
+            {
+                "label": _("Today sales"),
+                "value": format_number(today_sales),
+                "hint": _("%(count)s orders, net of refunds") % {"count": format_number(today_orders.count())},
+                "url": "/admin/shop/shoporder/?od_datetime__day=%s" % today.day,
+                "tone": "success" if today_sales > 0 else "neutral",
+            },
+            {
+                "label": _("Low stock"),
+                "value": format_number(low_stock.count()),
+                "hint": _("%(count)s sold out") % {"count": format_number(sold_out.count())},
+                "url": "/admin/shop/shopproduct/stock-list/?low=5",
+                "tone": "warning" if low_stock.exists() else "success",
+            },
             {
                 "label": _("Today orders"),
                 "value": format_number(today_orders.count()),

@@ -23,6 +23,7 @@ from gnu_jango.config import theme_admin
 from gnu_jango.config import sample_data_admin
 from gnu_jango.core.audit import audit_log_view
 from gnu_jango.shop import admin_settings
+from gnu_jango.users import impersonation
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 # The site administration is the Django admin at /admin/; the former Next.js admin pages were removed
@@ -63,6 +64,8 @@ urlpatterns = [
     # these are the same views as /api/social/*.php and must come before the legacy *.php redirects.
     path("social/start.php", v1_auth.social_start_view, name="social-start-root"),
     path("social/finish.php", v1_auth.social_callback_view, name="social-finish-root"),
+    path("impersonation/", impersonation.impersonation_page, name="impersonation"),
+    path("impersonation/stop/", impersonation.stop_impersonation, name="impersonation-stop"),
     path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
     path("", include("gnu_jango.editor.urls")),
     path("", include("gnu_jango.core.urls")),

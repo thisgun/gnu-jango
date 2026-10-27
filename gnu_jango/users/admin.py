@@ -12,8 +12,10 @@ from django.contrib.auth.models import Group
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
 from django.http import HttpResponse
+from django.urls import path
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from import_export.admin import ImportExportMixin
 from unfold.admin import ModelAdmin, StackedInline
 from unfold.contrib.filters.admin import DropdownFilter
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
@@ -23,6 +25,8 @@ from gnu_jango.config.models import Config
 from gnu_jango.core.audit import UnfoldHistoryAdmin
 from gnu_jango.users import point_ledger
 
+from .import_export_resources import UserResource
+from .impersonation import start_impersonation
 from .models import Profile, User_Memo, User_Point, User_Scrap
 from gnu_jango.utils.admin_display import (
     badge,
@@ -162,11 +166,30 @@ class MemoStateFilter(DropdownFilter):
         return queryset
 
 
-class UserAdmin(BaseUserAdmin, ModelAdmin):
+class UserAdmin(ImportExportMixin, BaseUserAdmin, ModelAdmin):
     form = UserChangeForm
     add_form = UserCreationForm
     change_password_form = RevokingAdminPasswordChangeForm
+    resource_classes = [UserResource]
+    change_form_template = "admin/users/user/change_form.html"
     inlines = (ProfileInline,)
+
+    def has_import_permission(self, request):
+        return request.user.is_superuser
+
+    def has_export_permission(self, request):
+        return request.user.is_superuser
+
+    def get_urls(self):
+        urls = super().get_urls()
+        return [
+            path(
+                "<path:object_id>/impersonate/",
+                self.admin_site.admin_view(start_impersonation),
+                name="auth_user_impersonate",
+            ),
+            *urls,
+        ]
     readonly_fields = tuple(getattr(BaseUserAdmin, "readonly_fields", ())) + ("user_snapshot",)
     list_display = (
         "profile_add",
