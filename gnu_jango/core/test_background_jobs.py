@@ -1,6 +1,7 @@
 """Outbox regression tests. External delivery is replaced; use a disposable test DB."""
 import base64
 import hashlib
+import io
 import json
 import smtplib
 import tempfile
@@ -15,6 +16,8 @@ from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
 from django.core.mail import EmailMultiAlternatives
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db import close_old_connections, connection, transaction
 from django.test import TestCase, TransactionTestCase, override_settings, skipUnlessDBFeature
 from django.utils import timezone
@@ -61,6 +64,36 @@ class OutboxTests(TestCase):
     def test_invalid_kind_is_rejected(self):
         with self.assertRaises(ValueError):
             jobs.enqueue("arbitrary_callable", {})
+
+    def test_health_check_command_flags_dead_letters(self):
+        job = jobs.enqueue("mail", {"private": "message"})
+        BackgroundJob.objects.filter(pk=job.pk).update(status="dead", error_code="smtp_550")
+        output = io.StringIO()
+        with self.assertRaises(CommandError):
+            call_command("process_background_jobs", "--check", stdout=output)
+        report = json.loads(output.getvalue())
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["dead"], 1)
+
+    def test_health_check_command_flags_stale_pending_jobs(self):
+        job = jobs.enqueue("scheduled", {"name": "save_order_points"})
+        BackgroundJob.objects.filter(pk=job.pk).update(
+            available_at=timezone.now() - timedelta(minutes=20)
+        )
+        output = io.StringIO()
+        with self.assertRaises(CommandError):
+            call_command("process_background_jobs", "--check", stdout=output)
+        report = json.loads(output.getvalue())
+        self.assertFalse(report["ok"])
+        self.assertEqual(report["stale_pending"], 1)
+
+    def test_health_check_command_passes_when_queue_is_clear(self):
+        output = io.StringIO()
+        call_command("process_background_jobs", "--check", stdout=output)
+        report = json.loads(output.getvalue())
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["dead"], 0)
+        self.assertEqual(report["stale_pending"], 0)
 
     def test_recurring_job_is_deduplicated(self):
         self.assertEqual(jobs.enqueue_scheduled("save_order_points").pk,

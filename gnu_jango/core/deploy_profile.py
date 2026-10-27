@@ -239,22 +239,76 @@ def check_writable_paths(settings_obj):
     return _result("writable_paths", "No runtime disk writes", "pass", "Logs, sessions and cache avoid the disk.")
 
 
-def check_background_tasks(settings_obj):
-    if _setting(settings_obj, "BACKGROUND_JOBS_ENABLED", False):
-        return _result(
-            "background_tasks", "Background tasks", "warn",
-            "Requests use a durable DB outbox; Vercel web functions do not run the configured Beat and workers.",
-            "Provision external worker, media-worker and one Beat with the same DB/storage/settings. See docs/04-deploy/background-jobs.md.",
-        )
-    if not _setting(settings_obj, "CELERY_TASK_ALWAYS_EAGER", False):
+def _required_beat_entries():
+    from gnu_jango.core.scheduled_jobs import SCHEDULED_JOBS
+
+    return (
+        *(f"maintenance-{job.name}" for job in SCHEDULED_JOBS),
+        "background-outbox-dispatch",
+        "background-retention",
+    )
+
+
+def check_background_tasks(settings_obj, *, serverless=False):
+    enabled = _setting(settings_obj, "BACKGROUND_JOBS_ENABLED", False)
+    eager = _setting(settings_obj, "CELERY_TASK_ALWAYS_EAGER", False)
+    cron_secret = str(_setting(settings_obj, "CRON_SECRET", "") or "")
+    if not enabled:
+        if serverless and eager:
+            return _result(
+                "background_tasks",
+                "Background tasks",
+                "pass",
+                "Celery tasks run eagerly in the Vercel function; no external worker is configured.",
+            )
+        if not eager:
+            return _result(
+                "background_tasks",
+                "Background tasks",
+                "warn",
+                "Background jobs are disabled and Celery is not eager; requests may leave work undrained.",
+                "Enable BACKGROUND_JOBS_ENABLED=True with workers/Beat, or use CELERY_TASK_ALWAYS_EAGER=True for serverless.",
+            )
         return _result(
             "background_tasks",
             "Background tasks",
             "warn",
-            "Celery tasks are queued, but there is no worker on Vercel.",
-            "Set CELERY_TASK_ALWAYS_EAGER=True (tasks run inside the request) or run a worker elsewhere.",
+            "Background jobs are disabled; mail/SMS/image work can run on the request path.",
+            "For full request-path separation set BACKGROUND_JOBS_ENABLED=True and run worker, media-worker and Beat.",
         )
-    return _result("background_tasks", "Background tasks", "pass", "Celery tasks run eagerly.")
+
+    schedule = _setting(settings_obj, "CELERY_BEAT_SCHEDULE", {}) or {}
+    missing = [name for name in _required_beat_entries() if name not in schedule]
+    if missing:
+        return _result(
+            "background_tasks",
+            "Background tasks",
+            "fail",
+            "Celery Beat schedule is missing scheduled jobs: " + ", ".join(missing) + ".",
+            "Keep CELERY_BEAT_SCHEDULE generated from core.scheduled_jobs.SCHEDULED_JOBS.",
+        )
+    if cron_secret:
+        return _result(
+            "background_tasks",
+            "Background tasks",
+            "warn",
+            "Both Celery Beat and the cron endpoint are configured; scheduled jobs can be triggered twice.",
+            "Choose one trigger per deployment: clear CRON_SECRET on VPS/Docker, or disable Beat when using only serverless cron.",
+        )
+    if serverless:
+        return _result(
+            "background_tasks",
+            "Background tasks",
+            "warn",
+            "Requests use a durable DB outbox; Vercel web functions do not run the configured Beat and workers.",
+            "Provision external worker, media-worker and one Beat with the same DB/storage/settings. See docs/04-deploy/background-jobs.md.",
+        )
+    return _result(
+        "background_tasks",
+        "Background tasks",
+        "pass",
+        "Requests use the DB outbox; one external Celery Beat and workers are expected.",
+    )
 
 
 # --------------------------------------------------------------------------------------------- #
@@ -398,7 +452,7 @@ def evaluate_deploy_profile(profile, *, settings_obj, env, cache_table_exists=No
             check_cache(settings_obj, cache_table_exists=cache_table_exists),
             check_cron_secret(settings_obj, env),
             check_writable_paths(settings_obj),
-            check_background_tasks(settings_obj),
+            check_background_tasks(settings_obj, serverless=True),
         ]
     else:
         checks += [
@@ -408,6 +462,7 @@ def evaluate_deploy_profile(profile, *, settings_obj, env, cache_table_exists=No
                 settings_obj, cache_table_exists=cache_table_exists, allow_locmem_workers=_gunicorn_workers(env)
             ),
             check_static_root(settings_obj),
+            check_background_tasks(settings_obj, serverless=False),
         ]
         if profile == "split":
             checks += [check_cross_domain(settings_obj, env), check_secure_cookies(settings_obj)]

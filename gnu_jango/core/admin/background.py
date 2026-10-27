@@ -13,16 +13,29 @@ STALE_PENDING_MINUTES = 15
 
 
 def stale_pending_warning():
-    """Name a backlog that no worker is draining, so it is not discovered by missing texts."""
+    """Name dead letters and a backlog that no worker is draining."""
     cutoff = timezone.now() - timedelta(minutes=STALE_PENDING_MINUTES)
     stale = BackgroundJob.objects.filter(status="pending", available_at__lte=cutoff).count()
-    if not stale:
+    dead = BackgroundJob.objects.filter(status="dead").count()
+    if not stale and not dead:
         return ""
-    if not enabled():
-        return (f"백그라운드 작업이 꺼져 있어 대기 작업 {stale}개를 처리할 작업자가 없습니다. "
-                "운영자 명령 process_background_jobs --apply 로 남은 작업을 처리하세요.")
-    return (f"{STALE_PENDING_MINUTES}분 넘게 대기 중인 작업이 {stale}개 있습니다. "
-            "Celery 작업자와 Beat가 같은 DB·브로커로 실행 중인지 확인하세요.")
+    messages = []
+    if dead:
+        messages.append(
+            f"최종 실패한 백그라운드 작업이 {dead}개 있습니다. 관리자 목록에서 오류 코드를 확인하세요."
+        )
+    if stale:
+        if not enabled():
+            messages.append(
+                f"백그라운드 작업이 꺼져 있어 대기 작업 {stale}개를 처리할 작업자가 없습니다. "
+                "운영자 명령 process_background_jobs --apply 로 남은 작업을 처리하세요."
+            )
+        else:
+            messages.append(
+                f"{STALE_PENDING_MINUTES}분 넘게 대기 중인 작업이 {stale}개 있습니다. "
+                "Celery 작업자와 Beat가 같은 DB·브로커로 실행 중인지 확인하세요."
+            )
+    return " ".join(messages)
 
 
 @admin.register(BackgroundJob)
