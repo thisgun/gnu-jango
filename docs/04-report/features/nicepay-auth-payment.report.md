@@ -71,11 +71,13 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
 ## 테스트 결과
 
 - `manage.py check`: 통과 (기존 silenced 1개)
-- `gnu_jango.core.test_shop_nicepay`: **49개 통과** (관리자 설정 상속 회귀 포함)
-- `manage.py test` 전체: **2,905개 통과**, 23개 skip
+- `gnu_jango.core.test_shop_nicepay`: **50개 통과** (관리자 설정 상속 회귀 포함)
+- `manage.py test` 전체: **2,906개 통과**, 23개 skip
 - Next.js `npm run typecheck`: 통과
 - Next.js `npm run lint`: 통과
 - `npx playwright test tests/payment-nicepay.spec.ts --workers=1`: **10개 통과**
+- 제공된 테스트 MID/MerchantKey로 실제 거래조회 인증 호출: `ResultCode=0000` 확인
+  (테스트 TID는 실제 거래가 아니어서 `Status=9`; 실제 승인·입금 검증은 아님)
 - `nextjs_default` 정적 테마 빌드: 통과
 - `handbook` 정적 테마 빌드: 통과
   - 일회용 DB(`migrate` + `ensure_demo_samples --apply` + `ensure_handbook_samples
@@ -102,16 +104,18 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
   `superseded`로 남깁니다.
 - **H2 가상계좌 통보**: 운영(`DEBUG=False`)에서 IP 허용 목록이 비면 403; 공식 NICEPAY
   통보 IP(`121.133.126.10`, `121.133.126.11`, `211.33.136.39`)를 문서화했습니다.
-  `ResultCode=4110`/`StateCd=0`/`PayMethod=VBANK`를 확인하고, 거래조회의
-  TID/MID/Moid/Amt/PayMethod를 **모두 필수로** 시도·주문과 대조합니다. 하나라도 없거나
-  다르면 fail-closed로 입금 처리하지 않습니다. 금액은 조회 Amt를 권위 값으로 사용하고
-  통보 Amt는 교차 확인만 합니다. 동일 TID 재통보는 아무 것도 바꾸지 않습니다.
-  공식 거래조회 예시에는 MID/Moid/Amt/PayMethod가 없으므로 실제 테스트 MID 응답을 반드시
-  확인해야 하며, 없으면 자동 입금 확정 대신 관리자 확인 대상으로 남깁니다.
+  `ResultCode=4110`/`StateCd=0`/`PayMethod=VBANK`를 확인하고, 거래조회 TID/Status를
+  서버가 발급한 attempt와 대조합니다. MID/Moid/Amt/PayMethod는 서버 attempt/order 값을
+  기준으로 검증하고, 조회 응답에 해당 필드가 추가로 오면 모두 일치해야 합니다.
+  `SHOP_NICEPAY_VBANK_REQUIRE_LOOKUP_IDENTITY=True`인 strict 모드에서는 네 필드가
+  조회 응답에 없거나 다르면 fail-closed로 입금 처리하지 않습니다. 기본값은 공식
+  거래조회 응답(TID/Status/AuthCode/AuthDate)과 호환되는 fallback 모드입니다.
+  동일 TID 재통보는 아무 것도 바꾸지 않습니다.
 - **M1**: `approved_local_failed`는 다음 복귀/확인에서 `recover_nicepay_attempt`로 로컬
   반영만 재시도합니다. 일반 `uncertain`/`approving` 복구는 거래조회 `Status=0`만 보고
-  반영하지 않고, TID/MID/Moid/Amt(가상계좌는 PayMethod=VBANK 포함)를 시도·주문과 대조한
-  뒤에만 로컬 결제를 반영합니다. 불일치·누락 시 `uncertain`과 관리자 확인 대상으로 남깁니다.
+  반영하지 않고, TID를 시도와 대조하며 서버 attempt/order의 MID/Moid/Amt/PayMethod를
+  검증합니다. 조회 응답에 해당 필드가 있으면 추가로 일치 여부를 확인하고, strict 옵션에서는
+  누락도 거절합니다. 불일치 시 `uncertain`과 관리자 확인 대상으로 남깁니다.
 - **M2**: `recover_nicepay_attempts` 관리 명령은 기본 `--limit=20`, 40초 시간 예산,
   시도별 예외 격리, 주문 삭제 시 `failed` 처리, `recovery_attempts` 카운트를 적용합니다.
   `run_scheduled_jobs`에 등록했으며 Vercel cron은 일 1회임을 문서화했습니다. VPS/Docker는

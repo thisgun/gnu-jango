@@ -806,6 +806,13 @@ SHOP_NICEPAY_MID = de_config("SHOP_NICEPAY_MID", default="")
 SHOP_NICEPAY_MERCHANT_KEY = de_config("SHOP_NICEPAY_MERCHANT_KEY", default="")
 SHOP_NICEPAY_ADMIN_KEYS_ENABLED = bool_config("SHOP_NICEPAY_ADMIN_KEYS_ENABLED", default=True)
 SHOP_NICEPAY_VBANK_ENABLED = bool_config("SHOP_NICEPAY_VBANK_ENABLED", default=True)
+# The official trans-inquiry response guarantees TID/Status/AuthCode/AuthDate and normally does
+# not echo MID/Moid/Amt/PayMethod. The default mode binds those fields to the server-created
+# attempt and checks them additionally when present. Enable strict mode only after the merchant's
+# test MID is confirmed to return all four fields.
+SHOP_NICEPAY_VBANK_REQUIRE_LOOKUP_IDENTITY = bool_config(
+    "SHOP_NICEPAY_VBANK_REQUIRE_LOOKUP_IDENTITY", default=False
+)
 # Send TaxFreeAmt on cancellation for merchants whose NICEPAY contract exposes the mixed-tax
 # cancellation option. Off by default because the published cancel request does not require it.
 SHOP_NICEPAY_TAX_FREE_CANCEL_ENABLED = bool_config("SHOP_NICEPAY_TAX_FREE_CANCEL_ENABLED", default=False)

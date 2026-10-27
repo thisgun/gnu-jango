@@ -1351,7 +1351,13 @@ def recover_nicepay_attempt(attempt):
                 code="nicepay_order_missing",
             )
         mismatch = _lookup_mismatch(
-            lookup, attempt, attempt.order, require_pay_method=attempt.pay_method == "VBANK"
+            lookup,
+            attempt,
+            attempt.order,
+            require_pay_method=attempt.pay_method == "VBANK",
+            strict_identity=(
+                attempt.pay_method == "VBANK" and _vbank_lookup_identity_required()
+            ),
         )
         if mismatch:
             _mark_attempt(attempt, "uncertain", provider_data=lookup, error=mismatch)
@@ -1393,40 +1399,74 @@ def _lookup_field(lookup, *names):
     return ""
 
 
-def _lookup_mismatch(lookup, attempt, order, *, require_pay_method=False):
-    """Fail-closed identity check for a transaction-lookup response.
+def _vbank_lookup_identity_required():
+    return bool(
+        getattr(settings, "SHOP_NICEPAY_VBANK_REQUIRE_LOOKUP_IDENTITY", False)
+    )
 
-    NICEPAY's published trans-inquiry response lists TID/Status/AuthCode/AuthDate and allows
-    undocumented extra fields. This integration treats the lookup as unusable unless it also
-    returns the identity fields needed to bind it to the attempt: TID, MID, Moid and Amt; for
-    virtual accounts it must also return PayMethod=VBANK. A missing field is a mismatch, never a
-    wildcard. The real test MID response must be checked before enabling live virtual-account
-    payments; if NICEPAY omits them, the deposit stays unconfirmed and needs manual handling.
+
+def _lookup_mismatch(
+    lookup,
+    attempt,
+    order,
+    *,
+    require_pay_method=False,
+    strict_identity=False,
+):
+    """Validate a transaction-lookup response against the server-side attempt.
+
+    The official trans-inquiry response guarantees only TID/Status/AuthCode/AuthDate. The
+    default mode therefore binds the response to the attempt with the TID and validates the
+    notification against the server-created attempt/order. MID/Moid/Amt/PayMethod are checked
+    additionally whenever NICEPAY returns them. ``strict_identity`` is an opt-in for merchants
+    whose test MID has been confirmed to return all four fields; it then fails closed when one is
+    missing.
     """
     if not attempt:
         return "NICEPAY lookup has no local attempt."
+    if not str(attempt.tid or "").strip():
+        return "NICEPAY attempt has no TID."
+    if not str(attempt.mid or "").strip():
+        return "NICEPAY attempt has no MID."
+    if int(attempt.amount or 0) <= 0:
+        return "NICEPAY attempt has no valid amount."
+    if order is None:
+        return "NICEPAY lookup has no local order."
     if str(lookup.get("TID") or "").strip() != str(attempt.tid):
         return "NICEPAY lookup TID does not match the attempt."
+
     lookup_mid = _lookup_field(lookup, "MID", "mid")
-    if not lookup_mid:
+    if lookup_mid:
+        if lookup_mid != attempt.mid:
+            return "NICEPAY lookup MID does not match the attempt."
+    elif strict_identity:
         return "NICEPAY lookup MID is missing."
-    if lookup_mid != attempt.mid:
-        return "NICEPAY lookup MID does not match the attempt."
+
     lookup_moid = _lookup_field(lookup, "Moid", "MOID", "moid")
-    if not lookup_moid:
+    if lookup_moid:
+        if lookup_moid != str(order.od_id):
+            return "NICEPAY lookup order id does not match the order."
+    elif strict_identity:
         return "NICEPAY lookup order id is missing."
-    if lookup_moid != str(order.od_id):
-        return "NICEPAY lookup order id does not match the order."
+
     lookup_amount = _lookup_field(lookup, "Amt", "amt")
-    if not lookup_amount:
+    if lookup_amount:
+        if _amount_int(lookup_amount) != attempt.amount:
+            return "NICEPAY lookup amount does not match the attempt."
+    elif strict_identity:
         return "NICEPAY lookup amount is missing."
-    if _amount_int(lookup_amount) != attempt.amount:
-        return "NICEPAY lookup amount does not match the attempt."
+
     lookup_method = _lookup_field(lookup, "PayMethod", "payMethod", "pay_method").upper()
-    if require_pay_method and lookup_method != "VBANK":
-        return "NICEPAY lookup payment method is not a virtual account."
-    if lookup_method and lookup_method != str(attempt.pay_method or "").upper():
-        return "NICEPAY lookup payment method does not match the attempt."
+    if require_pay_method and str(attempt.pay_method or "").upper() != "VBANK":
+        return "NICEPAY attempt is not a virtual account."
+    if lookup_method:
+        if require_pay_method and lookup_method != "VBANK":
+            return "NICEPAY lookup payment method is not a virtual account."
+        if lookup_method != str(attempt.pay_method or "").upper():
+            return "NICEPAY lookup payment method does not match the attempt."
+    elif strict_identity and require_pay_method:
+        return "NICEPAY lookup payment method is missing."
+
     lookup_state = _lookup_field(lookup, "StateCd", "StateCD", "stateCd")
     if lookup_state and lookup_state != "0":
         return "NICEPAY lookup state is not an approved deposit."
@@ -1507,12 +1547,24 @@ def process_nicepay_vbank_notification(data):
         record_payment_raw_log(order, order_id, "nicepay-vbank", tid, raw, prefix="nicepay-vbank-not-found")
         return None
     # A 4110/StateCd=0 callback is the only deposit-completion notification we accept. The
-    # lookup Amt is authoritative; the notification Amt is only a cross-check.
+    # official lookup normally has no Amt/MID/Moid/PayMethod, so the server-created attempt is
+    # authoritative for those values; if NICEPAY returns them, they must also match. The
+    # notification amount is always a cross-check, never the final amount.
     lookup_amount = _lookup_field(lookup, "Amt", "amt")
     lookup_amount_int = _amount_int(lookup_amount)
-    lookup_mismatch = _lookup_mismatch(lookup, attempt, order, require_pay_method=True)
-    if not lookup_amount or amount != lookup_amount_int:
-        lookup_mismatch = lookup_mismatch or "NICEPAY lookup amount does not match the notification."
+    authoritative_amount = lookup_amount_int if lookup_amount else attempt.amount
+    lookup_mismatch = _lookup_mismatch(
+        lookup,
+        attempt,
+        order,
+        require_pay_method=True,
+        strict_identity=_vbank_lookup_identity_required(),
+    )
+    if lookup_amount:
+        if amount != lookup_amount_int:
+            lookup_mismatch = lookup_mismatch or "NICEPAY lookup amount does not match the notification."
+    elif amount != attempt.amount:
+        lookup_mismatch = lookup_mismatch or "NICEPAY notification amount does not match the attempt."
     if lookup_mismatch:
         record_payment_raw_log(order, order_id, "nicepay-vbank", tid, raw, prefix="nicepay-vbank-mismatch")
         return api_error(lookup_mismatch, status=drf_status.HTTP_409_CONFLICT,
@@ -1529,7 +1581,7 @@ def process_nicepay_vbank_notification(data):
         return None
     paid_order, error = confirm_order_payment(
         order.pk,
-        lookup_amount_int,
+        authoritative_amount,
         "nicepay",
         tid,
         {"nicepay_vbank_notification": data, "nicepay_lookup": lookup},

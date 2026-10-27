@@ -90,6 +90,7 @@ Django + Next.js 쇼핑몰에 연결한 구현의 운영·전환 안내입니다
 | 모바일/PC 복귀 | `SHOP_NICEPAY_RETURN_URL` |
 | 결과 페이지 | `SHOP_NICEPAY_SUCCESS_URL` 또는 `SHOP_NICEPAY_FRONTEND_URL` |
 | 입금통보 IP 제한 | `SHOP_NICEPAY_VBANK_NOTIFY_ALLOWED_IPS` (쉼표 구분, 선택) |
+| 조회 identity strict | `SHOP_NICEPAY_VBANK_REQUIRE_LOOKUP_IDENTITY` (기본 `False`) |
 | 타임아웃 | `SHOP_NICEPAY_CONNECT_TIMEOUT`, `SHOP_NICEPAY_READ_TIMEOUT` |
 | 복구 기준/예산 | `SHOP_NICEPAY_RECOVERY_AFTER_SECONDS`, `SHOP_NICEPAY_RECOVERY_TIME_BUDGET` |
 
@@ -113,7 +114,8 @@ NICEPAY 상점관리자에 아래 공개 HTTPS URL을 등록합니다.
   - `SHOP_NICEPAY_VBANK_NOTIFY_ALLOWED_IPS`를 비우면 개발(`DEBUG=True`)에서만 수신하고
     운영(`DEBUG=False`)에서는 403으로 거절합니다. 운영에서는 위 IP를 명시하세요.
   - 통보의 `ResultCode=4110`, `StateCd=0`, `PayMethod=VBANK`를 확인하고, 거래조회의
-    `Status=0`과 조회 응답에 포함된 TID/MID/주문번호/금액/결제수단도 대조합니다.
+    `Status=0`/TID를 서버가 발급한 attempt와 대조합니다. 조회 응답에 MID/주문번호/금액/
+    결제수단이 추가로 포함되면 그 값도 모두 대조합니다.
 - 취소·망취소·거래조회 endpoint는 NICEPAY가 인증 응답/문서로 제공하는 호스트만 사용하며,
   관리자가 임의 URL을 넣을 수 없습니다.
 
@@ -157,16 +159,23 @@ NICEPAY 상점관리자에 아래 공개 HTTPS URL을 등록합니다.
 NICEPAY 거래조회 문서의 `Status`는 `0=승인`, `1=취소`, `9=거래 없음`입니다. 가상계좌
 문서는 발급 후 입금 전에는 승인거래로 조회되지 않고(`9`), 입금이 완료된 뒤에만 `0`으로
 조회된다고 설명합니다. 따라서 가상계좌 입금통보 처리에서는 `Status=0`과 함께 통보의
-`ResultCode=4110`/`StateCd=0`/`PayMethod=VBANK`를 확인하고, 조회 응답의
-`MID`/`Moid`/`Amt`/`TID`/`PayMethod`를 모두 시도·주문과 대조합니다. 하나라도 없거나 다르면
-입금 완료로 바꾸지 않습니다.
+`ResultCode=4110`/`StateCd=0`/`PayMethod=VBANK`를 확인합니다.
 
-> **실연동 전 확인 필요:** NICEPAY 거래조회 공개 규격의 응답 예시에는 `TID`, `Status`,
-> `AuthCode`, `AuthDate`만 있고 `MID`/`Moid`/`Amt`/`PayMethod`는 표시되어 있지 않습니다.
-> 이 구현은 위 필드를 필수로 요구하는 fail-closed 정책이므로, 실제 테스트 MID의 거래조회
-> 응답에 네 필드가 포함되는지 먼저 확인해야 합니다. 포함되지 않으면 가상계좌 자동 입금
-> 확정은 동작하지 않으며, NICEPAY 계약/규격 확인 또는 관리자 수동 확인 절차가 필요합니다.
-> 이 확인 전에는 실결제 가상계좌를 활성화하지 마세요.
+공식 거래조회 응답은 `TID`/`Status`/`AuthCode`/`AuthDate`만 보장하고
+`MID`/`Moid`/`Amt`/`PayMethod`는 일반적으로 포함하지 않습니다. 이 구현은 기본적으로
+**서버가 발급한 attempt의 TID·MID·금액·결제수단과 주문번호**를 기준으로 검증하고,
+조회 응답에 위 identity 필드가 추가로 포함되면 그 값도 모두 대조합니다. 이 방식은
+통보값을 신뢰하지 않고 서버가 만든 거래와 실제 입금 완료(`Status=0`)를 결합하므로
+fail-open이 아닙니다.
+
+> **strict 옵션:** 실제 테스트 MID의 거래조회 응답에 `MID`/`Moid`/`Amt`/`PayMethod`가
+> 모두 포함되는 것이 확인된 가맹점만
+> `SHOP_NICEPAY_VBANK_REQUIRE_LOOKUP_IDENTITY=True`로 설정하세요. strict 모드에서는 네
+> 필드 중 하나라도 없거나 다르면 입금 완료로 바꾸지 않습니다. 기본값은 공식 응답 호환
+> 모드(`False`)입니다.
+>
+> 공유 테스트 MID(`nicepay00m`)는 거래조회 인증 확인용이며, 가상계좌 발급/입금 테스트는
+> NICEPAY 가맹점 전용 테스트 ID가 필요할 수 있습니다.
 
 ### 복구 트리거
 
