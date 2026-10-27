@@ -944,6 +944,7 @@ class ShopPaymentAttempt(models.Model):
     state = models.CharField(max_length=32, choices=STATES, default="prepared", db_index=True)
     provider_data = models.TextField(blank=True, default="")
     last_error = models.TextField(blank=True, default="")
+    recovery_attempts = models.PositiveSmallIntegerField(default=0)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 

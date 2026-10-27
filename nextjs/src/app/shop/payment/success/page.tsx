@@ -81,35 +81,79 @@ function PaymentSuccessContent() {
         const backendMessage = sp.get("message") || "";
         const paidAmount = Number(sp.get("amount") || 0);
         const orderDetailUrl = orderId ? paymentOrderDetailUrl(orderId, uid) : "/shop/cart";
-        if (outcome === "paid") {
+        const showPaid = (message: string, amount = paidAmount) => {
           gaPurchase({
             transaction_id: orderId,
-            value: Number.isFinite(paidAmount) ? paidAmount : 0,
+            value: Number.isFinite(amount) ? amount : 0,
           });
           setStatus("success");
-          setMessage(backendMessage || "결제가 완료되었습니다.");
+          setMessage(message || "결제가 완료되었습니다.");
           notifyHost(paymentSuccessHostPayload(orderId, uid));
           if (isPopup) {
             setTimeout(() => window.close(), 800);
           } else if (!isEmbedded) {
             setTimeout(() => runtimeRouterPush(router, orderDetailUrl), 1500);
           }
-          return;
-        }
-        if (outcome === "pending") {
+        };
+        const showPending = (message: string) => {
           setStatus("pending");
-          setMessage(backendMessage || "가상계좌가 발급되었습니다. 입금 확인을 기다려 주세요.");
+          setMessage(message || "가상계좌가 발급되었습니다. 입금 확인을 기다려 주세요.");
           notifyHost(paymentPendingHostPayload(orderId, uid));
           if (isPopup) {
             setTimeout(() => window.close(), 1800);
           } else if (!isEmbedded && orderId) {
             setTimeout(() => runtimeRouterPush(router, orderDetailUrl), 2500);
           }
+        };
+        if (outcome === "paid") {
+          showPaid(backendMessage);
           return;
         }
+        if (outcome === "pending") {
+          showPending(backendMessage);
+          return;
+        }
+        // A result page reopened after an ambiguous approval can reconcile the old attempt
+        // through the server. This endpoint only calls the transaction lookup; it never asks
+        // NICEPAY to approve a second time.
+        let finalMessage = backendMessage || "NICEPAY 결제 승인에 실패했습니다.";
+        if (orderId) {
+          try {
+            const recovered = await api.post<{
+              order_id: string;
+              uid?: string;
+              status: string;
+              payment_status?: string;
+              amount?: number;
+              vbank?: {
+                bank_code: string;
+                account_number: string;
+                customer_name: string;
+                due_date: string;
+              };
+            }>("/shop/payment/nicepay/recover", { order_id: orderId, uid });
+            if (recovered.data?.payment_status === "DONE") {
+              showPaid(
+                "결제가 완료되었습니다.",
+                Number(recovered.data?.amount ?? paidAmount)
+              );
+              return;
+            }
+            if (recovered.data?.payment_status === "WAITING_FOR_DEPOSIT") {
+              setVirtualAccount(recovered.data.vbank ?? null);
+              setPaymentAmount(paidAmount);
+              showPending("가상계좌가 발급되었습니다. 입금 확인을 기다려 주세요.");
+              return;
+            }
+          } catch (recoveryError: unknown) {
+            if (recoveryError instanceof Error && recoveryError.message) {
+              finalMessage = recoveryError.message;
+            }
+          }
+        }
         setStatus("error");
-        setMessage(backendMessage || "NICEPAY 결제 승인에 실패했습니다.");
-        notifyHost(paymentErrorHostPayload(backendMessage || "NICEPAY 결제 승인에 실패했습니다."));
+        setMessage(finalMessage);
+        notifyHost(paymentErrorHostPayload(finalMessage));
         if (isPopup) setTimeout(() => window.close(), 1800);
         return;
       }

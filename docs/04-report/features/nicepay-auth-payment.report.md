@@ -29,11 +29,16 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
 - `gnu_jango/api/v1_urls.py`
   - `/api/v1/shop/payment/nicepay/return`
   - `/api/v1/shop/payment/nicepay/vbank/notification`
+  - `/api/v1/shop/payment/nicepay/recover` (결과 페이지 재방문 시 거래조회 복구)
 - `gnu_jango/shop/order_flow.py`, `gnu_jango/shop/order_lines.py`
   - 관리자 전체취소와 부분취소에서 NICEPAY API 사용
 - `gnu_jango/shop/admin_pg_settings.py`, `admin_settings.py`, 관리자 템플릿
   - NICEPAY 필드, write-only MerchantKey, 상태·경고·URL 안내
-  - 관리자 `ShopPaymentAttempt` 읽기 전용 목록
+  - 관리자 `ShopPaymentAttempt` 읽기 전용 목록과 **NICEPAY 거래조회로 복구** 액션
+- `gnu_jango/api/v1_shop.py`, `gnu_jango/api/v1_urls.py`
+  - 결과 페이지 재방문 시 사용하는 `/api/v1/shop/payment/nicepay/recover`
+  - 회원 주문은 소유자/스태프, 비회원 주문은 주문 uid로 접근 제한
+  - 거래조회만 수행하고 승인 API는 절대 다시 호출하지 않음
 
 ### 프런트엔드
 
@@ -48,6 +53,8 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
   - NICEPAY 준비 응답 허용
 - `nextjs/src/app/shop/payment/success/page.tsx`
   - 서버 Return URL 결과(`payment_status=paid|pending|error`)를 표시하고 중복 confirm 방지
+  - `nicepay=1` 결과 페이지를 다시 열었을 때 오래된 불명확 거래를 `/recover`로 조회·복구
+  - 복구 실패 시 서버가 준 안내 문구를 그대로 표시
 - `nextjs/tests/payment-nicepay.spec.ts`
   - 최신 모바일 goPay 흐름에 맞춘 테스트
 
@@ -64,15 +71,16 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
 ## 테스트 결과
 
 - `manage.py check`: 통과 (기존 silenced 1개)
-- `gnu_jango.core.test_shop_nicepay`: **44개 통과** (관리자 설정 상속 회귀 포함)
-- `manage.py test` 전체: **2,900개 통과**, 23개 skip
+- `gnu_jango.core.test_shop_nicepay`: **49개 통과** (관리자 설정 상속 회귀 포함)
+- `manage.py test` 전체: **2,905개 통과**, 23개 skip
 - Next.js `npm run typecheck`: 통과
 - Next.js `npm run lint`: 통과
 - `npx playwright test tests/payment-nicepay.spec.ts --workers=1`: **10개 통과**
 - `nextjs_default` 정적 테마 빌드: 통과
 - `handbook` 정적 테마 빌드: 통과
-  - 일회용 DB(`migrate` + `ensure_handbook_samples --stable-dates`)와 빈 공개 URL로 빌드
-  - `check:theme-sync`, `check:theme-sync:handbook`: 통과
+  - 일회용 DB(`migrate` + `ensure_demo_samples --apply` + `ensure_handbook_samples
+    --stable-dates`)와 공개 URL 플레이스홀더로 빌드
+  - `check:theme-sync`, `check:theme-sync:handbook`: 각 테마 빌드 시 통과
   - `git diff origin/main`에서 새 금지 문자열(127.0.0.1, 8000/8081/8090, 로컬 경로,
     로컬 DB 게시판) 없음 확인
 
@@ -82,8 +90,9 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
 ## 마이그레이션
 
 - `gnu_jango/shop/migrations/0036_shoppaymentattempt.py`
-- `ShopPaymentAttempt` 테이블 생성. 운영 DB와 데모/핸드북 Supabase에는 병합 전에 별도
-  적용이 필요합니다. 이번 작업에서는 운영/로컬 DB에 migrate하지 않았습니다.
+- `ShopPaymentAttempt` 테이블 생성(2차 리뷰에서 `recovery_attempts` 필드 추가). 운영 DB와
+  데모/핸드북 Supabase에는 병합 전에 별도 적용이 필요합니다. 이번 작업에서는 운영/로컬 DB에
+  migrate하지 않았습니다.
 
 ## 코드 리뷰 반영 (PR #84)
 
@@ -93,16 +102,26 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
   `superseded`로 남깁니다.
 - **H2 가상계좌 통보**: 운영(`DEBUG=False`)에서 IP 허용 목록이 비면 403; 공식 NICEPAY
   통보 IP(`121.133.126.10`, `121.133.126.11`, `211.33.136.39`)를 문서화했습니다.
-  `ResultCode=4110`/`StateCd=0`/`PayMethod=VBANK`를 확인하고, 거래조회의 TID/MID/주문번호/
-  금액/결제수단(존재하는 경우)을 대조합니다. 동일 TID 재통보는 아무 것도 바꾸지 않습니다.
+  `ResultCode=4110`/`StateCd=0`/`PayMethod=VBANK`를 확인하고, 거래조회의
+  TID/MID/Moid/Amt/PayMethod를 **모두 필수로** 시도·주문과 대조합니다. 하나라도 없거나
+  다르면 fail-closed로 입금 처리하지 않습니다. 금액은 조회 Amt를 권위 값으로 사용하고
+  통보 Amt는 교차 확인만 합니다. 동일 TID 재통보는 아무 것도 바꾸지 않습니다.
+  공식 거래조회 예시에는 MID/Moid/Amt/PayMethod가 없으므로 실제 테스트 MID 응답을 반드시
+  확인해야 하며, 없으면 자동 입금 확정 대신 관리자 확인 대상으로 남깁니다.
 - **M1**: `approved_local_failed`는 다음 복귀/확인에서 `recover_nicepay_attempt`로 로컬
-  반영만 재시도합니다.
-- **M2**: `recover_nicepay_attempts` 관리 명령을 추가하고 `run_scheduled_jobs`의 5분 주기
-  작업에 등록했습니다. 오래된 `approving`/`uncertain`/`approved_local_failed`를 거래조회로
-  정리합니다.
+  반영만 재시도합니다. 일반 `uncertain`/`approving` 복구는 거래조회 `Status=0`만 보고
+  반영하지 않고, TID/MID/Moid/Amt(가상계좌는 PayMethod=VBANK 포함)를 시도·주문과 대조한
+  뒤에만 로컬 결제를 반영합니다. 불일치·누락 시 `uncertain`과 관리자 확인 대상으로 남깁니다.
+- **M2**: `recover_nicepay_attempts` 관리 명령은 기본 `--limit=20`, 40초 시간 예산,
+  시도별 예외 격리, 주문 삭제 시 `failed` 처리, `recovery_attempts` 카운트를 적용합니다.
+  `run_scheduled_jobs`에 등록했으며 Vercel cron은 일 1회임을 문서화했습니다. VPS/Docker는
+  5분 주기 실행을 권장합니다. 같은 주문 재결제 시작과 결과 페이지 재방문 시에도 오래된
+  시도를 거래조회로 복구하며, 실패하면 명확한 안내를 반환합니다. 관리자
+  `ShopPaymentAttempt`에는 변경 권한이 필요한 **거래조회로 복구** 액션을 추가했습니다.
 - **M3**: 취소 한도를 `od_receipt_price - od_refund_price` 잔액으로 제한하고, 취소 응답
   유실 시 거래조회 `Status=1`을 확인한 뒤 전체취소만 already-canceled로 인정합니다.
-  `SHOP_NICEPAY_TAX_FREE_CANCEL_ENABLED` 계약 옵션이 켜진 경우 `TaxFreeAmt`를 보냅니다.
+  `SHOP_NICEPAY_TAX_FREE_CANCEL_ENABLED` 계약 옵션이 켜진 경우 남은 면세 금액
+  (`od_free_mny`) 범위의 `TaxFreeAmt`를 보냅니다.
 - **LOW**: 취소 로그에서 환불 계좌/예금주/SignData를 마스킹하고, 인증 오류 상태 변경을
   row lock 하에서 수행하며, attempt FK를 `SET_NULL`로 바꿔 결제 기록이 주문 삭제와 함께
   사라지지 않게 했습니다.
@@ -117,9 +136,6 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
 - 가상계좌 입금 후 환불은 환불 계좌·은행·예금주 입력 UI와 관리자 승인 절차가 필요합니다.
 - NICEPAY 취소 API에는 idempotency key가 없어, 응답 유실 시 거래조회/상점관리자 확인 전
   자동 재시도하지 않습니다.
-- 관리자 `ShopPaymentAttempt` 화면에서 `approved_local_failed`/`uncertain` 거래의 복구
-  액션(조회 후 로컬 반영)을 별도 버튼으로 노출하는 후속 작업이 필요합니다. 현재는 상태와
-  오류/응답 스냅샷을 확인할 수 있습니다.
 - 실제 Vercel 배포 프로필에서 Redis/Celery가 없는 경우 즉시 승인은 동작하지만, 메일·SMS
   후속 작업은 기존 작업 큐 정책을 따릅니다.
 

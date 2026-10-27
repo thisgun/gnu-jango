@@ -52,6 +52,7 @@ class Migration(migrations.Migration):
                 ),
                 ("provider_data", models.TextField(blank=True, default="")),
                 ("last_error", models.TextField(blank=True, default="")),
+                ("recovery_attempts", models.PositiveSmallIntegerField(default=0)),
                 ("created_at", models.DateTimeField(default=django.utils.timezone.now)),
                 ("updated_at", models.DateTimeField(auto_now=True)),
                 (

@@ -175,6 +175,7 @@ from .shop_nicepay import (
     create_nicepay_attempt,
     nicepay_cancel_payment,
     order_paid_through_nicepay,
+    recover_stale_nicepay_attempts,
 )
 from .shop_payments import (
     cancel_pending_toss_vbank,
@@ -2040,6 +2041,84 @@ def payment_confirm_view(request):
     if error:
         return error
     return api_response(data={"order_id": order.od_id, "uid": order.uid, "status": order.od_status, "payment_status": payment_status})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@authentication_classes([JWTAuthentication, BasicAuthentication])
+def nicepay_recovery_view(request):
+    """On-demand recovery when a customer reopens the NICEPAY result page.
+
+    This only calls the transaction lookup for old approving/uncertain attempts. It never calls
+    the approval API again, so a reopened page cannot create a second charge.
+    """
+    data = request_data(request)
+    order_id = payment_order_id(data)
+    order = ShopOrder.objects.filter(pk=order_id, od_pg="nicepay").first()
+    if not order or not payment_confirm_access_allowed(request, order, data):
+        return api_error("Order not found.", status=drf_status.HTTP_404_NOT_FOUND, code="order_not_found")
+    if str(order.od_status or "") in CANCELLED_STATUSES:
+        return api_error(
+            "취소된 주문은 결제 상태를 복구할 수 없습니다.",
+            status=drf_status.HTTP_409_CONFLICT,
+            code="order_cancelled",
+        )
+    if str(order.od_status or "") in PAID_STATUSES:
+        return api_response(data={
+            "order_id": order.od_id,
+            "uid": order.uid,
+            "status": order.od_status,
+            "payment_status": "DONE",
+            "amount": max(0, int(order.od_receipt_price or 0)),
+        })
+    try:
+        stale = recover_stale_nicepay_attempts(order)
+    except NicepayConfigError as exc:
+        return api_error(
+            str(exc),
+            status=drf_status.HTTP_409_CONFLICT,
+            code="nicepay_recovery_failed",
+        )
+    order.refresh_from_db()
+    if str(order.od_status or "") in CANCELLED_STATUSES:
+        return api_error(
+            "NICEPAY 거래조회 결과 주문이 취소되었습니다.",
+            status=drf_status.HTTP_409_CONFLICT,
+            code="order_cancelled",
+        )
+    if str(order.od_status or "") in PAID_STATUSES:
+        return api_response(data={
+            "order_id": order.od_id,
+            "uid": order.uid,
+            "status": order.od_status,
+            "payment_status": "DONE",
+            "amount": max(0, int(order.od_receipt_price or 0)),
+        })
+    attempt = order.payment_attempts.filter(provider="nicepay").order_by("-pk").first()
+    if attempt is not None and attempt.state == "pending_deposit":
+        return api_response(data={
+            "order_id": order.od_id,
+            "uid": order.uid,
+            "status": order.od_status,
+            "payment_status": "WAITING_FOR_DEPOSIT",
+            "vbank": {
+                "bank_code": order.od_vbank_bank_code,
+                "account_number": order.od_vbank_account,
+                "customer_name": order.od_vbank_customer_name,
+                "due_date": order.od_vbank_due_date,
+            },
+        })
+    if not stale:
+        return api_error(
+            "자동 복구할 오래된 NICEPAY 결제 시도가 없습니다. 잠시 후 주문 상태를 확인하거나 관리자에게 문의하세요.",
+            status=drf_status.HTTP_409_CONFLICT,
+            code="nicepay_recovery_not_due",
+        )
+    return api_error(
+        "NICEPAY 거래조회로 결제 상태를 확인하지 못했습니다. 관리자에게 문의하세요.",
+        status=drf_status.HTTP_409_CONFLICT,
+        code="nicepay_recovery_unresolved",
+    )
 
 
 @api_view(["POST"])

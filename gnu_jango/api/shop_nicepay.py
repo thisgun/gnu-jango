@@ -376,6 +376,17 @@ def _mark_attempt(attempt, state, *, error="", provider_data=None, tid=None, nex
     attempt.save(update_fields=fields)
 
 
+def _note_recovery_failure(attempt):
+    attempt.recovery_attempts = min(65535, int(attempt.recovery_attempts or 0) + 1)
+    attempt.save(update_fields=["recovery_attempts", "updated_at"])
+
+
+def _clear_recovery_failures(attempt):
+    if int(attempt.recovery_attempts or 0):
+        attempt.recovery_attempts = 0
+        attempt.save(update_fields=["recovery_attempts", "updated_at"])
+
+
 def _attempt_token():
     token = secrets.token_urlsafe(NICEPAY_ATTEMPT_TOKEN_RE)
     return token, hashlib.sha256(token.encode("utf-8")).hexdigest()
@@ -465,6 +476,7 @@ def create_nicepay_attempt(order, pay_method, *, request=None):
     keys = effective_nicepay_keys(mode=order_key_mode(order))
     if not keys.enabled:
         raise NicepayConfigError("NICEPAY MID/MerchantKey가 설정되지 않았습니다.")
+    recover_stale_nicepay_attempts(order)
     token, token_hash = _attempt_token()
     with transaction.atomic():
         locked_order = ShopOrder.objects.select_for_update(of=("self",)).get(pk=order.pk)
@@ -518,6 +530,47 @@ def create_nicepay_attempt(order, pay_method, *, request=None):
         # merchants that need another limit can set it in the checkout request after contract review.
         extra["vbank_exp_date"] = (timezone.localdate() + timedelta(days=2)).strftime("%Y%m%d")
     return attempt, extra
+
+
+def _recovery_cutoff():
+    seconds = max(
+        0,
+        min(int(getattr(settings, "SHOP_NICEPAY_RECOVERY_AFTER_SECONDS", 120) or 120), 86400),
+    )
+    return timezone.now() - timedelta(seconds=seconds)
+
+
+def recover_stale_nicepay_attempts(order):
+    """Reconcile old in-flight attempts before a new checkout starts.
+
+    Vercel's daily cron cannot provide a five-minute recovery cadence, so a customer retry is
+    also a recovery trigger. Any failure is surfaced as a configuration/payment error instead
+    of silently allowing another approval for the same order.
+    """
+    cutoff = _recovery_cutoff()
+    stale = list(
+        ShopPaymentAttempt.objects.select_related("order").filter(
+            order=order,
+            provider="nicepay",
+            state__in={"approving", "uncertain", "approved_local_failed"},
+            updated_at__lt=cutoff,
+        ).order_by("updated_at")
+    )
+    for attempt in stale:
+        _, error = recover_nicepay_attempt(attempt)
+        if error is not None:
+            raise NicepayConfigError(
+                "이전 NICEPAY 결제 결과를 자동으로 확인하지 못했습니다. 관리자에게 문의하세요."
+            )
+    return stale
+
+
+def _maybe_recover_stale_attempt(attempt):
+    if attempt.state not in {"approving", "uncertain", "approved_local_failed"}:
+        return None, None
+    if attempt.updated_at and attempt.updated_at >= _recovery_cutoff():
+        return None, None
+    return recover_nicepay_attempt(attempt)
 
 
 def _is_mobile_request(request):
@@ -679,6 +732,12 @@ def _validate_cancel_response(order, response, keys, amount):
 def _save_vbank_authorization(attempt, response):
     """Persist the issued virtual account without marking the order paid."""
     order = attempt.order
+    if order is None:
+        return api_error(
+            "NICEPAY 가상계좌를 연결할 주문이 없습니다.",
+            status=drf_status.HTTP_409_CONFLICT,
+            code="nicepay_order_missing",
+        )
     bank_code = str(response.get("VbankBankCode") or "").strip()[:10]
     account_number = str(response.get("VbankNum") or "").strip()[:20]
     if not bank_code or not account_number:
@@ -746,7 +805,15 @@ def _apply_approved_payment(attempt, response):
             )
     action = ""
     with transaction.atomic():
-        locked_order = ShopOrder.objects.select_for_update(of=("self",)).get(pk=attempt.od_id)
+        locked_order = ShopOrder.objects.select_for_update(of=("self",)).filter(pk=attempt.od_id).first()
+        if locked_order is None:
+            _mark_attempt(attempt, "uncertain", provider_data=response,
+                          error="NICEPAY approval succeeded but the local order no longer exists.")
+            return api_error(
+                "NICEPAY 승인은 완료됐지만 연결된 주문이 없습니다. 관리자에게 문의하세요.",
+                status=drf_status.HTTP_409_CONFLICT,
+                code="nicepay_order_missing",
+            )
         if str(locked_order.od_status or "") in CANCELLED_STATUSES:
             action = "cancelled"
         elif str(locked_order.od_status or "") in PAID_STATUSES:
@@ -827,12 +894,14 @@ def _net_cancel_attempt(attempt, reason="approval result unknown", *, success_st
         keys = _keys_for_attempt(attempt)
         auth_token = _unseal_attempt_token(attempt)
         if not auth_token or not attempt.net_cancel_url:
+            _note_recovery_failure(attempt)
             _mark_attempt(attempt, "uncertain", error="NICEPAY net-cancel data is incomplete.")
             return None, "NICEPAY 망취소에 필요한 인증 정보가 없습니다."
         endpoint = _canonical_endpoint(
             attempt.net_cancel_url, NICEPAY_NET_CANCEL_URLS, NICEPAY_NET_CANCEL_ENDPOINTS
         )
         if not endpoint:
+            _note_recovery_failure(attempt)
             _mark_attempt(attempt, "uncertain", error="NICEPAY net-cancel URL is not allowed.")
             return None, "NICEPAY 망취소 URL이 허용 목록에 없습니다."
         response, status = _nicepay_post(
@@ -841,6 +910,7 @@ def _net_cancel_attempt(attempt, reason="approval result unknown", *, success_st
             allowed_urls=NICEPAY_NET_CANCEL_URLS,
         )
         if str(response.get("ResultCode") or "").strip() != NICEPAY_NET_CANCEL_SUCCESS_CODE:
+            _note_recovery_failure(attempt)
             _mark_attempt(attempt, "uncertain", provider_data=response,
                           error=str(response.get("ResultMsg") or "NICEPAY net-cancel was rejected."))
             _record_attempt_log(attempt, {"nicepay_net_cancel": response}, prefix="nicepay-net-cancel-reject")
@@ -857,14 +927,17 @@ def _net_cancel_attempt(attempt, reason="approval result unknown", *, success_st
             or _amount_int(response.get("CancelAmt")) != attempt.amount
             or not _signature_matches(response.get("Signature"), expected)
         ):
+            _note_recovery_failure(attempt)
             _mark_attempt(attempt, "uncertain", provider_data=response,
                           error="NICEPAY net-cancel response did not match the attempt.")
             _record_attempt_log(attempt, {"nicepay_net_cancel": response}, prefix="nicepay-net-cancel-mismatch")
             return response, "NICEPAY 망취소 응답이 결제 시도와 일치하지 않습니다."
         _mark_attempt(attempt, success_state, provider_data=response)
+        _clear_recovery_failures(attempt)
         _record_attempt_log(attempt, {"nicepay_net_cancel": response, "reason": reason}, prefix="nicepay-net-cancel")
         return response, ""
     except (NicepayTransportError, PaymentCancelError) as exc:
+        _note_recovery_failure(attempt)
         _mark_attempt(attempt, "uncertain", error=str(exc))
         _record_attempt_log(attempt, {"net_cancel_error": str(exc)}, prefix="nicepay-net-cancel-failed")
         return None, str(exc)
@@ -888,6 +961,11 @@ def confirm_nicepay_payment(data):
         # The provider already charged this attempt; a browser retry must only re-apply the
         # stored, verified approval to the local order (not call the approval API again).
         return recover_nicepay_attempt(attempt)
+    recovered_attempt, recovery_error = _maybe_recover_stale_attempt(attempt)
+    if recovery_error is not None:
+        return None, recovery_error
+    if recovered_attempt is not None:
+        attempt = recovered_attempt
     if attempt.state in {"approved", "pending_deposit"}:
         # A replayed confirmation / browser retry: do not call the approval API again.
         order = attempt.order
@@ -1102,6 +1180,8 @@ def nicepay_cancel_payment(
         "EdiType": "JSON",
     }
     if getattr(settings, "SHOP_NICEPAY_TAX_FREE_CANCEL_ENABLED", False) and safe_int(order.od_tax_flag, 0):
+        # od_free_mny is the remaining tax-free amount after earlier partial cancellations.
+        # A full cancellation therefore reports only the tax-free portion that still exists.
         requested_tax_free = max(0, safe_int(order.od_free_mny, 0)) if tax_free_amount is None else max(0, safe_int(tax_free_amount, 0))
         tax_free = min(requested_tax_free, cancel_amount)
         if tax_free:
@@ -1262,15 +1342,37 @@ def recover_nicepay_attempt(attempt):
                                   code="nicepay_lookup_failed")
     status = str(lookup.get("Status") or "").strip()
     if status == "0":
+        if attempt.order is None:
+            _mark_attempt(attempt, "uncertain", provider_data=lookup,
+                          error="NICEPAY lookup succeeded but the order no longer exists.")
+            return attempt, api_error(
+                "NICEPAY 거래조회는 성공했지만 연결된 주문이 없습니다.",
+                status=drf_status.HTTP_409_CONFLICT,
+                code="nicepay_order_missing",
+            )
+        mismatch = _lookup_mismatch(
+            lookup, attempt, attempt.order, require_pay_method=attempt.pay_method == "VBANK"
+        )
+        if mismatch:
+            _mark_attempt(attempt, "uncertain", provider_data=lookup, error=mismatch)
+            _record_attempt_log(attempt, {"nicepay_lookup_mismatch": lookup}, prefix="nicepay-recovery-mismatch")
+            return attempt, api_error(
+                "NICEPAY 거래조회 응답을 시도/주문과 대조하지 못했습니다. 관리자 확인이 필요합니다.",
+                status=drf_status.HTTP_409_CONFLICT,
+                code="nicepay_lookup_mismatch",
+            )
         if attempt.state == "pending_deposit":
             return attempt, None
         # Approved at NICEPAY. Apply the local payment once.
         attempt.provider_data = attempt.provider_data or json.dumps(lookup, ensure_ascii=False)
         error = _apply_approved_payment(attempt, lookup)
         attempt.refresh_from_db()
+        if error is None:
+            _clear_recovery_failures(attempt)
         return attempt, error
     if status == "1":
         _mark_attempt(attempt, "canceled", provider_data=lookup)
+        _clear_recovery_failures(attempt)
         return attempt, None
     if status == "9":
         _mark_attempt(attempt, "failed", provider_data=lookup, error="NICEPAY transaction not found.")
@@ -1291,22 +1393,46 @@ def _lookup_field(lookup, *names):
     return ""
 
 
-def _vbank_lookup_mismatch(lookup, attempt, order):
-    """Validate the optional richer fields some NICEPAY lookup responses include."""
+def _lookup_mismatch(lookup, attempt, order, *, require_pay_method=False):
+    """Fail-closed identity check for a transaction-lookup response.
+
+    NICEPAY's published trans-inquiry response lists TID/Status/AuthCode/AuthDate and allows
+    undocumented extra fields. This integration treats the lookup as unusable unless it also
+    returns the identity fields needed to bind it to the attempt: TID, MID, Moid and Amt; for
+    virtual accounts it must also return PayMethod=VBANK. A missing field is a mismatch, never a
+    wildcard. The real test MID response must be checked before enabling live virtual-account
+    payments; if NICEPAY omits them, the deposit stays unconfirmed and needs manual handling.
+    """
+    if not attempt:
+        return "NICEPAY lookup has no local attempt."
     if str(lookup.get("TID") or "").strip() != str(attempt.tid):
         return "NICEPAY lookup TID does not match the attempt."
     lookup_mid = _lookup_field(lookup, "MID", "mid")
-    if lookup_mid and lookup_mid != attempt.mid:
+    if not lookup_mid:
+        return "NICEPAY lookup MID is missing."
+    if lookup_mid != attempt.mid:
         return "NICEPAY lookup MID does not match the attempt."
     lookup_moid = _lookup_field(lookup, "Moid", "MOID", "moid")
-    if lookup_moid and lookup_moid != str(order.od_id):
+    if not lookup_moid:
+        return "NICEPAY lookup order id is missing."
+    if lookup_moid != str(order.od_id):
         return "NICEPAY lookup order id does not match the order."
     lookup_amount = _lookup_field(lookup, "Amt", "amt")
-    if lookup_amount and _amount_int(lookup_amount) != attempt.amount:
+    if not lookup_amount:
+        return "NICEPAY lookup amount is missing."
+    if _amount_int(lookup_amount) != attempt.amount:
         return "NICEPAY lookup amount does not match the attempt."
     lookup_method = _lookup_field(lookup, "PayMethod", "payMethod", "pay_method").upper()
-    if lookup_method and lookup_method != "VBANK":
+    if require_pay_method and lookup_method != "VBANK":
         return "NICEPAY lookup payment method is not a virtual account."
+    if lookup_method and lookup_method != str(attempt.pay_method or "").upper():
+        return "NICEPAY lookup payment method does not match the attempt."
+    lookup_state = _lookup_field(lookup, "StateCd", "StateCD", "stateCd")
+    if lookup_state and lookup_state != "0":
+        return "NICEPAY lookup state is not an approved deposit."
+    deposit_state = _lookup_field(lookup, "VbankStatus", "DepositStatus", "vbankStatus")
+    if deposit_state and deposit_state.upper() not in {"0", "DONE", "COMPLETED", "입금완료"}:
+        return "NICEPAY lookup virtual account is not deposited."
     return ""
 
 
@@ -1331,7 +1457,7 @@ def process_nicepay_vbank_notification(data):
     if attempt is None:
         return api_error("NICEPAY payment attempt not found.", status=drf_status.HTTP_404_NOT_FOUND,
                          code="nicepay_attempt_not_found")
-    if mid != attempt.mid or amount != attempt.amount or (pay_method and pay_method != "VBANK"):
+    if mid != attempt.mid or pay_method != "VBANK":
         record_payment_raw_log(order, order_id, "nicepay-vbank", tid, data, prefix="nicepay-vbank-mismatch")
         return api_error("NICEPAY notification does not match the order.", status=drf_status.HTTP_409_CONFLICT,
                          code="nicepay_vbank_notification_mismatch")
@@ -1340,6 +1466,13 @@ def process_nicepay_vbank_notification(data):
         return api_error("NICEPAY notification has an invalid result code.",
                          status=drf_status.HTTP_400_BAD_REQUEST,
                          code="nicepay_vbank_notification_result_invalid")
+    # StateCd is a completion signal. An empty value is never a completed deposit, even when the
+    # lookup is temporarily unavailable or returns "not found".
+    if result_code == NICEPAY_VBANK_DEPOSIT_CODE and state_cd != "0":
+        record_payment_raw_log(order, order_id, "nicepay-vbank", tid, data, prefix="nicepay-vbank-state-reject")
+        return api_error("NICEPAY notification is not a completed virtual account deposit.",
+                         status=drf_status.HTTP_409_CONFLICT,
+                         code="nicepay_vbank_not_deposited")
     # A duplicate deposit callback must be a no-op (not a second order notification/mail/log).
     if str(order.od_status or "") in PAID_STATUSES and str(order.od_tno or "") == tid:
         return None
@@ -1351,13 +1484,12 @@ def process_nicepay_vbank_notification(data):
         record_payment_raw_log(order, order_id, "nicepay-vbank", tid, data, prefix="nicepay-vbank-retry")
         return api_error(str(exc), status=drf_status.HTTP_503_SERVICE_UNAVAILABLE,
                          code="nicepay_vbank_lookup_unavailable")
+    # Official 거래조회 (developers.nicepay.co.kr/docs/pg/inquiry/trans-inquiry): Status
+    # 0 = 승인, 1 = 취소, 9 = 거래 없음. The virtual-account guide says a TID is classified as
+    # approved only after the deposit; before deposit the lookup returns 승인거래 없음 (9),
+    # after deposit it returns 0.
     status = str(lookup.get("Status") or "").strip()
     raw = {"notification": data, "lookup": lookup}
-    lookup_mismatch = _vbank_lookup_mismatch(lookup, attempt, order)
-    if lookup_mismatch:
-        record_payment_raw_log(order, order_id, "nicepay-vbank", tid, raw, prefix="nicepay-vbank-mismatch")
-        return api_error(lookup_mismatch, status=drf_status.HTTP_409_CONFLICT,
-                         code="nicepay_vbank_lookup_mismatch")
     if status == "1":
         _mark_attempt(attempt, "canceled", provider_data=lookup)
         if str(order.od_status or "") not in CANCELLED_STATUSES and str(order.od_status or "") not in PAID_STATUSES:
@@ -1374,8 +1506,18 @@ def process_nicepay_vbank_notification(data):
     if status != "0":
         record_payment_raw_log(order, order_id, "nicepay-vbank", tid, raw, prefix="nicepay-vbank-not-found")
         return None
-    # A 4110/StateCd=0 callback is the only deposit-completion notification we accept.
-    if result_code != NICEPAY_VBANK_DEPOSIT_CODE or state_cd not in {"", "0"}:
+    # A 4110/StateCd=0 callback is the only deposit-completion notification we accept. The
+    # lookup Amt is authoritative; the notification Amt is only a cross-check.
+    lookup_amount = _lookup_field(lookup, "Amt", "amt")
+    lookup_amount_int = _amount_int(lookup_amount)
+    lookup_mismatch = _lookup_mismatch(lookup, attempt, order, require_pay_method=True)
+    if not lookup_amount or amount != lookup_amount_int:
+        lookup_mismatch = lookup_mismatch or "NICEPAY lookup amount does not match the notification."
+    if lookup_mismatch:
+        record_payment_raw_log(order, order_id, "nicepay-vbank", tid, raw, prefix="nicepay-vbank-mismatch")
+        return api_error(lookup_mismatch, status=drf_status.HTTP_409_CONFLICT,
+                         code="nicepay_vbank_lookup_mismatch")
+    if result_code != NICEPAY_VBANK_DEPOSIT_CODE or state_cd != "0":
         record_payment_raw_log(order, order_id, "nicepay-vbank", tid, raw, prefix="nicepay-vbank-not-deposit")
         return api_error("NICEPAY notification is not a completed virtual account deposit.",
                          status=drf_status.HTTP_409_CONFLICT,
@@ -1387,7 +1529,7 @@ def process_nicepay_vbank_notification(data):
         return None
     paid_order, error = confirm_order_payment(
         order.pk,
-        attempt.amount,
+        lookup_amount_int,
         "nicepay",
         tid,
         {"nicepay_vbank_notification": data, "nicepay_lookup": lookup},

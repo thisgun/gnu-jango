@@ -2341,20 +2341,69 @@ class ShopPersonalPayAdmin(ModelAdmin):
 
 @admin.register(ShopPaymentAttempt)
 class ShopPaymentAttemptAdmin(ModelAdmin):
-    list_display = ("od_id", "provider", "mode", "state", "amount", "tid", "created_at", "updated_at")
+    list_display = (
+        "od_id", "provider", "mode", "state", "amount", "tid",
+        "recovery_signal", "created_at", "updated_at",
+    )
     search_fields = ("od_id", "tid", "mid", "attempt_token_hash")
     list_filter = ("provider", "mode", "state")
     readonly_fields = (
         "order", "od_id", "provider", "mode", "mid", "key_fingerprint", "amount",
-        "pay_method", "tid", "state", "provider_data", "last_error", "created_at", "updated_at",
+        "pay_method", "tid", "state", "provider_data", "last_error",
+        "recovery_attempts", "created_at", "updated_at",
     )
     ordering = ("-created_at",)
+    actions = ("recover_selected_attempts",)
+
+    @admin.display(description=_("Recovery"))
+    def recovery_signal(self, obj):
+        count = int(obj.recovery_attempts or 0)
+        if count >= 3:
+            return badge(_("확인 필요 %(count)s회") % {"count": count}, "danger")
+        return str(count)
+
+    @admin.action(description=_("NICEPAY 거래조회로 복구"))
+    def recover_selected_attempts(self, request, queryset):
+        from gnu_jango.api.shop_nicepay import recover_nicepay_attempt
+
+        recovered = failed = skipped = 0
+        for attempt in queryset:
+            if attempt.order_id is None:
+                ShopPaymentAttempt.objects.filter(pk=attempt.pk).update(
+                    state="failed",
+                    last_error="NICEPAY recovery skipped because the order was deleted.",
+                    recovery_attempts=attempt.recovery_attempts + 1,
+                )
+                failed += 1
+                continue
+            if attempt.state not in {"approving", "uncertain", "approved_local_failed"}:
+                skipped += 1
+                continue
+            try:
+                _, error = recover_nicepay_attempt(attempt)
+            except Exception as exc:  # noqa: BLE001 - one row must not stop the admin action
+                ShopPaymentAttempt.objects.filter(pk=attempt.pk).update(
+                    last_error=str(exc)[:4000],
+                    recovery_attempts=attempt.recovery_attempts + 1,
+                )
+                failed += 1
+                continue
+            if error is None:
+                recovered += 1
+            else:
+                failed += 1
+        self.message_user(
+            request,
+            f"NICEPAY 거래조회 복구: 복구 {recovered}건, 실패 {failed}건, 건너뜀 {skipped}건",
+            messages.SUCCESS if failed == 0 else messages.WARNING,
+        )
 
     def has_add_permission(self, request):
         return False
 
     def has_change_permission(self, request, obj=None):
-        return False
+        # Read-only fields; change permission is required to expose the recovery action.
+        return super().has_change_permission(request, obj)
 
     def has_delete_permission(self, request, obj=None):
         return False

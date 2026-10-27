@@ -311,7 +311,7 @@ class NicepayPaymentTests(PaymentTestBase):
             "PayMethod": "VBANK",
         }
         with patch("gnu_jango.api.shop_nicepay._lookup_transaction") as lookup:
-            lookup.return_value = {"ResultCode": "0000", "Status": "0", "TID": order.od_tno}
+            lookup.return_value = {"ResultCode": "0000", "Status": "0", "TID": order.od_tno, "MID": MID, "Moid": order.od_id, "Amt": "000000005000", "PayMethod": "VBANK"}
             error = shop_nicepay.process_nicepay_vbank_notification(payload)
         self.assertIsNone(error)
         order.refresh_from_db()
@@ -503,7 +503,7 @@ class NicepayPaymentTests(PaymentTestBase):
             "PayMethod": "VBANK",
         }
         with patch("gnu_jango.api.shop_nicepay._lookup_transaction") as lookup:
-            lookup.return_value = {"ResultCode": "0000", "Status": "0", "TID": order.od_tno}
+            lookup.return_value = {"ResultCode": "0000", "Status": "0", "TID": order.od_tno, "MID": MID, "Moid": order.od_id, "Amt": "000000005000", "PayMethod": "VBANK"}
             self.assertIsNone(shop_nicepay.process_nicepay_vbank_notification(payload))
             self.assertIsNone(shop_nicepay.process_nicepay_vbank_notification(payload))
         self.assertEqual(lookup.call_count, 1)
@@ -511,6 +511,64 @@ class NicepayPaymentTests(PaymentTestBase):
         attempt.refresh_from_db()
         self.assertEqual(order.od_status, PAID)
         self.assertEqual(attempt.state, "approved")
+
+    def test_vbank_notification_fails_closed_on_missing_lookup_identity_or_state(self):
+        order = ShopOrder.objects.create(
+            od_id="ODNICEVBANK6",
+            user=self.member,
+            od_name="VBANK buyer 6",
+            od_receipt_price=5000,
+            od_status=ORDERED,
+            od_settle_case="가상계좌",
+            od_pg="nicepay",
+            od_tno="NICTESTTID0000000000000011",
+        )
+        ShopPaymentAttempt.objects.create(
+            order=order,
+            od_id=order.od_id,
+            provider="nicepay",
+            mode="test",
+            mid=MID,
+            amount=5000,
+            pay_method="VBANK",
+            tid=order.od_tno,
+            state="pending_deposit",
+        )
+        payload = {
+            "MOID": order.od_id,
+            "TID": order.od_tno,
+            "MID": MID,
+            "Amt": "000000005000",
+            "ResultCode": "4110",
+            "StateCd": "0",
+            "PayMethod": "VBANK",
+        }
+        full_lookup = {
+            "ResultCode": "0000",
+            "Status": "0",
+            "TID": order.od_tno,
+            "MID": MID,
+            "Moid": order.od_id,
+            "Amt": "000000005000",
+            "PayMethod": "VBANK",
+        }
+        for missing in ("MID", "Moid", "Amt", "PayMethod"):
+            lookup = dict(full_lookup)
+            lookup.pop(missing)
+            with self.subTest(missing=missing), patch(
+                "gnu_jango.api.shop_nicepay._lookup_transaction", return_value=lookup
+            ):
+                error = shop_nicepay.process_nicepay_vbank_notification(payload)
+            self.assertIsNotNone(error)
+            order.refresh_from_db()
+            self.assertEqual(order.od_status, ORDERED)
+        with patch(
+            "gnu_jango.api.shop_nicepay._lookup_transaction", return_value=full_lookup
+        ):
+            error = shop_nicepay.process_nicepay_vbank_notification({**payload, "StateCd": ""})
+        self.assertIsNotNone(error)
+        order.refresh_from_db()
+        self.assertEqual(order.od_status, ORDERED)
 
     def test_vbank_notification_rejects_a_lookup_mismatch(self):
         order = ShopOrder.objects.create(
@@ -558,6 +616,37 @@ class NicepayPaymentTests(PaymentTestBase):
         order.refresh_from_db()
         self.assertEqual(order.od_status, ORDERED)
 
+    def test_recovery_requires_full_lookup_identity_before_marking_paid(self):
+        order = ShopOrder.objects.create(
+            od_id="ODNICERECOVERYMISMATCH",
+            user=self.member,
+            od_name="Recovery mismatch buyer",
+            od_receipt_price=5000,
+            od_status=ORDERED,
+            od_settle_case="신용카드",
+            od_pg="nicepay",
+            od_tno="NICTESTTID0000000000000012",
+        )
+        attempt = ShopPaymentAttempt.objects.create(
+            order=order,
+            od_id=order.od_id,
+            provider="nicepay",
+            mode="test",
+            mid=MID,
+            amount=5000,
+            pay_method="CARD",
+            tid=order.od_tno,
+            state="uncertain",
+        )
+        with patch("gnu_jango.api.shop_nicepay._lookup_transaction") as lookup:
+            lookup.return_value = {"ResultCode": "0000", "Status": "0", "TID": order.od_tno}
+            recovered, error = shop_nicepay.recover_nicepay_attempt(attempt)
+        self.assertIsNotNone(error)
+        recovered.refresh_from_db()
+        order.refresh_from_db()
+        self.assertEqual(recovered.state, "uncertain")
+        self.assertEqual(order.od_status, ORDERED)
+
     def test_recovery_command_only_processes_old_attempts(self):
         order = ShopOrder.objects.create(
             od_id="ODNICERECOVER",
@@ -586,6 +675,154 @@ class NicepayPaymentTests(PaymentTestBase):
             call_command("recover_nicepay_attempts", "--apply", "--json", stdout=out)
         recover.assert_called_once()
         self.assertIn("recovered", out.getvalue())
+
+    def test_result_page_recovery_uses_lookup_without_reapproving(self):
+        order = ShopOrder.objects.create(
+            od_id="ODNICERESULTPAGE",
+            user=self.member,
+            od_name="Result page buyer",
+            od_receipt_price=5000,
+            od_status=ORDERED,
+            od_settle_case="신용카드",
+            od_pg="nicepay",
+            od_tno="NICTESTTID0000000000000013",
+        )
+        attempt = ShopPaymentAttempt.objects.create(
+            order=order,
+            od_id=order.od_id,
+            provider="nicepay",
+            mode="test",
+            mid=MID,
+            amount=5000,
+            pay_method="CARD",
+            tid=order.od_tno,
+            state="uncertain",
+        )
+        ShopPaymentAttempt.objects.filter(pk=attempt.pk).update(
+            updated_at=timezone.now() - timedelta(minutes=30)
+        )
+        with patch("gnu_jango.api.shop_nicepay._lookup_transaction") as lookup, patch(
+            "gnu_jango.api.shop_nicepay._nicepay_post"
+        ) as approval:
+            lookup.return_value = {
+                "ResultCode": "0000",
+                "Status": "0",
+                "TID": order.od_tno,
+                "MID": MID,
+                "Moid": order.od_id,
+                "Amt": "000000005000",
+                "PayMethod": "CARD",
+            }
+            response = self.client.post(
+                "/api/v1/shop/payment/nicepay/recover",
+                {"order_id": order.od_id, "uid": order.uid},
+                format="json",
+            )
+        self.assertEqual(response.status_code, 200, response.content[:400])
+        order.refresh_from_db()
+        self.assertEqual(order.od_status, PAID)
+        approval.assert_not_called()
+
+    def test_recovery_command_isolates_failures_and_deleted_orders(self):
+        deleted = ShopPaymentAttempt.objects.create(
+            order=None,
+            od_id="ODNICEDELETED",
+            provider="nicepay",
+            mode="test",
+            mid=MID,
+            amount=5000,
+            state="uncertain",
+        )
+        first_order = ShopOrder.objects.create(
+            od_id="ODNICEBATCH1",
+            user=self.member,
+            od_name="Batch buyer 1",
+            od_receipt_price=5000,
+            od_status=ORDERED,
+            od_settle_case="신용카드",
+            od_pg="nicepay",
+        )
+        second_order = ShopOrder.objects.create(
+            od_id="ODNICEBATCH2",
+            user=self.member,
+            od_name="Batch buyer 2",
+            od_receipt_price=5000,
+            od_status=ORDERED,
+            od_settle_case="신용카드",
+            od_pg="nicepay",
+        )
+        first = ShopPaymentAttempt.objects.create(
+            order=first_order,
+            od_id=first_order.od_id,
+            provider="nicepay",
+            mode="test",
+            mid=MID,
+            amount=5000,
+            state="uncertain",
+        )
+        second = ShopPaymentAttempt.objects.create(
+            order=second_order,
+            od_id=second_order.od_id,
+            provider="nicepay",
+            mode="test",
+            mid=MID,
+            amount=5000,
+            state="uncertain",
+        )
+        old = timezone.now() - timedelta(minutes=30)
+        ShopPaymentAttempt.objects.filter(pk__in=[deleted.pk, first.pk, second.pk]).update(updated_at=old)
+        out = io.StringIO()
+        with patch(
+            "gnu_jango.core.management.commands.recover_nicepay_attempts.recover_nicepay_attempt",
+            side_effect=[RuntimeError("one bad row"), (second, None)],
+        ) as recover:
+            call_command("recover_nicepay_attempts", "--apply", "--json", stdout=out)
+        summary = json.loads(out.getvalue())
+        self.assertEqual(recover.call_count, 2)
+        self.assertEqual(summary["failed"], 2)
+        self.assertEqual(summary["recovered"], 1)
+        deleted.refresh_from_db()
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(deleted.state, "failed")
+        self.assertEqual(deleted.recovery_attempts, 1)
+        self.assertIn("one bad row", first.last_error)
+        self.assertEqual(first.recovery_attempts, 1)
+
+    def test_recovery_command_stops_at_the_time_budget(self):
+        order = ShopOrder.objects.create(
+            od_id="ODNICEBUDGET",
+            user=self.member,
+            od_name="Budget buyer",
+            od_receipt_price=5000,
+            od_status=ORDERED,
+            od_settle_case="신용카드",
+            od_pg="nicepay",
+        )
+        attempt = ShopPaymentAttempt.objects.create(
+            order=order,
+            od_id=order.od_id,
+            provider="nicepay",
+            mode="test",
+            mid=MID,
+            amount=5000,
+            state="uncertain",
+        )
+        ShopPaymentAttempt.objects.filter(pk=attempt.pk).update(
+            updated_at=timezone.now() - timedelta(minutes=30)
+        )
+        out = io.StringIO()
+        with patch(
+            "gnu_jango.core.management.commands.recover_nicepay_attempts.time.monotonic",
+            side_effect=[0.0, 999.0],
+        ), patch(
+            "gnu_jango.core.management.commands.recover_nicepay_attempts.recover_nicepay_attempt"
+        ) as recover:
+            call_command("recover_nicepay_attempts", "--apply", "--json", stdout=out)
+        summary = json.loads(out.getvalue())
+        self.assertTrue(summary["timed_out"])
+        self.assertEqual(summary["recovered"], 0)
+        recover.assert_not_called()
 
     @override_settings(SHOP_NICEPAY_TAX_FREE_CANCEL_ENABLED=True)
     def test_cancel_sends_tax_free_amount_when_the_contract_option_is_enabled(self):

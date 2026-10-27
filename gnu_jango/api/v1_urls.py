@@ -127,6 +127,7 @@ urlpatterns = [
     path("shop/payment/cancel", v1_shop.payment_cancel_view, name="shop-payment-cancel"),
     path("shop/payment/confirm", v1_shop.payment_confirm_view, name="shop-payment-confirm"),
     path("shop/payment/nicepay/return", shop_nicepay.nicepay_return_view, name="shop-payment-nicepay-return"),
+    path("shop/payment/nicepay/recover", v1_shop.nicepay_recovery_view, name="shop-payment-nicepay-recover"),
     path(
         "shop/payment/nicepay/vbank/notification",
         shop_nicepay.nicepay_vbank_notification_view,

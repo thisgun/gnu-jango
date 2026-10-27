@@ -816,6 +816,10 @@ SHOP_NICEPAY_SUCCESS_URL = de_config("SHOP_NICEPAY_SUCCESS_URL", default="")
 SHOP_NICEPAY_FRONTEND_URL = de_config("SHOP_NICEPAY_FRONTEND_URL", default="")
 SHOP_NICEPAY_CONNECT_TIMEOUT = de_config("SHOP_NICEPAY_CONNECT_TIMEOUT", default=10, cast=int)
 SHOP_NICEPAY_READ_TIMEOUT = de_config("SHOP_NICEPAY_READ_TIMEOUT", default=20, cast=int)
+# An approving/uncertain attempt older than this can be reconciled from a customer return or a
+# new checkout start. The scheduled command uses its own time budget (see below).
+SHOP_NICEPAY_RECOVERY_AFTER_SECONDS = de_config("SHOP_NICEPAY_RECOVERY_AFTER_SECONDS", default=120, cast=int)
+SHOP_NICEPAY_RECOVERY_TIME_BUDGET = de_config("SHOP_NICEPAY_RECOVERY_TIME_BUDGET", default=40, cast=int)
 SHOP_NICEPAY_VBANK_NOTIFY_ALLOWED_IPS = de_config("SHOP_NICEPAY_VBANK_NOTIFY_ALLOWED_IPS", default="")
 SHOP_PAYMENT_PROVIDER = de_config("SHOP_PAYMENT_PROVIDER", default="")
 SHOP_PAYMENT_ADAPTER_BASE_URL = de_config("SHOP_PAYMENT_ADAPTER_BASE_URL", default="")

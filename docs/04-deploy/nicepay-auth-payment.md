@@ -91,6 +91,7 @@ Django + Next.js 쇼핑몰에 연결한 구현의 운영·전환 안내입니다
 | 결과 페이지 | `SHOP_NICEPAY_SUCCESS_URL` 또는 `SHOP_NICEPAY_FRONTEND_URL` |
 | 입금통보 IP 제한 | `SHOP_NICEPAY_VBANK_NOTIFY_ALLOWED_IPS` (쉼표 구분, 선택) |
 | 타임아웃 | `SHOP_NICEPAY_CONNECT_TIMEOUT`, `SHOP_NICEPAY_READ_TIMEOUT` |
+| 복구 기준/예산 | `SHOP_NICEPAY_RECOVERY_AFTER_SECONDS`, `SHOP_NICEPAY_RECOVERY_TIME_BUDGET` |
 
 환경 변수는 해당 모드의 관리자 키보다 우선합니다. 한 모드의 값만 설정하고 다른 모드로
 결제하지 않도록 주의하세요.
@@ -150,6 +151,51 @@ NICEPAY 상점관리자에 아래 공개 HTTPS URL을 등록합니다.
   반영합니다.
 
 ## 6. 장애 복구
+
+### 거래조회 상태의 의미
+
+NICEPAY 거래조회 문서의 `Status`는 `0=승인`, `1=취소`, `9=거래 없음`입니다. 가상계좌
+문서는 발급 후 입금 전에는 승인거래로 조회되지 않고(`9`), 입금이 완료된 뒤에만 `0`으로
+조회된다고 설명합니다. 따라서 가상계좌 입금통보 처리에서는 `Status=0`과 함께 통보의
+`ResultCode=4110`/`StateCd=0`/`PayMethod=VBANK`를 확인하고, 조회 응답의
+`MID`/`Moid`/`Amt`/`TID`/`PayMethod`를 모두 시도·주문과 대조합니다. 하나라도 없거나 다르면
+입금 완료로 바꾸지 않습니다.
+
+> **실연동 전 확인 필요:** NICEPAY 거래조회 공개 규격의 응답 예시에는 `TID`, `Status`,
+> `AuthCode`, `AuthDate`만 있고 `MID`/`Moid`/`Amt`/`PayMethod`는 표시되어 있지 않습니다.
+> 이 구현은 위 필드를 필수로 요구하는 fail-closed 정책이므로, 실제 테스트 MID의 거래조회
+> 응답에 네 필드가 포함되는지 먼저 확인해야 합니다. 포함되지 않으면 가상계좌 자동 입금
+> 확정은 동작하지 않으며, NICEPAY 계약/규격 확인 또는 관리자 수동 확인 절차가 필요합니다.
+> 이 확인 전에는 실결제 가상계좌를 활성화하지 마세요.
+
+### 복구 트리거
+
+- Vercel의 `vercel.json` cron은 하루 1회(`0 18 * * *`)이므로 5분 복구 주기를 보장하지
+  않습니다. Vercel에서는 결제자가 같은 주문으로 다시 결제를 시작할 때(서버의 새 attempt
+  생성 경로), 또는 결과 페이지를 다시 열 때 오래된 `approving`/`uncertain` 시도를
+  거래조회로 복구합니다. 결과 페이지의 `nicepay=1` 오류 상태는
+  `/api/v1/shop/payment/nicepay/recover`를 호출하며, 이 endpoint는 회원 주문 소유자/스태프
+  또는 비회원 주문 `uid`만 허용하고 **승인 API를 다시 호출하지 않습니다.**
+- `SHOP_NICEPAY_RECOVERY_AFTER_SECONDS`(기본 120초)보다 오래된 시도만 자동 복구합니다.
+  너무 이른 재시도는 "자동 복구할 오래된 시도가 없습니다"라는 안내로 끝납니다.
+- VPS/Docker에서는 cron 또는 systemd timer로 아래 명령을 **5분마다** 실행하세요.
+  ```bash
+  python manage.py recover_nicepay_attempts --apply
+  ```
+  기본 `--limit`은 20이고, `SHOP_NICEPAY_RECOVERY_TIME_BUDGET`(기본 40초)을 넘으면 다음
+  실행으로 넘깁니다. Vercel 함수 제한(60초) 안에서 동작하도록 55초를 넘기지 않습니다.
+  명령은 시도 하나의 예외가 다음 시도를 막지 않게 격리하고, 주문이 삭제된 시도는 `failed`로
+  기록합니다.
+- 관리자 `ShopPaymentAttempt` 목록에서 **NICEPAY 거래조회로 복구** 액션을 선택하면 변경
+  권한이 있는 관리자가 조회만으로 복구할 수 있습니다. 이 액션은 재승인을 호출하지 않습니다.
+- 같은 망취소/조회 실패가 반복되면 시도의 `recovery_attempts`가 증가하고 목록의
+  `recovery_signal`이 3회 이상을 빨간색 **확인 필요**로 표시합니다.
+
+### 프록시 IP 주의
+
+`TRUSTED_PROXY_COUNT`가 실제 신뢰 프록시 홉 수와 다르면 입금통보 IP 허용 목록 검사가
+우회되거나 잘못 거절될 수 있습니다. Vercel/Cloudflare/Nginx 앞단의 실제 프록시 구성을
+확인하고, 직접 연결되는 서버에서는 `TRUSTED_PROXY_COUNT`를 함부로 늘리지 마세요.
 
 - 승인 결과 불명확: `ShopPaymentAttempt.state=uncertain`, `last_error`, 원본 응답 로그를
   확인합니다. 망취소가 성공했으면 `net_canceled`입니다. 실패했으면 NICEPAY 상점관리자에서
