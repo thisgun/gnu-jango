@@ -30,6 +30,7 @@ from gnu_jango.shop.order_points import save_order_item_status, take_back_order_
 from gnu_jango.shop.payment_options import online_payment_preferences
 from gnu_jango.shop.pg_settings import (
     MODE_LABELS,
+    PG_SERVICE_NICEPAY,
     PG_SERVICE_NONE,
     admin_pg_service,
     current_mode,
@@ -37,6 +38,7 @@ from gnu_jango.shop.pg_settings import (
     env_payment_provider,
     escrow_enabled,
     mode_flag,
+    nicepay_payment_config,
     order_key_mode,
     stored_rows as pg_stored_rows,
 )
@@ -73,19 +75,30 @@ def payment_key(data):
     return str(first_value(data, "paymentKey", "payment_key", "payment_key_id") or "").strip()
 
 
-def configured_payment_provider(*, rows=None, toss_config=None):
+def configured_payment_provider(*, rows=None, toss_config=None, nicepay_config=None):
     """The PG the checkout starts payments with: SHOP_PAYMENT_PROVIDER when the server sets it
-    (an external adapter, or Toss), otherwise the admin 결제대행사 (de_pg_service). "bank" means
-    no online PG (무통장입금 only). ``rows`` / ``toss_config`` reuse what the caller loaded."""
+    (an external adapter, Toss or NICEPAY), otherwise the admin 결제대행사 (de_pg_service). "bank"
+    means no online PG (무통장입금 only). ``rows`` / ``toss_config`` / ``nicepay_config`` reuse
+    what the caller loaded."""
     configured_provider = env_payment_provider()
     if configured_provider in PAYMENT_ADAPTER_PROVIDERS and payment_adapter_enabled(configured_provider):
         return configured_provider
     rows = pg_stored_rows() if rows is None else rows
-    if not configured_provider and admin_pg_service(rows) == PG_SERVICE_NONE:
-        return "bank"
     toss_config = toss_payment_config(rows=rows) if toss_config is None else toss_config
-    if toss_config["enabled"]:
-        return "toss"
+    nicepay_config = nicepay_payment_config(rows) if nicepay_config is None else nicepay_config
+    if configured_provider == "toss":
+        return "toss" if toss_config["enabled"] else "bank"
+    if configured_provider == PG_SERVICE_NICEPAY:
+        return "nicepay" if nicepay_config["enabled"] else "bank"
+    if configured_provider:
+        return "bank"
+    service = admin_pg_service(rows)
+    if service == PG_SERVICE_NONE:
+        return "bank"
+    if service == PG_SERVICE_NICEPAY:
+        return "nicepay" if nicepay_config["enabled"] else "bank"
+    if service == "toss":
+        return "toss" if toss_config["enabled"] else "bank"
     return "bank"
 
 
@@ -205,14 +218,26 @@ def check_toss_connection():
         return {"status": "invalid_response", "connected": False}
 
 
-def checkout_payment_methods(*, toss_config=None, pg_service=None, bank_accounts=None):
+def checkout_payment_methods(*, toss_config=None, nicepay_config=None, pg_service=None, bank_accounts=None):
     toss_config = toss_config if toss_config is not None else toss_payment_config()
-    pg_service = pg_service if pg_service is not None else configured_payment_provider()
+    nicepay_config = nicepay_config if nicepay_config is not None else nicepay_payment_config()
+    pg_service = pg_service if pg_service is not None else configured_payment_provider(
+        toss_config=toss_config, nicepay_config=nicepay_config
+    )
     bank_accounts = bank_accounts if bank_accounts is not None else configured_bank_accounts()
     preferences = online_payment_preferences()
-    pg_enabled = pg_service == "toss" and toss_config["enabled"]
+    pg_enabled = bool(
+        (pg_service == "toss" and toss_config["enabled"])
+        or (pg_service == "nicepay" and nicepay_config["enabled"])
+    )
     methods = {name: pg_enabled and allowed for name, allowed in preferences.items()}
-    methods["vbank"] = methods["vbank"] and toss_config["vbank_enabled"]
+    # NICEPAY authentication supports card/transfer/virtual account/cellphone. The current
+    # product does not advertise a separate easy-pay button; easy-pay contract options are card
+    # payment options and are not exposed as an independent method here.
+    methods["easy_pay"] = False if pg_service == "nicepay" else methods["easy_pay"]
+    methods["vbank"] = methods["vbank"] and (
+        toss_config["vbank_enabled"] if pg_service == "toss" else nicepay_config["vbank_enabled"]
+    )
     return {"bank": bool(bank_accounts), **methods, "kakaopay": False}
 
 
@@ -600,6 +625,17 @@ def redact_payment_data(data):
                 "secret",
                 "signature",
                 "authorization",
+                "auth_token",
+                "attempt_token",
+                "req_reserved",
+                "sign_data",
+                "refund_acct",
+                "refund_bank",
+                "acct_no",
+                "account_no",
+                "acct_nm",
+                "holder",
+                "merchant_key",
                 "access_token",
                 "identity_number",
                 "registration_number",

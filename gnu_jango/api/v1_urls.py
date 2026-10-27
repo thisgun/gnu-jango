@@ -4,7 +4,19 @@ from gnu_jango.core import thumbnails
 from gnu_jango.notifications.api import ticket_view
 from gnu_jango.shop import price_feed
 
-from . import member_lifecycle, page_bootstrap, shop_personal_pay, v1_auth, v1_board, v1_community, v1_docs, v1_search, v1_shop, v1_views
+from . import (
+    member_lifecycle,
+    page_bootstrap,
+    shop_nicepay,
+    shop_personal_pay,
+    v1_auth,
+    v1_board,
+    v1_community,
+    v1_docs,
+    v1_search,
+    v1_shop,
+    v1_views,
+)
 from .shop_cash_receipts import order_cash_receipt_view
 
 app_name = "api_v1"
@@ -114,6 +126,13 @@ urlpatterns = [
     path("shop/payment/prepare", v1_shop.payment_prepare_view, name="shop-payment-prepare"),
     path("shop/payment/cancel", v1_shop.payment_cancel_view, name="shop-payment-cancel"),
     path("shop/payment/confirm", v1_shop.payment_confirm_view, name="shop-payment-confirm"),
+    path("shop/payment/nicepay/return", shop_nicepay.nicepay_return_view, name="shop-payment-nicepay-return"),
+    path("shop/payment/nicepay/recover", v1_shop.nicepay_recovery_view, name="shop-payment-nicepay-recover"),
+    path(
+        "shop/payment/nicepay/vbank/notification",
+        shop_nicepay.nicepay_vbank_notification_view,
+        name="shop-payment-nicepay-vbank-notification",
+    ),
     path("shop/payment/toss/vbank/webhook", v1_shop.toss_vbank_webhook_view, name="shop-payment-toss-vbank-webhook"),
     path("shop/payment/callback/<str:provider>", v1_shop.payment_callback_view, name="shop-payment-callback"),
     path("shop/naverpay/order", v1_shop.naverpay_order_view, name="shop-naverpay-order"),

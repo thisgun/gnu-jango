@@ -393,6 +393,7 @@ class ScheduledJobsRunnerTests(TestCase):
                 "expire_pending_payment_orders",
                 "expire_pending_email_members",
                 "expire_toss_vbank_orders",
+                "recover_nicepay_attempts",
                 "cleanup_admin_privacy",
                 "cleanup_search_clicks",
                 "process_notifications",
@@ -410,7 +411,8 @@ class ScheduledJobsRunnerTests(TestCase):
         self.assertEqual(first["status"], "ok")
         # Counts are kept, per-row samples (order ids, user ids) are not.
         self.assertEqual(first["summary"], {"applied": True, "cancelled": 2})
-        self.assertIn("visits=3", report["jobs"][3]["summary"])
+        cleanup = next(job for job in report["jobs"] if job["name"] == "cleanup_admin_privacy")
+        self.assertIn("visits=3", cleanup["summary"])
 
     def test_dry_run_never_applies(self):
         runner = fake_runner()

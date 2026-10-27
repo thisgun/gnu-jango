@@ -898,6 +898,71 @@ class ShopOrderData(models.Model):
         return self.log_id
 
 
+class ShopPaymentAttempt(models.Model):
+    """Server-side record of one NICEPAY authentication payment attempt.
+
+    The browser may carry only the attempt token (hashed here) and the authentication response;
+    the MID, amount, mode, approval URLs and sealed AuthToken stay on the server. Keeping this
+    separate from ShopOrder means an uncertain approval or a failed local save has a durable,
+    admin-visible state instead of being lost with the request.
+    """
+
+    STATES = (
+        ("prepared", "준비됨"),
+        ("authenticating", "인증 처리 중"),
+        ("authenticated", "인증 완료"),
+        ("approving", "승인 요청 중"),
+        ("approved", "승인 완료"),
+        ("pending_deposit", "가상계좌 입금 대기"),
+        ("approved_local_failed", "승인 후 주문 저장 실패"),
+        ("uncertain", "승인 결과 불명확"),
+        ("net_canceled", "망취소 완료"),
+        ("superseded", "다른 결제 시도로 대체됨"),
+        ("failed", "실패"),
+        ("canceled", "취소됨"),
+    )
+
+    order = models.ForeignKey(
+        ShopOrder,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="payment_attempts",
+    )
+    od_id = models.CharField(max_length=40, db_index=True)
+    provider = models.CharField(max_length=20, default="nicepay")
+    mode = models.CharField(max_length=4, default="test")
+    mid = models.CharField(max_length=10, blank=True, default="")
+    key_fingerprint = models.CharField(max_length=32, blank=True, default="")
+    amount = models.IntegerField(default=0)
+    pay_method = models.CharField(max_length=10, blank=True, default="")
+    attempt_token_hash = models.CharField(max_length=64, blank=True, default="")
+    tid = models.CharField(max_length=30, blank=True, default="")
+    auth_token_sealed = models.TextField(blank=True, default="")
+    next_app_url = models.CharField(max_length=255, blank=True, default="")
+    net_cancel_url = models.CharField(max_length=255, blank=True, default="")
+    state = models.CharField(max_length=32, choices=STATES, default="prepared", db_index=True)
+    provider_data = models.TextField(blank=True, default="")
+    last_error = models.TextField(blank=True, default="")
+    recovery_attempts = models.PositiveSmallIntegerField(default=0)
+    last_checked_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = _("Shop payment attempt")
+        verbose_name_plural = _("Shop payment attempts")
+        indexes = [
+            models.Index(fields=["order", "provider", "state"]),
+            models.Index(fields=["attempt_token_hash"]),
+            models.Index(fields=["provider", "state", "updated_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.od_id}/{self.provider}/{self.state}"
+
+
 class ShopPersonalPay(models.Model):
     pp_id = models.CharField(max_length=40, primary_key=True)
     user = models.ForeignKey(

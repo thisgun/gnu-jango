@@ -659,6 +659,8 @@ REST_FRAMEWORK = {
         # personal pay lookups, payer checks and payments, per address (pp_id can be guessed)
         "shop-personalpay": "30/min",
         "order-lookup": "10/min",
+        # result-page NICEPAY recovery; keyed by client address + order id
+        "nicepay-recovery": "20/min",
         # guest checkouts per address (each may text the phone number it was given)
         "shop-guest-order": "20/hour",
         # cash receipt requests after the order (each try may reach the Toss cash receipt API)
@@ -797,6 +799,37 @@ SHOP_TOSS_VBANK_ENABLED = bool_config("SHOP_TOSS_VBANK_ENABLED", default=False)
 # The admin shop settings can hold a Toss key pair (sealed in Config). The two env keys above win
 # when either is set; False ignores the admin pair (disposable previews).
 SHOP_TOSS_ADMIN_KEYS_ENABLED = bool_config("SHOP_TOSS_ADMIN_KEYS_ENABLED", default=True)
+# NICEPAY 인증결제 (MID + MerchantKey + AuthToken). The test and live pairs are separate;
+# SHOP_NICEPAY_MID / SHOP_NICEPAY_MERCHANT_KEY are the live pair. The admin shop settings can
+# hold either pair sealed in Config. The environment wins for the mode it names.
+SHOP_NICEPAY_TEST_MID = de_config("SHOP_NICEPAY_TEST_MID", default="")
+SHOP_NICEPAY_TEST_MERCHANT_KEY = de_config("SHOP_NICEPAY_TEST_MERCHANT_KEY", default="")
+SHOP_NICEPAY_MID = de_config("SHOP_NICEPAY_MID", default="")
+SHOP_NICEPAY_MERCHANT_KEY = de_config("SHOP_NICEPAY_MERCHANT_KEY", default="")
+SHOP_NICEPAY_ADMIN_KEYS_ENABLED = bool_config("SHOP_NICEPAY_ADMIN_KEYS_ENABLED", default=True)
+SHOP_NICEPAY_VBANK_ENABLED = bool_config("SHOP_NICEPAY_VBANK_ENABLED", default=True)
+# The official trans-inquiry response guarantees TID/Status/AuthCode/AuthDate and normally does
+# not echo MID/Moid/Amt/PayMethod. The default mode binds those fields to the server-created
+# attempt and checks them additionally when present. Enable strict mode only after the merchant's
+# test MID is confirmed to return all four fields.
+SHOP_NICEPAY_VBANK_REQUIRE_LOOKUP_IDENTITY = bool_config(
+    "SHOP_NICEPAY_VBANK_REQUIRE_LOOKUP_IDENTITY", default=False
+)
+# Send TaxFreeAmt on cancellation for merchants whose NICEPAY contract exposes the mixed-tax
+# cancellation option. Off by default because the published cancel request does not require it.
+SHOP_NICEPAY_TAX_FREE_CANCEL_ENABLED = bool_config("SHOP_NICEPAY_TAX_FREE_CANCEL_ENABLED", default=False)
+# Absolute URLs registered with NICEPAY. RETURN_URL is the merchant return endpoint (mobile POST);
+# SUCCESS_URL is the Next.js page the backend redirects to after approval.
+SHOP_NICEPAY_RETURN_URL = de_config("SHOP_NICEPAY_RETURN_URL", default="")
+SHOP_NICEPAY_SUCCESS_URL = de_config("SHOP_NICEPAY_SUCCESS_URL", default="")
+SHOP_NICEPAY_FRONTEND_URL = de_config("SHOP_NICEPAY_FRONTEND_URL", default="")
+SHOP_NICEPAY_CONNECT_TIMEOUT = de_config("SHOP_NICEPAY_CONNECT_TIMEOUT", default=10, cast=int)
+SHOP_NICEPAY_READ_TIMEOUT = de_config("SHOP_NICEPAY_READ_TIMEOUT", default=20, cast=int)
+# An approving/uncertain attempt older than this can be reconciled from a customer return or a
+# new checkout start. The scheduled command uses its own time budget (see below).
+SHOP_NICEPAY_RECOVERY_AFTER_SECONDS = de_config("SHOP_NICEPAY_RECOVERY_AFTER_SECONDS", default=120, cast=int)
+SHOP_NICEPAY_RECOVERY_TIME_BUDGET = de_config("SHOP_NICEPAY_RECOVERY_TIME_BUDGET", default=40, cast=int)
+SHOP_NICEPAY_VBANK_NOTIFY_ALLOWED_IPS = de_config("SHOP_NICEPAY_VBANK_NOTIFY_ALLOWED_IPS", default="")
 SHOP_PAYMENT_PROVIDER = de_config("SHOP_PAYMENT_PROVIDER", default="")
 SHOP_PAYMENT_ADAPTER_BASE_URL = de_config("SHOP_PAYMENT_ADAPTER_BASE_URL", default="")
 SHOP_PAYMENT_ADAPTER_SECRET = de_config("SHOP_PAYMENT_ADAPTER_SECRET", default="")

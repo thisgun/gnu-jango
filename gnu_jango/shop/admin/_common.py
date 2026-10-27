@@ -25,6 +25,7 @@ from gnu_jango.shop.models import (
     ShopOrder,
     ShopOrderData,
     ShopOrderItem,
+    ShopPaymentAttempt,
     ShopPersonalPay,
     ShopProduct,
     ShopQA,

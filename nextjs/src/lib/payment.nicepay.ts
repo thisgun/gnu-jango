@@ -8,43 +8,17 @@ import {
 } from "./payment.shared";
 import type { NicepayExtra, PaymentMethod, PaymentRequest } from "./payment.types";
 
-export function createNicepayConfirmPayload(
-  fields: Record<string, string>,
-  req: PaymentRequest
-) {
-  return {
-    pg_service: "nicepay",
-    order_id: req.order.order_id || fields.Moid || fields.MOID || "",
-    amount: req.order.amount || Number(fields.Amt || 0),
-    AuthResultCode: fields.AuthResultCode || fields.ResultCode || "",
-    AuthResultMsg: fields.AuthResultMsg || fields.ResultMsg || "",
-    AuthToken: fields.AuthToken || fields.authToken || "",
-    TxTid: fields.TxTid || fields.TID || fields.tid || "",
-    TID: fields.TID || fields.TxTid || fields.tid || "",
-    NextAppURL: fields.NextAppURL || fields.nextAppURL || "",
-    NetCancelURL: fields.NetCancelURL || fields.netCancelUrl || "",
-    MID: fields.MID || fields.mid || "",
-    Moid: fields.Moid || fields.MOID || req.order.order_id || "",
-    Amt: fields.Amt || String(req.order.amount),
-    PayMethod: fields.PayMethod || "",
-    Signature: fields.Signature || fields.signature || "",
-    VbankBankName: fields.VbankBankName || "",
-    VbankNum: fields.VbankNum || "",
-    VbankExpDate: fields.VbankExpDate || "",
-    VbankExpTime: fields.VbankExpTime || "",
-  };
-}
-
-async function confirmNicepayPaymentPayload(
-  fields: Record<string, string>,
-  req: PaymentRequest
-) {
-  await api.post("/shop/payment/confirm", createNicepayConfirmPayload(fields, req));
-}
+/**
+ * NICEPAY 인증결제 (MID / MerchantKey / AuthToken).
+ *
+ * The browser calls the payment window only with the server-issued EdiDate/SignData,
+ * a one-time attempt token and the public MID. It never receives MerchantKey or AuthToken.
+ * The approval is performed by the Django endpoint after this callback; a success toast from
+ * the payment window is not treated as a paid order.
+ */
 
 const NICEPAY_PC_SCRIPT_URL =
-  "https://web.nicepay.co.kr/v3/webstd/js/nicepay-3.0.js";
-const NICEPAY_MOBILE_URL = "https://web.nicepay.co.kr/v3/v3Payment.jsp";
+  "https://pg-web.nicepay.co.kr/v3/common/js/nicepay-pgweb.js";
 const NICEPAY_FORM_ID = "nicepayForm";
 
 type NicepayWindow = Window & {
@@ -69,15 +43,69 @@ const NICEPAY_RESPONSE_FIELDS = [
   "ResultCode",
   "ResultMsg",
   "TID",
+  "VbankBankCode",
   "VbankBankName",
   "VbankNum",
   "VbankExpDate",
   "VbankExpTime",
 ] as const;
 
-function nicepayAllowedMessageOrigins(nicepay?: NicepayExtra) {
-  return paymentMessageOrigins(nicepay?.return_url);
+function nicepayAttemptToken(req: PaymentRequest, fields?: Record<string, string>) {
+  const fromFields = fields?.attempt_token || fields?.ReqReserved || "";
+  if (fromFields.startsWith("gnu-nicepay:")) {
+    return fromFields.split(":").slice(2).join(":");
+  }
+  return fromFields || req.order.pg_extra?.nicepay?.attempt_token || "";
 }
+
+function nicepayReserved(req: PaymentRequest, fields?: Record<string, string>) {
+  return (
+    fields?.ReqReserved ||
+    req.order.pg_extra?.nicepay?.req_reserved ||
+    ""
+  );
+}
+
+export function createNicepayConfirmPayload(
+  fields: Record<string, string>,
+  req: PaymentRequest
+) {
+  return {
+    pg_service: "nicepay",
+    order_id:
+      fields.Moid || fields.MOID || req.order.order_id || fields.order_id || "",
+    // The server ignores this amount for its checks and uses the amount recorded when the
+    // attempt was prepared. It is sent only for compatibility with older API consumers.
+    amount: req.order.amount,
+    attempt_token: nicepayAttemptToken(req, fields),
+    ReqReserved: nicepayReserved(req, fields),
+    AuthResultCode: fields.AuthResultCode || fields.ResultCode || "",
+    AuthResultMsg: fields.AuthResultMsg || fields.ResultMsg || "",
+    AuthToken: fields.AuthToken || fields.authToken || "",
+    TxTid: fields.TxTid || fields.TID || fields.tid || "",
+    TID: fields.TID || fields.TxTid || fields.tid || "",
+    NextAppURL: fields.NextAppURL || fields.nextAppURL || "",
+    NetCancelURL: fields.NetCancelURL || fields.netCancelUrl || "",
+    MID: fields.MID || fields.mid || "",
+    Moid: fields.Moid || fields.MOID || fields.moid || req.order.order_id || "",
+    Amt: fields.Amt || String(req.order.amount),
+    PayMethod: fields.PayMethod || "",
+    Signature: fields.Signature || fields.signature || "",
+    VbankBankCode: fields.VbankBankCode || "",
+    VbankBankName: fields.VbankBankName || "",
+    VbankNum: fields.VbankNum || "",
+    VbankExpDate: fields.VbankExpDate || "",
+    VbankExpTime: fields.VbankExpTime || "",
+  };
+}
+
+async function confirmNicepayPaymentPayload(
+  fields: Record<string, string>,
+  req: PaymentRequest
+) {
+  await api.post("/shop/payment/confirm", createNicepayConfirmPayload(fields, req));
+}
+
 function clearNicepayCallbacks() {
   const hostWindow = window as NicepayWindow;
   delete hostWindow.nicepaySubmit;
@@ -175,13 +203,17 @@ export function createNicepayFields(req: PaymentRequest, nicepay: NicepayExtra) 
     BuyerName: req.order.buyer_name || "",
     BuyerEmail: email,
     BuyerTel: tel,
+    // Mobile requires this absolute URL. PC AJAX still sends it so a standard form submit
+    // (if a browser bypasses the callback) also reaches the server-side approval endpoint.
     ReturnURL: nicepay.return_url || `${req.success_url}?pg=nicepay`,
     VbankExpDate: req.method === "vbank" ? nicepay.vbank_exp_date || "" : "",
     NpLang: "KO",
     GoodsCl: "1",
     TransType: nicepay.trans_type || "0",
-    CharSet: "utf-8",
-    ReqReserved: "",
+    // The official form encoding is EUC-KR; the value inside CharSet also tells NICEPAY how
+    // to encode the authentication response.
+    CharSet: "euc-kr",
+    ReqReserved: nicepay.req_reserved || "",
     EdiDate: nicepay.edi_date || "",
     SignData: nicepay.sign_data || "",
     DirectShowOpt: req.method === "easy_pay" ? "CARD" : "",
@@ -194,12 +226,8 @@ export function createNicepayFields(req: PaymentRequest, nicepay: NicepayExtra) 
     MultiEasyPayQuota: "",
   };
 
-  if (nicepay.wap_url) {
-    fields.WapUrl = nicepay.wap_url;
-  }
-  if (nicepay.isp_cancel_url) {
-    fields.IspCancelUrl = nicepay.isp_cancel_url;
-  }
+  if (nicepay.wap_url) fields.WapUrl = nicepay.wap_url;
+  if (nicepay.isp_cancel_url) fields.IspCancelUrl = nicepay.isp_cancel_url;
 
   if (taxAmounts.enabled) {
     fields.SupplyAmt = String(taxAmounts.tax);
@@ -260,26 +288,17 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
       reject(new Error("Nicepay MID/signature is missing."));
       return;
     }
-
-    const isMobile = shouldUseNicepayMobile(nicepay);
-    const fields = createNicepayFields(req, nicepay);
-    const form = createNicepayForm(fields, nicepay.return_url || "");
-
-    if (isMobile) {
-      form.action = nicepay.mobile_url || NICEPAY_MOBILE_URL;
-      form.acceptCharset = "euc-kr";
-      const charsetInput = form.querySelector<HTMLInputElement>(
-        'input[name="CharSet"]'
-      );
-      if (charsetInput) charsetInput.value = "euc-kr";
-      form.submit();
-      resolve();
+    if (!nicepay.return_url) {
+      reject(new Error("Nicepay return URL is missing."));
       return;
     }
 
+    const isMobile = shouldUseNicepayMobile(nicepay);
+    const fields = createNicepayFields(req, nicepay);
+    const form = createNicepayForm(fields, nicepay.return_url);
     const hostWindow = window as NicepayWindow;
     const bodySnapshot = new Set<Element>(Array.from(document.body.children));
-    const allowedOrigins = nicepayAllowedMessageOrigins(nicepay);
+    const allowedOrigins = paymentMessageOrigins(nicepay.return_url);
     let resultCompleted = false;
     let settled = false;
     // eslint-disable-next-line prefer-const
@@ -304,23 +323,25 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
     function finish(fn: () => Promise<void> | void) {
       if (resultCompleted) return;
       resultCompleted = true;
-      void Promise.resolve().then(fn).catch(async (err: unknown) => {
-        cleanup();
-        await cancelPreparedPayment(
-          req,
-          err instanceof Error ? err.message : "Nicepay payment failed"
-        );
-        postPaymentResult({
-          status: "error",
-          message:
-            err instanceof Error
-              ? err.message
-              : "Nicepay payment confirmation failed.",
+      void Promise.resolve()
+        .then(fn)
+        .catch(async (err: unknown) => {
+          cleanup();
+          await cancelPreparedPayment(
+            req,
+            err instanceof Error ? err.message : "Nicepay payment failed"
+          );
+          postPaymentResult({
+            status: "error",
+            message:
+              err instanceof Error
+                ? err.message
+                : "Nicepay payment confirmation failed.",
+          });
+          settle(() => {
+            reject(err instanceof Error ? err : new Error("Nicepay payment failed"));
+          });
         });
-        settle(() => {
-          reject(err instanceof Error ? err : new Error("Nicepay payment failed"));
-        });
-      });
     }
 
     function onNicepayMessage(event: MessageEvent) {
@@ -331,66 +352,34 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
             status?: "success" | "error" | "cancelled";
             orderId?: string;
             message?: string;
-            fields?: Record<string, string>;
           }
         | undefined;
-      if (!data) return;
-
-      if (data.type === "shop-nicepay-auth-result") {
-        finish(async () => {
-          cleanup();
-          if (data.status !== "success" || !data.fields) {
-            await cancelPreparedPayment(
-              req,
-              data.message || "Nicepay authentication failed"
-            );
-            postPaymentResult({
-              status: "error",
-              message: data.message || "Nicepay authentication failed.",
-            });
-            settle(() => {
-              reject(new Error(data.message || "Nicepay authentication failed."));
-            });
-            return;
-          }
-
-          await confirmNicepayPaymentPayload(data.fields, req);
-          postPaymentResult({ status: "success", orderId: req.order.order_id });
+      if (!data || data.type !== "shop-payment-result") return;
+      finish(async () => {
+        cleanup();
+        if (data.status === "success" && data.orderId) {
+          postPaymentResult({ status: "success", orderId: data.orderId });
           settle(() => resolve());
+          return;
+        }
+        const isCancelled = data.status === "cancelled";
+        const message =
+          data.message ||
+          (isCancelled
+            ? "Payment was cancelled."
+            : "Nicepay payment was not completed.");
+        await cancelPreparedPayment(
+          req,
+          isCancelled
+            ? "Nicepay payment cancelled"
+            : data.message || "Nicepay payment failed"
+        );
+        postPaymentResult({
+          status: isCancelled ? "cancelled" : "error",
+          message,
         });
-        return;
-      }
-
-      if (data.type === "shop-payment-result") {
-        finish(async () => {
-          cleanup();
-          if (data.status === "success" && data.orderId) {
-            postPaymentResult({ status: "success", orderId: data.orderId });
-            settle(() => resolve());
-            return;
-          }
-
-          const isCancelled = data.status === "cancelled";
-          const message =
-            data.message ||
-            (isCancelled
-              ? "Payment was cancelled."
-              : "Nicepay payment was not completed.");
-          await cancelPreparedPayment(
-            req,
-            isCancelled
-              ? "Nicepay payment cancelled"
-              : data.message || "Nicepay payment failed"
-          );
-          postPaymentResult({
-            status: isCancelled ? "cancelled" : "error",
-            message,
-          });
-          settle(() => {
-            reject(new Error(message));
-          });
-        });
-      }
+        settle(() => reject(new Error(message)));
+      });
     }
 
     hostWindow.nicepaySubmit = () => {
@@ -404,22 +393,12 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
             responseFields.AuthResultMsg || responseFields.ResultMsg || code
           );
           cleanup();
-          postPaymentResult({
-            status: "error",
-            message:
-              responseFields.AuthResultMsg ||
-              responseFields.ResultMsg ||
-              `Nicepay authentication failed: ${code}`,
-          });
-          settle(() => {
-            reject(
-              new Error(
-                responseFields.AuthResultMsg ||
-                  responseFields.ResultMsg ||
-                  `Nicepay authentication failed: ${code}`
-              )
-            );
-          });
+          const message =
+            responseFields.AuthResultMsg ||
+            responseFields.ResultMsg ||
+            `Nicepay authentication failed: ${code}`;
+          postPaymentResult({ status: "error", message });
+          settle(() => reject(new Error(message)));
           return;
         }
         await confirmNicepayPaymentPayload(responseFields, req);
@@ -437,9 +416,7 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
           status: "cancelled",
           message: resultMsg || "Payment was cancelled.",
         });
-        settle(() => {
-          reject(new Error(resultMsg || "Payment was cancelled."));
-        });
+        settle(() => reject(new Error(resultMsg || "Payment was cancelled.")));
       });
     };
 
@@ -448,14 +425,10 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
       finish(async () => {
         cleanup();
         await cancelPreparedPayment(req, "Nicepay payment response timeout");
-        postPaymentResult({
-          status: "error",
-          message:
-            "Nicepay payment response timed out. Close the payment window and try again.",
-        });
-        settle(() => {
-          reject(new Error("Nicepay payment response timeout"));
-        });
+        const message =
+          "Nicepay payment response timed out. Close the payment window and try again.";
+        postPaymentResult({ status: "error", message });
+        settle(() => reject(new Error(message)));
       });
     }, 300000);
 
@@ -468,6 +441,12 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
         }
         try {
           hostWindow.goPay(form);
+          if (isMobile) {
+            // The mobile payment window navigates to ReturnURL. The server-side return
+            // endpoint approves the payment and redirects to the Next.js result page; no
+            // browser message is needed and the current document is about to unload.
+            settle(() => resolve());
+          }
         } catch (err) {
           cleanup();
           reject(err instanceof Error ? err : new Error(String(err)));
