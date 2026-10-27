@@ -23,7 +23,7 @@ from gnu_jango.shop.admin.bulk import copy_selected_personal_pays, create_person
 from gnu_jango.shop.admin.cash_receipts import order_cash_receipt_page
 from gnu_jango.shop.cash_receipts import admin_risk as cash_receipt_admin_risk
 from gnu_jango.shop.delivery import delivery_company_form_field
-from gnu_jango.shop.import_export_resources import ShopOrderResource
+from gnu_jango.shop.import_export_resources import ShopOrderRegistrationResource, ShopOrderResource
 from gnu_jango.shop.models import ORDER_ITEM_STATUS_COMPLETED
 from gnu_jango.shop.order_flow import (
     ADMIN_ORDER_STATUSES,
@@ -196,7 +196,7 @@ class OrderStatusActionForm(ActionForm):
 
 @admin.register(ShopOrder)
 class ShopOrderAdmin(ImportExportMixin, UnfoldHistoryAdmin):
-    resource_classes = [ShopOrderResource]
+    resource_classes = [ShopOrderResource, ShopOrderRegistrationResource]
 
     def has_import_permission(self, request):
         # Order imports update existing descriptive rows; only superusers may use the importer.

@@ -1,13 +1,18 @@
 """Support impersonation: superuser-only, audited, read-only, and reversible."""
 
+from datetime import timedelta
+
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.translation import gettext
+from rest_framework_simplejwt.tokens import AccessToken
 
 from gnu_jango.users.impersonation import (
     SESSION_IMPERSONATOR_KEY,
+    SESSION_STARTED_KEY,
     SESSION_TARGET_KEY,
 )
 
@@ -41,6 +46,7 @@ class ImpersonationTests(TestCase):
         self.assertEqual(self.client.session[SESSION_TARGET_KEY], self.member.pk)
         self.assertIn("g5_token", response.cookies)
         self.assertEqual(response.cookies["g5_refresh"].value, "")
+        self.assertEqual(AccessToken(response.cookies["g5_token"].value)["imp"], str(self.admin.pk))
         self.assertTrue(
             LogEntry.objects.filter(
                 user_id=self.admin.pk,
@@ -49,16 +55,20 @@ class ImpersonationTests(TestCase):
             ).exists()
         )
 
-    def test_stop_restores_the_admin_session_and_previous_auth_cookie(self):
-        self.client.cookies["g5_token"] = "admin-token"
+    def test_stop_requires_the_admin_password_and_restores_the_admin_session(self):
         self.start()
 
-        response = self.client.post(reverse("impersonation-stop"))
+        response = self.client.post(reverse("impersonation-stop"), {"password": "wrong"})
+
+        self.assertRedirects(response, reverse("impersonation"), fetch_redirect_response=False)
+        self.assertEqual(self.client.session["_auth_user_id"], str(self.member.pk))
+
+        response = self.client.post(reverse("impersonation-stop"), {"password": "password"})
 
         self.assertRedirects(response, reverse("admin:index"), fetch_redirect_response=False)
         self.assertEqual(self.client.session["_auth_user_id"], str(self.admin.pk))
         self.assertNotIn(SESSION_IMPERSONATOR_KEY, self.client.session)
-        self.assertEqual(response.cookies["g5_token"].value, "admin-token")
+        self.assertEqual(response.cookies["g5_token"].value, "")
         self.assertTrue(
             LogEntry.objects.filter(
                 user_id=self.admin.pk,
@@ -73,6 +83,26 @@ class ImpersonationTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertIn("read-only", response.json()["detail"])
+
+    def test_an_impersonated_access_token_alone_cannot_mutate(self):
+        self.start()
+        self.client.cookies.pop("sessionid", None)
+
+        response = self.client.post("/api/v1/auth/logout")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("read-only", response.json()["detail"])
+
+    def test_an_expired_impersonation_stops_browsing_until_password_is_entered(self):
+        self.start()
+        session = self.client.session
+        session[SESSION_STARTED_KEY] = (timezone.now() - timedelta(hours=1)).isoformat()
+        session.save()
+
+        response = self.client.get("/api/v1/status")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("expired", response.json()["detail"])
 
     def test_a_staff_user_cannot_impersonate(self):
         staff = get_user_model().objects.create_user(

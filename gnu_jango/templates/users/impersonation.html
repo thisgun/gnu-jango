@@ -25,18 +25,26 @@
       <strong>{{ target.get_username }}</strong>{% if target.email %} · {{ target.email }}{% endif %}<br>
       <small>{% translate "Started" %}: {{ started_at }}{% if admin %} · {% translate "Admin" %}: {{ admin.get_username }}{% endif %}</small>
     </p>
-    <p>{% translate "This preview is read-only. Open the storefront to inspect the member experience, then stop the impersonation to return to the admin session." %}</p>
-    <div class="actions">
-      <a href="/">{% translate "Open storefront" %}</a>
-      <form method="post" action="{% url 'impersonation-stop' %}">
-        {% csrf_token %}
-        <button type="submit">{% translate "Stop impersonation" %}</button>
-      </form>
-    </div>
+    {% if expired %}
+      <p class="warning">{% translate "This impersonation session has expired. Enter the admin password to return to the admin session." %}</p>
+    {% else %}
+      <p>{% translate "This preview is read-only. Open the storefront to inspect the member experience, then stop the impersonation to return to the admin session. It expires automatically after 30 minutes." %}</p>
+      <div class="actions">
+        <a href="/">{% translate "Open storefront" %}</a>
+      </div>
+    {% endif %}
+    <form method="post" action="{% url 'impersonation-stop' %}">
+      {% csrf_token %}
+      <label for="stop-password">{% translate "Admin password" %}</label>
+      <input id="stop-password" name="password" type="password" autocomplete="current-password" required>
+      <button type="submit">{% translate "Stop impersonation" %}</button>
+    </form>
   {% else %}
     <p>{% translate "The impersonated member no longer exists." %}</p>
     <form method="post" action="{% url 'impersonation-stop' %}">
       {% csrf_token %}
+      <label for="stop-password">{% translate "Admin password" %}</label>
+      <input id="stop-password" name="password" type="password" autocomplete="current-password" required>
       <button type="submit">{% translate "Stop impersonation" %}</button>
     </form>
   {% endif %}

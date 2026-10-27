@@ -1,12 +1,16 @@
 """Superuser-only, audited member impersonation for support.
 
 The Django admin session is switched to the member, and a short-lived member access cookie is set
-so the Next.js/API storefront also renders as that member. The session keeps the acting admin id;
-``/impersonation/stop/`` restores the admin session and the admin's previous auth cookies.
+so the Next.js/API storefront also renders as that member. The session keeps the acting admin id.
+``/impersonation/stop/`` requires the acting admin's password, restores the admin session, and clears
+the storefront auth cookies.
 
-The read-only middleware rejects unsafe requests while impersonating. Stop the impersonation before
+The read-only middleware rejects unsafe requests while impersonating, including token-only requests
+that carry the ``imp`` claim. A preview expires after 30 minutes. Stop the impersonation before
 performing any operation that changes member data.
 """
+
+from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.contrib import messages
@@ -24,17 +28,19 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
-from gnu_jango.api.auth_sessions import issue_refresh_token, revoke_refresh_token
+from gnu_jango.api.auth_sessions import issue_refresh_token
 
 User = get_user_model()
 
 SESSION_IMPERSONATOR_KEY = "g5_impersonator_id"
 SESSION_TARGET_KEY = "g5_impersonation_target_id"
 SESSION_STARTED_KEY = "g5_impersonation_started_at"
-SESSION_SAVED_COOKIES_KEY = "g5_impersonation_saved_cookies"
-SESSION_REFRESH_KEY = "g5_impersonation_refresh_token"
+SESSION_REFRESH_JTI_KEY = "g5_impersonation_refresh_jti"
 STOP_PATH = "/impersonation/stop/"
+IMPERSONATION_PAGE_PATH = "/impersonation/"
+IMPERSONATION_MAX_SECONDS = 30 * 60
 AUTH_COOKIE_NAMES = ("g5_token", "g5_refresh", "g5_auth_hint", "g5_auto_login")
 
 
@@ -42,24 +48,30 @@ def _cookie_kwargs(request):
     return {"path": "/", "secure": request.is_secure(), "samesite": "Lax"}
 
 
-def _saved_auth_cookies(request):
-    return {name: request.COOKIES[name] for name in AUTH_COOKIE_NAMES if request.COOKIES.get(name)}
-
-
 def _clear_auth_cookies(response):
     for name in AUTH_COOKIE_NAMES:
         response.delete_cookie(name, path="/", samesite="Lax")
 
 
-def _restore_auth_cookies(response, request, saved):
-    _clear_auth_cookies(response)
-    for name, value in saved.items():
-        response.set_cookie(
-            name,
-            value,
-            httponly=name in {"g5_token", "g5_refresh"},
-            **_cookie_kwargs(request),
-        )
+def _blacklist_refresh(jti):
+    if not jti:
+        return
+    row = OutstandingToken.objects.filter(jti=jti).first()
+    if row is not None:
+        BlacklistedToken.objects.get_or_create(token=row)
+
+
+def impersonation_expired(request):
+    raw_started = request.session.get(SESSION_STARTED_KEY)
+    if not raw_started:
+        return False
+    try:
+        started = datetime.fromisoformat(raw_started)
+    except (TypeError, ValueError):
+        return True
+    if timezone.is_naive(started):
+        started = timezone.make_aware(started)
+    return timezone.now() - started > timedelta(seconds=IMPERSONATION_MAX_SECONDS)
 
 
 def _switch_session_user(request, user):
@@ -122,18 +134,18 @@ def start_impersonation(request, object_id):
         return redirect("impersonation")
 
     admin = request.user
-    saved_cookies = _saved_auth_cookies(request)
     _switch_session_user(request, target)
     request.session[SESSION_IMPERSONATOR_KEY] = admin.pk
     request.session[SESSION_TARGET_KEY] = target.pk
     request.session[SESSION_STARTED_KEY] = timezone.now().isoformat()
-    request.session[SESSION_SAVED_COOKIES_KEY] = saved_cookies
     refresh = issue_refresh_token(target, request)
-    request.session[SESSION_REFRESH_KEY] = str(refresh)
+    request.session[SESSION_REFRESH_JTI_KEY] = str(refresh["jti"])
+    access = refresh.access_token
+    access["imp"] = str(admin.pk)
     _audit(admin, target, "Impersonation started")
 
     response = redirect("impersonation")
-    _set_member_access_cookie(response, request, str(refresh.access_token))
+    _set_member_access_cookie(response, request, str(access))
     return response
 
 
@@ -150,6 +162,7 @@ def impersonation_page(request):
             "target": target,
             "admin": admin,
             "started_at": request.session.get(SESSION_STARTED_KEY, ""),
+            "expired": impersonation_expired(request),
         },
     )
 
@@ -161,32 +174,28 @@ def stop_impersonation(request):
         return redirect("index")
     target_id = request.session.get(SESSION_TARGET_KEY)
     target = User.objects.filter(pk=target_id).first()
-    saved_cookies = request.session.get(SESSION_SAVED_COOKIES_KEY, {})
-    refresh_token = request.session.get(SESSION_REFRESH_KEY, "")
+    refresh_jti = request.session.get(SESSION_REFRESH_JTI_KEY, "")
     admin = User.objects.filter(pk=admin_id, is_active=True, is_staff=True).first()
-
-    if refresh_token and target:
-        try:
-            revoke_refresh_token(refresh_token, target)
-        except Exception:  # A revoked/expired token must not strand the admin in the preview.
-            pass
 
     if admin is None:
         logout(request)
         response = HttpResponseRedirect(reverse("admin:login"))
         _clear_auth_cookies(response)
         return response
+    if not admin.check_password(str(request.POST.get("password") or "")):
+        messages.error(request, "Enter the acting admin password to stop impersonation.")
+        return redirect("impersonation")
 
+    _blacklist_refresh(refresh_jti)
     _switch_session_user(request, admin)
     for key in (
         SESSION_IMPERSONATOR_KEY,
         SESSION_TARGET_KEY,
         SESSION_STARTED_KEY,
-        SESSION_SAVED_COOKIES_KEY,
-        SESSION_REFRESH_KEY,
+        SESSION_REFRESH_JTI_KEY,
     ):
         request.session.pop(key, None)
     _audit(admin, target or admin, "Impersonation stopped")
     response = redirect("admin:index")
-    _restore_auth_cookies(response, request, saved_cookies)
+    _clear_auth_cookies(response)
     return response

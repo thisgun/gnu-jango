@@ -9,11 +9,20 @@ CSV/XLSX export of the current admin selection. Keep the same safety rules as th
 * unknown order ids are rejected instead of creating incomplete orders.
 """
 
+import re
+import uuid
 from decimal import Decimal, InvalidOperation
 
+from django.contrib.auth import get_user_model
 from import_export import fields, resources
 
-from .models import ShopOrder, ShopProduct
+from .inventory import reserve_product_stock
+from .models import ShopOrder, ShopOrderItem, ShopProduct
+from .order_statuses import STATUS_ORDERED
+from .shipping import current_shipping_policy, shipping_quote
+from .taxes import calculate_order_tax_amounts
+
+IT_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,40}")
 
 
 def _text(value):
@@ -25,9 +34,12 @@ def _integer(value, *, default=None, minimum=None):
     if not text:
         return default
     try:
-        number = int(Decimal(text))
+        number = Decimal(text)
     except (InvalidOperation, ValueError) as exc:
         raise ValueError(f"Not an integer: {value!r}") from exc
+    if number != number.to_integral_value():
+        raise ValueError(f"Not an integer: {value!r}")
+    number = int(number)
     if minimum is not None and number < minimum:
         raise ValueError(f"Must be at least {minimum}: {value!r}")
     return number
@@ -73,6 +85,7 @@ class ShopProductResource(resources.ModelResource):
             "it_soldout",
             "it_use",
             "it_stock_sms",
+            "it_tel_inq",
             "it_sc_type",
             "it_sc_method",
             "it_sc_price",
@@ -93,8 +106,8 @@ class ShopProductResource(resources.ModelResource):
         it_id = _text(row.get("it_id"))
         if not it_id:
             raise ValueError("it_id is required.")
-        if len(it_id) > 40:
-            raise ValueError("it_id must be at most 40 characters.")
+        if not IT_ID_RE.fullmatch(it_id):
+            raise ValueError("it_id must contain only letters, digits, underscores, and hyphens (max 40).")
         row["it_id"] = it_id
         existing = ShopProduct.objects.filter(pk=it_id).first()
 
@@ -141,6 +154,18 @@ class ShopProductResource(resources.ModelResource):
         row["it_stock_sms"] = _flag(
             row.get("it_stock_sms"), default=existing.it_stock_sms if existing else ""
         )
+        row["it_tel_inq"] = _flag(
+            row.get("it_tel_inq"), default=existing.it_tel_inq if existing else ""
+        )
+        if (
+            existing is None
+            and row["it_use"] == "1"
+            and row["it_price"] == 0
+            and row["it_tel_inq"] != "1"
+        ):
+            raise ValueError(
+                "A new product on sale needs a price; set it_tel_inq=1 for a phone-inquiry product."
+            )
 
 
 class ShopOrderResource(resources.ModelResource):
@@ -239,5 +264,159 @@ class ShopOrderResource(resources.ModelResource):
         if not od_id:
             raise ValueError("od_id is required.")
         if not ShopOrder.objects.filter(pk=od_id).exists():
-            raise ValueError("Order import only updates existing orders; create orders through checkout.")
+            raise ValueError(
+                "This resource updates existing orders only; use the order registration resource for new orders."
+            )
         row["od_id"] = od_id
+
+
+class ShopOrderRegistrationResource(resources.ModelResource):
+    """Create unpaid bank-deposit orders from one CSV row per order.
+
+    This intentionally supports one line item per row and rejects options, coupons, points, and
+    online payments. It creates the order in the ``order`` state, reserves the product stock, and
+    leaves payment/status movement to the normal admin actions. For multi-line orders or options,
+    use the storefront order flow or the existing delivery/order tools.
+    """
+
+    username = fields.Field(column_name="username", attribute=None, readonly=True)
+    it_id = fields.Field(column_name="it_id", attribute=None, readonly=True)
+    ct_qty = fields.Field(column_name="ct_qty", attribute=None, readonly=True)
+    ct_option = fields.Field(column_name="ct_option", attribute=None, readonly=True)
+
+    class Meta:
+        model = ShopOrder
+        fields = (
+            "od_id",
+            "username",
+            "od_name",
+            "od_tel",
+            "od_hp",
+            "od_email",
+            "od_zip",
+            "od_addr1",
+            "od_addr2",
+            "od_addr3",
+            "od_b_name",
+            "od_b_tel",
+            "od_b_hp",
+            "od_b_zip",
+            "od_b_addr1",
+            "od_b_addr2",
+            "od_b_addr3",
+            "od_memo",
+            "od_shop_memo",
+            "od_hope_date",
+            "od_deposit_name",
+            "od_bank_account",
+            "it_id",
+            "ct_qty",
+            "ct_option",
+        )
+        export_order = fields
+        import_id_fields = ("od_id",)
+        skip_unchanged = False
+        report_skipped = True
+
+    def before_import_row(self, row, **kwargs):
+        od_id = _text(row.get("od_id"))
+        if not od_id:
+            raise ValueError("od_id is required.")
+        if len(od_id) > 40:
+            raise ValueError("od_id must be at most 40 characters.")
+        if ShopOrder.objects.filter(pk=od_id).exists():
+            raise ValueError("od_id already exists; use the existing-order update resource.")
+        row["od_id"] = od_id
+
+        od_name = _text(row.get("od_name"))
+        if not od_name:
+            raise ValueError("od_name is required.")
+        row["od_name"] = od_name
+
+        product_id = _text(row.get("it_id"))
+        product = ShopProduct.objects.filter(pk=product_id).first()
+        if product is None:
+            raise ValueError(f"Product not found: {product_id or '-'}")
+        quantity = _integer(row.get("ct_qty"), default=1, minimum=1)
+        if _text(row.get("ct_option")):
+            raise ValueError("Options are not supported by order registration; use the storefront order flow.")
+        row["_product_id"] = product.pk
+        row["_quantity"] = quantity
+        row["_unit_price"] = int(product.it_price or 0)
+
+        username = _text(row.get("username"))
+        user_id = None
+        if username:
+            user = get_user_model().objects.filter(username=username, is_active=True).first()
+            if user is None:
+                raise ValueError(f"Member not found: {username}")
+            user_id = user.pk
+        row["_user_id"] = user_id
+
+        # Registration creates an unpaid bank-deposit order only. Payment is recorded later by
+        # the existing order actions, so a CSV cannot claim a gateway payment.
+        settle_case = _text(row.get("od_settle_case"))
+        if settle_case and settle_case not in {"bank", "무통장입금"}:
+            raise ValueError("Order registration supports bank-deposit orders only; use bank.")
+
+    def before_save_instance(self, instance, row, **kwargs):
+        if not instance._state.adding:
+            raise ValueError("Order registration cannot update an existing order.")
+        product = ShopProduct.objects.get(pk=row["_product_id"])
+        quantity = row["_quantity"]
+        unit_price = row["_unit_price"]
+        total = unit_price * quantity
+        recipient_zip = _text(row.get("od_b_zip") or row.get("od_zip"))
+        shipping = shipping_quote(
+            total,
+            recipient_zip,
+            items=[{"it_id": product.pk, "ct_qty": quantity, "ct_price": unit_price, "line_total": total}],
+        )
+        base, extra = shipping["base"], shipping["extra"]
+        payable = total + base + extra
+        tax = calculate_order_tax_amounts(
+            [{"ct_price": unit_price, "ct_qty": quantity, "ct_notax": product.it_notax, "io_type": 0, "io_price": 0}],
+            send_cost=base,
+            send_cost2=extra,
+            payable_amount=payable,
+            mixed_tax_enabled=bool(current_shipping_policy().de_tax_flag_use),
+        )
+
+        instance.od_id = row["od_id"]
+        instance.user_id = row["_user_id"]
+        instance.od_name = row["od_name"]
+        instance.od_b_name = _text(row.get("od_b_name")) or instance.od_name
+        instance.od_b_zip = recipient_zip or _text(row.get("od_zip"))
+        instance.od_status = STATUS_ORDERED
+        instance.od_settle_case = "bank"
+        instance.od_cart_price = total
+        instance.od_send_cost = base
+        instance.od_send_cost2 = extra
+        instance.od_receipt_price = 0
+        instance.od_misu = payable
+        instance.od_bank_account = _text(row.get("od_bank_account"))
+        instance.od_tax_flag = tax["od_tax_flag"]
+        instance.od_tax_mny = tax["od_tax_mny"]
+        instance.od_vat_mny = tax["od_vat_mny"]
+        instance.od_free_mny = tax["od_free_mny"]
+        instance.od_mod_history = "CSV order registration\n"
+
+    def after_save_instance(self, instance, row, **kwargs):
+        product = reserve_product_stock(row["_product_id"], row["_quantity"])
+        ShopOrderItem.objects.create(
+            order=instance,
+            product=product,
+            ct_id=f"csv-{uuid.uuid4().hex}",
+            it_id=product.pk,
+            it_name=product.it_name,
+            ct_price=row["_unit_price"],
+            ct_qty=row["_quantity"],
+            ct_option="",
+            ct_status=STATUS_ORDERED,
+            io_type=0,
+            io_price=0,
+            ct_notax=product.it_notax,
+            ct_send_cost=0,
+            stock_adjusted=True,
+            image_url=product.image_url,
+        )

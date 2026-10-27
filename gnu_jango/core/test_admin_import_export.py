@@ -5,8 +5,12 @@ from django.test import TestCase
 from django.urls import reverse
 from tablib import Dataset
 
-from gnu_jango.shop.import_export_resources import ShopOrderResource, ShopProductResource
-from gnu_jango.shop.models import ShopOrder, ShopProduct
+from gnu_jango.shop.import_export_resources import (
+    ShopOrderRegistrationResource,
+    ShopOrderResource,
+    ShopProductResource,
+)
+from gnu_jango.shop.models import ShopOrder, ShopOrderItem, ShopProduct
 from gnu_jango.users.import_export_resources import UserResource
 from gnu_jango.users.models import Profile
 
@@ -53,6 +57,19 @@ class ProductResourceTests(AdminBase):
         self.assertFalse(result.has_errors())
         product.refresh_from_db()
         self.assertEqual((product.it_name, product.it_price, product.it_stock_qty, product.it_use), ("Renamed", 2500, 7, "1"))
+
+    def test_a_new_on_sale_product_needs_a_price_or_phone_inquiry_flag(self):
+        free = Dataset(headers=["it_id", "it_name", "it_price", "it_use"])
+        free.append(["P-FREE", "Free mistake", "0", "1"])
+        result = ShopProductResource().import_data(free, dry_run=False, raise_errors=False)
+        self.assertTrue(result.has_errors())
+        self.assertFalse(ShopProduct.objects.filter(pk="P-FREE").exists())
+
+        inquiry = Dataset(headers=["it_id", "it_name", "it_price", "it_use", "it_tel_inq"])
+        inquiry.append(["P-INQUIRY", "Phone inquiry", "0", "1", "1"])
+        result = ShopProductResource().import_data(inquiry, dry_run=False, raise_errors=False)
+        self.assertFalse(result.has_errors())
+        self.assertTrue(ShopProduct.objects.filter(pk="P-INQUIRY").exists())
 
 
 class MemberResourceTests(AdminBase):
@@ -124,6 +141,58 @@ class OrderResourceTests(AdminBase):
         self.assertIn("CSV-EXPORT", csv_text)
         self.assertIn("od_status", csv_text)
         self.assertNotIn("od_vbank_secret_hash", csv_text)
+
+
+class OrderRegistrationResourceTests(AdminBase):
+    def test_registration_creates_an_unpaid_bank_order_and_reserves_stock(self):
+        product = ShopProduct.objects.create(it_id="REG-P1", it_name="Registration item", it_use="1", it_price=1000, it_stock_qty=10)
+        dataset = Dataset(headers=["od_id", "od_name", "it_id", "ct_qty", "od_b_zip", "od_deposit_name"])
+        dataset.append(["CSV-NEW-1", "Buyer", "REG-P1", "2", "06236", "Buyer"])
+
+        result = ShopOrderRegistrationResource().import_data(dataset, dry_run=False, raise_errors=False)
+
+        self.assertFalse(result.has_errors())
+        order = ShopOrder.objects.get(pk="CSV-NEW-1")
+        item = ShopOrderItem.objects.get(order=order)
+        product.refresh_from_db()
+        self.assertEqual(order.od_status, "주문")
+        self.assertEqual(order.od_settle_case, "bank")
+        self.assertEqual(order.od_cart_price, 2000)
+        self.assertGreaterEqual(order.od_misu, 2000)
+        self.assertEqual((item.it_id, item.ct_qty, item.stock_adjusted), ("REG-P1", 2, True))
+        self.assertEqual(product.it_stock_qty, 8)
+
+    def test_registration_rejects_unknown_products_and_duplicate_order_ids(self):
+        ShopOrder.objects.create(od_id="CSV-DUP", od_name="Existing")
+        dataset = Dataset(headers=["od_id", "od_name", "it_id", "ct_qty"])
+        dataset.append(["CSV-DUP", "Duplicate", "MISSING", "1"])
+
+        result = ShopOrderRegistrationResource().import_data(dataset, dry_run=False, raise_errors=False)
+
+        self.assertTrue(result.has_errors())
+        self.assertEqual(ShopOrder.objects.filter(pk="CSV-DUP").count(), 1)
+
+    def test_registration_rejects_options(self):
+        ShopProduct.objects.create(it_id="REG-OPT", it_name="Option item", it_use="1", it_price=1000, it_stock_qty=3)
+        dataset = Dataset(headers=["od_id", "od_name", "it_id", "ct_qty", "ct_option"])
+        dataset.append(["CSV-OPT", "Buyer", "REG-OPT", "1", "red"])
+
+        result = ShopOrderRegistrationResource().import_data(dataset, dry_run=False, raise_errors=False)
+
+        self.assertTrue(result.has_errors())
+        self.assertFalse(ShopOrder.objects.filter(pk="CSV-OPT").exists())
+
+    def test_registration_rolls_back_the_order_when_stock_is_insufficient(self):
+        product = ShopProduct.objects.create(it_id="REG-LOW", it_name="Low stock", it_use="1", it_price=1000, it_stock_qty=1)
+        dataset = Dataset(headers=["od_id", "od_name", "it_id", "ct_qty"])
+        dataset.append(["CSV-LOW", "Buyer", "REG-LOW", "2"])
+
+        result = ShopOrderRegistrationResource().import_data(dataset, dry_run=False, raise_errors=False)
+
+        self.assertTrue(result.has_errors())
+        self.assertFalse(ShopOrder.objects.filter(pk="CSV-LOW").exists())
+        product.refresh_from_db()
+        self.assertEqual(product.it_stock_qty, 1)
 
 
 class ImportExportAdminTests(AdminBase):
