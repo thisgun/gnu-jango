@@ -17,7 +17,7 @@ from unfold.forms import ActionForm
 from unfold.widgets import UnfoldAdminSelectWidget
 
 from gnu_jango.api.shop_common import CANCELLED_STATUSES
-from gnu_jango.core.audit import UnfoldHistoryAdmin, history_record_for
+from gnu_jango.core.audit import AdminExportAuditMixin, UnfoldHistoryAdmin, history_record_for
 from gnu_jango.shop import delivery_import
 from gnu_jango.shop.admin.bulk import copy_selected_personal_pays, create_personal_pay_for_balance, order_tool_urls
 from gnu_jango.shop.admin.cash_receipts import order_cash_receipt_page
@@ -195,12 +195,18 @@ class OrderStatusActionForm(ActionForm):
 
 
 @admin.register(ShopOrder)
-class ShopOrderAdmin(ImportExportMixin, UnfoldHistoryAdmin):
+class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmin):
     resource_classes = [ShopOrderResource, ShopOrderRegistrationResource]
+    export_audit_label = "orders"
 
     def has_import_permission(self, request):
         # Order imports update existing descriptive rows; only superusers may use the importer.
         return request.user.is_superuser
+
+    def has_export_permission(self, request):
+        return request.user.is_superuser or (
+            request.user.has_perm("shop.view_shoporder") and request.user.has_perm("shop.export_shoporder")
+        )
 
     list_before_template = "admin/shop/order_list_before.html"
     change_form_before_template = "admin/shop/order_change_before.html"

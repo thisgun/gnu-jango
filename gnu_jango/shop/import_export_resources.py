@@ -14,7 +14,9 @@ import uuid
 from decimal import Decimal, InvalidOperation
 
 from django.contrib.auth import get_user_model
-from import_export import fields, resources
+from import_export import fields
+
+from gnu_jango.core.import_export import SafeExportResource, UpdateOnlyResource
 
 from .inventory import reserve_product_stock
 from .models import ShopOrder, ShopOrderItem, ShopProduct
@@ -56,11 +58,12 @@ def _flag(value, *, default=""):
     return default
 
 
-class ShopProductResource(resources.ModelResource):
+class ShopProductResource(UpdateOnlyResource):
     """Product catalogue import/export without counters, images, options, or stock updates."""
 
     created_at = fields.Field(attribute="created_at", readonly=True)
     updated_at = fields.Field(attribute="updated_at", readonly=True)
+    protected_update_fields = ("it_stock_qty",)
 
     class Meta:
         model = ShopProduct
@@ -109,7 +112,7 @@ class ShopProductResource(resources.ModelResource):
         if not IT_ID_RE.fullmatch(it_id):
             raise ValueError("it_id must contain only letters, digits, underscores, and hyphens (max 40).")
         row["it_id"] = it_id
-        existing = ShopProduct.objects.filter(pk=it_id).first()
+        existing = ShopProduct.objects.select_for_update().filter(pk=it_id).first()
 
         it_name = _text(row.get("it_name"))
         if not it_name:
@@ -121,6 +124,18 @@ class ShopProductResource(resources.ModelResource):
         for field_name in ("category", "category2", "category3"):
             if not _text(row.get(field_name)):
                 row[field_name] = getattr(existing, f"{field_name}_id") if existing else None
+        for field_name in (
+            "it_seo_title",
+            "it_brand",
+            "it_maker",
+            "it_origin",
+            "it_model",
+            "it_info_gubun",
+        ):
+            if existing is not None and not _text(row.get(field_name)):
+                row[field_name] = getattr(existing, field_name, "")
+        if existing is not None and not _text(row.get("it_nocoupon")):
+            row["it_nocoupon"] = existing.it_nocoupon
 
         stock_text = _text(row.get("it_stock_qty")).replace(",", "")
         if existing is not None:
@@ -157,18 +172,13 @@ class ShopProductResource(resources.ModelResource):
         row["it_tel_inq"] = _flag(
             row.get("it_tel_inq"), default=existing.it_tel_inq if existing else ""
         )
-        if (
-            existing is None
-            and row["it_use"] == "1"
-            and row["it_price"] == 0
-            and row["it_tel_inq"] != "1"
-        ):
+        if row["it_use"] == "1" and row["it_price"] == 0 and row["it_tel_inq"] != "1":
             raise ValueError(
-                "A new product on sale needs a price; set it_tel_inq=1 for a phone-inquiry product."
+                "A product on sale needs a price; set it_tel_inq=1 for a phone-inquiry product."
             )
 
 
-class ShopOrderResource(resources.ModelResource):
+class ShopOrderResource(UpdateOnlyResource):
     """Order reporting plus a safe update of customer-facing descriptive fields.
 
     Import is deliberately limited to existing orders. Status, amounts, payment keys, delivery
@@ -263,14 +273,37 @@ class ShopOrderResource(resources.ModelResource):
         od_id = _text(row.get("od_id"))
         if not od_id:
             raise ValueError("od_id is required.")
-        if not ShopOrder.objects.filter(pk=od_id).exists():
+        existing = ShopOrder.objects.select_for_update().filter(pk=od_id).first()
+        if existing is None:
             raise ValueError(
                 "This resource updates existing orders only; use the order registration resource for new orders."
             )
         row["od_id"] = od_id
+        for field_name in (
+            "od_name",
+            "od_tel",
+            "od_hp",
+            "od_email",
+            "od_zip",
+            "od_addr1",
+            "od_addr2",
+            "od_addr3",
+            "od_b_name",
+            "od_b_tel",
+            "od_b_hp",
+            "od_b_zip",
+            "od_b_addr1",
+            "od_b_addr2",
+            "od_b_addr3",
+            "od_memo",
+            "od_shop_memo",
+            "od_hope_date",
+        ):
+            if not _text(row.get(field_name)):
+                row[field_name] = getattr(existing, field_name)
 
 
-class ShopOrderRegistrationResource(resources.ModelResource):
+class ShopOrderRegistrationResource(SafeExportResource):
     """Create unpaid bank-deposit orders from one CSV row per order.
 
     This intentionally supports one line item per row and rejects options, coupons, points, and
@@ -338,11 +371,20 @@ class ShopOrderRegistrationResource(resources.ModelResource):
         if product is None:
             raise ValueError(f"Product not found: {product_id or '-'}")
         quantity = _integer(row.get("ct_qty"), default=1, minimum=1)
+        min_qty = int(product.it_buy_min_qty or 0)
+        max_qty = int(product.it_buy_max_qty or 0)
+        if min_qty and quantity < min_qty:
+            raise ValueError(f"ct_qty is below the product minimum ({min_qty}).")
+        if max_qty and quantity > max_qty:
+            raise ValueError(f"ct_qty is above the product maximum ({max_qty}).")
         if _text(row.get("ct_option")):
             raise ValueError("Options are not supported by order registration; use the storefront order flow.")
+        unit_price = int(product.it_price or 0)
+        if unit_price <= 0:
+            raise ValueError("Order registration does not support zero-price products.")
         row["_product_id"] = product.pk
         row["_quantity"] = quantity
-        row["_unit_price"] = int(product.it_price or 0)
+        row["_unit_price"] = unit_price
 
         username = _text(row.get("username"))
         user_id = None

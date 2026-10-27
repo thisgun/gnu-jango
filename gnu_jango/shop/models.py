@@ -799,6 +799,7 @@ class ShopOrder(models.Model):
         ordering = ["-od_datetime", "-od_id"]
         verbose_name = _("Shop order")
         verbose_name_plural = _("Shop orders")
+        permissions = [("export_shoporder", _("Can export shop orders"))]
         indexes = [
             models.Index(fields=["od_datetime", "od_status"]),
             models.Index(fields=["od_misu", "od_datetime"]),

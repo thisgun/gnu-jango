@@ -39,7 +39,7 @@ from gnu_jango.shop.product_copy import copy_product, next_product_id
 from gnu_jango.shop.product_relations import mirror_product_relations
 from gnu_jango.shop.models import ShopProduct, ShopProductRelation, ShopStockAdjustment
 from gnu_jango.shop.import_export_resources import ShopProductResource
-from gnu_jango.core.audit import UnfoldHistoryAdmin
+from gnu_jango.core.audit import AdminExportAuditMixin, UnfoldHistoryAdmin
 
 
 PRODUCT_TYPE_FIELDS = (
@@ -244,12 +244,17 @@ class ShopCategoryAdmin(ModelAdmin):
 
 
 @admin.register(ShopProduct)
-class ShopProductAdmin(ImportExportMixin, UnfoldHistoryAdmin):
+class ShopProductAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmin):
     resource_classes = [ShopProductResource]
+    export_audit_label = "products"
 
     def has_import_permission(self, request):
         # Import can both add and update products; stock updates stay on the stock tool.
         return request.user.has_perm("shop.add_shopproduct") and request.user.has_perm("shop.change_shopproduct")
+
+    def has_export_permission(self, request):
+        # A staff account needs the product view permission; the import-export default is too broad.
+        return request.user.has_perm("shop.view_shopproduct")
 
     def revert_disabled(self, request, obj=None):
         # A product revision also carries stock/options; restoring it would bypass the stock

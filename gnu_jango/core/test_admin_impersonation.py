@@ -8,10 +8,12 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from rest_framework_simplejwt.tokens import AccessToken
 
 from gnu_jango.users.impersonation import (
     SESSION_IMPERSONATOR_KEY,
+    SESSION_REFRESH_JTI_KEY,
     SESSION_STARTED_KEY,
     SESSION_TARGET_KEY,
 )
@@ -51,7 +53,7 @@ class ImpersonationTests(TestCase):
             LogEntry.objects.filter(
                 user_id=self.admin.pk,
                 object_id=str(self.member.pk),
-                change_message__contains="Impersonation started",
+                change_message__contains="Impersonation started; ip=127.0.0.1",
             ).exists()
         )
 
@@ -73,6 +75,84 @@ class ImpersonationTests(TestCase):
             LogEntry.objects.filter(
                 user_id=self.admin.pk,
                 change_message__contains="Impersonation stopped",
+            ).exists()
+        )
+
+    def test_logout_without_password_revokes_the_preview(self):
+        self.start()
+        refresh_jti = self.client.session[SESSION_REFRESH_JTI_KEY]
+
+        response = self.client.post(reverse("impersonation-logout"))
+
+        self.assertRedirects(response, reverse("admin:login"), fetch_redirect_response=False)
+        self.assertEqual(response.cookies["g5_token"].value, "")
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertTrue(BlacklistedToken.objects.filter(token__jti=refresh_jti).exists())
+        self.assertTrue(
+            LogEntry.objects.filter(
+                user_id=self.admin.pk,
+                change_message__contains="Impersonation ended by logout; ip=",
+            ).exists()
+        )
+
+    def test_admin_logout_during_impersonation_is_an_escape_hatch(self):
+        self.start()
+        refresh_jti = self.client.session[SESSION_REFRESH_JTI_KEY]
+
+        response = self.client.post(reverse("admin:logout"))
+
+        self.assertRedirects(response, reverse("admin:login"), fetch_redirect_response=False)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertTrue(BlacklistedToken.objects.filter(token__jti=refresh_jti).exists())
+        self.assertTrue(
+            LogEntry.objects.filter(
+                user_id=self.admin.pk,
+                change_message__contains="Impersonation ended by logout",
+            ).exists()
+        )
+
+    def test_missing_acting_admin_still_revokes_the_preview_token(self):
+        self.start()
+        refresh_jti = self.client.session[SESSION_REFRESH_JTI_KEY]
+        self.admin.is_active = False
+        self.admin.save(update_fields=["is_active"])
+
+        response = self.client.post(reverse("impersonation-stop"), {"password": "password"})
+
+        self.assertRedirects(response, reverse("admin:login"), fetch_redirect_response=False)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertTrue(BlacklistedToken.objects.filter(token__jti=refresh_jti).exists())
+
+    def test_repeated_wrong_stop_passwords_end_the_preview(self):
+        self.start()
+        refresh_jti = self.client.session[SESSION_REFRESH_JTI_KEY]
+
+        for _ in range(5):
+            response = self.client.post(reverse("impersonation-stop"), {"password": "wrong"})
+
+        self.assertRedirects(response, reverse("admin:login"), fetch_redirect_response=False)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertTrue(BlacklistedToken.objects.filter(token__jti=refresh_jti).exists())
+        self.assertTrue(
+            LogEntry.objects.filter(
+                user_id=self.admin.pk,
+                change_message__contains="repeated password failures",
+            ).exists()
+        )
+
+    def test_expiry_is_audited_with_the_request_ip(self):
+        self.start()
+        session = self.client.session
+        session[SESSION_STARTED_KEY] = (timezone.now() - timedelta(hours=1)).isoformat()
+        session.save()
+
+        response = self.client.get("/api/v1/status")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(
+            LogEntry.objects.filter(
+                user_id=self.admin.pk,
+                change_message__contains="Impersonation expired; ip=127.0.0.1",
             ).exists()
         )
 

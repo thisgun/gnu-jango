@@ -7,6 +7,7 @@ category tree, and an unanswered-inquiry count on the dashboard.
 """
 
 import json
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -257,6 +258,31 @@ class ShippingBulkActionTests(AdminTestBase):
         self.assertEqual(order.od_invoice, "1234567890")
         self.assertTrue(order.od_delivery_company)
         self.assertTrue(order.od_invoice_time)
+
+    def test_send_sms_option_is_forwarded_to_the_shipping_transition(self):
+        product = ShopProduct.objects.create(it_id="SHIP-SMS", it_name="SMS item", it_use="1")
+        order = ShopOrder.objects.create(od_id="SHIP-SMS-ORDER", od_name="Buyer", od_status=STATUS_READY)
+        ShopOrderItem.objects.create(
+            order=order,
+            product=product,
+            ct_id="SHIP-SMS-LINE",
+            it_id=product.it_id,
+            it_name=product.it_name,
+            ct_status=STATUS_READY,
+        )
+
+        with patch("gnu_jango.shop.delivery_import.move_order_status", return_value=object()) as transition:
+            self.run_action(
+                "admin:shop_shoporder_changelist",
+                "set_selected_shipping",
+                [order],
+                od_delivery_company="CJ",
+                od_invoice="SMS-123",
+                send_sms="on",
+            )
+
+        transition.assert_called_once()
+        self.assertTrue(transition.call_args.kwargs["send_sms"])
 
 
 class NextAdminRemovalTests(AdminTestBase):

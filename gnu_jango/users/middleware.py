@@ -1,13 +1,19 @@
 """Safety guard for support impersonation sessions."""
 
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.urls import reverse
 from rest_framework_simplejwt.tokens import AccessToken
 
 from .impersonation import (
+    ADMIN_LOGOUT_PATH,
+    IMPERSONATION_LOGOUT_PATH,
     IMPERSONATION_PAGE_PATH,
     SESSION_IMPERSONATOR_KEY,
     STOP_PATH,
+    _clear_auth_cookies,
+    end_impersonation_session,
     impersonation_expired,
+    log_impersonation_expiry,
 )
 
 
@@ -47,14 +53,34 @@ class ImpersonationReadOnlyMiddleware:
         path = request.path.rstrip("/")
         stop_path = STOP_PATH.rstrip("/")
         page_path = IMPERSONATION_PAGE_PATH.rstrip("/")
+        logout_paths = {
+            IMPERSONATION_LOGOUT_PATH.rstrip("/"),
+            ADMIN_LOGOUT_PATH.rstrip("/"),
+        }
         expired = marker and impersonation_expired(request)
 
+        if expired:
+            log_impersonation_expiry(request)
+
+        # A target member must always be able to abandon the preview without knowing the admin
+        # password. The standard admin logout URL is wrapped here so its session flush still
+        # revokes the issued refresh token and clears the storefront cookies.
+        if marker and request.method == "POST" and path == ADMIN_LOGOUT_PATH.rstrip("/"):
+            end_impersonation_session(request, "Impersonation ended by logout")
+            response = HttpResponseRedirect(reverse("admin:login"))
+            _clear_auth_cookies(response)
+            return response
+
         # An expired preview is closed to browsing. The stop page remains reachable so the acting
-        # admin can authenticate and end it.
-        if expired and path not in {stop_path, page_path}:
+        # admin can authenticate and end it, and logout is always available as an escape hatch.
+        if expired and path not in {stop_path, page_path, *logout_paths}:
             return self._forbidden(request, "Impersonation expired. Stop it with the admin password.")
 
-        if (marker or token_impersonated) and request.method not in self.SAFE_METHODS and path != stop_path:
+        if (
+            (marker or token_impersonated)
+            and request.method not in self.SAFE_METHODS
+            and path not in {stop_path, *logout_paths}
+        ):
             return self._forbidden(
                 request,
                 "Impersonation is read-only. Stop impersonation before changing member data.",

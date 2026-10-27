@@ -22,7 +22,7 @@ from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationFo
 
 from gnu_jango.api.auth_sessions import revoke_member_tokens
 from gnu_jango.config.models import Config
-from gnu_jango.core.audit import UnfoldHistoryAdmin
+from gnu_jango.core.audit import AdminExportAuditMixin, UnfoldHistoryAdmin
 from gnu_jango.users import point_ledger
 
 from .import_export_resources import UserResource
@@ -166,11 +166,12 @@ class MemoStateFilter(DropdownFilter):
         return queryset
 
 
-class UserAdmin(ImportExportMixin, BaseUserAdmin, ModelAdmin):
+class UserAdmin(AdminExportAuditMixin, ImportExportMixin, BaseUserAdmin, ModelAdmin):
     form = UserChangeForm
     add_form = UserCreationForm
     change_password_form = RevokingAdminPasswordChangeForm
     resource_classes = [UserResource]
+    export_audit_label = "members"
     change_form_template = "admin/users/user/change_form.html"
     inlines = (ProfileInline,)
 

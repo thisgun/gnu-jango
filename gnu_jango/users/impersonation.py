@@ -31,6 +31,7 @@ from django.views.decorators.http import require_POST
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
 
 from gnu_jango.api.auth_sessions import issue_refresh_token
+from gnu_jango.utils.lib import get_client_ip
 
 User = get_user_model()
 
@@ -38,9 +39,14 @@ SESSION_IMPERSONATOR_KEY = "g5_impersonator_id"
 SESSION_TARGET_KEY = "g5_impersonation_target_id"
 SESSION_STARTED_KEY = "g5_impersonation_started_at"
 SESSION_REFRESH_JTI_KEY = "g5_impersonation_refresh_jti"
+SESSION_EXPIRY_LOGGED_KEY = "g5_impersonation_expiry_logged"
+SESSION_STOP_ATTEMPTS_KEY = "g5_impersonation_stop_attempts"
 STOP_PATH = "/impersonation/stop/"
 IMPERSONATION_PAGE_PATH = "/impersonation/"
+IMPERSONATION_LOGOUT_PATH = "/impersonation/logout/"
+ADMIN_LOGOUT_PATH = "/admin/logout/"
 IMPERSONATION_MAX_SECONDS = 30 * 60
+STOP_MAX_ATTEMPTS = 5
 AUTH_COOKIE_NAMES = ("g5_token", "g5_refresh", "g5_auth_hint", "g5_auto_login")
 
 
@@ -89,9 +95,37 @@ def _switch_session_user(request, user):
     request.session.modified = True
 
 
-def _audit(admin, target, message):
+def _audit(admin, target, message, *, request=None):
     # Django 6.1 removed LogEntryManager.log_action; log_actions accepts the affected objects.
-    LogEntry.objects.log_actions(admin.pk, [target], CHANGE, message, single_object=True)
+    client_ip = get_client_ip(request) if request is not None else ""
+    detail = f"{message}; ip={client_ip or '-'}"
+    LogEntry.objects.log_actions(admin.pk, [target], CHANGE, detail, single_object=True)
+
+
+def end_impersonation_session(request, reason):
+    """End a preview without the admin password: logout, audit, revoke, clear cookies."""
+    admin_id = request.session.get(SESSION_IMPERSONATOR_KEY)
+    target_id = request.session.get(SESSION_TARGET_KEY)
+    jti = request.session.get(SESSION_REFRESH_JTI_KEY, "")
+    admin = User.objects.filter(pk=admin_id).first() if admin_id else None
+    target = User.objects.filter(pk=target_id).first() if target_id else None
+    _blacklist_refresh(jti)
+    if admin is not None:
+        _audit(admin, target or admin, reason, request=request)
+    logout(request)
+
+
+def log_impersonation_expiry(request):
+    if not request.session.get(SESSION_IMPERSONATOR_KEY) or request.session.get(SESSION_EXPIRY_LOGGED_KEY):
+        return
+    admin_id = request.session.get(SESSION_IMPERSONATOR_KEY)
+    target_id = request.session.get(SESSION_TARGET_KEY)
+    admin = User.objects.filter(pk=admin_id).first() if admin_id else None
+    target = User.objects.filter(pk=target_id).first() if target_id else None
+    if admin is not None:
+        _audit(admin, target or admin, "Impersonation expired", request=request)
+    request.session[SESSION_EXPIRY_LOGGED_KEY] = True
+    request.session.modified = True
 
 
 def _set_member_access_cookie(response, request, access_token):
@@ -142,7 +176,7 @@ def start_impersonation(request, object_id):
     request.session[SESSION_REFRESH_JTI_KEY] = str(refresh["jti"])
     access = refresh.access_token
     access["imp"] = str(admin.pk)
-    _audit(admin, target, "Impersonation started")
+    _audit(admin, target, "Impersonation started", request=request)
 
     response = redirect("impersonation")
     _set_member_access_cookie(response, request, str(access))
@@ -178,11 +212,21 @@ def stop_impersonation(request):
     admin = User.objects.filter(pk=admin_id, is_active=True, is_staff=True).first()
 
     if admin is None:
+        _blacklist_refresh(refresh_jti)
         logout(request)
         response = HttpResponseRedirect(reverse("admin:login"))
         _clear_auth_cookies(response)
         return response
     if not admin.check_password(str(request.POST.get("password") or "")):
+        attempts = int(request.session.get(SESSION_STOP_ATTEMPTS_KEY) or 0) + 1
+        request.session[SESSION_STOP_ATTEMPTS_KEY] = attempts
+        if attempts >= STOP_MAX_ATTEMPTS:
+            _blacklist_refresh(refresh_jti)
+            _audit(admin, target or admin, "Impersonation stopped after repeated password failures", request=request)
+            logout(request)
+            response = HttpResponseRedirect(reverse("admin:login"))
+            _clear_auth_cookies(response)
+            return response
         messages.error(request, "Enter the acting admin password to stop impersonation.")
         return redirect("impersonation")
 
@@ -193,9 +237,20 @@ def stop_impersonation(request):
         SESSION_TARGET_KEY,
         SESSION_STARTED_KEY,
         SESSION_REFRESH_JTI_KEY,
+        SESSION_EXPIRY_LOGGED_KEY,
+        SESSION_STOP_ATTEMPTS_KEY,
     ):
         request.session.pop(key, None)
-    _audit(admin, target or admin, "Impersonation stopped")
+    _audit(admin, target or admin, "Impersonation stopped", request=request)
     response = redirect("admin:index")
+    _clear_auth_cookies(response)
+    return response
+
+
+@require_POST
+def logout_impersonation(request):
+    """Allow a previewing admin to end the session without knowing the password."""
+    end_impersonation_session(request, "Impersonation ended by logout")
+    response = HttpResponseRedirect(reverse("admin:login"))
     _clear_auth_cookies(response)
     return response

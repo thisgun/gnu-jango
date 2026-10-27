@@ -8,6 +8,8 @@ history screen, diff view and revert action keep Unfold's layout.
 import csv
 
 from django.contrib import admin, messages
+from django.contrib.admin.models import CHANGE, LogEntry
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import CharField, F, Q, Value
@@ -20,6 +22,8 @@ from django.utils.translation import gettext_lazy as _
 from simple_history.admin import SimpleHistoryAdmin
 from unfold.admin import ModelAdmin
 
+from gnu_jango.utils.lib import get_client_ip
+
 AUDIT_PAGE_SIZE = 50
 AUDIT_EXPORT_LIMIT = 1000
 # get_history_type_display() reuses Django's "created" translation, which the Korean locale
@@ -30,6 +34,34 @@ AUDIT_ACTION_LABELS = {
     "-": "삭제",
 }
 AUDIT_ACTION_CHOICES = tuple(AUDIT_ACTION_LABELS.items())
+
+
+def log_admin_export(request, model, count, *, label=""):
+    """Record who exported how many rows through an import-export admin endpoint."""
+    label = label or str(model._meta.verbose_name_plural)
+    LogEntry.objects.create(
+        user_id=request.user.pk,
+        content_type_id=ContentType.objects.get_for_model(model).pk,
+        object_id="",
+        object_repr=(f"Export {label}: {count} rows")[:200],
+        action_flag=CHANGE,
+        change_message=f"Admin export via django-import-export; rows={count}; ip={get_client_ip(request) or '-'}",
+    )
+
+
+class AdminExportAuditMixin:
+    """Log successful export downloads, including the row count and client IP."""
+
+    export_audit_label = ""
+
+    def _do_file_export(self, file_format, request, queryset, export_form=None):
+        response = super()._do_file_export(file_format, request, queryset, export_form=export_form)
+        try:
+            count = queryset.count()
+        except Exception:
+            count = 0
+        log_admin_export(request, self.model, count, label=self.export_audit_label)
+        return response
 
 
 class UnfoldHistoryAdmin(SimpleHistoryAdmin, ModelAdmin):

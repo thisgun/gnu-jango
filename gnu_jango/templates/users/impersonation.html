@@ -14,6 +14,7 @@
     a, button { padding: 10px 14px; border-radius: 8px; border: 0; font: inherit; cursor: pointer; text-decoration: none; }
     a { background: #eef4ff; color: #1d4ed8; }
     button { background: #dc2626; color: #fff; }
+    button.secondary { background: #475569; }
     small { color: #64748b; }
   </style>
 </head>
@@ -31,6 +32,10 @@
       <p>{% translate "This preview is read-only. Open the storefront to inspect the member experience, then stop the impersonation to return to the admin session. It expires automatically after 30 minutes." %}</p>
       <div class="actions">
         <a href="/">{% translate "Open storefront" %}</a>
+        <form method="post" action="{% url 'impersonation-logout' %}">
+          {% csrf_token %}
+          <button type="submit" class="secondary">{% translate "End preview without password" %}</button>
+        </form>
       </div>
     {% endif %}
     <form method="post" action="{% url 'impersonation-stop' %}">
