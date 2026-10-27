@@ -179,10 +179,17 @@ fail-open이 아닙니다.
 
 ### 복구 트리거
 
+- 가상계좌의 `pending_deposit`도 복구 대상입니다. 입금 전에는 `Status=9`로 남겨 두고,
+  `Status=0`이 확인되면 로컬 결제완료·`od_vbank_status=DONE`·attempt `approved`로
+  전환합니다. 입금통보가 유실되어도 예약 복구/관리자 액션/결과 페이지 재방문에서
+  복구할 수 있습니다.
+- 입금통보 `ResultCode=4110`인데 거래조회가 아직 `Status=9`이면 200으로 삼키지 않고
+  503을 반환해 NICEPAY 재통보를 유도합니다. 재통보가 끝난 뒤에도 미입금이면
+  `pending_deposit`으로 남고, 이후 예약 복구가 `Status=0`을 확인합니다.
 - Vercel의 `vercel.json` cron은 하루 1회(`0 18 * * *`)이므로 5분 복구 주기를 보장하지
   않습니다. Vercel에서는 결제자가 같은 주문으로 다시 결제를 시작할 때(서버의 새 attempt
-  생성 경로), 또는 결과 페이지를 다시 열 때 오래된 `approving`/`uncertain` 시도를
-  거래조회로 복구합니다. 결과 페이지의 `nicepay=1` 오류 상태는
+  생성 경로), 또는 결과 페이지를 다시 열 때 오래된 `approving`/`uncertain`/
+  `pending_deposit` 시도를 거래조회로 복구합니다. 결과 페이지의 `nicepay=1` 오류 상태는
   `/api/v1/shop/payment/nicepay/recover`를 호출하며, 이 endpoint는 회원 주문 소유자/스태프
   또는 비회원 주문 `uid`만 허용하고 **승인 API를 다시 호출하지 않습니다.**
 - `SHOP_NICEPAY_RECOVERY_AFTER_SECONDS`(기본 120초)보다 오래된 시도만 자동 복구합니다.

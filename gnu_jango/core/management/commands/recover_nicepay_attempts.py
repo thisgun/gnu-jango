@@ -11,7 +11,7 @@ from django.utils import timezone
 from gnu_jango.api.shop_nicepay import recover_nicepay_attempt
 from gnu_jango.shop.models import ShopPaymentAttempt
 
-RECOVERY_STATES = ("approving", "uncertain", "approved_local_failed")
+RECOVERY_STATES = ("approving", "uncertain", "approved_local_failed", "pending_deposit")
 DEFAULT_MINUTES = 15
 DEFAULT_LIMIT = 20
 MIN_TIME_BUDGET = 5

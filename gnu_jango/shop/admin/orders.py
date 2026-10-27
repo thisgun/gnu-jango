@@ -2376,7 +2376,7 @@ class ShopPaymentAttemptAdmin(ModelAdmin):
                 )
                 failed += 1
                 continue
-            if attempt.state not in {"approving", "uncertain", "approved_local_failed"}:
+            if attempt.state not in {"approving", "uncertain", "approved_local_failed", "pending_deposit"}:
                 skipped += 1
                 continue
             try:

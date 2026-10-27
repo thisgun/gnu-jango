@@ -71,13 +71,15 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
 ## 테스트 결과
 
 - `manage.py check`: 통과 (기존 silenced 1개)
-- `gnu_jango.core.test_shop_nicepay`: **50개 통과** (관리자 설정 상속 회귀 포함)
-- `manage.py test` 전체: **2,906개 통과**, 23개 skip
+- `gnu_jango.core.test_shop_nicepay`: **53개 통과** (관리자 설정 상속 회귀 포함)
+- `manage.py test` 전체: **2,909개 통과**, 23개 skip
 - Next.js `npm run typecheck`: 통과
 - Next.js `npm run lint`: 통과
 - `npx playwright test tests/payment-nicepay.spec.ts --workers=1`: **10개 통과**
 - 제공된 테스트 MID/MerchantKey로 실제 거래조회 인증 호출: `ResultCode=0000` 확인
   (테스트 TID는 실제 거래가 아니어서 `Status=9`; 실제 승인·입금 검증은 아님)
+- 비인증 가상계좌 발급 API 실제 호출: `ResultCode=4100`, 국민은행 `004`, 금액 1,004원,
+  입금만료 2026-10-29, 발급 직후 거래조회 `Status=9` 확인 (입금은 하지 않음)
 - `nextjs_default` 정적 테마 빌드: 통과
 - `handbook` 정적 테마 빌드: 통과
   - 일회용 DB(`migrate` + `ensure_demo_samples --apply` + `ensure_handbook_samples
@@ -86,8 +88,10 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
   - `git diff origin/main`에서 새 금지 문자열(127.0.0.1, 8000/8081/8090, 로컬 경로,
     로컬 DB 게시판) 없음 확인
 
-실제 NICEPAY 테스트 가맹점 정보가 없어 실제 결제창·승인·취소·가상계좌 입금통보는
-수행하지 못했습니다. 모의 테스트 통과를 실제 연동 성공으로 보고하지 않습니다.
+제공된 테스트 MID/MerchantKey로 거래조회 인증과 비인증 가상계좌 발급까지는 실제로
+확인했습니다. 다만 인증결제 결제창 승인·취소, 입금 후 거래조회 `Status=0`, 실제 입금통보
+수신은 아직 수행하지 못했습니다. 모의 테스트/비인증 발급 성공을 인증결제 전체 성공으로
+보고하지 않습니다.
 
 ## 마이그레이션
 
@@ -110,7 +114,8 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
   `SHOP_NICEPAY_VBANK_REQUIRE_LOOKUP_IDENTITY=True`인 strict 모드에서는 네 필드가
   조회 응답에 없거나 다르면 fail-closed로 입금 처리하지 않습니다. 기본값은 공식
   거래조회 응답(TID/Status/AuthCode/AuthDate)과 호환되는 fallback 모드입니다.
-  동일 TID 재통보는 아무 것도 바꾸지 않습니다.
+  동일 TID 재통보는 아무 것도 바꾸지 않습니다. `ResultCode=4110`인데 조회가 아직
+  `Status=9`이면 503으로 응답해 재통보를 유도합니다.
 - **M1**: `approved_local_failed`는 다음 복귀/확인에서 `recover_nicepay_attempt`로 로컬
   반영만 재시도합니다. 일반 `uncertain`/`approving` 복구는 거래조회 `Status=0`만 보고
   반영하지 않고, TID를 시도와 대조하며 서버 attempt/order의 MID/Moid/Amt/PayMethod를
@@ -120,8 +125,11 @@ NICEPAY PG 인증결제(`MID` / `MerchantKey` / `AuthToken`)를 기존 Django �
   시도별 예외 격리, 주문 삭제 시 `failed` 처리, `recovery_attempts` 카운트를 적용합니다.
   `run_scheduled_jobs`에 등록했으며 Vercel cron은 일 1회임을 문서화했습니다. VPS/Docker는
   5분 주기 실행을 권장합니다. 같은 주문 재결제 시작과 결과 페이지 재방문 시에도 오래된
-  시도를 거래조회로 복구하며, 실패하면 명확한 안내를 반환합니다. 관리자
-  `ShopPaymentAttempt`에는 변경 권한이 필요한 **거래조회로 복구** 액션을 추가했습니다.
+  `approving`/`uncertain`/`approved_local_failed`/`pending_deposit` 시도를 거래조회로
+  복구하며, 실패하면 명확한 안내를 반환합니다. `pending_deposit`은 `Status=9`이면
+  대기 상태를 유지하고, `Status=0`이면 로컬 결제완료/가상계좌 `DONE`으로 전환합니다.
+  관리자 `ShopPaymentAttempt`에는 변경 권한이 필요한 **거래조회로 복구** 액션을
+  추가했습니다.
 - **M3**: 취소 한도를 `od_receipt_price - od_refund_price` 잔액으로 제한하고, 취소 응답
   유실 시 거래조회 `Status=1`을 확인한 뒤 전체취소만 already-canceled로 인정합니다.
   `SHOP_NICEPAY_TAX_FREE_CANCEL_ENABLED` 계약 옵션이 켜진 경우 남은 면세 금액
