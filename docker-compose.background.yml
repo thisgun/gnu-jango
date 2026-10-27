@@ -83,7 +83,7 @@ services:
     healthcheck:
       test:
         - "CMD-SHELL"
-        - "python -c \"import base64, os, urllib.request; auth=os.environ.get('FLOWER_BASIC_AUTH',''); req=urllib.request.Request('http://127.0.0.1:5555/healthcheck', headers={'Authorization': 'Basic '+base64.b64encode(auth.encode()).decode()} if auth else {}); urllib.request.urlopen(req, timeout=3)\""
+        - "python -c \"import base64, os, urllib.request; auth=os.environ.get('FLOWER_BASIC_AUTH','').split(',')[0].strip(); req=urllib.request.Request('http://127.0.0.1:5555/healthcheck', headers={'Authorization': 'Basic '+base64.b64encode(auth.encode()).decode()} if auth else {}); urllib.request.urlopen(req, timeout=3)\""
       interval: 60s
       timeout: 5s
       start_period: 20s
