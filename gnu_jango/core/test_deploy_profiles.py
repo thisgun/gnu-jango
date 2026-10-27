@@ -661,6 +661,57 @@ class DeployProfileCheckTests(SimpleTestCase):
         single = self.evaluate("vps", env={"GUNICORN_WORKERS": "1"}, **overrides)
         self.assertEqual(statuses(single)["cache"], "pass")
 
+    def test_vps_warns_when_beat_and_cron_are_both_enabled(self):
+        beat = {
+            f"maintenance-{job.name}": {"task": "core.enqueue_scheduled_job"}
+            for job in scheduled_jobs.SCHEDULED_JOBS
+        }
+        beat.update({
+            "background-outbox-dispatch": {"task": "core.dispatch_background_jobs"},
+            "background-retention": {"task": "core.purge_background_jobs"},
+        })
+        report = self.evaluate(
+            "vps",
+            env={"GUNICORN_WORKERS": "1"},
+            BACKGROUND_JOBS_ENABLED=True,
+            CELERY_BEAT_SCHEDULE=beat,
+            CELERY_TASK_ALWAYS_EAGER=False,
+            CRON_SECRET="c" * 32,
+        )
+        check = next(item for item in report["checks"] if item["name"] == "background_tasks")
+        self.assertEqual(check["status"], "warn")
+        self.assertIn("CRON_SECRET", check["action"])
+
+    def test_vps_fails_when_beat_schedule_misses_a_job(self):
+        beat = {
+            f"maintenance-{job.name}": {"task": "core.enqueue_scheduled_job"}
+            for job in scheduled_jobs.SCHEDULED_JOBS
+        }
+        beat["background-retention"] = {"task": "core.purge_background_jobs"}
+        report = self.evaluate(
+            "vps",
+            env={"GUNICORN_WORKERS": "1"},
+            BACKGROUND_JOBS_ENABLED=True,
+            CELERY_BEAT_SCHEDULE=beat,
+            CELERY_TASK_ALWAYS_EAGER=False,
+            CRON_SECRET="",
+        )
+        check = next(item for item in report["checks"] if item["name"] == "background_tasks")
+        self.assertEqual(check["status"], "fail")
+        self.assertIn("background-outbox-dispatch", check["details"])
+
+    def test_vps_warns_when_background_jobs_are_disabled(self):
+        report = self.evaluate(
+            "vps",
+            env={"GUNICORN_WORKERS": "1"},
+            BACKGROUND_JOBS_ENABLED=False,
+            CELERY_TASK_ALWAYS_EAGER=True,
+            CRON_SECRET="",
+        )
+        check = next(item for item in report["checks"] if item["name"] == "background_tasks")
+        self.assertEqual(check["status"], "warn")
+        self.assertIn("request path", check["details"])
+
     def test_vps_requires_a_media_root_for_local_storage(self):
         report = self.evaluate(
             "vps",

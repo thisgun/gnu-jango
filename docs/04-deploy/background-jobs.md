@@ -49,6 +49,8 @@ PostgreSQL의 새 outbox 테이블에는 RLS를 켜고 `PUBLIC`, Supabase `anon`
 
 Beat를 두 개 실행하면 중복 전달이 발생할 수 있으므로 **한 사이트에 하나만** 실행하세요. DB의 활성 작업 키가 중복 실행을 추가로 막습니다. 기존 system cron, Vercel Cron 또는 외부 HTTP 스케줄은 전환 후 끕니다. 새 모드의 `/api/internal/cron`은 실제 명령을 실행하지 않고 같은 대기열에 작업만 등록하는 호환 경로입니다. `dry_run` 조회는 기존 점검을 유지합니다.
 
+Beat와 cron을 동시에 켜지 마세요. `check_deploy_profile`은 `BACKGROUND_JOBS_ENABLED=True`와 `CRON_SECRET`이 함께 설정되면 경고하고, Beat 스케줄에서 정기 작업이 빠지면 실패합니다. VPS/Docker는 `CRON_SECRET`을 비우고, Vercel 단독처럼 worker가 없는 환경만 cron을 사용합니다.
+
 ## 3. VPS에서 시작하기
 
 먼저 DB와 미디어를 백업하고 `deploy/env/vps.env.example`을 참고하여 저장소 밖 설정 파일을 준비하세요. 다음은 **VPS 자체 PostgreSQL과 Redis를 사용하는 Docker Compose 구성**입니다. 기존 Supabase 프로젝트에 연결하는 절차로 사용하면 안 됩니다.
@@ -97,6 +99,12 @@ celery -A example beat -l INFO --schedule=/writable/private/path/celerybeat-sche
 # 상태별 건수 조회: 실행·전송 없음
 python manage.py process_background_jobs
 
+# dead letter 또는 15분 이상 대기 작업이 있으면 exit 1:
+python manage.py process_background_jobs --check --max-pending-minutes 15
+
+# --check는 외부 모니터링이 주기적으로 호출해 exit code로 알림을 받는 용도입니다.
+# Beat에 넣지 마세요. 실패가 다시 백그라운드 작업 실패로 기록될 뿐입니다.
+
 # 특정 실패 작업 조회: 실행 없음
 python manage.py replay_background_jobs --id <작업-UUID>
 
@@ -128,7 +136,7 @@ docker compose --profile monitoring up -d --build flower
 
 접속 주소는 `http://127.0.0.1:5555/`입니다. 원격 서버에서는 SSH 포트 포워딩으로 접속하세요. Flower는 읽기 전용이며 인증 없이 시작되지 않습니다. 포트는 호스트 loopback에만 연결합니다. `/metrics` 등 일부 경로는 Flower 인증의 예외이므로 포트를 인터넷에 직접 공개하지 마세요.
 
-Flower는 작업자와 Celery 메시지의 실행 상태를 보여줍니다. **아직 Redis로 전달되지 않은 DB 대기 작업과 최종 실패 원문 보관 상태는 Django 관리자에서 확인**하세요. Flower에서 성공으로 보이는 중복 전달 건도 실제 작업 상태는 DB 기록을 기준으로 판단합니다.
+Flower는 작업자와 Celery 메시지의 실행 상태를 보여줍니다. Compose의 Flower healthcheck는 Basic Auth를 포함한 `/healthcheck` 요청으로 기동 상태를 확인합니다. **아직 Redis로 전달되지 않은 DB 대기 작업과 최종 실패 원문 보관 상태는 Django 관리자에서 확인**하세요. Flower에서 성공으로 보이는 중복 전달 건도 실제 작업 상태는 DB 기록을 기준으로 판단합니다.
 
 ## 6. Vercel·PythonAnywhere
 
