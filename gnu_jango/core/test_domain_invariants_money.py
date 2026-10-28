@@ -220,18 +220,8 @@ TOSS_SETTINGS = {"SHOP_TOSS_CLIENT_KEY": "test_ck_fake_client", "SHOP_TOSS_SECRE
 
 
 def place_toss_order(buyer, shop, settings, **fields):
-    for name, value in TOSS_SETTINGS.items():
-        setattr(settings, name, value)
+    order = place_toss_order_unpaid(buyer, shop, settings, **fields)
     client = client_for(buyer)
-    for key, qty in ITEMS:
-        client.post("/api/v1/shop/cart", {"it_id": shop[key].it_id, "ct_qty": qty}, format="json")
-    prepared = client.post(
-        "/api/v1/shop/payment/prepare",
-        {**CHECKOUT_FIELDS, "od_settle_case": "card", "pg_service": "toss", **fields},
-        format="json",
-    )
-    assert prepared.status_code == 200, prepared.content[:400]
-    order = ShopOrder.objects.get(pk=prepared.json()["data"]["order_id"])
     payment = {
         "orderId": order.od_id, "paymentKey": "pay_fake_key_1", "method": "card", "status": "DONE",
         "totalAmount": order.od_receipt_price,
@@ -243,6 +233,22 @@ def place_toss_order(buyer, shop, settings, **fields):
             assert confirmed.status_code == 200, confirmed.content[:400]
     order.refresh_from_db()
     return order
+
+
+def place_toss_order_unpaid(buyer, shop, settings, **fields):
+    """A Toss checkout prepared through the API (stock, coupon and points taken), not paid yet."""
+    for name, value in TOSS_SETTINGS.items():
+        setattr(settings, name, value)
+    client = client_for(buyer)
+    for key, qty in ITEMS:
+        client.post("/api/v1/shop/cart", {"it_id": shop[key].it_id, "ct_qty": qty}, format="json")
+    prepared = client.post(
+        "/api/v1/shop/payment/prepare",
+        {**CHECKOUT_FIELDS, "od_settle_case": "card", "pg_service": "toss", **fields},
+        format="json",
+    )
+    assert prepared.status_code == 200, prepared.content[:400]
+    return ShopOrder.objects.get(pk=prepared.json()["data"]["order_id"])
 
 
 TOSS_SEQUENCES = {
@@ -425,3 +431,47 @@ def test_the_shared_cancel_path_run_twice_gives_everything_back_once(buyer, shop
     assert_fully_cancelled(order, paid=CASH)
     assert balance(buyer) == START_POINTS
     assert_point_ledger_matches(buyer)
+
+
+TOSS_VBANK_SECRET = "vbank-fake-secret"
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        "입금",
+        "배송",
+        pytest.param("준비", marks=pytest.mark.xfail(strict=True, reason=(
+            "BUG: PAID_STATUSES (api/shop_common.py:40) leaves out 준비/완료; the Toss vbank webhook "
+            "(api/v1_shop.py:2277) then cancels the paid order locally instead of flagging it"))),
+        pytest.param("완료", marks=pytest.mark.xfail(strict=True, reason=(
+            "BUG: PAID_STATUSES leaves out 완료; a delivered order's stock and payment record are wiped"))),
+    ],
+)
+def test_a_toss_virtual_account_reported_cancelled_never_wipes_a_paid_order(buyer, shop, settings, status):
+    """Toss reports the virtual account CANCELED (an operator refunded it in the Toss dashboard)
+    while the shop already took the deposit: the order needs a person, not an automatic cancel that
+    erases the payment record and puts delivered goods back on the shelf."""
+    import hashlib
+
+    settings.SHOP_TOSS_VBANK_ENABLED = True
+    order = place_toss_order_unpaid(buyer, shop, settings, od_settle_case="가상계좌")
+    ShopOrder.objects.filter(pk=order.pk).update(
+        od_status=status, od_misu=0, od_tno="pay_vb_key_1", od_vbank_status="DONE",
+        od_vbank_secret_hash=hashlib.sha256(TOSS_VBANK_SECRET.encode()).hexdigest(),
+    )
+    order.items.update(ct_status=status)
+    before = snapshot(order, shop, buyer)
+    provider = {"orderId": order.od_id, "paymentKey": "pay_vb_key_1", "method": "가상계좌", "status": "CANCELED",
+                "totalAmount": order.od_receipt_price}
+    event = {"eventType": "DEPOSIT_CALLBACK",
+             "data": {"orderId": order.od_id, "secret": TOSS_VBANK_SECRET, "status": "CANCELED"}}
+
+    with patch("gnu_jango.api.v1_shop.toss_api_get_payment_by_order", return_value=(provider, None)):
+        response = client_for(buyer).post(
+            "/api/v1/shop/payment/toss/vbank/webhook", data=json.dumps(event), content_type="application/json"
+        )
+
+    assert response.status_code == 200
+    assert response.json()["data"].get("manual_review") is True
+    assert snapshot(order, shop, buyer) == before
