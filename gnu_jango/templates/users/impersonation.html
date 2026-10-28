@@ -1,10 +1,9 @@
-{% load i18n %}
 <!doctype html>
 <html lang="ko">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% translate "Member impersonation" %}</title>
+  <title>회원 미리보기</title>
   <style>
     body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f4f7fb; color: #1e293b; font: 16px/1.6 system-ui, sans-serif; }
     main { width: min(560px, calc(100% - 40px)); padding: 32px; border: 1px solid #d9e2ef; border-radius: 12px; background: #fff; box-shadow: 0 12px 28px rgba(15, 23, 42, .08); }
@@ -16,41 +15,44 @@
     button { background: #dc2626; color: #fff; }
     button.secondary { background: #475569; }
     small { color: #64748b; }
+    .warning { padding: 12px 14px; border-radius: 8px; background: #fef3c7; color: #78350f; }
+    label { display: block; margin: 24px 0 6px; font-weight: 600; }
+    input { box-sizing: border-box; width: 100%; margin-bottom: 10px; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }
   </style>
 </head>
 <body>
 <main>
-  <h1>{% translate "Viewing as a member" %}</h1>
+  <h1>회원 화면 미리보기 중</h1>
   {% if target %}
     <p class="member">
       <strong>{{ target.get_username }}</strong>{% if target.email %} · {{ target.email }}{% endif %}<br>
-      <small>{% translate "Started" %}: {{ started_at }}{% if admin %} · {% translate "Admin" %}: {{ admin.get_username }}{% endif %}</small>
+      <small>시작: {{ started_at|date:"Y-m-d H:i" }}{% if admin %} · 관리자: {{ admin.get_username }}{% endif %}</small>
     </p>
     {% if expired %}
-      <p class="warning">{% translate "This impersonation session has expired. Enter the admin password to return to the admin session." %}</p>
+      <p class="warning">미리보기 시간(30분)이 끝났습니다. 관리자 비밀번호를 입력하면 관리자 세션으로 돌아갑니다.</p>
     {% else %}
-      <p>{% translate "This preview is read-only. Open the storefront to inspect the member experience, then stop the impersonation to return to the admin session. It expires automatically after 30 minutes." %}</p>
+      <p>읽기 전용 미리보기입니다. 쇼핑몰에서 이 회원이 보는 화면을 확인한 뒤 미리보기를 종료하세요. 주문·글쓰기·정보 변경은 막혀 있습니다. 미리보기는 30분 뒤 자동으로 끝나고, 쇼핑몰 화면의 회원 로그인은 15분 뒤 먼저 끊깁니다.</p>
       <div class="actions">
-        <a href="/">{% translate "Open storefront" %}</a>
+        <a href="/">쇼핑몰 열기</a>
         <form method="post" action="{% url 'impersonation-logout' %}">
           {% csrf_token %}
-          <button type="submit" class="secondary">{% translate "End preview without password" %}</button>
+          <button type="submit" class="secondary">비밀번호 없이 종료(로그아웃)</button>
         </form>
       </div>
     {% endif %}
     <form method="post" action="{% url 'impersonation-stop' %}">
       {% csrf_token %}
-      <label for="stop-password">{% translate "Admin password" %}</label>
+      <label for="stop-password">관리자 비밀번호</label>
       <input id="stop-password" name="password" type="password" autocomplete="current-password" required>
-      <button type="submit">{% translate "Stop impersonation" %}</button>
+      <button type="submit">미리보기 종료</button>
     </form>
   {% else %}
-    <p>{% translate "The impersonated member no longer exists." %}</p>
+    <p>미리보기 중이던 회원이 더 이상 없습니다.</p>
     <form method="post" action="{% url 'impersonation-stop' %}">
       {% csrf_token %}
-      <label for="stop-password">{% translate "Admin password" %}</label>
+      <label for="stop-password">관리자 비밀번호</label>
       <input id="stop-password" name="password" type="password" autocomplete="current-password" required>
-      <button type="submit">{% translate "Stop impersonation" %}</button>
+      <button type="submit">미리보기 종료</button>
     </form>
   {% endif %}
 </main>

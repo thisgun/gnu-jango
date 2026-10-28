@@ -47,7 +47,10 @@ IMPERSONATION_LOGOUT_PATH = "/impersonation/logout/"
 ADMIN_LOGOUT_PATH = "/admin/logout/"
 IMPERSONATION_MAX_SECONDS = 30 * 60
 STOP_MAX_ATTEMPTS = 5
-AUTH_COOKIE_NAMES = ("g5_token", "g5_refresh", "g5_auth_hint", "g5_auto_login")
+# Readable by the storefront so it can show a "read-only preview" banner. It only carries the
+# preview's end time (epoch seconds); the read-only rule itself is enforced by the middleware.
+IMPERSONATION_HINT_COOKIE = "g5_impersonation"
+AUTH_COOKIE_NAMES = ("g5_token", "g5_refresh", "g5_auth_hint", "g5_auto_login", IMPERSONATION_HINT_COOKIE)
 
 
 def _cookie_kwargs(request):
@@ -67,16 +70,21 @@ def _blacklist_refresh(jti):
         BlacklistedToken.objects.get_or_create(token=row)
 
 
-def impersonation_expired(request):
-    raw_started = request.session.get(SESSION_STARTED_KEY)
-    if not raw_started:
-        return False
+def _started_at(request):
+    """The preview start time, or None when absent or unreadable."""
     try:
-        started = datetime.fromisoformat(raw_started)
+        started = datetime.fromisoformat(request.session.get(SESSION_STARTED_KEY) or "")
     except (TypeError, ValueError):
+        return None
+    return timezone.make_aware(started) if timezone.is_naive(started) else started
+
+
+def impersonation_expired(request):
+    if not request.session.get(SESSION_STARTED_KEY):
+        return False
+    started = _started_at(request)
+    if started is None:
         return True
-    if timezone.is_naive(started):
-        started = timezone.make_aware(started)
     return timezone.now() - started > timedelta(seconds=IMPERSONATION_MAX_SECONDS)
 
 
@@ -144,6 +152,15 @@ def _set_member_access_cookie(response, request, access_token):
         httponly=False,
         **_cookie_kwargs(request),
     )
+    # The storefront preview ends with the member token or the session limit, whichever is first.
+    banner_seconds = min(int(lifetime.total_seconds()), IMPERSONATION_MAX_SECONDS)
+    response.set_cookie(
+        IMPERSONATION_HINT_COOKIE,
+        str(int(timezone.now().timestamp()) + banner_seconds),
+        max_age=banner_seconds,
+        httponly=False,
+        **_cookie_kwargs(request),
+    )
     # Never let the admin's refresh cookie silently refresh the member preview or vice versa.
     response.delete_cookie("g5_refresh", path="/", samesite="Lax")
     response.delete_cookie("g5_auto_login", path="/", samesite="Lax")
@@ -155,16 +172,16 @@ def start_impersonation(request, object_id):
         raise PermissionDenied("Only superusers may impersonate members.")
     target = get_object_or_404(User, pk=object_id)
     if target.pk == request.user.pk:
-        messages.error(request, "You cannot impersonate yourself.")
+        messages.error(request, "자기 자신으로는 미리보기를 할 수 없습니다.")
         return redirect("admin:auth_user_change", object_id=target.pk)
     if target.is_staff or target.is_superuser:
-        messages.error(request, "Admin and staff accounts cannot be impersonated.")
+        messages.error(request, "관리자·스태프 계정으로는 미리보기를 할 수 없습니다.")
         return redirect("admin:auth_user_change", object_id=target.pk)
     if not target.is_active:
-        messages.error(request, "Inactive members cannot be impersonated.")
+        messages.error(request, "비활성 회원으로는 미리보기를 할 수 없습니다.")
         return redirect("admin:auth_user_change", object_id=target.pk)
     if request.session.get(SESSION_IMPERSONATOR_KEY):
-        messages.error(request, "Stop the current impersonation before starting another one.")
+        messages.error(request, "진행 중인 회원 미리보기를 먼저 종료하세요.")
         return redirect("impersonation")
 
     admin = request.user
@@ -195,7 +212,7 @@ def impersonation_page(request):
         {
             "target": target,
             "admin": admin,
-            "started_at": request.session.get(SESSION_STARTED_KEY, ""),
+            "started_at": _started_at(request),
             "expired": impersonation_expired(request),
         },
     )
@@ -227,7 +244,7 @@ def stop_impersonation(request):
             response = HttpResponseRedirect(reverse("admin:login"))
             _clear_auth_cookies(response)
             return response
-        messages.error(request, "Enter the acting admin password to stop impersonation.")
+        messages.error(request, "미리보기를 종료하려면 관리자 비밀번호를 입력하세요.")
         return redirect("impersonation")
 
     _blacklist_refresh(refresh_jti)

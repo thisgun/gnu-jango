@@ -17,6 +17,7 @@ import { ThemeSlotsProvider } from "@/components/providers/ThemeSlotsProvider";
 import { themeComponents, themeConfig } from "@/lib/theme";
 import { Toaster } from "@/components/ui/toaster";
 import { BackToTop } from "@/components/layout/BackToTop";
+import { ImpersonationBanner } from "@/components/layout/ImpersonationBanner";
 import { CompareTray } from "@/components/shop/CompareTray";
 import { PWAProvider } from "@/components/providers/PWAProvider";
 import { WebVitals } from "@/components/WebVitals";
@@ -141,6 +142,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <GoogleAnalytics id={process.env.NEXT_PUBLIC_GA_ID} />
         {/* 접근성 — 키보드 사용자가 첫 Tab 으로 본문 바로 이동. */}
         <a href="#main-content" className="skip-link">본문 바로가기</a>
+        <ImpersonationBanner />
         <ThemeProvider
           attribute="data-theme"
           value={{ light: "gnu-default", dark: "gnu-dark" }}
