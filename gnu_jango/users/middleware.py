@@ -74,7 +74,7 @@ class ImpersonationReadOnlyMiddleware:
         # An expired preview is closed to browsing. The stop page remains reachable so the acting
         # admin can authenticate and end it, and logout is always available as an escape hatch.
         if expired and path not in {stop_path, page_path, *logout_paths}:
-            return self._forbidden(request, "Impersonation expired. Stop it with the admin password.")
+            return self._forbidden(request, "회원 미리보기 시간이 끝났습니다. 관리자 비밀번호로 미리보기를 종료하세요.")
 
         if (
             (marker or token_impersonated)
@@ -83,7 +83,7 @@ class ImpersonationReadOnlyMiddleware:
         ):
             return self._forbidden(
                 request,
-                "Impersonation is read-only. Stop impersonation before changing member data.",
+                "회원 미리보기는 읽기 전용입니다. 미리보기를 종료한 뒤 변경하세요.",
             )
         return self.get_response(request)
 

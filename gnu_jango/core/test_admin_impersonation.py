@@ -7,11 +7,12 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.translation import gettext
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from rest_framework_simplejwt.tokens import AccessToken
 
 from gnu_jango.users.impersonation import (
+    IMPERSONATION_HINT_COOKIE,
+    IMPERSONATION_MAX_SECONDS,
     SESSION_IMPERSONATOR_KEY,
     SESSION_REFRESH_JTI_KEY,
     SESSION_STARTED_KEY,
@@ -37,7 +38,7 @@ class ImpersonationTests(TestCase):
         response = self.client.get(reverse("admin:auth_user_change", args=[self.member.pk]))
 
         self.assertContains(response, reverse("admin:auth_user_impersonate", args=[self.member.pk]))
-        self.assertContains(response, gettext("View as this member"))
+        self.assertContains(response, "이 회원으로 보기")
 
     def test_start_switches_the_session_and_sets_a_short_lived_member_cookie(self):
         response = self.start()
@@ -56,6 +57,28 @@ class ImpersonationTests(TestCase):
                 change_message__contains="Impersonation started; ip=127.0.0.1",
             ).exists()
         )
+
+    def test_start_sets_a_readable_banner_cookie_with_the_preview_expiry(self):
+        before = int(timezone.now().timestamp())
+
+        response = self.start()
+
+        cookie = response.cookies[IMPERSONATION_HINT_COOKIE]
+        self.assertFalse(cookie["httponly"])
+        expires_at = int(cookie.value)
+        token_expires_at = int(AccessToken(response.cookies["g5_token"].value)["exp"])
+        self.assertGreater(expires_at, before)
+        self.assertLessEqual(expires_at, min(token_expires_at, before + IMPERSONATION_MAX_SECONDS) + 2)
+        self.assertAlmostEqual(int(cookie["max-age"]), expires_at - before, delta=2)
+
+    def test_stop_and_logout_clear_the_banner_cookie(self):
+        self.start()
+        response = self.client.post(reverse("impersonation-stop"), {"password": "password"})
+        self.assertEqual(response.cookies[IMPERSONATION_HINT_COOKIE].value, "")
+
+        self.start()
+        response = self.client.post(reverse("impersonation-logout"))
+        self.assertEqual(response.cookies[IMPERSONATION_HINT_COOKIE].value, "")
 
     def test_stop_requires_the_admin_password_and_restores_the_admin_session(self):
         self.start()
@@ -162,7 +185,7 @@ class ImpersonationTests(TestCase):
         response = self.client.post("/api/v1/auth/logout")
 
         self.assertEqual(response.status_code, 403)
-        self.assertIn("read-only", response.json()["detail"])
+        self.assertIn("읽기 전용", response.json()["detail"])
 
     def test_an_impersonated_access_token_alone_cannot_mutate(self):
         self.start()
@@ -171,7 +194,7 @@ class ImpersonationTests(TestCase):
         response = self.client.post("/api/v1/auth/logout")
 
         self.assertEqual(response.status_code, 403)
-        self.assertIn("read-only", response.json()["detail"])
+        self.assertIn("읽기 전용", response.json()["detail"])
 
     def test_an_expired_impersonation_stops_browsing_until_password_is_entered(self):
         self.start()
@@ -182,7 +205,7 @@ class ImpersonationTests(TestCase):
         response = self.client.get("/api/v1/status")
 
         self.assertEqual(response.status_code, 403)
-        self.assertIn("expired", response.json()["detail"])
+        self.assertIn("시간이 끝났습니다", response.json()["detail"])
 
     def test_a_staff_user_cannot_impersonate(self):
         staff = get_user_model().objects.create_user(

@@ -1,13 +1,16 @@
 {% extends "admin/change_form.html" %}
-{% load i18n %}
 
 {% block object-tools-items %}
   {{ block.super }}
   {% if original and request.user.is_superuser and original.is_active and not original.is_staff and not original.is_superuser and original.pk != request.user.pk %}
-    <li>
-      <form method="post" action="{% url 'admin:auth_user_impersonate' original.pk %}" style="display:inline">
+    {# Same item styling as Unfold's history link next to it. #}
+    <li class="border-base-200 max-lg:first:rounded-t-default select-none min-lg:first:rounded-l-default dark:border-base-700 border hover:text-primary-600 max-lg:last:rounded-b-default min-lg:-ml-px max-lg:-mt-px min-lg:last:rounded-r-default hover:bg-base-500/8 dark:hover:text-primary-500">
+      <form method="post" action="{% url 'admin:auth_user_impersonate' original.pk %}" class="flex grow">
         {% csrf_token %}
-        <button type="submit" class="button">{% translate "View as this member" %}</button>
+        <button type="submit" class="cursor-pointer flex grow items-center gap-2 px-3 py-2 text-left whitespace-nowrap" title="읽기 전용으로 30분 동안 이 회원의 쇼핑몰 화면을 봅니다">
+          <span class="material-symbols-outlined">visibility</span>
+          이 회원으로 보기
+        </button>
       </form>
     </li>
   {% endif %}
