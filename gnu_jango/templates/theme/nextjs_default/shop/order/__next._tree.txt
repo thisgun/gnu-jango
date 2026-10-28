@@ -1,10 +1,7 @@
-:HL["/_next/static/chunks/3osgt0bp7ydnv.css","style"]
+:HL["/_next/static/chunks/2h0yqwyhexue6.css","style"]
 :HL["/_next/static/chunks/0c2_300mu1915.css","style"]
 :HL["/_next/static/chunks/0uija019tgc-z.css","style"]
 :HL["/_next/static/chunks/2cqjskkn3_e8-.css","style"]
 :HL["/_next/static/chunks/0x9t66kbq980l.css","style"]
 :HC["/",""]
-3:[["children",{"s":"__PAGE__","h":160}]]
-2:[["children",{"s":"order","h":100,"c":"$Q3"}]]
-1:[["children",{"s":"shop","h":76,"c":"$Q2"}]]
-0:{"b":"g5-nextjs25-static","t":{"t":{"s":"","h":28,"c":"$Q1"}}}
+0:{"tree":{"name":"","param":null,"prefetchHints":4124,"slots":{"children":{"name":"shop","param":null,"prefetchHints":4172,"slots":{"children":{"name":"order","param":null,"prefetchHints":4196,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":4256,"slots":null}}}}}}},"staleTime":300,"buildId":"g5-nextjs25-static"}
