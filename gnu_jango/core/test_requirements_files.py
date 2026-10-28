@@ -11,7 +11,7 @@ from pathlib import Path
 from django.test import SimpleTestCase
 
 ROOT = Path(__file__).resolve().parents[2]
-S3_ONLY = {"django-storages[s3]==1.14.6", "boto3==1.43.111"}
+S3_ONLY = {"django-storages[s3]==1.14.6", "boto3==1.43.118"}
 
 
 def _requirement_lines(name):

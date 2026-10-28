@@ -144,18 +144,18 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "lowlight": "^3.3.0",
-    "lucide-react": "^1.59.0",
+    "lucide-react": "^1.62.0",
     "next": "16.4.2",
     "next-themes": "^0.4.3",
     "pretendard": "1.3.9",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "react-dropzone": "^15.0.0",
     "sanitize-html": "^2.18.1",
     "swiper": "12.2.0",
     "tailwind-merge": "^2.6.0",
     "zod": "^4.6.7",
-    "zustand": "^5.0.0"
+    "zustand": "^5.0.16"
   },
   "overrides": {
     "postcss": "$postcss"
@@ -163,17 +163,17 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.59.1",
-    "@tailwindcss/postcss": "^4.0.0",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.0.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@types/sanitize-html": "^2.16.1",
+    "@types/sanitize-html": "^2.16.2",
     "ajv": "^8.20.0",
     "daisyui": "^5.7.50",
     "eslint": "^10.13.0",
     "eslint-config-next": "16.4.2",
     "postcss": "^8.5.0",
-    "tailwindcss": "^4.0.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.7.0",
     "webpack": "^5.107.2"
   }
