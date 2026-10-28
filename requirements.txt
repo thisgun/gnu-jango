@@ -78,4 +78,4 @@ django-seed==0.3.1
 
 # S3-compatible media storage (not needed with MEDIA_STORAGE=local)
 django-storages[s3]==1.14.6
-boto3==1.43.111
+boto3==1.43.118
