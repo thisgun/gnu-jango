@@ -142,6 +142,8 @@ npm run build:theme:handbook         # handbook
 
 산출물은 `gnu_jango/templates/theme/`와 `gnu_jango/templates/theme_static/`에 저장됩니다. Django 관리자에서 `/admin/theme/`으로 테마를 선택하고, `/admin/sample-data/`에서 샘플 콘텐츠를 추가하거나 삭제할 수 있습니다. 테마 설치·복구 절차는 [테마 배포 안내](docs/04-deploy/nextjs-default-theme.md)에 있습니다.
 
+상품·회원·주문 CSV/XLSX 가져오기·내보내기, 운영 KPI, 지원용 회원 impersonation, 주문·배송 일괄 작업은 [관리자 운영 도구](docs/04-deploy/admin-operations.md)를 참고하세요.
+
 프런트엔드 소스 폴더는 `nextjs/`, 새 기본 테마 산출물은 `nextjs_default`입니다. 기존 사이트 설정과 주소의 호환성을 위해 `nextjs25` 이름이 일부 저장값·URL·배포 자료에 남아 있으며, 새 빌드가 사용하는 소스 폴더와는 구분됩니다. 테마 전환의 배경과 호환 규칙은 [테마 플랜](docs/01-plan/features/nextjs-default-theme.plan.md)과 [PRD](docs/01-plan/features/nextjs-default-theme.prd.md)를 참고하세요.
 
 ## 배포 방식

@@ -1,0 +1,14 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  {{ block.super }}
+  {% if original and request.user.is_superuser and original.is_active and not original.is_staff and not original.is_superuser and original.pk != request.user.pk %}
+    <li>
+      <form method="post" action="{% url 'admin:auth_user_impersonate' original.pk %}" style="display:inline">
+        {% csrf_token %}
+        <button type="submit" class="button">{% translate "View as this member" %}</button>
+      </form>
+    </li>
+  {% endif %}
+{% endblock %}

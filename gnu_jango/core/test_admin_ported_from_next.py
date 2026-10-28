@@ -7,14 +7,18 @@ category tree, and an unanswered-inquiry count on the dashboard.
 """
 
 import json
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
+from django.utils.translation import gettext
 
 from gnu_jango.api.community_common import GENERAL_QA_PRODUCT_ID
 from gnu_jango.config.models import Config
 from gnu_jango.shop.models import ShopCategory, ShopOrder, ShopOrderItem, ShopProduct, ShopQA
+from gnu_jango.shop.order_statuses import STATUS_READY, STATUS_SHIPPING
 from gnu_jango.users.models import Profile, User_Point
 
 
@@ -201,12 +205,108 @@ class CategoryTreeAdminTests(AdminTestBase):
 
 class DashboardInquiryCountTests(AdminTestBase):
     def test_the_dashboard_counts_unanswered_1_1_inquiries(self):
+        cache.delete("admin_ops_summary")
         general, _ = ShopProduct.objects.get_or_create(
             it_id=GENERAL_QA_PRODUCT_ID, defaults={"it_name": "1:1 inquiries", "it_use": "0"}
         )
         ShopQA.objects.create(product=general, iq_subject="waiting one")
         body = self.client.get(reverse("admin:index")).content.decode()
         self.assertIn(reverse("admin:shop_generalinquiry_changelist"), body)
+
+
+class DashboardKpiTests(AdminTestBase):
+    def test_the_dashboard_shows_sales_and_inventory_kpis(self):
+        cache.delete("admin_ops_summary")
+        ShopProduct.objects.create(it_id="LOW-STOCK", it_name="Low stock", it_use="1", it_stock_qty=0)
+        ShopOrder.objects.create(
+            od_id="KPI-ORDER",
+            od_name="KPI buyer",
+            od_receipt_price=10000,
+            od_refund_price=1000,
+        )
+
+        body = self.client.get(reverse("admin:index")).content.decode()
+
+        self.assertIn(gettext("Today sales"), body)
+        self.assertIn(gettext("Low stock"), body)
+        self.assertIn("stock-list", body)
+
+
+class ShippingBulkActionTests(AdminTestBase):
+    def test_selected_ready_orders_get_a_carrier_invoice_and_move_to_shipping(self):
+        product = ShopProduct.objects.create(it_id="SHIP-P1", it_name="Shipped item", it_use="1")
+        order = ShopOrder.objects.create(od_id="SHIP-ORDER", od_name="Buyer", od_status=STATUS_READY)
+        ShopOrderItem.objects.create(
+            order=order,
+            product=product,
+            ct_id="SHIP-LINE",
+            it_id=product.it_id,
+            it_name=product.it_name,
+            ct_status=STATUS_READY,
+        )
+
+        self.run_action(
+            "admin:shop_shoporder_changelist",
+            "set_selected_shipping",
+            [order],
+            od_delivery_company="CJ",
+            od_invoice="1234567890",
+        )
+
+        order.refresh_from_db()
+        self.assertEqual(order.od_status, STATUS_SHIPPING)
+        self.assertEqual(order.od_invoice, "1234567890")
+        self.assertTrue(order.od_delivery_company)
+        self.assertTrue(order.od_invoice_time)
+
+    def test_send_sms_option_is_forwarded_to_the_shipping_transition(self):
+        product = ShopProduct.objects.create(it_id="SHIP-SMS", it_name="SMS item", it_use="1")
+        order = ShopOrder.objects.create(od_id="SHIP-SMS-ORDER", od_name="Buyer", od_status=STATUS_READY)
+        ShopOrderItem.objects.create(
+            order=order,
+            product=product,
+            ct_id="SHIP-SMS-LINE",
+            it_id=product.it_id,
+            it_name=product.it_name,
+            ct_status=STATUS_READY,
+        )
+
+        with patch("gnu_jango.shop.delivery_import.move_order_status", return_value=object()) as transition:
+            self.run_action(
+                "admin:shop_shoporder_changelist",
+                "set_selected_shipping",
+                [order],
+                od_delivery_company="CJ",
+                od_invoice="SMS-123",
+                send_sms="on",
+            )
+
+        transition.assert_called_once()
+        self.assertTrue(transition.call_args.kwargs["send_sms"])
+
+    def test_no_sms_is_sent_unless_the_option_is_checked(self):
+        product = ShopProduct.objects.create(it_id="SHIP-NOSMS", it_name="Quiet item", it_use="1")
+        order = ShopOrder.objects.create(od_id="SHIP-NOSMS-ORDER", od_name="Buyer", od_status=STATUS_READY)
+        ShopOrderItem.objects.create(
+            order=order,
+            product=product,
+            ct_id="SHIP-NOSMS-LINE",
+            it_id=product.it_id,
+            it_name=product.it_name,
+            ct_status=STATUS_READY,
+        )
+
+        with patch("gnu_jango.shop.delivery_import.move_order_status", return_value=object()) as transition:
+            self.run_action(
+                "admin:shop_shoporder_changelist",
+                "set_selected_shipping",
+                [order],
+                od_delivery_company="CJ",
+                od_invoice="NOSMS-123",
+            )
+
+        transition.assert_called_once()
+        self.assertFalse(transition.call_args.kwargs["send_sms"])
 
 
 class NextAdminRemovalTests(AdminTestBase):
