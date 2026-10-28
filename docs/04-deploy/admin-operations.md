@@ -73,4 +73,4 @@ python manage.py makemigrations --check --dry-run
 python manage.py test gnu_jango.core.test_admin_import_export gnu_jango.core.test_admin_impersonation gnu_jango.core.test_admin_ported_from_next
 ```
 
-주문 export 전용 권한은 `shop.0038_export_shoporder_permission` 마이그레이션에서 생성됩니다. 운영 배포 시 마이그레이션을 적용한 뒤, 주문 export가 필요한 staff 그룹에 `shop.view_shoporder`와 `shop.export_shoporder`를 함께 부여하세요. `setup_admin_role_presets`의 역할 프리셋에는 `export_shoporder`가 들어 있지 않으므로, 따로 부여하기 전까지는 최고 관리자만 주문을 내보낼 수 있습니다. 실제 운영 전에는 최고 관리자·일반 회원·준비 상태 주문을 각각 하나씩 준비해 가져오기 미리보기, 내보내기(권한별 403 포함), 지원 세션 시작·종료·로그아웃을 확인하세요.
+주문 export 전용 권한은 `shop.0038_export_shoporder_permission` 마이그레이션에서 생성됩니다. 운영 배포 시 마이그레이션을 적용한 뒤, 주문 export가 필요한 staff 그룹에 `shop.view_shoporder`와 `shop.export_shoporder`를 함께 부여하세요. `setup_admin_role_presets`를 실행하면 **쇼핑몰 운영자**와 **정산 담당자** 그룹에 `export_shoporder`가 들어갑니다. **고객지원** 그룹은 주문을 하나씩 조회만 하고 고객 정보를 대량으로 내려받지 않도록 넣지 않습니다. 이 명령은 각 프리셋 그룹의 권한을 프리셋 내용으로 **덮어쓰므로**, 그룹 권한을 직접 고친 적이 있으면 실행 전에 확인하거나 관리자 화면에서 해당 그룹에 권한만 추가하세요. 실제 운영 전에는 최고 관리자·일반 회원·준비 상태 주문을 각각 하나씩 준비해 가져오기 미리보기, 내보내기(권한별 403 포함), 지원 세션 시작·종료·로그아웃을 확인하세요.
