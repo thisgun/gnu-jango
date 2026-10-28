@@ -1,10 +1,13 @@
 """Admin CSV import/export resources and their permission boundaries."""
 
+from datetime import timedelta
+
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from tablib import Dataset
 
 from gnu_jango.shop.import_export_resources import (
@@ -96,6 +99,45 @@ class ProductResourceTests(AdminBase):
         self.assertTrue(result.has_errors())
         product.refresh_from_db()
         self.assertEqual(product.it_price, 2500)
+
+    def test_a_legacy_zero_price_product_can_still_update_other_columns(self):
+        product = ShopProduct.objects.create(
+            it_id="P-LEGACY", it_name="Legacy", it_price=0, it_stock_qty=7, it_use="1"
+        )
+        dataset = Dataset(headers=["it_id", "it_name", "it_brand"])
+        dataset.append(["P-LEGACY", "Legacy renamed", "Brand"])
+
+        result = ShopProductResource().import_data(dataset, dry_run=False, raise_errors=False)
+
+        self.assertFalse(result.has_errors())
+        product.refresh_from_db()
+        self.assertEqual((product.it_name, product.it_brand, product.it_price), ("Legacy renamed", "Brand", 0))
+
+    def test_a_hidden_product_cannot_be_put_on_sale_at_zero_price(self):
+        product = ShopProduct.objects.create(
+            it_id="P-HIDDEN", it_name="Hidden", it_price=0, it_stock_qty=7, it_use=""
+        )
+        dataset = Dataset(headers=["it_id", "it_use"])
+        dataset.append(["P-HIDDEN", "1"])
+
+        result = ShopProductResource().import_data(dataset, dry_run=False, raise_errors=False)
+
+        self.assertTrue(result.has_errors())
+        product.refresh_from_db()
+        self.assertEqual(product.it_use, "")
+
+    def test_an_import_bumps_the_modification_time(self):
+        product = ShopProduct.objects.create(it_id="P-TIME", it_name="Original", it_price=2500)
+        old = timezone.now() - timedelta(days=3)
+        ShopProduct.objects.filter(pk=product.pk).update(updated_at=old)
+        dataset = Dataset(headers=["it_id", "it_name"])
+        dataset.append(["P-TIME", "Renamed"])
+
+        result = ShopProductResource().import_data(dataset, dry_run=False, raise_errors=False)
+
+        self.assertFalse(result.has_errors())
+        product.refresh_from_db()
+        self.assertGreater(product.updated_at, old)
 
     def test_stock_changes_during_an_import_are_not_overwritten(self):
         product = ShopProduct.objects.create(
@@ -234,6 +276,15 @@ class OrderResourceTests(AdminBase):
         csv_text = ShopOrderResource().export([order]).csv
 
         self.assertIn("'@SUM(1+1)", csv_text)
+
+    def test_csv_export_keeps_negative_amounts_numeric_and_escapes_dash_text(self):
+        order = ShopOrder.objects.create(od_id="CSV-NEGATIVE", od_name="Buyer", od_misu=-500, od_memo="-cmd")
+
+        csv_text = ShopOrderResource().export([order]).csv
+
+        self.assertIn(",-500,", csv_text)
+        self.assertNotIn("'-500", csv_text)
+        self.assertIn("'-cmd", csv_text)
 
     def test_blank_order_cells_are_preserved(self):
         order = ShopOrder.objects.create(

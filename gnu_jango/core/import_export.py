@@ -6,13 +6,18 @@ resource field boundary. ``UpdateOnlyResource`` also makes existing-row imports 
 columns the file actually supplied instead of rewriting the whole model row.
 """
 
+import re
+
 from import_export import resources
 
 FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r", "\n")
+# CSV renders numbers as text, so a negative amount such as "-500" or "-1,000.5" reaches this
+# check as a string; spreadsheets read it as a number, not a formula.
+PLAIN_NUMBER_RE = re.compile(r"-\d[\d,]*(\.\d+)?")
 
 
 def safe_export_value(value):
-    if isinstance(value, str) and value[:1] in FORMULA_PREFIXES:
+    if isinstance(value, str) and value[:1] in FORMULA_PREFIXES and not PLAIN_NUMBER_RE.fullmatch(value):
         return "'" + value
     return value
 
@@ -48,5 +53,10 @@ class UpdateOnlyResource(SafeExportResource):
                         continue
                     update_fields.append(attribute)
                 if update_fields:
+                    update_fields += [
+                        field.attname
+                        for field in self._meta.model._meta.concrete_fields
+                        if getattr(field, "auto_now", False) and field.attname not in update_fields
+                    ]
                     instance.save(update_fields=update_fields)
         self.after_save_instance(instance, row, **kwargs)

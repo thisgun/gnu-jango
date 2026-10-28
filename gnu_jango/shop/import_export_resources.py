@@ -172,7 +172,15 @@ class ShopProductResource(UpdateOnlyResource):
         row["it_tel_inq"] = _flag(
             row.get("it_tel_inq"), default=existing.it_tel_inq if existing else ""
         )
-        if row["it_use"] == "1" and row["it_price"] == 0 and row["it_tel_inq"] != "1":
+        # Only refuse a row that would newly put a product on sale without a price; a legacy
+        # product already in that state can still have its other columns updated.
+        already_unpriced = (
+            existing is not None
+            and existing.it_use == "1"
+            and int(existing.it_price or 0) == 0
+            and existing.it_tel_inq != "1"
+        )
+        if row["it_use"] == "1" and row["it_price"] == 0 and row["it_tel_inq"] != "1" and not already_unpriced:
             raise ValueError(
                 "A product on sale needs a price; set it_tel_inq=1 for a phone-inquiry product."
             )

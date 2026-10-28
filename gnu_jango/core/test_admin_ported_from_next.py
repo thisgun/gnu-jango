@@ -284,6 +284,30 @@ class ShippingBulkActionTests(AdminTestBase):
         transition.assert_called_once()
         self.assertTrue(transition.call_args.kwargs["send_sms"])
 
+    def test_no_sms_is_sent_unless_the_option_is_checked(self):
+        product = ShopProduct.objects.create(it_id="SHIP-NOSMS", it_name="Quiet item", it_use="1")
+        order = ShopOrder.objects.create(od_id="SHIP-NOSMS-ORDER", od_name="Buyer", od_status=STATUS_READY)
+        ShopOrderItem.objects.create(
+            order=order,
+            product=product,
+            ct_id="SHIP-NOSMS-LINE",
+            it_id=product.it_id,
+            it_name=product.it_name,
+            ct_status=STATUS_READY,
+        )
+
+        with patch("gnu_jango.shop.delivery_import.move_order_status", return_value=object()) as transition:
+            self.run_action(
+                "admin:shop_shoporder_changelist",
+                "set_selected_shipping",
+                [order],
+                od_delivery_company="CJ",
+                od_invoice="NOSMS-123",
+            )
+
+        transition.assert_called_once()
+        self.assertFalse(transition.call_args.kwargs["send_sms"])
+
 
 class NextAdminRemovalTests(AdminTestBase):
     def test_the_old_spa_address_moves_to_the_django_admin(self):
