@@ -56,17 +56,26 @@ exclude = [
 [tool.django-stubs]
 django_settings_module = "example.settings"
 
+[tool.pytest.ini_options]
+# pytest runs the whole suite (CI: pytest -n auto --cov). Django TestCase classes run unchanged;
+# new tests may be plain functions using the fixtures in conftest.py and the factories in
+# gnu_jango/testing/factories.py.
+DJANGO_SETTINGS_MODULE = "example.settings"
+testpaths = ["gnu_jango"]
+python_files = ["tests.py", "test_*.py"]
+addopts = "-p no:cacheprovider --strict-markers"
+
 [tool.coverage.run]
 source = ["gnu_jango"]
 omit = ["*/migrations/*", "*/tests.py", "*/test_*.py", "gnu_jango/templates/*"]
 branch = true
-# `manage.py test --parallel` runs tests in worker processes; each writes its own data file and
-# `coverage combine` merges them before `coverage report`.
+# pytest-xdist workers each write a data file; pytest-cov combines them and reports.
 parallel = true
 concurrency = ["multiprocessing"]
 
 [tool.coverage.report]
 skip_empty = true
-# CI enforces this minimum for the measured application source; raise it as coverage improves.
-fail_under = 65
+# CI (pytest --cov) fails below this. Measured 78.46% on 2026-10-28 (SQLite); kept a point lower
+# for the branches PostgreSQL takes differently. Raise it as coverage improves.
+fail_under = 77
 show_missing = false
