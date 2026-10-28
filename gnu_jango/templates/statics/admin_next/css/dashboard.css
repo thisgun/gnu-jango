@@ -2868,3 +2868,23 @@ html.dark .g5-admin-badge-neutral {
   background: transparent;
   border: 0;
 }
+
+/* Change forms: let wide widgets shrink instead of pushing the page sideways.
+   A fieldset defaults to min-width: min-content, and the field column next to each label is a
+   flex item with min-width: auto, so the two-box group/permission selector (2 x 384px) kept the
+   whole form wider than the content area (user change page: +16px at 1440, +136px at 1024).
+   The long masked password hash had no break opportunity either. */
+fieldset.module {
+  min-width: 0;
+}
+
+.field-line > .grow.relative,
+.selector,
+.selector-available,
+.selector-chosen {
+  min-width: 0;
+}
+
+#id_password {
+  overflow-wrap: anywhere;
+}
