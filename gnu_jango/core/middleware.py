@@ -185,7 +185,8 @@ class G5SecurityHeadersMiddleware:
         elif path.startswith("/api/"):
             response["Referrer-Policy"] = "no-referrer"
             patch_vary_headers(response, ("Authorization", "Cookie"))
-            if (
+            # api/caching.shared_response_etag: same body for every requester, revalidated by ETag.
+            if not getattr(response, "shared_api_response", False) and (
                 request.COOKIES
                 or request.headers.get("Authorization")
                 or path.startswith(PRIVATE_API_PREFIXES)

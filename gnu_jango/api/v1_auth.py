@@ -20,6 +20,7 @@ from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.cache import never_cache
+from drf_spectacular.utils import extend_schema
 from rest_framework import status
 from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
@@ -37,6 +38,8 @@ from gnu_jango.users.models import Profile
 
 from .response import api_error, api_response
 from .authentication import SessionJWTAuthentication as JWTAuthentication
+from .contracts import envelope
+from .contracts.auth import AuthMeSerializer
 from .auth_sessions import (  # noqa: F401 - urls and other api modules import these from v1_auth
     bump_token_version,
     issue_refresh_token,
@@ -1415,6 +1418,7 @@ def register_view(request):
     return response
 
 
+@extend_schema(responses=envelope("AuthMe", AuthMeSerializer()))
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def me_view(request):

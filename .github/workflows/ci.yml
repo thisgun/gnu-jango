@@ -65,6 +65,13 @@ jobs:
         run: ruff check gnu_jango example --select E9,F63,F7,F82,F601,F811,E722
       - name: Django checks
         run: python manage.py check
+      - name: OpenAPI schema is up to date
+        # openapi/schema.json is the API contract the Next.js types are generated from. After
+        # changing an annotated view or gnu_jango/api/contracts/, regenerate it with the same
+        # command (writing to openapi/schema.json) and run `npm run api:types` in nextjs/.
+        run: |
+          python manage.py spectacular --format openapi-json --file "$RUNNER_TEMP/openapi.json"
+          diff -u openapi/schema.json "$RUNNER_TEMP/openapi.json"
       - name: Django tests
         # The whole suite: new test modules are picked up without editing this file.
         # --parallel runs the suite in worker processes (about 4x faster); coverage writes one data
@@ -96,6 +103,8 @@ jobs:
         run: npm ci
       - name: Validate the production environment template
         run: npm run check:vercel-env:template
+      - name: API types match the OpenAPI schema
+        run: npm run check:api-types
       - name: Typecheck
         run: npm run typecheck
       - name: Lint

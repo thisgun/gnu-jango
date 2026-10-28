@@ -13,6 +13,7 @@ from django.db.models.functions import TruncDate
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema
 from rest_framework import status as drf_status
 from rest_framework.authentication import BasicAuthentication
 from rest_framework.decorators import (
@@ -25,6 +26,9 @@ from rest_framework.decorators import (
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from .authentication import SessionJWTAuthentication as JWTAuthentication
+from .caching import shared_response_etag
+from .contracts import envelope
+from .contracts.site import SiteSettingsSerializer
 
 from gnu_jango.bbs.models import Board, Comment, Post, Post_scrap, validate_upload_file_content
 from gnu_jango.core.image_privacy import strip_image_metadata
@@ -352,6 +356,8 @@ def visit_stats():
     }
 
 
+@extend_schema(responses=envelope("SiteSettings", SiteSettingsSerializer()))
+@shared_response_etag
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])

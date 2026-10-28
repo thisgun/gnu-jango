@@ -103,7 +103,9 @@
     "test:order-submit-handler": "playwright test tests/order-submit-handler.spec.ts",
     "test:ui-smoke": "playwright test tests/pages.spec.ts tests/header-menu.spec.ts tests/homepage-content.spec.ts tests/post-detail.spec.ts tests/product-detail.spec.ts",
     "analyze": "ANALYZE=true next build",
-    "perf:local": "node scripts/measure-pages.mjs"
+    "perf:local": "node scripts/measure-pages.mjs",
+    "api:types": "node scripts/api-types.mjs",
+    "check:api-types": "node scripts/api-types.mjs --check"
   },
   "dependencies": {
     "@bprogress/next": "^3.2.12",
@@ -175,6 +177,7 @@
     "daisyui": "^5.7.50",
     "eslint": "^10.13.0",
     "eslint-config-next": "16.4.2",
+    "openapi-typescript": "7.13.0",
     "postcss": "^8.5.0",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.7.0",

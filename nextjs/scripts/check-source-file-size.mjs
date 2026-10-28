@@ -26,7 +26,8 @@ function walk(dir, extensions = EXTENSIONS) {
       files.push(...walk(fullPath, extensions));
       continue;
     }
-    if (entry.isFile() && extensions.has(extensionOf(entry.name))) {
+    // *.gen.ts is generated (src/types/api.gen.ts from the OpenAPI schema), not hand-maintained.
+    if (entry.isFile() && extensions.has(extensionOf(entry.name)) && !entry.name.endsWith(".gen.ts")) {
       files.push(fullPath);
     }
   }

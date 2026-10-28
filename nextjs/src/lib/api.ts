@@ -456,7 +456,7 @@ export interface ShopProduct {
   image_url: string;
   images?: string[];
   options?: ShopProductOption[];
-  category?: ShopCategory;
+  category?: ShopCategory | null;
   review_count?: number;
   review_avg?: number;
   qa_count?: number;
@@ -474,10 +474,10 @@ export interface ShopProductNavItem {
 
 export interface ShopProductOption {
   io_no: number;
-  it_id: string;
+  it_id?: string;
   io_id: string;
-  io_type: string;
-  io_value: string;
+  io_type: number;
+  io_value?: string;
   io_price: number;
   io_stock_qty: number;
   io_noti_qty?: number;

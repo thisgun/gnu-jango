@@ -259,10 +259,10 @@ const shopProductInfoItemSchema = z
 const shopProductOptionSchema = z
   .object({
     io_no: numberValue,
-    it_id: stringValue,
+    it_id: optionalString,
     io_id: stringValue,
-    io_type: stringValue,
-    io_value: stringValue,
+    io_type: numberValue,
+    io_value: optionalString,
     io_price: numberValue,
     io_stock_qty: numberValue,
     io_noti_qty: numberValue.optional(),
@@ -727,7 +727,6 @@ export const publicSettingsSchema = z
     cf_company_fax: optionalString,
     cf_company_info_name: optionalString,
     cf_company_email: optionalString,
-    de_admin_company_name: optionalString,
     de_admin_company_tel: optionalString,
     de_bank_use: optionalString,
     de_bank_account: optionalString,
