@@ -35,6 +35,7 @@ from gnu_jango.core.image_privacy import strip_image_metadata
 from gnu_jango.bbs.utils import get_pretty_url
 from gnu_jango.config import config
 from gnu_jango.config.models import Config
+from gnu_jango.config.Configforms import config_to_bool
 from gnu_jango.config.theme_settings import theme_settings_for
 from gnu_jango.core.models import (
     ContentPage,
@@ -391,7 +392,8 @@ def settings_response(request):
             "cf_docs_group": data.get("cf_docs_group", ""),
             "theme_settings": theme_settings_for(str(data.get("cf_theme") or ""), data),
             "cf_bbs_rewrite": _safe_int(data.get("cf_bbs_rewrite"), 0),
-            "infinite_scroll": False,
+            # cf_infinite_scroll: board lists load the next posts on scroll (cursor paging)
+            "infinite_scroll": config_to_bool(data.get("cf_infinite_scroll")),
             "comment_editor": False,
             "pwa_enabled": False,
             "visit": visit_stats_payload,

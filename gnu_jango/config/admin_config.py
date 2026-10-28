@@ -33,6 +33,7 @@ CONFIG_FIELDSETS = getattr(
             "cf_comment_point",
             "cf_download_point",
             "cf_search_part",
+            "cf_infinite_scroll",
         ],
         "3_join": [
             "cf_member_skin",
