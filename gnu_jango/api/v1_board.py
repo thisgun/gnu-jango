@@ -15,12 +15,14 @@ from django.http import FileResponse
 from django.utils import timezone
 from django.utils.html import strip_tags
 from django.utils.text import get_valid_filename
+from drf_spectacular.utils import extend_schema
 from rest_framework import status as drf_status
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.authentication import BasicAuthentication
 from rest_framework.decorators import api_view, authentication_classes, parser_classes, permission_classes
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
+from .caching import shared_response_etag
 from .authentication import SessionJWTAuthentication as JWTAuthentication
 
 from gnu_jango.bbs.delete_posts import Delete_all_posts
@@ -34,6 +36,13 @@ from gnu_jango.utils.users import get_user_level, is_admin as gnu_is_admin
 from gnu_jango.users import point_ledger
 
 from .access import listable_post_queryset, readable_post_queryset, secret_post_session_key
+from .contracts import envelope
+from .contracts.boards import (
+    BoardPostListItemSerializer,
+    BoardPostsPageMetaSerializer,
+    BoardSerializer,
+    PostDetailSerializer,
+)
 from .response import api_error, api_response
 from .search import apply_text_search, post_body_match
 from .v1_auth import _auth_user_from_request, _captcha_matches, _consume_captcha, member_payload
@@ -876,6 +885,8 @@ def _related_count(rows):
     return Coalesce(Subquery(counted, output_field=IntegerField()), 0)
 
 
+@extend_schema(responses=envelope("BoardList", BoardSerializer(many=True)))
+@shared_response_etag
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -900,6 +911,7 @@ def board_list_response(request):
     return api_response(data=[_board_payload(board) for board in queryset])
 
 
+@extend_schema(responses=envelope("Board", BoardSerializer()))
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -1048,6 +1060,12 @@ def board_posts_response(request, bo_table):
             if post.pk in allowed and not row["is_secret"]:
                 row["wr_excerpt"] = _post_excerpt(post.wr_content)
     return api_response(data=rows, meta=meta)
+
+
+@extend_schema(
+    methods=["GET"],
+    responses=envelope("BoardPostList", BoardPostListItemSerializer(many=True), meta=BoardPostsPageMetaSerializer()),
+)
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -1341,6 +1359,7 @@ def _get_post_for_board(request, bo_table, wr_id=None, slug=None, *, for_update=
     return board, None
 
 
+@extend_schema(methods=["GET"], responses=envelope("PostDetail", PostDetailSerializer()))
 @api_view(["GET", "PATCH", "DELETE"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])

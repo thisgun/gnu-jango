@@ -69,7 +69,7 @@ export interface BoardCategoryCounts {
 // 게시판 설정 (g5_board)
 export interface Board {
   bo_table: string;
-  gr_admin?: string;
+  gr_admin?: string | null;
   post_count?: number;
   gr_id: string;
   bo_subject: string;

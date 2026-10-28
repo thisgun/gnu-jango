@@ -11,6 +11,7 @@ from django.db import transaction
 from django.db.models import Avg, BooleanField, Case, Count, Exists, F, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema
 from rest_framework import status as drf_status
 from rest_framework.authentication import BasicAuthentication
 from rest_framework.decorators import (
@@ -23,7 +24,15 @@ from rest_framework.decorators import (
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny
 from rest_framework.throttling import ScopedRateThrottle, SimpleRateThrottle
+from .caching import shared_response_etag
 from .authentication import SessionJWTAuthentication as JWTAuthentication
+from .contracts import PageMetaSerializer, envelope
+from .contracts.shop import (
+    ShopCategoryDetailSerializer,
+    ShopCategoryTreeSerializer,
+    ShopProductDetailSerializer,
+    ShopProductSerializer,
+)
 
 from gnu_jango.config.models import Config
 from gnu_jango.core.legacy_assets import first_existing_legacy_path
@@ -1036,6 +1045,8 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
     return order
 
 
+@extend_schema(responses=envelope("ShopCategories", ShopCategoryTreeSerializer(many=True)))
+@shared_response_etag
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -1055,6 +1066,10 @@ def categories_response(request):
     ])
 
 
+@extend_schema(
+    responses=envelope("ShopCategoryDetail", ShopCategoryDetailSerializer(), meta=PageMetaSerializer())
+)
+@shared_response_etag
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -1089,6 +1104,8 @@ def category_detail_view(request, ca_id):
     )
 
 
+@extend_schema(responses=envelope("ShopProducts", ShopProductSerializer(many=True), meta=PageMetaSerializer()))
+@shared_response_etag
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -1132,6 +1149,7 @@ def products_response(request, *, limit=None):
     return api_response(data=[product_payload(product) for product in page], meta=meta)
 
 
+@extend_schema(responses=envelope("ShopProductDetail", ShopProductDetailSerializer()))
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
