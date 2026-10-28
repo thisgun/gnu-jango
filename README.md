@@ -381,7 +381,7 @@ celery -A example beat -l INFO
 
 ## 개발 점검
 
-GitHub의 `main` 브랜치는 관리자도 직접 푸시할 수 없도록 보호됩니다. 변경사항은 PR로 올리고 `django`, `nextjs`, `theme-bundles`, `docker` 점검이 모두 통과한 뒤 병합하세요. PR의 기준 브랜치가 최신 상태여야 합니다.
+GitHub의 `main` 브랜치는 관리자도 직접 푸시할 수 없도록 보호됩니다. 변경사항은 PR로 올리고 `django`, `nextjs`, `e2e`, `theme-bundles`, `docker` 점검이 모두 통과한 뒤 병합하세요. PR의 기준 브랜치가 최신 상태여야 합니다.
 
 백엔드 테스트(pytest-django, `pip install -r requirements-dev.txt`):
 
@@ -403,6 +403,24 @@ npm run typecheck
 npm run check:vercel-env:template
 npm run check:theme-sync
 ```
+
+쇼핑몰 주문 E2E(`nextjs/tests/e2e-checkout.spec.ts`, CI의 `e2e` 점검): Django가 커밋된 테마 export를 직접 서비스하므로 Next 빌드나 dev 서버 없이 돌아갑니다. 실제 브라우저로 로그인 → 상품 담기 → 장바구니 → 주문서 → 무통장입금 + 쿠폰·포인트 → 주문 상세까지 진행하고, API로 금액·재고·포인트·쿠폰을 확인한 뒤 주문을 취소해 원래 상태로 되돌립니다(비회원 주문 1건 포함). 반드시 버리는 데이터베이스에서 실행하세요.
+
+```bash
+# 1) 빈 SQLite DB 준비 (.tmp-nextjs-runtime/은 git에서 제외됨)
+export DATABASE_URL=sqlite:///.tmp-nextjs-runtime/e2e.sqlite3
+python manage.py migrate --noinput
+python manage.py seed_e2e_shop            # DEBUG가 꺼져 있으면 --i-know-this-is-disposable
+python manage.py runserver 127.0.0.1:8095 --noreload
+
+# 2) 다른 터미널에서
+cd nextjs
+E2E_BASE_URL=http://127.0.0.1:8095 npx playwright test tests/e2e-checkout.spec.ts   # 또는 npm run test:e2e:checkout
+```
+
+- `seed_e2e_shop`은 회원(`E2E_MEMBER_ID`/`E2E_MEMBER_PASSWORD`, 기본 `e2e_buyer`/`e2e-Checkout-Pass-2026`), 상품 2개, 무통장 계좌, 배송비 3,000원(5만 원 이상 무료), 포인트 5,000점, 3,000원 주문할인 쿠폰을 만들고 결과를 JSON으로 출력합니다. 다시 실행하면 재고·포인트·쿠폰·비밀번호를 같은 상태로 되돌립니다.
+- DEBUG가 꺼져 있고 `--i-know-this-is-disposable`도 없거나, 다른 회원·주문이 몇 건 넘게 있는 DB에서는 실행을 거부합니다.
+- 시드 값을 바꿨다면 Playwright 쪽에도 같은 `E2E_MEMBER_ID`/`E2E_MEMBER_PASSWORD`를 넘기세요. `E2E_BASE_URL`(또는 `PLAYWRIGHT_BASE_URL`)이 없으면 이 spec은 건너뜁니다.
 
 개발용 게시글·회원 데이터가 필요하면 Faker 기반 관리 명령을 사용할 수 있습니다. 게시글을 만들기 전에 대상 게시판이 있어야 합니다.
 
