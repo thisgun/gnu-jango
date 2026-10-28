@@ -7,7 +7,7 @@ Django==6.1.2
 # Admin / UI
 # Field-level change history and the admin revert screen for orders, points, coupons and settings.
 django-simple-history==3.13.0
-django-unfold==0.105.0
+django-unfold==0.110.0
 # CSV/Excel import-export resources for products, members, and order operations.
 django-import-export==4.4.3
 django-js-asset==4.2.0
@@ -32,7 +32,7 @@ django_user_agents==0.4.0
 django-cors-headers==4.9.0
 
 # API
-djangorestframework==3.18.2
+djangorestframework==3.18.3
 djangorestframework-simplejwt==5.5.1
 drf-spectacular==0.30.0
 django-rest-multiple-models==2.1.3
