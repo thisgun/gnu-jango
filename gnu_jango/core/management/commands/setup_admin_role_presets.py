@@ -7,7 +7,8 @@ ROLE_PRESETS = {
     "쇼핑몰 운영자": {
         "apps": ("shop",),
         "extra_models": (("users", "profile"), ("auth", "user"), ("core", "notification")),
-        "actions": ("view", "add", "change"),
+        # "export" only matches shop.export_shoporder (order CSV/XLSX export in the admin).
+        "actions": ("view", "add", "change", "export"),
     },
     "정산 담당자": {
         "models": (
@@ -19,7 +20,7 @@ ROLE_PRESETS = {
             ("core", "mailsendlog"),
             ("core", "mailcampaign"),
         ),
-        "actions": ("view", "change"),
+        "actions": ("view", "change", "export"),
     },
     "커뮤니티 운영자": {
         "apps": ("bbs",),
@@ -51,6 +52,7 @@ ROLE_PRESETS = {
             ("core", "visitlog"),
             ("core", "searchkeyword"),
         ),
+        # No "export": support staff look up single orders but do not bulk-download customer data.
         "actions": ("view", "change"),
     },
 }
