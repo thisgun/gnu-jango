@@ -2,7 +2,8 @@
 // `npm run typecheck` fails here when a typed v1 response (src/types/api.gen.ts) drops, renames or
 // retypes a field a frontend type relies on. Fix the frontend type or the API, then regenerate.
 import type { ApiData, ApiMeta } from "@/lib/api-contract";
-import type { ShopCategory, ShopProduct } from "@/lib/api";
+import type { ShopCartResponse, ShopCategory, ShopOrder, ShopProduct } from "@/lib/api";
+import type { ApiMeta as ParsedMeta } from "@/lib/api-response";
 import type { Board, PaginationMeta, Post } from "@/lib/types";
 import type { PublicSettings, publicSettingsSchema } from "@/lib/schemas";
 
@@ -28,4 +29,17 @@ export type CategoryRowFitsShopCategory = Expect<Assignable<CategoryRow, ShopCat
 export type ProductRowFitsShopProduct = Expect<Assignable<ProductRow, ShopProduct>>;
 export type ProductDetailFitsShopProduct = Expect<Assignable<ApiData<"/api/v1/shop/products/{it_id}">, ShopProduct>>;
 export type ProductMetaFitsPagination = Expect<Assignable<ApiMeta<"/api/v1/shop/products">, PaginationMeta>>;
-export type PostMetaFitsPagination = Expect<Assignable<ApiMeta<"/api/v1/boards/{bo_table}/posts">, PaginationMeta>>;
+// Board post lists answer with numbered-page meta, or cursor meta for ?cursor= (infinite scroll).
+type PostsMeta = ApiMeta<"/api/v1/boards/{bo_table}/posts">;
+export type PostPageMetaFitsPagination = Expect<Assignable<Extract<PostsMeta, { last_page: number }>, PaginationMeta>>;
+export type PostCursorMetaIsParsed = Expect<
+  Assignable<Pick<Extract<PostsMeta, { has_more: boolean }>, "next_cursor" | "has_more">, Pick<ParsedMeta, "next_cursor" | "has_more">>
+>;
+export type PostPageCursorIsParsed = Expect<
+  Assignable<Pick<Extract<PostsMeta, { last_page: number }>, "next_cursor">, Pick<ParsedMeta, "next_cursor">>
+>;
+
+// Cart and orders (lib/api.ts)
+export type CartFitsShopCartResponse = Expect<Assignable<ApiData<"/api/v1/shop/cart">, ShopCartResponse>>;
+export type OrderRowFitsShopOrder = Expect<Assignable<ApiData<"/api/v1/shop/orders">[number], ShopOrder>>;
+export type OrderDetailFitsShopOrder = Expect<Assignable<ApiData<"/api/v1/shop/orders/{od_id}">, ShopOrder>>;

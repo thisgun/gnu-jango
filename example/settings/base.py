@@ -691,6 +691,12 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "GnuJango API",
     "DESCRIPTION": "Gnuboard5-compatible community, shop, and member API. Administration is the Django admin at /admin/.",
     "VERSION": "1.0.0",
+    # Stable, descriptive names for the enums of the response contracts (gnu_jango/api/contracts/).
+    "ENUM_NAME_OVERRIDES": {
+        "CashReceiptStateEnum": "gnu_jango.api.contracts.orders.CASH_RECEIPT_STATES",
+        "CashReceiptTypeEnum": "gnu_jango.api.contracts.orders.CASH_RECEIPT_TYPES",
+        "PostAdminRoleEnum": "gnu_jango.api.contracts.boards.POST_ADMIN_ROLES",
+    },
 }
 
 # https://velog.io/@chaeri93/DRF-Simple-jwt%EB%A1%9C-%ED%9A%8C%EC%9B%90%EA%B0%80%EC%9E%85-%EB%A1%9C%EA%B7%B8%EC%9D%B8-%EA%B8%B0%EB%8A%A5

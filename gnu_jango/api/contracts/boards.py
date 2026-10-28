@@ -8,9 +8,13 @@
 Gnuboard5 flags are sent as 0/1 integers (``_bool_int``), the ``is_*``/``can_*`` keys as booleans.
 """
 
+from drf_spectacular.utils import PolymorphicProxySerializer
 from rest_framework import serializers
 
 from . import PageMetaSerializer
+
+# Named enum component (SPECTACULAR_SETTINGS["ENUM_NAME_OVERRIDES"]); "" is the BlankEnum.
+POST_ADMIN_ROLES = ["super", "group", "board", ""]
 
 
 class BoardSerializer(serializers.Serializer):
@@ -153,7 +157,7 @@ class BoardPostSerializer(serializers.Serializer):
     can_manage = serializers.BooleanField()
     # "super", "group", "board" or "" (the viewer's role on this board).
     # v1_board._admin_role: the viewer's admin standing on this board, "" for none.
-    admin_role = serializers.ChoiceField(choices=["super", "group", "board", ""], allow_blank=True)
+    admin_role = serializers.ChoiceField(choices=POST_ADMIN_ROLES, allow_blank=True)
     is_scrapped = serializers.BooleanField()
     scrap_id = serializers.IntegerField()
 
@@ -222,6 +226,7 @@ class PostDetailSerializer(BoardPostSerializer):
     next_post = PostNavSerializer(allow_null=True)
 
 
+
 class BoardPostsPageMetaSerializer(PageMetaSerializer):
     """``_paginate_board_posts``: PageMeta, its aliases and the notice counts.
 
@@ -236,3 +241,21 @@ class BoardPostsPageMetaSerializer(PageMetaSerializer):
     # Notices on this page / on the whole board.
     notice_count = serializers.IntegerField()
     total_notice_count = serializers.IntegerField()
+    # Continue this list with ?cursor=<next_cursor> (null while searching, on the last page, or
+    # while notices still spill onto later pages).
+    next_cursor = serializers.CharField(allow_null=True)
+
+
+class BoardPostsCursorMetaSerializer(serializers.Serializer):
+    """``?cursor=`` mode (``_cursor_posts_response``): no totals, only where to continue."""
+
+    per_page = serializers.IntegerField()
+    has_more = serializers.BooleanField()
+    next_cursor = serializers.CharField(allow_null=True)
+
+
+BoardPostsMeta = PolymorphicProxySerializer(
+    component_name="BoardPostsMeta",
+    serializers=[BoardPostsPageMetaSerializer, BoardPostsCursorMetaSerializer],
+    resource_type_field_name=None,
+)

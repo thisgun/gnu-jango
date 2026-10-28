@@ -27,6 +27,7 @@ from rest_framework.throttling import ScopedRateThrottle, SimpleRateThrottle
 from .caching import shared_response_etag
 from .authentication import SessionJWTAuthentication as JWTAuthentication
 from .contracts import PageMetaSerializer, envelope
+from .contracts.orders import ShopOrderDetailSerializer, ShopOrderSerializer
 from .contracts.shop import (
     ShopCategoryDetailSerializer,
     ShopCategoryTreeSerializer,
@@ -223,6 +224,9 @@ from .shop_payments import (
 from gnu_jango.shop.pg_settings import escrow_enabled as pg_escrow_enabled
 from gnu_jango.shop.pg_settings import nicepay_payment_config
 from gnu_jango.shop.pg_settings import stored_rows as pg_stored_rows
+
+
+PRODUCT_DETAIL_ENVELOPE = envelope("ShopProductDetail", ShopProductDetailSerializer())
 
 
 def category_payload(category, *, include_children=False):
@@ -1149,7 +1153,7 @@ def products_response(request, *, limit=None):
     return api_response(data=[product_payload(product) for product in page], meta=meta)
 
 
-@extend_schema(responses=envelope("ShopProductDetail", ShopProductDetailSerializer()))
+@extend_schema(responses=PRODUCT_DETAIL_ENVELOPE)
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -1162,6 +1166,7 @@ def product_detail_view(request, it_id):
     return api_response(data=product_payload(product, request, detail=True))
 
 
+@extend_schema(responses=PRODUCT_DETAIL_ENVELOPE)
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -1476,6 +1481,10 @@ class GuestOrderThrottle(SimpleRateThrottle):
         return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
 
 
+@extend_schema(
+    methods=["GET"],
+    responses=envelope("ShopOrders", ShopOrderSerializer(many=True), meta=PageMetaSerializer()),
+)
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -1507,6 +1516,7 @@ def orders_view(request):
     )
 
 
+@extend_schema(methods=["GET"], responses=envelope("ShopOrderDetail", ShopOrderDetailSerializer()))
 @api_view(["GET", "PATCH"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])

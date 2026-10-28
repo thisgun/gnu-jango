@@ -2273,14 +2273,6 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /**
-         * @description * `super` - super
-         *     * `group` - group
-         *     * `board` - board
-         *     * `` -
-         * @enum {string}
-         */
-        AdminRoleEnum: "super" | "group" | "board";
         AuthMe: {
             member: components["schemas"]["CurrentMember"];
             is_super_admin: boolean;
@@ -2400,8 +2392,8 @@ export interface components {
             };
         };
         BoardPostListEnvelope: {
+            meta: components["schemas"]["BoardPostsMeta"];
             data: components["schemas"]["BoardPostListItem"][];
-            meta: components["schemas"]["BoardPostsPageMeta"];
             success: boolean;
             ok: boolean;
             message: string;
@@ -2455,11 +2447,18 @@ export interface components {
             bo_use_good: number;
             bo_use_nogood: number;
             can_manage: boolean;
-            admin_role: components["schemas"]["AdminRoleEnum"] | components["schemas"]["BlankEnum"];
+            admin_role: components["schemas"]["PostAdminRoleEnum"] | components["schemas"]["BlankEnum"];
             is_scrapped: boolean;
             scrap_id: number;
             wr_excerpt?: string;
         };
+        /** @description ``?cursor=`` mode (``_cursor_posts_response``): no totals, only where to continue. */
+        BoardPostsCursorMeta: {
+            per_page: number;
+            has_more: boolean;
+            next_cursor: string | null;
+        };
+        BoardPostsMeta: components["schemas"]["BoardPostsPageMeta"] | components["schemas"]["BoardPostsCursorMeta"];
         /**
          * @description ``_paginate_board_posts``: PageMeta, its aliases and the notice counts.
          *
@@ -2479,7 +2478,27 @@ export interface components {
             total_pages: number;
             notice_count: number;
             total_notice_count: number;
+            next_cursor: string | null;
         };
+        /**
+         * @description * `available` - available
+         *     * `requested` - requested
+         *     * `issued` - issued
+         *     * `cancel_needed` - cancel_needed
+         *     * `unavailable` - unavailable
+         * @enum {string}
+         */
+        CashReceiptStateEnum: "available" | "requested" | "issued" | "cancel_needed" | "unavailable";
+        CashReceiptType: {
+            value: components["schemas"]["CashReceiptTypeEnum"];
+            label: string;
+        };
+        /**
+         * @description * `income` - income
+         *     * `expense` - expense
+         * @enum {string}
+         */
+        CashReceiptTypeEnum: "income" | "expense";
         /** @description ``shop_display.category_list_display``: the category page grid (categoryform.php 출력설정). */
         CategoryListDisplay: {
             configured: boolean;
@@ -2524,6 +2543,14 @@ export interface components {
             from: number | null;
             to: number | null;
         };
+        /**
+         * @description * `super` - super
+         *     * `group` - group
+         *     * `board` - board
+         *     * `` -
+         * @enum {string}
+         */
+        PostAdminRoleEnum: "super" | "group" | "board";
         /** @description ``_member_payload_for_author``: blank strings for a guest. */
         PostAuthor: {
             mb_id: string;
@@ -2598,7 +2625,7 @@ export interface components {
             bo_use_good: number;
             bo_use_nogood: number;
             can_manage: boolean;
-            admin_role: components["schemas"]["AdminRoleEnum"] | components["schemas"]["BlankEnum"];
+            admin_role: components["schemas"]["PostAdminRoleEnum"] | components["schemas"]["BlankEnum"];
             is_scrapped: boolean;
             scrap_id: number;
             files: components["schemas"]["PostFile"][];
@@ -2655,6 +2682,64 @@ export interface components {
             use: boolean;
             pc_cols: number;
             mobile_cols: number;
+        };
+        /**
+         * @description ``shop_cart.cart_payload``: the lines (``?ct_ids=`` selects some, 바로구매 lines included)
+         *     and their totals; every amount is 0 for an empty cart.
+         */
+        ShopCart: {
+            items: components["schemas"]["ShopCartLine"][];
+            total_price: number;
+            total_qty: number;
+            cart_coupon: number;
+            send_cost: number;
+            send_cost2: number;
+            shipping_cost: number;
+        };
+        ShopCartEnvelope: {
+            data: components["schemas"]["ShopCart"];
+            success: boolean;
+            ok: boolean;
+            message: string;
+            meta: {
+                [key: string]: unknown;
+            };
+            errors: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * @description ``shop_cart.cart_item_payload``. A line whose product was deleted still renders, with the
+         *     stored name (or the it_id) and fallback shipping / stock values.
+         */
+        ShopCartLine: {
+            ct_id: string;
+            it_id: string;
+            it_name: string;
+            it_seo_title: string;
+            ct_price: number;
+            ct_qty: number;
+            ct_option: string;
+            io_type: number;
+            io_price: number;
+            ct_direct: number;
+            ct_send_cost: number;
+            it_sc_type: number;
+            it_sc_method: number;
+            it_sc_price: number;
+            it_sc_minimum: number;
+            it_sc_qty: number;
+            line_total: number;
+            it_basic_price: number;
+            it_stock_qty: number;
+            it_notax: number;
+            ct_notax: number;
+            it_soldout: string;
+            it_use: string;
+            it_tel_inq: string;
+            image_url: string;
+            cp_price: number;
+            cp_id: string;
         };
         ShopCategoriesEnvelope: {
             data: components["schemas"]["ShopCategoryTree"][];
@@ -2723,6 +2808,240 @@ export interface components {
             search: components["schemas"]["ProductGrid"];
             listtype: components["schemas"]["ProductGrid"];
             related: components["schemas"]["RelatedProductsDisplay"];
+        };
+        /**
+         * @description ``v1_shop.order_payload(order)`` as the order list shows it.
+         *
+         *     Dates and times are ISO strings or "" (``od_datetime``, ``od_time``, ``od_hope_date``);
+         *     ``od_receipt_time``, ``od_invoice_time`` and ``od_vbank_due_date`` are stored text.
+         */
+        ShopOrder: {
+            od_id: string;
+            uid: string;
+            mb_id: string;
+            item_count: number;
+            od_cart_count: number;
+            od_name: string;
+            od_tel: string;
+            od_hp: string;
+            od_email: string;
+            od_zip: string;
+            od_addr1: string;
+            od_addr2: string;
+            od_addr3: string;
+            od_b_name: string;
+            od_b_tel: string;
+            od_b_hp: string;
+            od_b_zip: string;
+            od_b_addr1: string;
+            od_b_addr2: string;
+            od_b_addr3: string;
+            od_memo: string;
+            od_hope_date: string;
+            od_cart_price: number;
+            od_send_cost: number;
+            od_send_cost2: number;
+            od_receipt_price: number;
+            od_cancel_price: number;
+            od_refund_price: number;
+            od_receipt_point: number;
+            od_deposit_name: string;
+            od_status: string;
+            od_settle_case: string;
+            od_bank_account: string;
+            od_vbank_bank_code: string;
+            od_vbank_account: string;
+            od_vbank_customer_name: string;
+            od_vbank_due_date: string;
+            od_vbank_status: string;
+            od_test: string;
+            od_misu: number;
+            od_pg: string;
+            od_tno: string;
+            od_app_no: string;
+            od_tax_flag: number;
+            od_tax_invoice_request: boolean;
+            od_tax_mny: number;
+            od_vat_mny: number;
+            od_free_mny: number;
+            od_coupon: number;
+            od_cart_coupon: number;
+            od_send_coupon: number;
+            od_point: number;
+            od_cash_request: boolean;
+            od_cash_type: string;
+            od_cash: number;
+            od_cash_no: string;
+            od_cash_res: string;
+            od_cash_info: string;
+            od_datetime: string;
+            od_time: string;
+            od_receipt_time: string;
+            od_ip: string;
+            od_total_price: number;
+            od_order_price: number;
+            od_list_price: number;
+            od_receipt_total: number;
+            od_misu_price: number;
+            od_is_fully_paid: boolean;
+            od_delivery_company: string;
+            od_invoice: string;
+            od_invoice_time: string;
+            delivery_inquiry_url: string;
+            od_delivery_inquiry_url: string;
+            delivery_inquiry_tel: string;
+            receipt_url: string;
+            od_payment_receipt_url: string;
+            od_payment_app_label: string;
+            od_payment_app_value: string;
+            cash_receipt_url: string;
+            od_cash_receipt_url: string;
+            cash_receipt_issue_url: string;
+            od_cash_receipt_issue_url: string;
+            cash_receipt: components["schemas"]["ShopOrderCashReceipt"] | null;
+            can_cancel: boolean;
+            cancel_block_reason: string;
+        };
+        /** @description ``shop.cash_receipts.customer_payload``: whether the customer may request a cash receipt. */
+        ShopOrderCashReceipt: {
+            state: components["schemas"]["CashReceiptStateEnum"];
+            can_request: boolean;
+            amount: number;
+            types: components["schemas"]["CashReceiptType"][];
+            message: string;
+            request_url: string;
+        };
+        /** @description ``order_payload(order, detail=True)``: the list shape plus the lines and the cash receipt. */
+        ShopOrderDetail: {
+            od_id: string;
+            uid: string;
+            mb_id: string;
+            item_count: number;
+            od_cart_count: number;
+            od_name: string;
+            od_tel: string;
+            od_hp: string;
+            od_email: string;
+            od_zip: string;
+            od_addr1: string;
+            od_addr2: string;
+            od_addr3: string;
+            od_b_name: string;
+            od_b_tel: string;
+            od_b_hp: string;
+            od_b_zip: string;
+            od_b_addr1: string;
+            od_b_addr2: string;
+            od_b_addr3: string;
+            od_memo: string;
+            od_hope_date: string;
+            od_cart_price: number;
+            od_send_cost: number;
+            od_send_cost2: number;
+            od_receipt_price: number;
+            od_cancel_price: number;
+            od_refund_price: number;
+            od_receipt_point: number;
+            od_deposit_name: string;
+            od_status: string;
+            od_settle_case: string;
+            od_bank_account: string;
+            od_vbank_bank_code: string;
+            od_vbank_account: string;
+            od_vbank_customer_name: string;
+            od_vbank_due_date: string;
+            od_vbank_status: string;
+            od_test: string;
+            od_misu: number;
+            od_pg: string;
+            od_tno: string;
+            od_app_no: string;
+            od_tax_flag: number;
+            od_tax_invoice_request: boolean;
+            od_tax_mny: number;
+            od_vat_mny: number;
+            od_free_mny: number;
+            od_coupon: number;
+            od_cart_coupon: number;
+            od_send_coupon: number;
+            od_point: number;
+            od_cash_request: boolean;
+            od_cash_type: string;
+            od_cash: number;
+            od_cash_no: string;
+            od_cash_res: string;
+            od_cash_info: string;
+            od_datetime: string;
+            od_time: string;
+            od_receipt_time: string;
+            od_ip: string;
+            od_total_price: number;
+            od_order_price: number;
+            od_list_price: number;
+            od_receipt_total: number;
+            od_misu_price: number;
+            od_is_fully_paid: boolean;
+            od_delivery_company: string;
+            od_invoice: string;
+            od_invoice_time: string;
+            delivery_inquiry_url: string;
+            od_delivery_inquiry_url: string;
+            delivery_inquiry_tel: string;
+            receipt_url: string;
+            od_payment_receipt_url: string;
+            od_payment_app_label: string;
+            od_payment_app_value: string;
+            cash_receipt_url: string;
+            od_cash_receipt_url: string;
+            cash_receipt_issue_url: string;
+            od_cash_receipt_issue_url: string;
+            cash_receipt: components["schemas"]["ShopOrderCashReceipt"];
+            can_cancel: boolean;
+            cancel_block_reason: string;
+            items: components["schemas"]["ShopOrderLine"][];
+        };
+        ShopOrderDetailEnvelope: {
+            data: components["schemas"]["ShopOrderDetail"];
+            success: boolean;
+            ok: boolean;
+            message: string;
+            meta: {
+                [key: string]: unknown;
+            };
+            errors: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description ``v1_shop.order_item_payload``: one ShopOrderItem. */
+        ShopOrderLine: {
+            ct_id: string;
+            it_id: string;
+            it_name: string;
+            it_seo_title: string;
+            ct_price: number;
+            ct_qty: number;
+            ct_point: number;
+            line_total: number;
+            line_point: number;
+            ct_option: string;
+            ct_status: string;
+            ct_stock_use: number;
+            stock_adjusted: boolean;
+            io_type: number;
+            io_price: number;
+            ct_notax: number;
+            ct_send_cost: number;
+            image_url: string;
+        };
+        ShopOrdersEnvelope: {
+            data: components["schemas"]["ShopOrder"][];
+            meta: components["schemas"]["PageMeta"];
+            success: boolean;
+            ok: boolean;
+            message: string;
+            errors: {
+                [key: string]: unknown;
+            };
         };
         /** @description ``v1_shop.product_payload`` as product lists, cards and the detail's neighbours show it. */
         ShopProduct: {
@@ -4244,12 +4563,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description No response body */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PostDetailEnvelope"];
+                };
             };
         };
     };
@@ -4753,12 +5073,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description No response body */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ShopCartEnvelope"];
+                };
             };
         };
     };
@@ -5159,12 +5480,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description No response body */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ShopOrdersEnvelope"];
+                };
             };
         };
     };
@@ -5197,12 +5519,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description No response body */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ShopOrderDetailEnvelope"];
+                };
             };
         };
     };
@@ -5713,12 +6036,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description No response body */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ShopProductDetailEnvelope"];
+                };
             };
         };
     };

@@ -97,6 +97,8 @@ export async function getBoardPosts({
   totalPage: number;
   noticeCount: number;
   totalNoticeCount: number;
+  /** meta.next_cursor: where infinite scroll continues with ?cursor= (null: use page numbers). */
+  nextCursor: string | null;
   error?: string;
 }> {
   const params = new URLSearchParams();
@@ -122,6 +124,7 @@ export async function getBoardPosts({
       totalPage: 1,
       noticeCount: 0,
       totalNoticeCount: 0,
+      nextCursor: null,
       error: result.error,
     };
   }
@@ -132,6 +135,7 @@ export async function getBoardPosts({
     totalPage: result.meta?.last_page ?? 1,
     noticeCount: result.meta?.notice_count ?? 0,
     totalNoticeCount: result.meta?.total_notice_count ?? result.meta?.notice_count ?? 0,
+    nextCursor: result.meta?.next_cursor ?? null,
   };
 }
 

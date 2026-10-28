@@ -22,6 +22,8 @@ interface InfinitePostListProps {
   bbsRewriteMode?: BbsRewriteMode;
   listQuery?: string;
   initialPage?: number;
+  /** meta.next_cursor of the first page: continue with ?cursor= instead of page numbers. */
+  initialCursor?: string | null;
   boNew?: number;
   boHot?: number;
   /** 글보기 아래 목록일 때 지금 읽고 있는 글 */
@@ -41,6 +43,7 @@ export function InfinitePostList({
   bbsRewriteMode,
   listQuery,
   initialPage = 1,
+  initialCursor = null,
   boNew,
   boHot,
   currentWrId,
@@ -49,6 +52,8 @@ export function InfinitePostList({
   const [posts, setPosts] = useState<WritePost[]>(initialPosts);
   const [notices, setNotices] = useState<WritePost[]>(initialNotices);
   const [page, setPage] = useState(initialPage);
+  // Cursor paging does not repeat rows when posts are written while scrolling; page numbers do.
+  const [cursor, setCursor] = useState<string | null>(initialCursor);
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(totalPages > 1);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -58,6 +63,19 @@ export function InfinitePostList({
     const nextPage = page + 1;
     setLoading(true);
     try {
+      if (cursor) {
+        const res = await apiClient.get(`/boards/${boTable}/posts`, {
+          params: { cursor, per_page: perPage, sca },
+        });
+        const newPosts = (Array.isArray(res.data) ? res.data : []) as WritePost[];
+        setPosts((prev) => [...prev, ...newPosts]);
+        setPage(nextPage);
+        setCursor(res.meta?.next_cursor ?? null);
+        if (!res.meta?.next_cursor || newPosts.length === 0) {
+          setHasMore(false);
+        }
+        return;
+      }
       const res = await apiClient.get(`/boards/${boTable}/posts`, {
         params: { page: nextPage, per_page: perPage, sfl, stx, sca },
       });
@@ -75,7 +93,7 @@ export function InfinitePostList({
     } finally {
       setLoading(false);
     }
-  }, [loading, hasMore, page, boTable, perPage, sfl, stx, sca, totalPages]);
+  }, [loading, hasMore, page, cursor, boTable, perPage, sfl, stx, sca, totalPages]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;

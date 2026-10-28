@@ -1866,7 +1866,14 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "No response body"
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/PostDetailEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 }
             }
@@ -2495,7 +2502,14 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "No response body"
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ShopCartEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 }
             },
@@ -2976,7 +2990,14 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "No response body"
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ShopOrdersEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 }
             },
@@ -3022,7 +3043,14 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "No response body"
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ShopOrderDetailEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 }
             },
@@ -3707,7 +3735,14 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "No response body"
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ShopProductDetailEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
                     }
                 }
             }
@@ -4208,15 +4243,6 @@
     },
     "components": {
         "schemas": {
-            "AdminRoleEnum": {
-                "enum": [
-                    "super",
-                    "group",
-                    "board"
-                ],
-                "type": "string",
-                "description": "* `super` - super\n* `group` - group\n* `board` - board\n* `` - "
-            },
             "AuthMe": {
                 "type": "object",
                 "properties": {
@@ -4646,14 +4672,14 @@
             "BoardPostListEnvelope": {
                 "type": "object",
                 "properties": {
+                    "meta": {
+                        "$ref": "#/components/schemas/BoardPostsMeta"
+                    },
                     "data": {
                         "type": "array",
                         "items": {
                             "$ref": "#/components/schemas/BoardPostListItem"
                         }
-                    },
-                    "meta": {
-                        "$ref": "#/components/schemas/BoardPostsPageMeta"
                     },
                     "success": {
                         "type": "boolean"
@@ -4813,7 +4839,7 @@
                     "admin_role": {
                         "oneOf": [
                             {
-                                "$ref": "#/components/schemas/AdminRoleEnum"
+                                "$ref": "#/components/schemas/PostAdminRoleEnum"
                             },
                             {
                                 "$ref": "#/components/schemas/BlankEnum"
@@ -4878,6 +4904,37 @@
                     "wr_subject"
                 ]
             },
+            "BoardPostsCursorMeta": {
+                "type": "object",
+                "description": "``?cursor=`` mode (``_cursor_posts_response``): no totals, only where to continue.",
+                "properties": {
+                    "per_page": {
+                        "type": "integer"
+                    },
+                    "has_more": {
+                        "type": "boolean"
+                    },
+                    "next_cursor": {
+                        "type": "string",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "has_more",
+                    "next_cursor",
+                    "per_page"
+                ]
+            },
+            "BoardPostsMeta": {
+                "oneOf": [
+                    {
+                        "$ref": "#/components/schemas/BoardPostsPageMeta"
+                    },
+                    {
+                        "$ref": "#/components/schemas/BoardPostsCursorMeta"
+                    }
+                ]
+            },
             "BoardPostsPageMeta": {
                 "type": "object",
                 "description": "``_paginate_board_posts``: PageMeta, its aliases and the notice counts.\n\n``total`` counts notices and regular posts; ``last_page`` counts regular posts only, since\nnotices are shown above each page rather than taking rows of it.",
@@ -4919,6 +4976,10 @@
                     },
                     "total_notice_count": {
                         "type": "integer"
+                    },
+                    "next_cursor": {
+                        "type": "string",
+                        "nullable": true
                     }
                 },
                 "required": [
@@ -4926,6 +4987,7 @@
                     "current_page",
                     "from",
                     "last_page",
+                    "next_cursor",
                     "notice_count",
                     "page",
                     "page_size",
@@ -4935,6 +4997,40 @@
                     "total_notice_count",
                     "total_pages"
                 ]
+            },
+            "CashReceiptStateEnum": {
+                "enum": [
+                    "available",
+                    "requested",
+                    "issued",
+                    "cancel_needed",
+                    "unavailable"
+                ],
+                "type": "string",
+                "description": "* `available` - available\n* `requested` - requested\n* `issued` - issued\n* `cancel_needed` - cancel_needed\n* `unavailable` - unavailable"
+            },
+            "CashReceiptType": {
+                "type": "object",
+                "properties": {
+                    "value": {
+                        "$ref": "#/components/schemas/CashReceiptTypeEnum"
+                    },
+                    "label": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "label",
+                    "value"
+                ]
+            },
+            "CashReceiptTypeEnum": {
+                "enum": [
+                    "income",
+                    "expense"
+                ],
+                "type": "string",
+                "description": "* `income` - income\n* `expense` - expense"
             },
             "CategoryListDisplay": {
                 "type": "object",
@@ -5101,6 +5197,15 @@
                     "to",
                     "total"
                 ]
+            },
+            "PostAdminRoleEnum": {
+                "enum": [
+                    "super",
+                    "group",
+                    "board"
+                ],
+                "type": "string",
+                "description": "* `super` - super\n* `group` - group\n* `board` - board\n* `` - "
             },
             "PostAuthor": {
                 "type": "object",
@@ -5335,7 +5440,7 @@
                     "admin_role": {
                         "oneOf": [
                             {
-                                "$ref": "#/components/schemas/AdminRoleEnum"
+                                "$ref": "#/components/schemas/PostAdminRoleEnum"
                             },
                             {
                                 "$ref": "#/components/schemas/BlankEnum"
@@ -5604,6 +5709,194 @@
                     "use"
                 ]
             },
+            "ShopCart": {
+                "type": "object",
+                "description": "``shop_cart.cart_payload``: the lines (``?ct_ids=`` selects some, 바로구매 lines included)\nand their totals; every amount is 0 for an empty cart.",
+                "properties": {
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopCartLine"
+                        }
+                    },
+                    "total_price": {
+                        "type": "integer"
+                    },
+                    "total_qty": {
+                        "type": "integer"
+                    },
+                    "cart_coupon": {
+                        "type": "integer"
+                    },
+                    "send_cost": {
+                        "type": "integer"
+                    },
+                    "send_cost2": {
+                        "type": "integer"
+                    },
+                    "shipping_cost": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "cart_coupon",
+                    "items",
+                    "send_cost",
+                    "send_cost2",
+                    "shipping_cost",
+                    "total_price",
+                    "total_qty"
+                ]
+            },
+            "ShopCartEnvelope": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ShopCart"
+                    },
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "ok": {
+                        "type": "boolean"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "errors": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "errors",
+                    "message",
+                    "meta",
+                    "ok",
+                    "success"
+                ]
+            },
+            "ShopCartLine": {
+                "type": "object",
+                "description": "``shop_cart.cart_item_payload``. A line whose product was deleted still renders, with the\nstored name (or the it_id) and fallback shipping / stock values.",
+                "properties": {
+                    "ct_id": {
+                        "type": "string"
+                    },
+                    "it_id": {
+                        "type": "string"
+                    },
+                    "it_name": {
+                        "type": "string"
+                    },
+                    "it_seo_title": {
+                        "type": "string"
+                    },
+                    "ct_price": {
+                        "type": "integer"
+                    },
+                    "ct_qty": {
+                        "type": "integer"
+                    },
+                    "ct_option": {
+                        "type": "string"
+                    },
+                    "io_type": {
+                        "type": "integer"
+                    },
+                    "io_price": {
+                        "type": "integer"
+                    },
+                    "ct_direct": {
+                        "type": "integer"
+                    },
+                    "ct_send_cost": {
+                        "type": "integer"
+                    },
+                    "it_sc_type": {
+                        "type": "integer"
+                    },
+                    "it_sc_method": {
+                        "type": "integer"
+                    },
+                    "it_sc_price": {
+                        "type": "integer"
+                    },
+                    "it_sc_minimum": {
+                        "type": "integer"
+                    },
+                    "it_sc_qty": {
+                        "type": "integer"
+                    },
+                    "line_total": {
+                        "type": "integer"
+                    },
+                    "it_basic_price": {
+                        "type": "integer"
+                    },
+                    "it_stock_qty": {
+                        "type": "integer"
+                    },
+                    "it_notax": {
+                        "type": "integer"
+                    },
+                    "ct_notax": {
+                        "type": "integer"
+                    },
+                    "it_soldout": {
+                        "type": "string"
+                    },
+                    "it_use": {
+                        "type": "string"
+                    },
+                    "it_tel_inq": {
+                        "type": "string"
+                    },
+                    "image_url": {
+                        "type": "string"
+                    },
+                    "cp_price": {
+                        "type": "integer"
+                    },
+                    "cp_id": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "cp_id",
+                    "cp_price",
+                    "ct_direct",
+                    "ct_id",
+                    "ct_notax",
+                    "ct_option",
+                    "ct_price",
+                    "ct_qty",
+                    "ct_send_cost",
+                    "image_url",
+                    "io_price",
+                    "io_type",
+                    "it_basic_price",
+                    "it_id",
+                    "it_name",
+                    "it_notax",
+                    "it_sc_method",
+                    "it_sc_minimum",
+                    "it_sc_price",
+                    "it_sc_qty",
+                    "it_sc_type",
+                    "it_seo_title",
+                    "it_soldout",
+                    "it_stock_qty",
+                    "it_tel_inq",
+                    "it_use",
+                    "line_total"
+                ]
+            },
             "ShopCategoriesEnvelope": {
                 "type": "object",
                 "properties": {
@@ -5838,6 +6131,897 @@
                     "listtype",
                     "related",
                     "search"
+                ]
+            },
+            "ShopOrder": {
+                "type": "object",
+                "description": "``v1_shop.order_payload(order)`` as the order list shows it.\n\nDates and times are ISO strings or \"\" (``od_datetime``, ``od_time``, ``od_hope_date``);\n``od_receipt_time``, ``od_invoice_time`` and ``od_vbank_due_date`` are stored text.",
+                "properties": {
+                    "od_id": {
+                        "type": "string"
+                    },
+                    "uid": {
+                        "type": "string"
+                    },
+                    "mb_id": {
+                        "type": "string"
+                    },
+                    "item_count": {
+                        "type": "integer"
+                    },
+                    "od_cart_count": {
+                        "type": "integer"
+                    },
+                    "od_name": {
+                        "type": "string"
+                    },
+                    "od_tel": {
+                        "type": "string"
+                    },
+                    "od_hp": {
+                        "type": "string"
+                    },
+                    "od_email": {
+                        "type": "string"
+                    },
+                    "od_zip": {
+                        "type": "string"
+                    },
+                    "od_addr1": {
+                        "type": "string"
+                    },
+                    "od_addr2": {
+                        "type": "string"
+                    },
+                    "od_addr3": {
+                        "type": "string"
+                    },
+                    "od_b_name": {
+                        "type": "string"
+                    },
+                    "od_b_tel": {
+                        "type": "string"
+                    },
+                    "od_b_hp": {
+                        "type": "string"
+                    },
+                    "od_b_zip": {
+                        "type": "string"
+                    },
+                    "od_b_addr1": {
+                        "type": "string"
+                    },
+                    "od_b_addr2": {
+                        "type": "string"
+                    },
+                    "od_b_addr3": {
+                        "type": "string"
+                    },
+                    "od_memo": {
+                        "type": "string"
+                    },
+                    "od_hope_date": {
+                        "type": "string"
+                    },
+                    "od_cart_price": {
+                        "type": "integer"
+                    },
+                    "od_send_cost": {
+                        "type": "integer"
+                    },
+                    "od_send_cost2": {
+                        "type": "integer"
+                    },
+                    "od_receipt_price": {
+                        "type": "integer"
+                    },
+                    "od_cancel_price": {
+                        "type": "integer"
+                    },
+                    "od_refund_price": {
+                        "type": "integer"
+                    },
+                    "od_receipt_point": {
+                        "type": "integer"
+                    },
+                    "od_deposit_name": {
+                        "type": "string"
+                    },
+                    "od_status": {
+                        "type": "string"
+                    },
+                    "od_settle_case": {
+                        "type": "string"
+                    },
+                    "od_bank_account": {
+                        "type": "string"
+                    },
+                    "od_vbank_bank_code": {
+                        "type": "string"
+                    },
+                    "od_vbank_account": {
+                        "type": "string"
+                    },
+                    "od_vbank_customer_name": {
+                        "type": "string"
+                    },
+                    "od_vbank_due_date": {
+                        "type": "string"
+                    },
+                    "od_vbank_status": {
+                        "type": "string"
+                    },
+                    "od_test": {
+                        "type": "string"
+                    },
+                    "od_misu": {
+                        "type": "integer"
+                    },
+                    "od_pg": {
+                        "type": "string"
+                    },
+                    "od_tno": {
+                        "type": "string"
+                    },
+                    "od_app_no": {
+                        "type": "string"
+                    },
+                    "od_tax_flag": {
+                        "type": "integer"
+                    },
+                    "od_tax_invoice_request": {
+                        "type": "boolean"
+                    },
+                    "od_tax_mny": {
+                        "type": "integer"
+                    },
+                    "od_vat_mny": {
+                        "type": "integer"
+                    },
+                    "od_free_mny": {
+                        "type": "integer"
+                    },
+                    "od_coupon": {
+                        "type": "integer"
+                    },
+                    "od_cart_coupon": {
+                        "type": "integer"
+                    },
+                    "od_send_coupon": {
+                        "type": "integer"
+                    },
+                    "od_point": {
+                        "type": "integer"
+                    },
+                    "od_cash_request": {
+                        "type": "boolean"
+                    },
+                    "od_cash_type": {
+                        "type": "string"
+                    },
+                    "od_cash": {
+                        "type": "integer"
+                    },
+                    "od_cash_no": {
+                        "type": "string"
+                    },
+                    "od_cash_res": {
+                        "type": "string"
+                    },
+                    "od_cash_info": {
+                        "type": "string"
+                    },
+                    "od_datetime": {
+                        "type": "string"
+                    },
+                    "od_time": {
+                        "type": "string"
+                    },
+                    "od_receipt_time": {
+                        "type": "string"
+                    },
+                    "od_ip": {
+                        "type": "string"
+                    },
+                    "od_total_price": {
+                        "type": "integer"
+                    },
+                    "od_order_price": {
+                        "type": "integer"
+                    },
+                    "od_list_price": {
+                        "type": "integer"
+                    },
+                    "od_receipt_total": {
+                        "type": "integer"
+                    },
+                    "od_misu_price": {
+                        "type": "integer"
+                    },
+                    "od_is_fully_paid": {
+                        "type": "boolean"
+                    },
+                    "od_delivery_company": {
+                        "type": "string"
+                    },
+                    "od_invoice": {
+                        "type": "string"
+                    },
+                    "od_invoice_time": {
+                        "type": "string"
+                    },
+                    "delivery_inquiry_url": {
+                        "type": "string"
+                    },
+                    "od_delivery_inquiry_url": {
+                        "type": "string"
+                    },
+                    "delivery_inquiry_tel": {
+                        "type": "string"
+                    },
+                    "receipt_url": {
+                        "type": "string"
+                    },
+                    "od_payment_receipt_url": {
+                        "type": "string"
+                    },
+                    "od_payment_app_label": {
+                        "type": "string"
+                    },
+                    "od_payment_app_value": {
+                        "type": "string"
+                    },
+                    "cash_receipt_url": {
+                        "type": "string"
+                    },
+                    "od_cash_receipt_url": {
+                        "type": "string"
+                    },
+                    "cash_receipt_issue_url": {
+                        "type": "string"
+                    },
+                    "od_cash_receipt_issue_url": {
+                        "type": "string"
+                    },
+                    "cash_receipt": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ShopOrderCashReceipt"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "can_cancel": {
+                        "type": "boolean"
+                    },
+                    "cancel_block_reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "can_cancel",
+                    "cancel_block_reason",
+                    "cash_receipt",
+                    "cash_receipt_issue_url",
+                    "cash_receipt_url",
+                    "delivery_inquiry_tel",
+                    "delivery_inquiry_url",
+                    "item_count",
+                    "mb_id",
+                    "od_addr1",
+                    "od_addr2",
+                    "od_addr3",
+                    "od_app_no",
+                    "od_b_addr1",
+                    "od_b_addr2",
+                    "od_b_addr3",
+                    "od_b_hp",
+                    "od_b_name",
+                    "od_b_tel",
+                    "od_b_zip",
+                    "od_bank_account",
+                    "od_cancel_price",
+                    "od_cart_count",
+                    "od_cart_coupon",
+                    "od_cart_price",
+                    "od_cash",
+                    "od_cash_info",
+                    "od_cash_no",
+                    "od_cash_receipt_issue_url",
+                    "od_cash_receipt_url",
+                    "od_cash_request",
+                    "od_cash_res",
+                    "od_cash_type",
+                    "od_coupon",
+                    "od_datetime",
+                    "od_delivery_company",
+                    "od_delivery_inquiry_url",
+                    "od_deposit_name",
+                    "od_email",
+                    "od_free_mny",
+                    "od_hope_date",
+                    "od_hp",
+                    "od_id",
+                    "od_invoice",
+                    "od_invoice_time",
+                    "od_ip",
+                    "od_is_fully_paid",
+                    "od_list_price",
+                    "od_memo",
+                    "od_misu",
+                    "od_misu_price",
+                    "od_name",
+                    "od_order_price",
+                    "od_payment_app_label",
+                    "od_payment_app_value",
+                    "od_payment_receipt_url",
+                    "od_pg",
+                    "od_point",
+                    "od_receipt_point",
+                    "od_receipt_price",
+                    "od_receipt_time",
+                    "od_receipt_total",
+                    "od_refund_price",
+                    "od_send_cost",
+                    "od_send_cost2",
+                    "od_send_coupon",
+                    "od_settle_case",
+                    "od_status",
+                    "od_tax_flag",
+                    "od_tax_invoice_request",
+                    "od_tax_mny",
+                    "od_tel",
+                    "od_test",
+                    "od_time",
+                    "od_tno",
+                    "od_total_price",
+                    "od_vat_mny",
+                    "od_vbank_account",
+                    "od_vbank_bank_code",
+                    "od_vbank_customer_name",
+                    "od_vbank_due_date",
+                    "od_vbank_status",
+                    "od_zip",
+                    "receipt_url",
+                    "uid"
+                ]
+            },
+            "ShopOrderCashReceipt": {
+                "type": "object",
+                "description": "``shop.cash_receipts.customer_payload``: whether the customer may request a cash receipt.",
+                "properties": {
+                    "state": {
+                        "$ref": "#/components/schemas/CashReceiptStateEnum"
+                    },
+                    "can_request": {
+                        "type": "boolean"
+                    },
+                    "amount": {
+                        "type": "integer"
+                    },
+                    "types": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/CashReceiptType"
+                        }
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "request_url": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "amount",
+                    "can_request",
+                    "message",
+                    "request_url",
+                    "state",
+                    "types"
+                ]
+            },
+            "ShopOrderDetail": {
+                "type": "object",
+                "description": "``order_payload(order, detail=True)``: the list shape plus the lines and the cash receipt.",
+                "properties": {
+                    "od_id": {
+                        "type": "string"
+                    },
+                    "uid": {
+                        "type": "string"
+                    },
+                    "mb_id": {
+                        "type": "string"
+                    },
+                    "item_count": {
+                        "type": "integer"
+                    },
+                    "od_cart_count": {
+                        "type": "integer"
+                    },
+                    "od_name": {
+                        "type": "string"
+                    },
+                    "od_tel": {
+                        "type": "string"
+                    },
+                    "od_hp": {
+                        "type": "string"
+                    },
+                    "od_email": {
+                        "type": "string"
+                    },
+                    "od_zip": {
+                        "type": "string"
+                    },
+                    "od_addr1": {
+                        "type": "string"
+                    },
+                    "od_addr2": {
+                        "type": "string"
+                    },
+                    "od_addr3": {
+                        "type": "string"
+                    },
+                    "od_b_name": {
+                        "type": "string"
+                    },
+                    "od_b_tel": {
+                        "type": "string"
+                    },
+                    "od_b_hp": {
+                        "type": "string"
+                    },
+                    "od_b_zip": {
+                        "type": "string"
+                    },
+                    "od_b_addr1": {
+                        "type": "string"
+                    },
+                    "od_b_addr2": {
+                        "type": "string"
+                    },
+                    "od_b_addr3": {
+                        "type": "string"
+                    },
+                    "od_memo": {
+                        "type": "string"
+                    },
+                    "od_hope_date": {
+                        "type": "string"
+                    },
+                    "od_cart_price": {
+                        "type": "integer"
+                    },
+                    "od_send_cost": {
+                        "type": "integer"
+                    },
+                    "od_send_cost2": {
+                        "type": "integer"
+                    },
+                    "od_receipt_price": {
+                        "type": "integer"
+                    },
+                    "od_cancel_price": {
+                        "type": "integer"
+                    },
+                    "od_refund_price": {
+                        "type": "integer"
+                    },
+                    "od_receipt_point": {
+                        "type": "integer"
+                    },
+                    "od_deposit_name": {
+                        "type": "string"
+                    },
+                    "od_status": {
+                        "type": "string"
+                    },
+                    "od_settle_case": {
+                        "type": "string"
+                    },
+                    "od_bank_account": {
+                        "type": "string"
+                    },
+                    "od_vbank_bank_code": {
+                        "type": "string"
+                    },
+                    "od_vbank_account": {
+                        "type": "string"
+                    },
+                    "od_vbank_customer_name": {
+                        "type": "string"
+                    },
+                    "od_vbank_due_date": {
+                        "type": "string"
+                    },
+                    "od_vbank_status": {
+                        "type": "string"
+                    },
+                    "od_test": {
+                        "type": "string"
+                    },
+                    "od_misu": {
+                        "type": "integer"
+                    },
+                    "od_pg": {
+                        "type": "string"
+                    },
+                    "od_tno": {
+                        "type": "string"
+                    },
+                    "od_app_no": {
+                        "type": "string"
+                    },
+                    "od_tax_flag": {
+                        "type": "integer"
+                    },
+                    "od_tax_invoice_request": {
+                        "type": "boolean"
+                    },
+                    "od_tax_mny": {
+                        "type": "integer"
+                    },
+                    "od_vat_mny": {
+                        "type": "integer"
+                    },
+                    "od_free_mny": {
+                        "type": "integer"
+                    },
+                    "od_coupon": {
+                        "type": "integer"
+                    },
+                    "od_cart_coupon": {
+                        "type": "integer"
+                    },
+                    "od_send_coupon": {
+                        "type": "integer"
+                    },
+                    "od_point": {
+                        "type": "integer"
+                    },
+                    "od_cash_request": {
+                        "type": "boolean"
+                    },
+                    "od_cash_type": {
+                        "type": "string"
+                    },
+                    "od_cash": {
+                        "type": "integer"
+                    },
+                    "od_cash_no": {
+                        "type": "string"
+                    },
+                    "od_cash_res": {
+                        "type": "string"
+                    },
+                    "od_cash_info": {
+                        "type": "string"
+                    },
+                    "od_datetime": {
+                        "type": "string"
+                    },
+                    "od_time": {
+                        "type": "string"
+                    },
+                    "od_receipt_time": {
+                        "type": "string"
+                    },
+                    "od_ip": {
+                        "type": "string"
+                    },
+                    "od_total_price": {
+                        "type": "integer"
+                    },
+                    "od_order_price": {
+                        "type": "integer"
+                    },
+                    "od_list_price": {
+                        "type": "integer"
+                    },
+                    "od_receipt_total": {
+                        "type": "integer"
+                    },
+                    "od_misu_price": {
+                        "type": "integer"
+                    },
+                    "od_is_fully_paid": {
+                        "type": "boolean"
+                    },
+                    "od_delivery_company": {
+                        "type": "string"
+                    },
+                    "od_invoice": {
+                        "type": "string"
+                    },
+                    "od_invoice_time": {
+                        "type": "string"
+                    },
+                    "delivery_inquiry_url": {
+                        "type": "string"
+                    },
+                    "od_delivery_inquiry_url": {
+                        "type": "string"
+                    },
+                    "delivery_inquiry_tel": {
+                        "type": "string"
+                    },
+                    "receipt_url": {
+                        "type": "string"
+                    },
+                    "od_payment_receipt_url": {
+                        "type": "string"
+                    },
+                    "od_payment_app_label": {
+                        "type": "string"
+                    },
+                    "od_payment_app_value": {
+                        "type": "string"
+                    },
+                    "cash_receipt_url": {
+                        "type": "string"
+                    },
+                    "od_cash_receipt_url": {
+                        "type": "string"
+                    },
+                    "cash_receipt_issue_url": {
+                        "type": "string"
+                    },
+                    "od_cash_receipt_issue_url": {
+                        "type": "string"
+                    },
+                    "cash_receipt": {
+                        "$ref": "#/components/schemas/ShopOrderCashReceipt"
+                    },
+                    "can_cancel": {
+                        "type": "boolean"
+                    },
+                    "cancel_block_reason": {
+                        "type": "string"
+                    },
+                    "items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopOrderLine"
+                        }
+                    }
+                },
+                "required": [
+                    "can_cancel",
+                    "cancel_block_reason",
+                    "cash_receipt",
+                    "cash_receipt_issue_url",
+                    "cash_receipt_url",
+                    "delivery_inquiry_tel",
+                    "delivery_inquiry_url",
+                    "item_count",
+                    "items",
+                    "mb_id",
+                    "od_addr1",
+                    "od_addr2",
+                    "od_addr3",
+                    "od_app_no",
+                    "od_b_addr1",
+                    "od_b_addr2",
+                    "od_b_addr3",
+                    "od_b_hp",
+                    "od_b_name",
+                    "od_b_tel",
+                    "od_b_zip",
+                    "od_bank_account",
+                    "od_cancel_price",
+                    "od_cart_count",
+                    "od_cart_coupon",
+                    "od_cart_price",
+                    "od_cash",
+                    "od_cash_info",
+                    "od_cash_no",
+                    "od_cash_receipt_issue_url",
+                    "od_cash_receipt_url",
+                    "od_cash_request",
+                    "od_cash_res",
+                    "od_cash_type",
+                    "od_coupon",
+                    "od_datetime",
+                    "od_delivery_company",
+                    "od_delivery_inquiry_url",
+                    "od_deposit_name",
+                    "od_email",
+                    "od_free_mny",
+                    "od_hope_date",
+                    "od_hp",
+                    "od_id",
+                    "od_invoice",
+                    "od_invoice_time",
+                    "od_ip",
+                    "od_is_fully_paid",
+                    "od_list_price",
+                    "od_memo",
+                    "od_misu",
+                    "od_misu_price",
+                    "od_name",
+                    "od_order_price",
+                    "od_payment_app_label",
+                    "od_payment_app_value",
+                    "od_payment_receipt_url",
+                    "od_pg",
+                    "od_point",
+                    "od_receipt_point",
+                    "od_receipt_price",
+                    "od_receipt_time",
+                    "od_receipt_total",
+                    "od_refund_price",
+                    "od_send_cost",
+                    "od_send_cost2",
+                    "od_send_coupon",
+                    "od_settle_case",
+                    "od_status",
+                    "od_tax_flag",
+                    "od_tax_invoice_request",
+                    "od_tax_mny",
+                    "od_tel",
+                    "od_test",
+                    "od_time",
+                    "od_tno",
+                    "od_total_price",
+                    "od_vat_mny",
+                    "od_vbank_account",
+                    "od_vbank_bank_code",
+                    "od_vbank_customer_name",
+                    "od_vbank_due_date",
+                    "od_vbank_status",
+                    "od_zip",
+                    "receipt_url",
+                    "uid"
+                ]
+            },
+            "ShopOrderDetailEnvelope": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ShopOrderDetail"
+                    },
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "ok": {
+                        "type": "boolean"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "errors": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "errors",
+                    "message",
+                    "meta",
+                    "ok",
+                    "success"
+                ]
+            },
+            "ShopOrderLine": {
+                "type": "object",
+                "description": "``v1_shop.order_item_payload``: one ShopOrderItem.",
+                "properties": {
+                    "ct_id": {
+                        "type": "string"
+                    },
+                    "it_id": {
+                        "type": "string"
+                    },
+                    "it_name": {
+                        "type": "string"
+                    },
+                    "it_seo_title": {
+                        "type": "string"
+                    },
+                    "ct_price": {
+                        "type": "integer"
+                    },
+                    "ct_qty": {
+                        "type": "integer"
+                    },
+                    "ct_point": {
+                        "type": "integer"
+                    },
+                    "line_total": {
+                        "type": "integer"
+                    },
+                    "line_point": {
+                        "type": "integer"
+                    },
+                    "ct_option": {
+                        "type": "string"
+                    },
+                    "ct_status": {
+                        "type": "string"
+                    },
+                    "ct_stock_use": {
+                        "type": "integer"
+                    },
+                    "stock_adjusted": {
+                        "type": "boolean"
+                    },
+                    "io_type": {
+                        "type": "integer"
+                    },
+                    "io_price": {
+                        "type": "integer"
+                    },
+                    "ct_notax": {
+                        "type": "integer"
+                    },
+                    "ct_send_cost": {
+                        "type": "integer"
+                    },
+                    "image_url": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "ct_id",
+                    "ct_notax",
+                    "ct_option",
+                    "ct_point",
+                    "ct_price",
+                    "ct_qty",
+                    "ct_send_cost",
+                    "ct_status",
+                    "ct_stock_use",
+                    "image_url",
+                    "io_price",
+                    "io_type",
+                    "it_id",
+                    "it_name",
+                    "it_seo_title",
+                    "line_point",
+                    "line_total",
+                    "stock_adjusted"
+                ]
+            },
+            "ShopOrdersEnvelope": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopOrder"
+                        }
+                    },
+                    "meta": {
+                        "$ref": "#/components/schemas/PageMeta"
+                    },
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "ok": {
+                        "type": "boolean"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "errors": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "errors",
+                    "message",
+                    "meta",
+                    "ok",
+                    "success"
                 ]
             },
             "ShopProduct": {

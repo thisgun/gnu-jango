@@ -1,4 +1,7 @@
+import base64
+import binascii
 import html
+import json
 import os
 import re
 import uuid
@@ -39,7 +42,7 @@ from .access import listable_post_queryset, readable_post_queryset, secret_post_
 from .contracts import envelope
 from .contracts.boards import (
     BoardPostListItemSerializer,
-    BoardPostsPageMetaSerializer,
+    BoardPostsMeta,
     BoardSerializer,
     PostDetailSerializer,
 )
@@ -1008,6 +1011,84 @@ def board_category_counts_view(request, bo_table):
     return api_response(data={"counts": counts, "reason": None})
 
 
+POST_DETAIL_ENVELOPE = envelope("PostDetail", PostDetailSerializer())
+
+
+def _reply_rank():
+    # thread roots ("" reply marker) before their replies
+    return Case(When(wr_reply="", then=0), default=1, output_field=IntegerField())
+
+
+def _encode_post_cursor(post):
+    """Opaque position after ``post`` in the board list order (keyset pagination)."""
+    values = [post.wr_num, 0 if not post.wr_reply else 1, post.wr_reply or "", post.wr_parent or 0, post.pk]
+    raw = json.dumps(values, separators=(",", ":")).encode()
+    return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+
+def _decode_post_cursor(token):
+    try:
+        raw = base64.urlsafe_b64decode(token + "=" * (-len(token) % 4))
+        values = json.loads(raw)
+    except (ValueError, TypeError, binascii.Error):
+        return None
+    if not (isinstance(values, list) and len(values) == 5):
+        return None
+    wr_num, rank, wr_reply, wr_parent, pk = values
+    ints = (wr_num, wr_parent, pk)
+    if not all(isinstance(value, int) and not isinstance(value, bool) for value in ints):
+        return None
+    if rank not in (0, 1) or not isinstance(wr_reply, str) or len(wr_reply) > 10:
+        return None
+    return values
+
+
+def _after_post_cursor(queryset, values):
+    wr_num, rank, wr_reply, wr_parent, pk = values
+    same_num = Q(wr_num=wr_num)
+    same_rank = same_num & Q(reply_rank=rank)
+    same_reply = same_rank & Q(wr_reply=wr_reply)
+    same_parent = same_reply & Q(wr_parent=wr_parent)
+    return queryset.annotate(reply_rank=_reply_rank()).filter(
+        Q(wr_num__gt=wr_num)
+        | (same_num & Q(reply_rank__gt=rank))
+        | (same_rank & Q(wr_reply__gt=wr_reply))
+        | (same_reply & Q(wr_parent__gt=wr_parent))
+        | (same_parent & Q(pk__gt=pk))
+    )
+
+
+def _board_posts_per_page(request, board):
+    default_per_page = board.bo_page_rows or 20
+    per_page = request.query_params.get("per_page", request.query_params.get("page_size", default_per_page))
+    return min(max(_safe_int(per_page, default_per_page), 1), 100)
+
+
+def _cursor_posts_response(request, board, posts):
+    """``?cursor=``: regular posts after a position, without COUNT or OFFSET.
+
+    Infinite scroll asks for the first page in the numbered mode (it has the notices and totals) and
+    continues from ``meta.next_cursor``; an empty ``cursor`` starts at the first regular post. Rows
+    written meanwhile neither repeat nor shift later pages, unlike ``page=N``.
+    """
+    token = request.query_params.get("cursor") or ""
+    if token:
+        values = _decode_post_cursor(token)
+        if values is None:
+            return None, api_error("Invalid cursor.", status=drf_status.HTTP_400_BAD_REQUEST, code="invalid_cursor")
+        posts = _after_post_cursor(posts, values)
+    per_page = _board_posts_per_page(request, board)
+    window = list(posts[: per_page + 1])
+    page_posts = window[:per_page]
+    has_more = len(window) > per_page
+    meta = {
+        "per_page": per_page,
+        "has_more": has_more,
+        "next_cursor": _encode_post_cursor(page_posts[-1]) if has_more and page_posts else None,
+    }
+    return (page_posts, meta), None
+
+
 def board_posts_response(request, bo_table):
     board = _get_board(bo_table)
     if not board:
@@ -1027,6 +1108,7 @@ def board_posts_response(request, bo_table):
         ),
         "wr_reply",
         "wr_parent",
+        "pk",
     )
     list_filter_active = bool(
         (request.query_params.get("sca") or "").strip()
@@ -1038,6 +1120,21 @@ def board_posts_response(request, bo_table):
     else:
         posts = _filter_posts(request, ordered_queryset.filter(is_notice=False))
         notices = ordered_queryset.filter(is_notice=True)
+
+    searching = bool((request.query_params.get("stx") or "").strip())
+    if "cursor" in request.query_params:
+        if searching:
+            # search results may come from the search index in relevance order: no stable keyset
+            return api_error(
+                "Cursor paging is not available with a search term; use page.",
+                status=drf_status.HTTP_400_BAD_REQUEST,
+                code="cursor_unsupported",
+            )
+        result, error = _cursor_posts_response(request, board, posts)
+        if error:
+            return error
+        page_posts, meta = result
+        return api_response(data=_board_post_rows(request, board, page_posts), meta=meta)
 
     notice_ids = []
     for value in (board.bo_notice or "").replace("\n", ",").split(","):
@@ -1051,6 +1148,18 @@ def board_posts_response(request, bo_table):
         board.bo_page_rows or 20,
         notice_ids,
     )
+    # Where infinite scroll may continue with ?cursor=: after this page's last regular post, while
+    # more regular posts follow and every notice has already been shown.
+    regular = [post for post in page_posts if not post.is_notice]
+    notices_left = meta["total_notice_count"] > (meta["current_page"] * meta["per_page"])
+    more_posts = meta["current_page"] < meta["last_page"]
+    meta["next_cursor"] = (
+        _encode_post_cursor(regular[-1]) if regular and more_posts and not notices_left and not searching else None
+    )
+    return api_response(data=_board_post_rows(request, board, page_posts), meta=meta)
+
+
+def _board_post_rows(request, board, page_posts):
     rows = [_post_payload(post, request, list_view=True) for post in page_posts]
     wants_excerpt = "excerpt" in {part.strip() for part in (request.query_params.get("with") or "").split(",")}
     if wants_excerpt:
@@ -1059,12 +1168,12 @@ def board_posts_response(request, bo_table):
             # 비밀글은 읽을 수 있는 사람에게도 카드에 본문을 내지 않는다(자물쇠 표시 · 사이트 검색과 같다).
             if post.pk in allowed and not row["is_secret"]:
                 row["wr_excerpt"] = _post_excerpt(post.wr_content)
-    return api_response(data=rows, meta=meta)
+    return rows
 
 
 @extend_schema(
     methods=["GET"],
-    responses=envelope("BoardPostList", BoardPostListItemSerializer(many=True), meta=BoardPostsPageMetaSerializer()),
+    responses=envelope("BoardPostList", BoardPostListItemSerializer(many=True), meta=BoardPostsMeta),
 )
 @api_view(["GET", "POST"])
 @permission_classes([AllowAny])
@@ -1359,7 +1468,7 @@ def _get_post_for_board(request, bo_table, wr_id=None, slug=None, *, for_update=
     return board, None
 
 
-@extend_schema(methods=["GET"], responses=envelope("PostDetail", PostDetailSerializer()))
+@extend_schema(methods=["GET"], responses=POST_DETAIL_ENVELOPE)
 @api_view(["GET", "PATCH", "DELETE"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -1500,6 +1609,7 @@ def _delete_post(user, board, post, wr_id):
     return api_response(data={"deleted": True, "wr_id": wr_id, "deleted_ids": deleted_ids})
 
 
+@extend_schema(responses=POST_DETAIL_ENVELOPE)
 @api_view(["GET"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
