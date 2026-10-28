@@ -12,6 +12,10 @@ export interface ApiMeta {
   total_pages?: number;
   engine?: string;
   truncated?: boolean;
+  /** Board post lists: continue with ?cursor=<next_cursor> (null when there is nothing after). */
+  next_cursor?: string | null;
+  /** ?cursor= responses: whether another cursor page follows. */
+  has_more?: boolean;
 }
 
 export interface ApiResponse<T> {
@@ -78,6 +82,10 @@ function parseMeta(value: unknown): ApiMeta | undefined {
     ...(value.total_pages === undefined ? {} : { total_pages: toNumber(value.total_pages) }),
     ...(typeof value.engine === "string" ? { engine: value.engine } : {}),
     ...(typeof value.truncated === "boolean" ? { truncated: value.truncated } : {}),
+    ...(typeof value.next_cursor === "string" || value.next_cursor === null
+      ? { next_cursor: value.next_cursor }
+      : {}),
+    ...(typeof value.has_more === "boolean" ? { has_more: value.has_more } : {}),
   };
 }
 

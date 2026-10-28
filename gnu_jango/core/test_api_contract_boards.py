@@ -25,12 +25,14 @@ BOARDS = "/api/v1/boards"
 BOARD = "/api/v1/boards/{bo_table}"
 BOARD_POSTS = "/api/v1/boards/{bo_table}/posts"
 POST = "/api/v1/posts/{bo_table}/{wr_id}"
+POST_BY_SEO = "/api/v1/posts/{bo_table}/seo/{slug}"
 
 CONTRACT_OPERATIONS = {
     ("GET", BOARDS),
     ("GET", BOARD),
     ("GET", BOARD_POSTS),
     ("GET", POST),
+    ("GET", POST_BY_SEO),
 }
 
 
@@ -274,3 +276,12 @@ class PostDetailContractTests(BoardContractTestCase):
 
         self.assertIsNone(response.json()["data"]["next_post"])
         self.assertMatchesContract(response, POST)
+
+    def test_a_post_read_by_its_seo_address_matches_the_same_contract(self):
+        self.attach_files(self.member_post)
+        by_id = self.get(self.post_url(self.member_post)).json()["data"]
+
+        response = self.get(f"/api/v1/posts/{self.board.bo_table}/seo/{self.member_post.wr_slug}")
+
+        self.assertEqual(response.json()["data"]["wr_id"], by_id["wr_id"])
+        self.assertMatchesContract(response, POST_BY_SEO)

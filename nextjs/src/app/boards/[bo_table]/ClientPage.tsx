@@ -40,6 +40,7 @@ interface PostsState {
   totalPage: number;
   noticeCount: number;
   totalNoticeCount: number;
+  nextCursor: string | null;
   error?: string;
 }
 
@@ -49,6 +50,7 @@ const EMPTY_POSTS: PostsState = {
   totalPage: 1,
   noticeCount: 0,
   totalNoticeCount: 0,
+  nextCursor: null,
 };
 
 function toPage(value: string | null): number {
@@ -400,6 +402,7 @@ export default function BoardPostListClient({ boTable, embedded = false, current
           bbsRewriteMode={bbsRewriteMode}
           listQuery={listQuery}
           initialPage={page}
+          initialCursor={postsData.nextCursor}
           boNew={board.bo_new ?? 0}
           boHot={board.bo_hot ?? 0}
           currentWrId={currentWrId}

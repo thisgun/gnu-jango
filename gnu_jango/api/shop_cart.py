@@ -4,6 +4,7 @@ import json
 import uuid
 
 from django.utils import timezone
+from drf_spectacular.utils import extend_schema
 from rest_framework import status as drf_status
 from rest_framework.authentication import BasicAuthentication
 from rest_framework.decorators import (
@@ -15,6 +16,8 @@ from rest_framework.decorators import (
 from rest_framework.parsers import FormParser, JSONParser
 from rest_framework.permissions import AllowAny
 from .authentication import SessionJWTAuthentication as JWTAuthentication
+from .contracts import envelope
+from .contracts.orders import ShopCartSerializer
 
 from gnu_jango.config.models import Config
 from gnu_jango.shop.models import (
@@ -591,6 +594,7 @@ def add_to_cart(request, data):
     return created, None
 
 
+@extend_schema(methods=["GET"], responses=envelope("ShopCart", ShopCartSerializer()))
 @api_view(["GET", "POST", "DELETE"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])

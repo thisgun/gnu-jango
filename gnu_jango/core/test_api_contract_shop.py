@@ -11,12 +11,14 @@ CATEGORIES = "/api/v1/shop/categories"
 CATEGORY_DETAIL = "/api/v1/shop/categories/{ca_id}"
 PRODUCTS = "/api/v1/shop/products"
 PRODUCT_DETAIL = "/api/v1/shop/products/{it_id}"
+PRODUCT_BY_SEO = "/api/v1/shop/products/seo/{slug}"
 
 CONTRACT_OPERATIONS = {
     ("GET", CATEGORIES),
     ("GET", CATEGORY_DETAIL),
     ("GET", PRODUCTS),
     ("GET", PRODUCT_DETAIL),
+    ("GET", PRODUCT_BY_SEO),
 }
 
 CHOICE_OPTIONS = [
@@ -107,6 +109,14 @@ class ShopCategoryContractTests(ShopCatalogContractFixture):
 
 
 class ShopProductContractTests(ShopCatalogContractFixture):
+    def test_product_by_seo_address_matches_the_detail_contract(self):
+        ShopProduct.objects.filter(pk="CT003").update(it_seo_title="no-category-product")
+
+        response = self.client.get("/api/v1/shop/products/seo/no-category-product")
+
+        self.assertEqual(response.json()["data"]["it_id"], "CT003")
+        self.assertMatchesContract(response, PRODUCT_BY_SEO)
+
     def test_product_list_matches_the_contract(self):
         response = self.client.get(PRODUCTS)
 

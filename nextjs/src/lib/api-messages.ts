@@ -40,6 +40,8 @@ const API_MESSAGES: Record<string, string> = {
   "You do not have permission to manage this post.": "이 글을 수정하거나 삭제할 권한이 없습니다.",
   "Good vote is disabled.": "추천 기능을 사용하지 않는 게시판입니다.",
   "Invalid vote type.": "올바르지 않은 추천 요청입니다.",
+  "Invalid cursor.": "목록 위치 정보가 올바르지 않습니다. 목록을 새로 불러와 주세요.",
+  "Cursor paging is not available with a search term; use page.": "검색 결과는 페이지 번호로만 이어서 볼 수 있습니다.",
   "Comment not found.": "댓글을 찾을 수 없습니다.",
   "You do not have permission to delete this comment.": "이 댓글을 삭제할 권한이 없습니다.",
   "Parent comment not found.": "원 댓글을 찾을 수 없습니다.",
