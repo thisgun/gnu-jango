@@ -383,17 +383,17 @@ celery -A example beat -l INFO
 
 GitHub의 `main` 브랜치는 관리자도 직접 푸시할 수 없도록 보호됩니다. 변경사항은 PR로 올리고 `django`, `nextjs`, `theme-bundles`, `docker` 점검이 모두 통과한 뒤 병합하세요. PR의 기준 브랜치가 최신 상태여야 합니다.
 
-백엔드 테스트:
+백엔드 테스트(pytest-django, `pip install -r requirements-dev.txt`):
 
 ```bash
-python manage.py test gnu_jango --parallel auto
+pytest -n auto --cov=gnu_jango --cov-report=term   # CI와 같은 실행: 병렬 + 커버리지 기준치 확인
+pytest gnu_jango/core/test_shop_cart_api.py -k guest   # 파일·이름으로 골라 실행
 ```
 
-병렬 실행 중 테스트가 실패하면 실패한 테스트 대신 `cannot pickle 'traceback' object`만 보일 수 있습니다. 그럴 때는 `--parallel` 없이 다시 실행해 실패 내용을 확인하세요(시간은 더 걸립니다).
-
-```bash
-python manage.py test gnu_jango
-```
+- 기존 Django `TestCase` 테스트는 그대로 돌고, 새 테스트는 `conftest.py`의 fixture(`member`, `member_client`, `api_client` 등)를 쓰는 함수형으로 써도 됩니다.
+- 테스트 데이터는 `gnu_jango/testing/factories.py`의 팩토리로 만듭니다: `ShopOrderFactory(user=member, items=[(ShopProductFactory(), 2)])`, `PostFactory(board__bo_read_level=2)`, `give_points(member, 1000)` 등.
+- 커버리지가 `pyproject.toml`의 `fail_under`보다 낮으면 CI가 실패합니다. 측정값이 오르면 기준치도 함께 올리세요.
+- `python manage.py test gnu_jango`도 계속 쓸 수 있지만, 함수형 테스트는 실행하지 않습니다.
 
 프런트엔드 점검:
 

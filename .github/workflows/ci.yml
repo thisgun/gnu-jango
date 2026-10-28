@@ -73,13 +73,11 @@ jobs:
           python manage.py spectacular --format openapi-json --file "$RUNNER_TEMP/openapi.json"
           diff -u openapi/schema.json "$RUNNER_TEMP/openapi.json"
       - name: Django tests
-        # The whole suite: new test modules are picked up without editing this file.
-        # --parallel runs the suite in worker processes (about 4x faster); coverage writes one data
-        # file per worker (parallel = true in pyproject.toml) and combine merges them.
-        run: |
-          coverage run manage.py test gnu_jango --parallel auto
-          coverage combine
-          coverage report
+        # The whole suite under pytest (pytest-django): Django TestCase classes and function-style
+        # tests that use conftest.py fixtures and gnu_jango/testing/factories.py. -n auto runs
+        # worker processes (pytest-xdist); pytest-cov merges their coverage and fails the job below
+        # [tool.coverage.report] fail_under in pyproject.toml.
+        run: pytest -n auto --cov=gnu_jango --cov-report=term
 
   nextjs:
     # CI runs in the public repository only; a private copy of the code skips it.

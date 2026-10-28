@@ -1,6 +1,14 @@
 -r requirements.txt
 -r requirements-realtime.txt
 
+# Test runner (CI runs the suite with pytest; Django TestCase classes run unchanged) and model
+# factories for new tests (gnu_jango/testing/factories.py).
+pytest==9.1.1
+pytest-django==4.14.0
+pytest-xdist==3.8.0
+pytest-cov==7.1.0
+factory-boy==3.3.3
+
 # Browser automation and isolated environment test runner.
 selenium==4.51.0
 tox==4.67.1
