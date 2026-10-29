@@ -118,10 +118,38 @@ def test_dry_run_and_limit(reviewed, chat):
     assert (limited["summarized"], limited["deferred"]) == (1, 1)
 
 
-def test_an_unusable_answer_skips_the_product_but_an_endpoint_failure_stops_the_run(reviewed, chat):
+def test_an_unusable_answer_is_remembered_until_the_reviews_change(reviewed, chat):
     chat.error = ChatError("invalid_response")
     report = summarize()
     assert (report["failed"], report["summarized"]) == (1, 0)
+    # not first in line again on every run (it would use up --limit for good)
+    assert summarize()["unchanged"] == 1 and len(chat.calls) == 1
+    with override_settings(**SUMMARIES_ON):
+        assert detail("NB-1") is None
+    review(reviewed.laptop, content="다시 샀어요")
+    chat.error = None
+    assert summarize()["summarized"] == 1
+
+
+def test_a_timeout_skips_the_product_and_is_retried_next_run(reviewed, chat):
+    chat.error = ChatError("timeout")
+    assert summarize()["failed"] == 1
+    assert not ReviewSummary.objects.exists()
+    chat.error = None
+    assert summarize()["summarized"] == 1
+
+
+def test_a_summary_is_withheld_once_a_review_it_used_is_unpublished(reviewed, chat):
+    summarize()
+    with override_settings(**SUMMARIES_ON):
+        assert detail("NB-1") is not None
+        # the admin's 후기 숨김 action is a bulk update, so no signal reaches the summary
+        first = ShopReview.objects.filter(product=reviewed.laptop).order_by("pk").first()
+        ShopReview.objects.filter(pk=first.pk).update(is_confirm="0")
+        assert detail("NB-1") is None
+
+
+def test_an_endpoint_failure_stops_the_run(reviewed, chat):
     chat.error = ChatError("unavailable")
     with pytest.raises(CommandError, match="unavailable"):
         call_command("summarize_reviews", stdout=StringIO())

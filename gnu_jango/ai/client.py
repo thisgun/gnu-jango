@@ -214,15 +214,19 @@ def get_provider(*, timeout=None):
 
 
 @sensitive_variables("api_key")
-def get_chat_provider():
-    """The active chat provider, or None when G5_AI_BASE_URL or G5_AI_CHAT_MODEL is not set."""
+def get_chat_provider(*, timeout=None):
+    """The active chat provider, or None when G5_AI_BASE_URL or G5_AI_CHAT_MODEL is not set.
+
+    ``timeout`` overrides G5_AI_CHAT_TIMEOUT (the admin briefing waits less than a background job).
+    """
     if _chat_override:
         return _chat_override[-1]
     if not conf.chat_configured():
         return None
     api_key = _api_key()
     return OpenAICompatibleChat(
-        conf.base_url(), conf.chat_model(), api_key=api_key, timeout=conf.chat_timeout(),
+        conf.base_url(), conf.chat_model(), api_key=api_key, timeout=min(timeout or conf.chat_timeout(),
+                                                                          conf.chat_timeout()),
         reasoning_effort=conf.chat_reasoning_effort(),
     )
 

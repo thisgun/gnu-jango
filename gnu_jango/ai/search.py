@@ -24,6 +24,9 @@ SEMANTIC_LIMIT = 20
 LEXICAL_POOL = 200
 BACKOFF_KEY = "ai:embedding-endpoint:backoff:v1"
 BACKOFF_SECONDS = 30
+# Only the start of a query is embedded: unified search already refuses more than 200 characters,
+# but product search takes any ?q=, and each new long query would be one more endpoint call.
+MAX_QUERY_CHARS = 200
 
 
 def reciprocal_rank_fusion(rankings, *, k=RRF_K):
@@ -80,7 +83,7 @@ def semantic_neighbours(kinds, query, *, limit=SEMANTIC_LIMIT):
     """
     found = {kind: [] for kind in kinds}
     provider = _active_provider()
-    query = str(query or "").strip()
+    query = str(query or "").strip()[:MAX_QUERY_CHARS].strip()
     if provider is None or not query or not kinds or _endpoint_recently_failed():
         return found
     try:

@@ -71,20 +71,27 @@ def _nearest_postgresql(kind, query, *, model, dimensions, limit, using):
     return [(object_id, 1.0 - float(value)) for object_id, value in found]
 
 
+def fingerprint(kind, *, model, dimensions, using="default"):
+    """(count, last change, last pk) of one kind's vectors: a save bumps the change time, a delete
+    the count, so anything derived from the vectors can be cached under it."""
+    state = rows(kind, model=model, dimensions=dimensions, using=using).aggregate(
+        count=Count("pk"), changed=Max("updated_at"), last=Max("pk"),
+    )
+    return state["count"], state["changed"], state["last"]
+
+
 def _portable_vectors(kind, *, model, dimensions, using):
     queryset = rows(kind, model=model, dimensions=dimensions, using=using)
-    # A save bumps updated_at, a delete changes the count; either rebuilds the decoded copy.
-    state = queryset.aggregate(count=Count("pk"), changed=Max("updated_at"), last=Max("pk"))
     key = (using, kind, model, dimensions)
-    fingerprint = (state["count"], state["changed"], state["last"])
+    current = fingerprint(kind, model=model, dimensions=dimensions, using=using)
     cached = _PORTABLE_CACHE.get(key)
-    if cached and cached[0] == fingerprint:
+    if cached and cached[0] == current:
         return cached[1]
     decoded = []
     for object_id, value in queryset.values_list("object_id", "embedding").iterator(chunk_size=500):
         if value is not None and len(value) == dimensions:
             decoded.append((object_id, array("f", value)))
-    _PORTABLE_CACHE[key] = (fingerprint, decoded)
+    _PORTABLE_CACHE[key] = (current, decoded)
     return decoded
 
 

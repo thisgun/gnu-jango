@@ -3,10 +3,14 @@ from io import StringIO
 from unittest import mock
 
 import pytest
+from django.core.cache import cache
 from django.core.management import call_command
+from django.db import connection
 from django.test import override_settings
+from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
+from gnu_jango.ai import store
 from gnu_jango.ai.recommend import similar_products
 from gnu_jango.shop.models import ShopProduct, ShopProductRelation
 from gnu_jango.testing.factories import ShopProductFactory
@@ -14,6 +18,13 @@ from gnu_jango.testing.factories import ShopProductFactory
 # The fake vectors of two laptops sharing "노트북" and the category score about 0.58; the laptop and
 # the mouse share only the category name (0.25), which alone should not make them similar.
 SIMILAR_ON = {"G5_AI_SIMILAR_PRODUCTS": True, "G5_AI_SIMILAR_MIN_SIMILARITY": 0.4}
+
+
+@pytest.fixture(autouse=True)
+def fresh_cache():
+    cache.clear()
+    yield
+    cache.clear()
 
 
 @pytest.fixture
@@ -81,3 +92,28 @@ def test_similar_products_returns_at_most_the_limit_best_first(fake_provider, ca
     assert len(found) == 4
     # products sharing two words with "가벼운 노트북" come before those sharing one
     assert {item.it_id for item in found[:3]} == {"NB-11", "NB-13", "NB-15"}
+
+
+def test_neighbours_are_cached_until_an_embedding_changes(embedded):
+    base = ShopProduct.objects.filter(it_use="1")
+    with override_settings(**SIMILAR_ON), mock.patch("gnu_jango.ai.recommend.store.nearest",
+                                                     wraps=store.nearest) as nearest:
+        assert [item.it_id for item in similar_products(embedded.laptop, base)] == ["NB-2"]
+        assert [item.it_id for item in similar_products(embedded.laptop, base)] == ["NB-2"]
+        assert nearest.call_count == 1
+        ShopProduct.objects.filter(pk="NB-2").update(it_name="게이밍 노트북 신형")
+        call_command("build_embeddings", stdout=StringIO())
+        similar_products(embedded.laptop, base)
+        assert nearest.call_count == 2
+
+
+def test_product_page_cards_do_not_count_reviews_one_by_one(embedded):
+    ShopProductRelation.objects.create(product=embedded.laptop, related=embedded.mouse, ir_no=1)
+    with override_settings(**SIMILAR_ON), mock.patch("gnu_jango.api.v1_shop.related_list_enabled", return_value=True), \
+            CaptureQueriesContext(connection) as queries:
+        data = APIClient().get("/api/v1/shop/products/NB-1").json()["data"]
+    assert data["related_items"] and data["similar_items"]
+    per_card = [q["sql"] for q in queries.captured_queries
+                if q["sql"].lstrip().upper().startswith("SELECT COUNT(*)") and "shop_shopreview" in q["sql"]]
+    # only the page's own product may still count its reviews on its own
+    assert len(per_card) <= 1
