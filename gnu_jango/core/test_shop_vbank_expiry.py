@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
@@ -80,3 +81,22 @@ class TossVirtualAccountExpiryCommandTests(TestCase):
         order.refresh_from_db()
         self.assertEqual(order.od_status, "order")
         self.assertIn("skipped=1", output.getvalue())
+
+    @patch("gnu_jango.core.management.commands.expire_toss_vbank_orders.cancel_pending_toss_vbank", return_value=None)
+    def test_a_paid_order_past_its_deadline_is_left_for_review_at_every_step(self, cancel_provider):
+        # 준비 and 완료 are paid like 입금/배송: a stale WAITING_FOR_DEPOSIT mark never cancels the order
+        for status in ("입금", "준비", "배송", "완료"):
+            with self.subTest(status=status):
+                order = self.create_order()
+                ShopOrder.objects.filter(pk=order.pk).update(od_status=status, od_misu=0)
+                output = StringIO()
+
+                call_command("expire_toss_vbank_orders", "--apply", "--json", stdout=output)
+
+                order.refresh_from_db()
+                self.assertEqual((order.od_status, order.od_receipt_price, order.od_misu), (status, 1000, 0))
+                self.assertEqual(order.od_vbank_status, "WAITING_FOR_DEPOSIT")
+                summary = json.loads(output.getvalue())
+                self.assertEqual((summary["cancelled"], summary["skipped"]), (0, 1))
+                self.assertEqual(summary["samples"][0]["action"], "manual_review")
+                order.delete()

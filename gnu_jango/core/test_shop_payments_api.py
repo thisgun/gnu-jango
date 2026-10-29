@@ -1486,14 +1486,22 @@ class TossVirtualAccountWebhookTests(PaymentTestBase):
         self.assertEqual(order.od_misu, 1000)
         self.assertEqual(order.od_receipt_time, "")
 
-    def test_waiting_for_deposit_is_flagged_for_a_shipped_or_cancelled_order(self):
-        for status in (SHIPPING, CANCELLED):
+    def test_waiting_for_deposit_is_flagged_for_an_order_moved_past_paid_or_cancelled(self):
+        # only an order still at 입금 is rolled back; one being prepared, shipped or delivered keeps
+        # its status, receipt and vbank state for a person to reconcile
+        for status in ("준비", SHIPPING, "완료", "ready", "completed", CANCELLED):
             with self.subTest(status=status):
-                order = self.make_vbank_order(order_id=f"ODPAY-W-{status}", od_status=status, od_misu=0)
+                order = self.make_vbank_order(
+                    order_id=f"ODPAY-W-{status}", od_status=status, od_misu=0,
+                    od_receipt_time="2026-10-10 10:00:00", od_vbank_status="DONE",
+                )
                 response, _ = self.send(self.event(order, status="WAITING_FOR_DEPOSIT"), (self.provider(order, status="WAITING_FOR_DEPOSIT"), None))
                 self.assertTrue(response.json()["data"]["manual_review"])
                 order.refresh_from_db()
-                self.assertEqual(order.od_status, status)
+                self.assertEqual(
+                    (order.od_status, order.od_misu, order.od_receipt_time, order.od_vbank_status),
+                    (status, 0, "2026-10-10 10:00:00", "DONE"),
+                )
 
     def test_an_unknown_provider_status_is_ignored(self):
         order = self.make_vbank_order()

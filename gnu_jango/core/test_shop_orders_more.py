@@ -549,28 +549,20 @@ class OrderCancelTests(OrderDirectCreateMixin, ShopOrderBase):
         order.refresh_from_db()
         self.assertIn("wrong size", order.od_memo)
 
-    def test_a_paid_or_shipped_order_cannot_be_cancelled_by_the_customer(self):
-        for index, status in enumerate(("입금", "배송")):
+    def test_a_paid_order_cannot_be_cancelled_by_the_customer_at_any_step(self):
+        # YoungCart orderinquirycancel.php: only od_status == '주문' with every line still '주문'.
+        # 준비 (preparing) and 완료 (delivered) are paid like 입금/배송, so the customer is sent to the
+        # shop rather than told the order is not cancellable for some other reason.
+        for index, status in enumerate(("입금", "준비", "배송", "완료")):
             order = self.make_order(status, user=self.member, od_id=f"MORE-P{index}")
             response = self.client.patch(f"{API}/orders/{order.od_id}", {}, format="json")
             self.assertEqual(response.status_code, 400, status)
             self.assertEqual(self.error_code(response), "order_cancel_blocked", status)
+            self.assertEqual(response.json()["message"], "입금 이후 주문은 관리자에게 문의해 주세요.", status)
             self.reload(order, self.product)
             self.assertEqual(order.od_status, status)
             self.assertEqual(order.items.get().ct_status, status)
             self.assertEqual(self.product.it_stock_qty, 18)
-
-    def test_an_order_being_prepared_or_completed_cannot_be_cancelled_by_the_customer(self):
-        # DEFECT shop_common.py:257 order_cancel_state only blocks 입금/배송 and the cancelled
-        # states, so an order in 준비 (preparing) or 완료 (delivered) can still be cancelled by its
-        # customer, which restores stock and points for goods that already left.
-        # YoungCart orderinquirycancel.php: only od_status == '주문' with every line still '주문'.
-        for index, status in enumerate(("준비", "완료")):
-            order = self.make_order(status, user=self.member, od_id=f"MORE-S{index}")
-            response = self.client.patch(f"{API}/orders/{order.od_id}", {}, format="json")
-            self.assertEqual(response.status_code, 400, status)
-            order.refresh_from_db()
-            self.assertEqual(order.od_status, status)
 
     def test_an_order_already_partly_cancelled_cannot_be_cancelled_again(self):
         # DEFECT shop_common.py:257: od_cancel_price > 0 or a line that is no longer '주문' is not

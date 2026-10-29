@@ -18,7 +18,14 @@ from gnu_jango.shop.models import (
     ShopProduct,
     ShopCouponLog,
 )
-from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES
+from gnu_jango.shop.order_flow import STATUS_ALIASES
+from gnu_jango.shop.order_statuses import (
+    INACTIVE_LINE_STATUSES,
+    STATUS_COMPLETED,
+    STATUS_PAID,
+    STATUS_READY,
+    STATUS_SHIPPING,
+)
 from gnu_jango.shop.shipping import (
     shipping_policy_payload,
 )
@@ -37,7 +44,20 @@ ORDER_STATUS_CANCELLED = "취소"
 # youngcart $status_cancel (취소, 반품, 품절): every "cancelled" check of the shop goes through
 # CANCELLED_STATUSES, so a returned or sold-out line or order counts as cancelled too.
 CANCELLED_STATUSES = INACTIVE_LINE_STATUSES
-PAID_STATUSES = {ORDER_STATUS_PAID, ORDER_STATUS_SHIPPING, "paid", "shipping"}
+
+
+def _spellings(*statuses):
+    """The statuses with the English spellings older rows use for them (order_flow.STATUS_ALIASES)."""
+    return frozenset(statuses) | {alias for alias, status in STATUS_ALIASES.items() if status in statuses}
+
+
+# youngcart: an order is paid from 입금 on. 준비 (preparing), 배송 (shipped) and 완료 (delivered) are
+# later steps of the same paid order - adm/shop_admin/orderlistupdate.php stamps the receipt only on
+# 주문 -> 입금 (order_update_receipt) and moves 입금 -> 준비 -> 배송 -> 완료 with change_status alone.
+PAID_STATUSES = _spellings(STATUS_PAID, STATUS_READY, STATUS_SHIPPING, STATUS_COMPLETED)
+# The paid orders an operator has already moved on from 입금: a payment event that would roll the
+# order back to 주문 leaves these to a person instead.
+FULFILMENT_STATUSES = _spellings(STATUS_READY, STATUS_SHIPPING, STATUS_COMPLETED)
 ORDERED_STATUSES = {ORDER_STATUS_ORDERED, "order", "ordered"}
 PAYMENT_ADAPTER_PROVIDERS = {"kcp", "kcp_v2", "inicis", "nicepay", "naverpay", "kakaopay", "samsungpay"}
 # Guest order passwords used to be stored as sha256(SECRET_KEY:od_id:password) with this prefix; they
