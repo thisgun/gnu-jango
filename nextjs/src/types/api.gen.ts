@@ -2683,6 +2683,13 @@ export interface components {
             pc_cols: number;
             mobile_cols: number;
         };
+        /** @description The chat model's plain-text summary of a product's published reviews. */
+        ShopAiReviewSummary: {
+            text: string;
+            review_count: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
         /**
          * @description ``shop_cart.cart_payload``: the lines (``?ct_ids=`` selects some, 바로구매 lines included)
          *     and their totals; every amount is 0 for an empty cart.
@@ -3164,6 +3171,7 @@ export interface components {
             next_item: components["schemas"]["ShopProduct"] | null;
             related_items: components["schemas"]["ShopProduct"][];
             similar_items: components["schemas"]["ShopProduct"][];
+            ai_review_summary: components["schemas"]["ShopAiReviewSummary"] | null;
         };
         ShopProductDetailEnvelope: {
             data: components["schemas"]["ShopProductDetail"];

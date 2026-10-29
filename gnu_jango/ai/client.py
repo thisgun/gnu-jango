@@ -1,7 +1,8 @@
-"""Embedding provider: an operator-configured OpenAI-compatible ``/embeddings`` endpoint.
+"""AI providers: an operator-configured OpenAI-compatible endpoint (``/embeddings``, ``/chat/completions``).
 
-Local development uses Ollama (``G5_AI_BASE_URL=http://127.0.0.1:11434/v1``, model ``bge-m3``).
-Tests install a deterministic provider with :func:`provider_override`; they never call the network.
+Local development uses Ollama (``G5_AI_BASE_URL=http://127.0.0.1:11434/v1``, embedding model
+``bge-m3``, chat model ``gemma4:e4b``). Tests install deterministic providers with
+:func:`provider_override` and :func:`chat_provider_override`; they never call the network.
 """
 import json
 import logging
@@ -17,6 +18,7 @@ from . import conf
 
 logger = logging.getLogger(__name__)
 _override = []
+_chat_override = []
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
@@ -31,7 +33,7 @@ def _default_opener(request, timeout):
     return build_opener(_NoRedirect).open(request, timeout=timeout)
 
 
-class EmbeddingError(Exception):
+class EndpointError(Exception):
     """A provider failure with a short machine-readable ``reason`` (never the key or a body)."""
 
     def __init__(self, reason, message=""):
@@ -39,16 +41,52 @@ class EmbeddingError(Exception):
         self.reason = reason
 
 
+class EmbeddingError(EndpointError):
+    pass
+
+
+class ChatError(EndpointError):
+    pass
+
+
+def _checked_url(base_url, path, model, api_key, error):
+    url = conf.endpoint(base_url, path)
+    if not url or not str(model or "").strip():
+        raise error("invalid_configuration")
+    parts = urlsplit(url)
+    if api_key and parts.scheme != "https" and (parts.hostname or "") not in LOOPBACK_HOSTS:
+        raise error("insecure_configuration", "G5_AI_API_KEY is sent only over https or to this host.")
+    return url
+
+
+@sensitive_variables("headers", "api_key")
+def _post_json(opener, url, payload, *, api_key, timeout, error, label):
+    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    request = Request(url, data=body, headers=headers, method="POST")
+    try:
+        with opener(request, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        raise error("http_error", f"The {label} endpoint answered HTTP {exc.code}.") from None
+    except (TimeoutError, socket.timeout) as exc:
+        raise error("timeout") from exc
+    except URLError as exc:
+        if isinstance(exc.reason, (TimeoutError, socket.timeout)):
+            raise error("timeout") from exc
+        raise error("unavailable") from exc
+    except OSError as exc:
+        raise error("unavailable") from exc
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise error("invalid_response") from exc
+
+
 class OpenAICompatibleEmbeddings:
     def __init__(self, base_url, model, *, dimensions, api_key="", timeout=conf.DEFAULT_TIMEOUT,
                  batch_size=conf.DEFAULT_BATCH_SIZE, opener=_default_opener):
-        url = conf.endpoint(base_url, "embeddings")
-        if not url or not str(model or "").strip():
-            raise EmbeddingError("invalid_configuration")
-        parts = urlsplit(url)
-        if api_key and parts.scheme != "https" and (parts.hostname or "") not in LOOPBACK_HOSTS:
-            raise EmbeddingError("insecure_configuration", "G5_AI_API_KEY is sent only over https or to this host.")
-        self.url = url
+        self.url = _checked_url(base_url, "embeddings", model, api_key, EmbeddingError)
         self.model = str(model).strip()
         self.dimensions = int(dimensions)
         self.timeout = timeout
@@ -86,34 +124,55 @@ class OpenAICompatibleEmbeddings:
             )
         return vectors
 
-    @sensitive_variables("headers", "api_key")
     def _post(self, payload):
-        headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        api_key = self._api_key
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        request = Request(self.url, data=body, headers=headers, method="POST")
+        return _post_json(self._opener, self.url, payload, api_key=self._api_key, timeout=self.timeout,
+                          error=EmbeddingError, label="embedding")
+
+
+class OpenAICompatibleChat:
+    """``complete(system, user)`` -> the assistant's text, from one non-streamed chat completion.
+
+    ``reasoning_effort`` (G5_AI_CHAT_REASONING_EFFORT, default "none") turns the "thinking" of
+    models such as gemma4 off: a short summary then takes about a second instead of ten. An empty
+    value leaves the field out, for providers that reject it.
+    """
+
+    def __init__(self, base_url, model, *, api_key="", timeout=conf.DEFAULT_CHAT_TIMEOUT, reasoning_effort="none",
+                 opener=_default_opener):
+        self.url = _checked_url(base_url, "chat/completions", model, api_key, ChatError)
+        self.model = str(model).strip()
+        self.timeout = timeout
+        self.reasoning_effort = str(reasoning_effort or "").strip()
+        self._api_key = api_key
+        self._opener = opener
+
+    def __repr__(self):
+        return f"<OpenAICompatibleChat model={self.model!r}>"
+
+    def complete(self, system, user, *, max_tokens=400, temperature=0.2):
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "stream": False,
+        }
+        if self.reasoning_effort:
+            payload["reasoning_effort"] = self.reasoning_effort
+        data = _post_json(self._opener, self.url, payload, api_key=self._api_key, timeout=self.timeout,
+                          error=ChatError, label="chat")
         try:
-            with self._opener(request, timeout=self.timeout) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            raise EmbeddingError("http_error", f"The embedding endpoint answered HTTP {exc.code}.") from None
-        except (TimeoutError, socket.timeout) as exc:
-            raise EmbeddingError("timeout") from exc
-        except URLError as exc:
-            if isinstance(exc.reason, (TimeoutError, socket.timeout)):
-                raise EmbeddingError("timeout") from exc
-            raise EmbeddingError("unavailable") from exc
-        except OSError as exc:
-            raise EmbeddingError("unavailable") from exc
-        except (UnicodeDecodeError, ValueError) as exc:
-            raise EmbeddingError("invalid_response") from exc
+            content = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise ChatError("invalid_response") from exc
+        if not isinstance(content, str) or not content.strip():
+            raise ChatError("invalid_response", "The chat endpoint returned no text.")
+        return content
 
 
 @contextmanager
 def provider_override(provider):
-    """Use ``provider`` instead of the configured endpoint (tests, smoke scripts)."""
+    """Use ``provider`` instead of the configured embedding endpoint (tests, smoke scripts)."""
     _override.append(provider)
     try:
         yield provider
@@ -121,9 +180,25 @@ def provider_override(provider):
         _override.remove(provider)
 
 
+@contextmanager
+def chat_provider_override(provider):
+    """Use ``provider`` instead of the configured chat model (tests, smoke scripts)."""
+    _chat_override.append(provider)
+    try:
+        yield provider
+    finally:
+        _chat_override.remove(provider)
+
+
+def _api_key():
+    from django.conf import settings
+
+    return str(getattr(settings, "G5_AI_API_KEY", "") or "").strip()
+
+
 @sensitive_variables("api_key")
 def get_provider(*, timeout=None):
-    """The active provider, or None when no embedding endpoint is configured.
+    """The active embedding provider, or None when no embedding endpoint is configured.
 
     ``timeout`` overrides G5_AI_TIMEOUT (search passes the shorter G5_AI_QUERY_TIMEOUT).
     """
@@ -131,12 +206,24 @@ def get_provider(*, timeout=None):
         return _override[-1]
     if not conf.embeddings_configured():
         return None
-    from django.conf import settings
-
-    api_key = str(getattr(settings, "G5_AI_API_KEY", "") or "").strip()
+    api_key = _api_key()
     return OpenAICompatibleEmbeddings(
         conf.base_url(), conf.embedding_model(), dimensions=conf.embedding_dimensions(), api_key=api_key,
         timeout=timeout or conf.timeout(), batch_size=conf.batch_size(),
+    )
+
+
+@sensitive_variables("api_key")
+def get_chat_provider():
+    """The active chat provider, or None when G5_AI_BASE_URL or G5_AI_CHAT_MODEL is not set."""
+    if _chat_override:
+        return _chat_override[-1]
+    if not conf.chat_configured():
+        return None
+    api_key = _api_key()
+    return OpenAICompatibleChat(
+        conf.base_url(), conf.chat_model(), api_key=api_key, timeout=conf.chat_timeout(),
+        reasoning_effort=conf.chat_reasoning_effort(),
     )
 
 

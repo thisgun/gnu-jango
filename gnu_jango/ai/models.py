@@ -34,3 +34,29 @@ class Embedding(models.Model):
 
     def __str__(self):
         return f"{self.kind}:{self.object_id}"
+
+
+class ReviewSummary(models.Model):
+    """The chat model's summary of one product's published reviews (``summarize_reviews``).
+
+    ``source_hash`` covers the chat model, the prompt version and the summarised reviews, so
+    unchanged products are skipped and a model or prompt change rewrites every summary. Pages
+    only read this row; they never call the model. An operator can hide a bad summary; a rewrite
+    after new reviews keeps it hidden.
+    """
+
+    # ShopProduct.it_id; a plain id like Embedding.object_id, so deleting a product never cascades here.
+    product_id = models.CharField(max_length=64, unique=True)
+    model = models.CharField(max_length=128)
+    review_count = models.PositiveIntegerField()
+    source_hash = models.CharField(max_length=64)
+    summary = models.TextField()
+    is_hidden = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "AI review summary"
+        verbose_name_plural = "AI review summaries"
+
+    def __str__(self):
+        return self.product_id

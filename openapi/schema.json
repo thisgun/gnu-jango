@@ -5709,6 +5709,27 @@
                     "use"
                 ]
             },
+            "ShopAiReviewSummary": {
+                "type": "object",
+                "description": "The chat model's plain-text summary of a product's published reviews.",
+                "properties": {
+                    "text": {
+                        "type": "string"
+                    },
+                    "review_count": {
+                        "type": "integer"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "review_count",
+                    "text",
+                    "updated_at"
+                ]
+            },
             "ShopCart": {
                 "type": "object",
                 "description": "``shop_cart.cart_payload``: the lines (``?ct_ids=`` selects some, 바로구매 lines included)\nand their totals; every amount is 0 for an empty cart.",
@@ -7478,9 +7499,18 @@
                         "items": {
                             "$ref": "#/components/schemas/ShopProduct"
                         }
+                    },
+                    "ai_review_summary": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ShopAiReviewSummary"
+                            }
+                        ],
+                        "nullable": true
                     }
                 },
                 "required": [
+                    "ai_review_summary",
                     "ca_id",
                     "ca_id2",
                     "ca_id3",

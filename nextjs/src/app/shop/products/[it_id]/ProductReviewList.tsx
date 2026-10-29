@@ -2,8 +2,8 @@
 
 import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { ChevronDown, Star } from "lucide-react";
-import type { ShopReview, ShopReviewSummary } from "@/lib/api";
+import { ChevronDown, Sparkles, Star } from "lucide-react";
+import type { ShopAiReviewSummary, ShopReview, ShopReviewSummary } from "@/lib/api";
 import { sanitizeUserHtml } from "@/lib/sanitize";
 import { reviewImageUrls } from "@/components/shop/productDetailHelpers";
 import { cn, formatDate } from "@/lib/utils";
@@ -71,6 +71,28 @@ export function ReviewSummaryBox({
       </ul>
       <div className="flex-none max-sm:w-full">{action}</div>
     </div>
+  );
+}
+
+/**
+ * AI 후기 요약 — 서버가 승인된 후기로 미리 만든 글을 평점 상자 아래에 보인다. 모델이 쓴 글이라 그대로
+ * 글자로만 넣고(HTML 로 풀지 않는다) 출처를 밝힌다.
+ */
+export function AiReviewSummary({ summary }: { summary?: ShopAiReviewSummary | null }) {
+  const text = summary?.text?.trim();
+  if (!summary || !text) return null;
+
+  return (
+    <aside className="product-review-ai mt-4 rounded-lg border bg-muted/40 px-6 py-5 sm:px-8" aria-label="AI 후기 요약">
+      <p className="product-review-ai-label flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+        <Sparkles aria-hidden="true" className="h-3.5 w-3.5" />
+        AI 후기 요약
+      </p>
+      <p className="product-review-ai-text mt-2 text-sm leading-relaxed">{text}</p>
+      <p className="product-review-ai-note mt-2 text-xs text-muted-foreground">
+        최근 후기 {summary.review_count.toLocaleString()}건을 AI가 요약했습니다. 실제 후기와 다를 수 있습니다.
+      </p>
+    </aside>
   );
 }
 

@@ -142,6 +142,15 @@ class ShopProductSerializer(serializers.Serializer):
     qa_count = serializers.IntegerField()
 
 
+class ShopAiReviewSummarySerializer(serializers.Serializer):
+    """The chat model's plain-text summary of a product's published reviews."""
+
+    text = serializers.CharField()
+    # how many (newest, at most 40) published reviews the summary was written from
+    review_count = serializers.IntegerField()
+    updated_at = serializers.DateTimeField()
+
+
 class ShopProductDetailSerializer(ShopProductSerializer):
     """``product_payload(..., detail=True)``: the list shape plus the neighbours and related items."""
 
@@ -152,6 +161,8 @@ class ShopProductDetailSerializer(ShopProductSerializer):
     # up to 4 on-sale products nearest by embedding, never one of related_items;
     # [] unless G5_AI_SIMILAR_PRODUCTS is on and this product has an embedding
     similar_items = ShopProductSerializer(many=True)
+    # null unless G5_AI_REVIEW_SUMMARIES is on and summarize_reviews wrote a summary that is not hidden
+    ai_review_summary = ShopAiReviewSummarySerializer(allow_null=True)
 
 
 class ShopCategoryDetailSerializer(serializers.Serializer):

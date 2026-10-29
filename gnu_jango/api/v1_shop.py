@@ -79,6 +79,7 @@ from gnu_jango.shop.shipping import (
     shipping_quote,
 )
 from gnu_jango.ai.recommend import similar_products
+from gnu_jango.ai.review_summaries import review_summary_payload
 from gnu_jango.shop.product_relations import related_product_ids
 from gnu_jango.shop.shop_display import category_list_display, related_list_enabled
 from gnu_jango.shop.taxes import calculate_order_tax_amounts
@@ -526,6 +527,8 @@ def product_payload(product, request=None, *, detail=False):
             exclude=related_ids,
         )
         data["similar_items"] = [product_payload(item) for item in similar]
+        # Optional (G5_AI_REVIEW_SUMMARIES): the stored AI summary of the published reviews.
+        data["ai_review_summary"] = review_summary_payload(product)
     return data
 
 
