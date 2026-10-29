@@ -14,7 +14,7 @@ import type {
 import { cn, formatPrice } from "@/lib/utils";
 import { sanitizeCommerceHtml } from "@/lib/sanitize";
 import { ReviewForm, QaForm, QaListItem } from "./ProductReviewQaForms";
-import { ReviewList, ReviewPager, ReviewSummaryBox } from "./ProductReviewList";
+import { AiReviewSummary, ReviewList, ReviewPager, ReviewSummaryBox } from "./ProductReviewList";
 
 export type ProductDetailTab = {
   id: string;
@@ -339,6 +339,7 @@ function ReviewsTab({
           )
         }
       />
+      <AiReviewSummary summary={product.ai_review_summary} />
       {canWriteReview && formOpen && (
         <div className="mt-4">
           <ReviewForm

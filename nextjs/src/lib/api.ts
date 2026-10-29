@@ -463,8 +463,18 @@ export interface ShopProduct {
   related_items?: ShopProduct[];
   /** 임베딩이 가까운 판매 중 상품(최대 4개, 관련 상품 제외) — G5_AI_SIMILAR_PRODUCTS 가 꺼져 있으면 []. */
   similar_items?: ShopProduct[];
+  /** 승인된 후기를 AI(G5_AI_CHAT_MODEL)가 미리 요약한 글 — G5_AI_REVIEW_SUMMARIES 가 꺼져 있거나 요약이 없으면 null. */
+  ai_review_summary?: ShopAiReviewSummary | null;
   prev_item?: ShopProductNavItem | null;
   next_item?: ShopProductNavItem | null;
+}
+
+export interface ShopAiReviewSummary {
+  /** 꾸밈 없는 글(HTML 아님). */
+  text: string;
+  /** 요약에 쓴 최근 승인 후기 수(최대 40). */
+  review_count: number;
+  updated_at: string;
 }
 
 export interface ShopProductNavItem {

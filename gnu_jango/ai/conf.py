@@ -15,6 +15,10 @@ MAX_BATCH_SIZE = 256
 DEFAULT_MAX_CHARS = 3000
 DEFAULT_MIN_SIMILARITY = 0.5
 DEFAULT_SIMILAR_MIN_SIMILARITY = 0.65
+# A cold local chat model can take a minute or two to load before its first answer.
+DEFAULT_CHAT_TIMEOUT = 120
+MAX_CHAT_TIMEOUT = 600
+DEFAULT_REVIEW_SUMMARY_MIN_REVIEWS = 3
 
 
 def _text(name):
@@ -101,3 +105,27 @@ def similar_min_similarity():
 
 def embeddings_configured():
     return bool(endpoint(base_url(), "embeddings") and embedding_model())
+
+
+def chat_model():
+    return _text("G5_AI_CHAT_MODEL")
+
+
+def chat_timeout():
+    return _int("G5_AI_CHAT_TIMEOUT", DEFAULT_CHAT_TIMEOUT, 1, MAX_CHAT_TIMEOUT)
+
+
+def chat_reasoning_effort():
+    return _text("G5_AI_CHAT_REASONING_EFFORT")
+
+
+def chat_configured():
+    return bool(endpoint(base_url(), "chat/completions") and chat_model())
+
+
+def review_summaries_requested():
+    return bool(getattr(settings, "G5_AI_REVIEW_SUMMARIES", False))
+
+
+def review_summary_min_reviews():
+    return _int("G5_AI_REVIEW_SUMMARY_MIN_REVIEWS", DEFAULT_REVIEW_SUMMARY_MIN_REVIEWS, 1, 1000)

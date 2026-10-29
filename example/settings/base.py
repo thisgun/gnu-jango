@@ -258,6 +258,12 @@ UNFOLD = {
                         "permission": lambda request: request.user.is_superuser and G5_AI_SEMANTIC_SEARCH,
                     },
                     {
+                        "title": _("AI 후기 요약"),
+                        "icon": "reviews",
+                        "link": reverse_lazy("admin:ai_reviewsummary_changelist"),
+                        "permission": lambda request: request.user.is_superuser and G5_AI_REVIEW_SUMMARIES,
+                    },
+                    {
                         "title": _("Shop orders"),
                         "icon": "receipt_long",
                         "link": reverse_lazy("admin:shop_shoporder_changelist"),
@@ -914,6 +920,15 @@ G5_AI_SEMANTIC_MIN_SIMILARITY = de_config("G5_AI_SEMANTIC_MIN_SIMILARITY", defau
 # higher than query-to-product ones, hence the separate, stricter floor.
 G5_AI_SIMILAR_PRODUCTS = bool_config("G5_AI_SIMILAR_PRODUCTS", default=G5_AI_SEMANTIC_SEARCH)
 G5_AI_SIMILAR_MIN_SIMILARITY = de_config("G5_AI_SIMILAR_MIN_SIMILARITY", default=0.65, cast=float)
+# Phase 2: an AI summary of each product's published reviews, written ahead of time by
+# ``summarize_reviews`` with the chat model on G5_AI_BASE_URL (local Ollama: gemma4:e4b) and shown
+# on the product page. Review titles, scores and text (not reviewer names) are sent to the model.
+G5_AI_CHAT_MODEL = de_config("G5_AI_CHAT_MODEL", default="").strip()
+G5_AI_CHAT_TIMEOUT = de_config("G5_AI_CHAT_TIMEOUT", default=120, cast=int)
+# "none" turns off the slow "thinking" step of reasoning models; leave empty for providers that reject it.
+G5_AI_CHAT_REASONING_EFFORT = de_config("G5_AI_CHAT_REASONING_EFFORT", default="none").strip()
+G5_AI_REVIEW_SUMMARIES = bool_config("G5_AI_REVIEW_SUMMARIES", default=False)
+G5_AI_REVIEW_SUMMARY_MIN_REVIEWS = de_config("G5_AI_REVIEW_SUMMARY_MIN_REVIEWS", default=3, cast=int)
 
 # Unified DB search: PostgreSQL FTS or the portable token inverted index.
 G5_SEARCH_ENABLED = bool_config("G5_SEARCH_ENABLED", default=True)

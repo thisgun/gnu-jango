@@ -73,6 +73,17 @@ if getattr(settings, "G5_AI_SEMANTIC_SEARCH", False) and str(getattr(settings, "
         ScheduledJob("build_embeddings", ("--json", "--limit", "200"), ("--json", "--dry-run"), 900),
     )
 
+# Optional review summaries: hourly, at most 20 model calls (about a second each on a warm local
+# model), so new reviews show up in the summary within the hour.
+if (
+    getattr(settings, "G5_AI_REVIEW_SUMMARIES", False)
+    and str(getattr(settings, "G5_AI_BASE_URL", "") or "").strip()
+    and str(getattr(settings, "G5_AI_CHAT_MODEL", "") or "").strip()
+):
+    SCHEDULED_JOBS += (
+        ScheduledJob("summarize_reviews", ("--json", "--limit", "20"), ("--json", "--dry-run"), 3600),
+    )
+
 JOB_NAMES = tuple(job.name for job in SCHEDULED_JOBS)
 
 

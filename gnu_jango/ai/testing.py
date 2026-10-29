@@ -38,3 +38,20 @@ class FakeEmbeddingProvider:
     @property
     def embedded_texts(self):
         return [text for batch in self.calls for text in batch]
+
+
+class FakeChatProvider:
+    """Answers every completion with ``reply`` (or raises ``error``) and records the prompts."""
+
+    def __init__(self, *, reply="가볍고 따뜻하다는 평이 많습니다. 세탁 후 보풀을 아쉬워하는 후기도 있습니다.",
+                 model="fake-chat", error=None):
+        self.reply = reply
+        self.model = model
+        self.error = error
+        self.calls = []
+
+    def complete(self, system, user, **kwargs):
+        self.calls.append((system, user))
+        if self.error is not None:
+            raise self.error
+        return self.reply
