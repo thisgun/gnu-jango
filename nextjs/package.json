@@ -88,6 +88,7 @@
     "check:local-post-reaction-actions": "node scripts/check-local-post-reaction-actions.mjs",
     "test:sanitize": "playwright test tests/sanitize.spec.ts",
     "test:django-flows": "playwright test tests/django-flows.spec.ts",
+    "test:e2e:checkout": "playwright test tests/e2e-checkout.spec.ts --workers=1",
     "test:payment": "playwright test tests/payment-shared.spec.ts tests/payment-kcp.spec.ts tests/payment-nicepay.spec.ts tests/payment-return.spec.ts tests/payment-inicis.spec.ts tests/payment-toss.spec.ts",
     "test:payment:kcp": "playwright test tests/payment-kcp.spec.ts",
     "test:payment:nicepay": "playwright test tests/payment-nicepay.spec.ts",

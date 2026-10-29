@@ -114,6 +114,77 @@ jobs:
       - name: Notification recovery tests
         run: npm run test:notifications
 
+  e2e:
+    # Browser E2E of the shop order flow (nextjs/tests/e2e-checkout.spec.ts) against a real Django
+    # server. Django serves the committed theme export (gnu_jango/templates/theme*/), so no Next
+    # build or dev server is needed. CI runs in the public repository only.
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      DJANGO_SETTINGS_MODULE: example.settings
+      # development settings: DEBUG on, the theme pages and /_next/static served by core.views
+      ENVIRONMENT: Development
+      SECRET_KEY: ci-e2e-secret-key
+      ALLOWED_HOSTS: 127.0.0.1,localhost
+      # a throwaway SQLite file in the checkout, created by migrate below
+      DATABASE_URL: sqlite:///e2e-ci.sqlite3
+      CELERY_TASK_ALWAYS_EAGER: "True"
+      E2E_BASE_URL: http://127.0.0.1:8000
+      E2E_MEMBER_ID: e2e_buyer
+      E2E_MEMBER_PASSWORD: e2e-ci-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt
+      - name: Prepare the disposable shop database
+        run: |
+          python manage.py migrate --noinput
+          python manage.py seed_e2e_shop --i-know-this-is-disposable
+      - name: Start Django
+        run: |
+          nohup python manage.py runserver 127.0.0.1:8000 --noreload > "$RUNNER_TEMP/django.log" 2>&1 &
+          for attempt in $(seq 1 30); do
+            curl -fsS -o /dev/null http://127.0.0.1:8000/api/v1/status && exit 0
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/django.log"
+          exit 1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22.14.0"
+          cache: npm
+          cache-dependency-path: nextjs/package-lock.json
+      - name: Install Node dependencies
+        working-directory: nextjs
+        run: npm ci
+      - name: Install browser
+        working-directory: nextjs
+        run: npx playwright install --with-deps chromium
+      - name: Checkout E2E
+        working-directory: nextjs
+        env:
+          PLAYWRIGHT_HTML_OPEN: never
+        run: npm run test:e2e:checkout -- --reporter=list,html
+      - name: Django log
+        if: failure()
+        run: cat "$RUNNER_TEMP/django.log" || true
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-checkout-report
+          path: |
+            nextjs/playwright-report/
+            nextjs/test-results/
+          retention-days: 7
+
   theme-bundles:
     # Next/Turbopack emits platform-specific static export filenames. Compare the committed Django
     # bundles on Windows, the same platform used to generate them, instead of reporting Linux drift.
