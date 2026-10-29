@@ -344,6 +344,8 @@ python manage.py configure_search_postgres
 
 전체 운영 절차와 성능·검색 범위의 제한은 [통합 검색 운영 안내](docs/04-deploy/unified-search.md), 요구사항은 [PRD](docs/01-plan/features/unified-search.prd.md), 구현 계획은 [계획서](docs/01-plan/features/unified-search.plan.md)를 참고하세요.
 
+선택 기능으로, 운영자가 설정한 OpenAI 호환 임베딩 엔드포인트(로컬 Ollama `bge-m3` 등)를 이용해 매뉴얼 장과 판매 상품을 의미로도 찾을 수 있습니다. 기본값은 꺼짐이며 `G5_AI_SEMANTIC_SEARCH=True`, `G5_AI_BASE_URL`, `G5_AI_EMBEDDING_MODEL`을 설정한 뒤 `python manage.py build_embeddings`를 실행합니다. 설정·저장 방식(PostgreSQL pgvector / SQLite)·장애 시 동작은 [AI 의미 검색 운영 안내](docs/04-deploy/ai-semantic-search.md)를 참고하세요.
+
 ## 실시간 알림
 
 댓글·수신 쪽지·회원 주문 상태 변경과 관리자 공지를 기존 알림함에 저장합니다.

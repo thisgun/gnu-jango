@@ -111,6 +111,7 @@ INSTALLED_APPS = [
     "gnu_jango.bbs",
     "gnu_jango.docs_search.apps.DocsSearchConfig",
     "gnu_jango.site_search.apps.SiteSearchConfig",
+    "gnu_jango.ai.apps.AiConfig",
     "gnu_jango.shop",
     "gnu_jango.api",
     "gnu_jango.editor.apps.EditorConfig",
@@ -249,6 +250,12 @@ UNFOLD = {
                         "icon": "pending_actions",
                         "link": reverse_lazy("admin:core_backgroundjob_changelist"),
                         "permission": lambda request: request.user.is_superuser and BACKGROUND_JOBS_ENABLED,
+                    },
+                    {
+                        "title": _("AI 의미 검색 임베딩"),
+                        "icon": "neurology",
+                        "link": reverse_lazy("admin:ai_embedding_changelist"),
+                        "permission": lambda request: request.user.is_superuser and G5_AI_SEMANTIC_SEARCH,
                     },
                     {
                         "title": _("Shop orders"),
@@ -883,6 +890,25 @@ G5_DEFAULT_DOCS_GROUP = de_config("G5_DEFAULT_DOCS_GROUP", default="").strip()
 G5_DOCS_LLM_BASE_URL = de_config("G5_DOCS_LLM_BASE_URL", default="").strip()
 G5_DOCS_LLM_MODEL = de_config("G5_DOCS_LLM_MODEL", default="").strip()
 G5_DOCS_LLM_TIMEOUT = de_config("G5_DOCS_LLM_TIMEOUT", default=20, cast=int)
+
+# Optional AI features, phase 1: semantic (embedding) search for handbook chapters and shop products,
+# merged with the lexical results. Off unless G5_AI_SEMANTIC_SEARCH=True and an OpenAI-compatible
+# endpoint and embedding model are set (local Ollama: http://127.0.0.1:11434/v1 and bge-m3). Indexed
+# text and search queries are sent to this endpoint. See docs/04-deploy/ai-semantic-search.md.
+G5_AI_BASE_URL = de_config("G5_AI_BASE_URL", default="").strip()
+# Sent as "Authorization: Bearer ..." to cloud providers only when set; never logged.
+G5_AI_API_KEY = de_config("G5_AI_API_KEY", default="").strip()
+G5_AI_EMBEDDING_MODEL = de_config("G5_AI_EMBEDDING_MODEL", default="").strip()
+G5_AI_EMBEDDING_DIMENSIONS = de_config("G5_AI_EMBEDDING_DIMENSIONS", default=1024, cast=int)
+G5_AI_EMBEDDING_BATCH_SIZE = de_config("G5_AI_EMBEDDING_BATCH_SIZE", default=16, cast=int)
+G5_AI_EMBEDDING_MAX_CHARS = de_config("G5_AI_EMBEDDING_MAX_CHARS", default=3000, cast=int)
+# Seconds per embedding request while building (a cold local model can take a while to load) and,
+# capped by it, how long a search waits for the query embedding before answering lexically.
+G5_AI_TIMEOUT = de_config("G5_AI_TIMEOUT", default=30, cast=int)
+G5_AI_QUERY_TIMEOUT = de_config("G5_AI_QUERY_TIMEOUT", default=3, cast=int)
+G5_AI_SEMANTIC_SEARCH = bool_config("G5_AI_SEMANTIC_SEARCH", default=False)
+# Nearest neighbours below this cosine similarity are not added to search results.
+G5_AI_SEMANTIC_MIN_SIMILARITY = de_config("G5_AI_SEMANTIC_MIN_SIMILARITY", default=0.5, cast=float)
 
 # Unified DB search: PostgreSQL FTS or the portable token inverted index.
 G5_SEARCH_ENABLED = bool_config("G5_SEARCH_ENABLED", default=True)

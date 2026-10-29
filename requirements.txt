@@ -56,6 +56,9 @@ dj-database-url==3.1.2
 # Python build image); same `psycopg2` module and version as the source package it replaces.
 psycopg2-binary==2.9.13
 PyMySQL==1.2.3
+# Optional semantic search (G5_AI_SEMANTIC_SEARCH): the pgvector column type for PostgreSQL. Pure
+# Python, no numpy; SQLite/MySQL store vectors as bytes and never touch the extension.
+pgvector==0.5.0
 
 # Background work
 celery==5.6.3

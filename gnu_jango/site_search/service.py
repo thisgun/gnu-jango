@@ -11,6 +11,7 @@ from django.db.models.functions import Coalesce, Concat, JSONObject, Length, Low
 from django.utils import timezone
 
 from gnu_jango.api.access import readable_post_queryset
+from gnu_jango.ai.client import semantic_search_enabled
 from gnu_jango.api.shop_common import on_sale_products
 from gnu_jango.bbs.models import Post
 from gnu_jango.bbs.utils import get_pretty_url
@@ -309,6 +310,11 @@ def ranked_results(request, query, *, result_type="all", bo_table="", page=None,
         kind = "document" if doc.kind == "page" or doc._manual else doc.kind
         ranked.append((doc, round(score * multiplier, 6), kind))
     ranked.sort(key=lambda item: (-item[1], item[2], str(getattr(item[0], f"{item[0].kind}_id"))))
+    if semantic_search_enabled():
+        # Optional (G5_AI_SEMANTIC_SEARCH): add permitted semantic neighbours by rank fusion.
+        from gnu_jango.ai.search import fuse_site_results
+        ranked, added = fuse_site_results(query, ranked, docs, body, result_type=result_type, docs_group=group)
+        total += added
     meta = {"engine": "postgresql-fts" if connections[docs.db].vendor == "postgresql" else "inverted-index",
             "total": total, "candidate_limit": CANDIDATE_LIMIT, "truncated": total > CANDIDATE_LIMIT, "fuzzy": fuzzy}
     if page is not None:

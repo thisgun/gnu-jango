@@ -8,6 +8,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.db.models import Count, Max
 
+from gnu_jango.ai.client import semantic_search_enabled
 from gnu_jango.api.v1_board import _excerpt_post_ids
 from gnu_jango.api.v1_community import _searchable_boards
 from gnu_jango.bbs.models import Board, Post
@@ -268,6 +269,10 @@ def search_documents(request, query, *, limit=5):
         supporting_score = sum(item[0] for item in matches[1:3])
         ranked.append((position, doc, best_score + min(best_score * 0.3, supporting_score * 0.2)))
     ranked.sort(key=lambda row: (-row[2], row[0]))
+    if semantic_search_enabled():
+        # Optional (G5_AI_SEMANTIC_SEARCH): add readable chapters found by meaning, not words.
+        from gnu_jango.ai.search import fuse_docs_chapters
+        ranked = fuse_docs_chapters(query, ranked, candidates)
     results = []
     for _, doc, score in ranked:
         snippet = _snippet(doc.text, terms)

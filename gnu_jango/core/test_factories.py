@@ -77,3 +77,9 @@ def test_a_coupon_is_currently_valid(member):
 
     assert coupon.cp_start < coupon.cp_end
     assert coupon.cp_id
+
+
+def test_an_admin_is_a_level_10_superuser(admin_member, admin_client_api):
+    assert admin_member.is_superuser and admin_member.is_staff
+    assert admin_member.profile.user_level == 10
+    assert admin_client_api.get("/api/v1/auth/me").json()["data"]["is_super_admin"] is True

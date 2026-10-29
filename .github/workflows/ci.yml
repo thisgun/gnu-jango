@@ -23,7 +23,8 @@ jobs:
           --health-timeout 3s
           --health-retries 10
       postgres:
-        image: postgres:16-alpine
+        # PostgreSQL 16 with the pgvector extension (gnu_jango/ai migration 0001 creates it).
+        image: pgvector/pgvector:0.8.7-pg16
         env:
           POSTGRES_DB: gnu_jango_ci
           POSTGRES_USER: gnu_jango
