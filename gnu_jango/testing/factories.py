@@ -48,7 +48,13 @@ class AdminFactory(MemberFactory):
     username = factory.Sequence(lambda n: f"admin{n}")
     is_staff = True
     is_superuser = True
-    level = 10
+
+    @factory.post_generation
+    def level(user, create, extracted, **kwargs):
+        # a plain ``level = 10`` here would be passed to User() instead of the profile
+        if create:
+            user.profile.user_level = 10 if extracted is None else extracted
+            user.profile.save(update_fields=["user_level"])
 
 
 def give_points(user, point, content="Test points"):
