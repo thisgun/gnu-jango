@@ -2,7 +2,7 @@
 and 가격비교사이트 (price.php). Wired into the product and order admins by bulk.py."""
 
 from calendar import monthrange
-from datetime import date
+from datetime import date, timedelta
 from urllib.parse import urlencode
 
 from django.contrib import messages
@@ -14,7 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
-from gnu_jango.shop import price_feed, sales_report
+from gnu_jango.shop import price_feed, sales_anomalies, sales_report
 from gnu_jango.shop.admin.bulk import product_tool_links, require_perms, tool_context
 from gnu_jango.shop.models import ShopProduct, ShopWishlist
 from gnu_jango.shop.spreadsheet import csv_download
@@ -160,6 +160,7 @@ def sales_view(model_admin, request):
         tool_links=[
             {"url": reverse("admin:shop_shoporder_reports"), "label": "정산 리포트"},
             {"url": reverse("admin:shop_shoporder_sales_rank"), "label": "상품 판매 순위"},
+            {"url": reverse("admin:shop_shoporder_sales_anomalies"), "label": "매출 이상 징후"},
         ],
         periods=sales_report.PERIODS,
         filters=filters,
@@ -170,6 +171,59 @@ def sales_view(model_admin, request):
         export_query=urlencode({**filters, "export": "csv"}),
     )
     return TemplateResponse(request, "admin/shop/tools/sales.html", context)
+
+
+# ---------------------------------------------------------------------------- 매출 이상 징후
+
+BRIEFING_ERRORS = {
+    "unverified_numbers": "AI 설명에 점검 결과에 없는 숫자가 섞여 보여 주지 않았습니다. 아래 점검 결과를 확인해 주세요.",
+    "timeout": "AI 모델이 제한 시간 안에 답하지 않았습니다. 잠시 뒤 다시 눌러 주세요.",
+}
+
+
+def _month_param(value, today):
+    """The first day of a ``YYYY-MM`` month, this month when missing, invalid or in the future."""
+    try:
+        year, month = (int(part) for part in str(value or "").split("-")[:2])
+        chosen = date(year, month, 1)
+    except (TypeError, ValueError):
+        return today.replace(day=1)
+    return min(chosen, today.replace(day=1))
+
+
+def sales_anomalies_view(model_admin, request):
+    """This month's sales against the three months before, by fixed rules, with an optional AI briefing."""
+    from gnu_jango.ai import sales_insights
+
+    today = timezone.localdate()
+    month = _month_param(request.POST.get("month") or request.GET.get("month"), today)
+    report = sales_anomalies.month_report(month, today)
+    can_explain = sales_insights.insights_enabled()
+    briefing = briefing_error = None
+    if request.method == "POST" and can_explain:
+        briefing, reason = sales_insights.narrate(report)
+        if reason:
+            briefing_error = BRIEFING_ERRORS.get(reason, "AI 모델에 연결하지 못했습니다. 설정과 모델 상태를 확인해 주세요.")
+    previous = (month - timedelta(days=1)).replace(day=1)
+    following = (month.replace(day=28) + timedelta(days=4)).replace(day=1)
+    context = tool_context(
+        model_admin,
+        request,
+        title="매출 이상 징후",
+        subtitle=f"{report['start']:%Y-%m-%d} ~ {report['end']:%Y-%m-%d} 매출을 직전 {report['baseline_months']}개월과 "
+                 "정해진 규칙으로 비교합니다. 이 결과는 AI 없이 계산합니다.",
+        parent_url=reverse("admin:shop_shoporder_changelist"),
+        parent_label="주문",
+        tool_links=[{"url": reverse("admin:shop_shoporder_sales"), "label": "매출현황"}],
+        report=report,
+        month_value=report["month"],
+        previous_month=previous.strftime("%Y-%m"),
+        next_month=following.strftime("%Y-%m") if following <= today else "",
+        can_explain=can_explain,
+        briefing=briefing,
+        briefing_error=briefing_error,
+    )
+    return TemplateResponse(request, "admin/shop/tools/sales_anomalies.html", context)
 
 
 # ---------------------------------------------------------------------------- 가격비교사이트

@@ -2220,6 +2220,14 @@ body.g5-admin-unfold {
   color: var(--g5-admin-muted);
 }
 
+/* A paragraph of prose inside a panel (the AI briefing on 매출 이상 징후). */
+.g5-admin-briefing {
+  max-width: 72ch;
+  margin: 0;
+  padding: 18px 18px 0;
+  line-height: 1.75;
+}
+
 @media (max-width: 1024px) {
   .g5-admin #content {
     padding: 20px;
