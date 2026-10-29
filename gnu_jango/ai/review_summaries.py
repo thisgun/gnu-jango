@@ -27,14 +27,19 @@ PROMPT_VERSION = "1"
 MAX_REVIEWS = 40
 MAX_REVIEW_CHARS = 500
 MAX_SUMMARY_CHARS = 400
-# A per-product answer the model could not give; the run goes on with the next product.
-SKIPPABLE_REASONS = {"invalid_response"}
+# Per-product failures; the run goes on with the next product. An unusable answer is remembered
+# (an empty summary under the reviews' hash) so it is not asked again until the reviews change;
+# otherwise a few such products, first in line every hour, could use up the run's --limit for good.
+# A timeout (a cold model, one very long product) is retried on the next run.
+UNUSABLE_ANSWER_REASONS = {"invalid_response"}
+SKIPPABLE_REASONS = UNUSABLE_ANSWER_REASONS | {"timeout"}
 # The model's answer when the reviews say nothing concrete ("test", "asdf"). Stored as an empty
 # summary, so the page shows nothing and the model is not asked again until the reviews change.
 NO_SUMMARY = "요약 불가"
 # The same answer in other words ("구체적인 장점이나 아쉬운 점을 언급하지 않으셨습니다"): only
 # short answers are checked, so a real summary that mentions a missing point is kept.
-_SAYS_NOTHING = re.compile(r"파악하기 어렵|언급하지 않|언급이 없|내용이 없|알 수 없")
+# ("알 수 없" is left out: "배송 속도는 알 수 없으나 품질은 좋다는 평" is a real summary.)
+_SAYS_NOTHING = re.compile(r"파악하기 어렵|언급하지 않|언급이 없|내용이 없")
 SAYS_NOTHING_MAX_CHARS = 120
 SYSTEM_PROMPT = (
     "당신은 쇼핑몰 상품의 구매 후기를 요약합니다. 주어진 후기에 있는 내용만 근거로, 구매자들이 말한 "
@@ -125,10 +130,15 @@ def summarize(provider, *, rebuild=False, limit=None, dry_run=False):
         except ChatError as exc:
             if exc.reason not in SKIPPABLE_REASONS:
                 raise
-            summary = ""
+            report["failed"] += 1
+            logger.warning("No review summary for product %s (reason=%s).", product_id, exc.reason)
+            if exc.reason in UNUSABLE_ANSWER_REASONS:
+                _remember(product_id, provider, reviews, digest, "")
+            continue
         if not summary:
             report["failed"] += 1
             logger.warning("No usable review summary for product %s.", product_id)
+            _remember(product_id, provider, reviews, digest, "")
             continue
         if summary.startswith(NO_SUMMARY) or (
             len(summary) <= SAYS_NOTHING_MAX_CHARS and _SAYS_NOTHING.search(summary)
@@ -137,19 +147,27 @@ def summarize(provider, *, rebuild=False, limit=None, dry_run=False):
             report["insufficient"] += 1
         else:
             report["summarized"] += 1
-        ReviewSummary.objects.update_or_create(
-            product_id=product_id,
-            defaults={"model": provider.model, "review_count": len(reviews), "source_hash": digest,
-                      "summary": summary},
-        )
+        _remember(product_id, provider, reviews, digest, summary)
     if dry_run:
         report["would_summarize"] = report.pop("summarized")
         report["summarized"] = 0
     return report
 
 
+def _remember(product_id, provider, reviews, digest, summary):
+    ReviewSummary.objects.update_or_create(
+        product_id=product_id,
+        defaults={"model": provider.model, "review_count": len(reviews), "source_hash": digest, "summary": summary},
+    )
+
+
 def review_summary_payload(product):
-    """The product page's ``ai_review_summary``: None unless the feature is on and a visible row exists."""
+    """The product page's ``ai_review_summary``: None unless the feature is on and a visible row exists.
+
+    A summary is also withheld once fewer reviews are published than it was written from: an
+    operator who unpublishes or deletes a review (the admin action does it with a bulk update,
+    so no signal fires) should not see that review's paraphrase stay up until the next run.
+    """
     if not conf.review_summaries_requested():
         return None
     row = (
@@ -157,5 +175,8 @@ def review_summary_payload(product):
         .only("summary", "review_count", "updated_at").first()
     )
     if row is None:
+        return None
+    published = ShopReview.objects.filter(product_id=product.pk, is_confirm=PUBLISHED).count()
+    if published < max(row.review_count, conf.review_summary_min_reviews()):
         return None
     return {"text": row.summary, "review_count": row.review_count, "updated_at": row.updated_at.isoformat()}

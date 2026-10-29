@@ -397,6 +397,16 @@ def annotate_product_coupon_badge(queryset):
     )
 
 
+def product_cards(queryset):
+    """Products shown as cards on a product page (neighbours, related, similar) with the counts
+    ``product_payload`` reads, so each card does not run its own three count queries."""
+    return annotate_product_coupon_badge(queryset.select_related("category")).annotate(
+        review_count=Count("reviews", distinct=True),
+        qa_count=Count("qas", distinct=True),
+        review_stats=Avg("reviews__is_score"),
+    )
+
+
 def product_coupon_badge_available(product):
     if product.it_nocoupon:
         return False
@@ -500,17 +510,11 @@ def product_payload(product, request=None, *, detail=False):
         "qa_count": qa_count if qa_count is not None else product.qas.count(),
     }
     if detail:
-        prev_product = annotate_product_coupon_badge(
-            on_sale_products().filter(it_id__lt=product.it_id)
-        ).order_by("-it_id").first()
-        next_product = annotate_product_coupon_badge(
-            on_sale_products().filter(it_id__gt=product.it_id)
-        ).order_by("it_id").first()
+        prev_product = product_cards(on_sale_products().filter(it_id__lt=product.it_id)).order_by("-it_id").first()
+        next_product = product_cards(on_sale_products().filter(it_id__gt=product.it_id)).order_by("it_id").first()
         # The shop setting de_rel_list_use switches the related-products list off (no lookup at all).
         related_ids = related_product_ids(product.it_id) if related_list_enabled() else []
-        related = annotate_product_coupon_badge(
-            on_sale_products().filter(pk__in=related_ids).select_related("category")
-        )
+        related = product_cards(on_sale_products().filter(pk__in=related_ids))
         related_by_id = {item.it_id: item for item in related}
         data["prev_item"] = product_payload(prev_product) if prev_product else None
         data["next_item"] = product_payload(next_product) if next_product else None
@@ -521,11 +525,7 @@ def product_payload(product, request=None, *, detail=False):
         ]
         # Optional (G5_AI_SIMILAR_PRODUCTS): on-sale products nearest to this one by meaning,
         # from the stored embeddings, leaving out the admin's related products.
-        similar = similar_products(
-            product,
-            annotate_product_coupon_badge(on_sale_products().select_related("category")),
-            exclude=related_ids,
-        )
+        similar = similar_products(product, product_cards(on_sale_products()), exclude=related_ids)
         data["similar_items"] = [product_payload(item) for item in similar]
         # Optional (G5_AI_REVIEW_SUMMARIES): the stored AI summary of the published reviews.
         data["ai_review_summary"] = review_summary_payload(product)

@@ -9,6 +9,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 
 from django.core.cache import cache
 
@@ -21,6 +22,11 @@ CACHE_SECONDS = 6 * 60 * 60
 MAX_BRIEFING_CHARS = 700
 PROMPT_VERSION = "1"
 ATTEMPT_TEMPERATURES = (0.2, 0.0)
+# The briefing is made inside an admin request: a cold model must not hold the worker for the
+# background G5_AI_CHAT_TIMEOUT (two minutes, twice). 20 s for an answer, and the second try only
+# when the first came back within 10 s, keeps the request near the common 30 s worker limit.
+INTERACTIVE_TIMEOUT = 20
+RETRY_WITHIN_SECONDS = 10
 SYSTEM_PROMPT = (
     "당신은 쇼핑몰 운영자에게 한 달 매출 점검 결과를 설명합니다. 주어진 JSON의 합계와 발견 사항만 근거로 "
     "한국어 존댓말 3~5문장으로 정리하세요. 가장 중요한 발견부터 말하고, 마지막 문장에는 운영자가 확인해 볼 "
@@ -74,13 +80,30 @@ def unverified_numbers(briefing, source_text):
     return numbers_in(briefing) - numbers_in(source_text)
 
 
+def allowed_numbers_text(sent, report):
+    """The text a briefing's numbers must come from: the totals, the findings and the year/month.
+
+    The period and baseline dates and the day count are left out: they would let any invented
+    figure from 1 to 31 (or the year) through, e.g. "취소율 12%" next to a 12th in the dates.
+    """
+    return json.dumps([sent["totals"], sent["findings"], report["start"].year, report["start"].month],
+                      ensure_ascii=False)
+
+
 def narrate(report, provider=None):
     """``(briefing, None)`` or ``(None, reason)``; reasons: disabled, unavailable, timeout,
-    http_error, invalid_response, unverified_numbers. Briefings are cached per input for 6 hours."""
-    provider = provider or (get_chat_provider() if conf.sales_insights_requested() else None)
+    http_error, invalid_response, unverified_numbers. Briefings are cached per input for 6 hours.
+
+    It runs inside an admin request, so the model gets INTERACTIVE_TIMEOUT seconds (not the
+    background G5_AI_CHAT_TIMEOUT), and the second try only follows a quick first answer.
+    """
+    if provider is None and conf.sales_insights_requested():
+        provider = get_chat_provider(timeout=INTERACTIVE_TIMEOUT)
     if provider is None:
         return None, "disabled"
-    source = json.dumps(model_input(report), ensure_ascii=False, sort_keys=True)
+    sent = model_input(report)
+    source = json.dumps(sent, ensure_ascii=False, sort_keys=True)
+    allowed = allowed_numbers_text(sent, report)
     key = "ai:sales-insight:v1:" + hashlib.sha256(
         f"{PROMPT_VERSION}\0{provider.model}\0{source}".encode("utf-8")).hexdigest()
     try:
@@ -91,7 +114,10 @@ def narrate(report, provider=None):
         return cached, None
     # A small model now and then rounds or derives a figure; one more try at temperature 0 usually
     # sticks to the given numbers.
-    for temperature in ATTEMPT_TEMPERATURES:
+    started = time.monotonic()
+    for attempt, temperature in enumerate(ATTEMPT_TEMPERATURES):
+        if attempt and time.monotonic() - started > RETRY_WITHIN_SECONDS:
+            return None, "unverified_numbers"
         try:
             answer = provider.complete(SYSTEM_PROMPT, source, max_tokens=600, temperature=temperature)
         except ChatError as exc:
@@ -100,7 +126,7 @@ def narrate(report, provider=None):
         briefing = clean_summary(answer, MAX_BRIEFING_CHARS)
         if not briefing:
             return None, "invalid_response"
-        stray = unverified_numbers(briefing, source)
+        stray = unverified_numbers(briefing, allowed)
         if not stray:
             break
         logger.warning("Sales briefing discarded: numbers not in the findings (%s).", ", ".join(sorted(stray)))

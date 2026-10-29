@@ -1,11 +1,12 @@
 from datetime import date
+from unittest import mock
 
 import pytest
 from django.core.cache import cache
 from django.test import override_settings
 
 from gnu_jango.ai.client import ChatError, chat_provider_override
-from gnu_jango.ai.sales_insights import model_input, narrate, numbers_in, unverified_numbers
+from gnu_jango.ai.sales_insights import INTERACTIVE_TIMEOUT, model_input, narrate, numbers_in, unverified_numbers
 from gnu_jango.ai.testing import FakeChatProvider
 
 REPORT = {
@@ -74,6 +75,34 @@ def test_a_second_try_at_temperature_zero_can_rescue_the_briefing():
         briefing, reason = narrate(REPORT)
     assert reason is None and briefing.startswith("취소율이 0%에서 54%")
     assert chat.temperatures == [0.2, 0.0]
+
+
+def test_dates_in_the_period_do_not_vouch_for_an_invented_number():
+    # 20 appears only as the period's last day (2026-10-20)
+    chat = FakeChatProvider(reply="취소율이 20%로 올랐습니다.")
+    with override_settings(G5_AI_SALES_INSIGHTS=True), chat_provider_override(chat):
+        assert narrate(REPORT) == (None, "unverified_numbers")
+
+
+def test_the_month_itself_may_be_named():
+    chat = FakeChatProvider(reply="2026년 10월은 취소율이 54%입니다.")
+    with override_settings(G5_AI_SALES_INSIGHTS=True), chat_provider_override(chat):
+        assert narrate(REPORT)[1] is None
+
+
+def test_a_slow_first_answer_is_not_tried_again():
+    chat = FakeChatProvider(reply="취소율이 60%입니다.")
+    with override_settings(G5_AI_SALES_INSIGHTS=True), chat_provider_override(chat), \
+            mock.patch("gnu_jango.ai.sales_insights.time.monotonic", side_effect=[0.0, 15.0]):
+        assert narrate(REPORT) == (None, "unverified_numbers")
+    assert len(chat.calls) == 1
+
+
+def test_the_briefing_waits_less_than_a_background_job():
+    with override_settings(G5_AI_SALES_INSIGHTS=True), \
+            mock.patch("gnu_jango.ai.sales_insights.get_chat_provider", return_value=None) as provider:
+        narrate(REPORT)
+    provider.assert_called_once_with(timeout=INTERACTIVE_TIMEOUT)
 
 
 def test_endpoint_errors_come_back_as_reasons():
