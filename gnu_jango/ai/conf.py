@@ -14,6 +14,7 @@ DEFAULT_BATCH_SIZE = 16
 MAX_BATCH_SIZE = 256
 DEFAULT_MAX_CHARS = 3000
 DEFAULT_MIN_SIMILARITY = 0.5
+DEFAULT_SIMILAR_MIN_SIMILARITY = 0.65
 
 
 def _text(name):
@@ -82,6 +83,20 @@ def min_similarity():
 
 def semantic_search_requested():
     return bool(getattr(settings, "G5_AI_SEMANTIC_SEARCH", False))
+
+
+def similar_products_requested():
+    return bool(getattr(settings, "G5_AI_SIMILAR_PRODUCTS", False))
+
+
+def similar_min_similarity():
+    # Two product descriptions share more boilerplate than a query and a product, so unrelated
+    # products already score about 0.5-0.6 with bge-m3; real neighbours score 0.7 and up.
+    try:
+        value = float(getattr(settings, "G5_AI_SIMILAR_MIN_SIMILARITY", DEFAULT_SIMILAR_MIN_SIMILARITY))
+    except (TypeError, ValueError):
+        value = DEFAULT_SIMILAR_MIN_SIMILARITY
+    return max(-1.0, min(value, 1.0))
 
 
 def embeddings_configured():
