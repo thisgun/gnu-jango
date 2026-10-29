@@ -76,13 +76,13 @@ def source_hash(model, product_name, reviews):
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def clean_summary(text):
-    """One plain paragraph without markdown, cut at a sentence end within MAX_SUMMARY_CHARS."""
+def clean_summary(text, max_chars=MAX_SUMMARY_CHARS):
+    """One plain paragraph without markdown, cut at a sentence end within ``max_chars``."""
     text = _MARKDOWN.sub(" ", str(text or ""))
     text = re.sub(r"\s+", " ", text).strip()
-    if len(text) <= MAX_SUMMARY_CHARS:
+    if len(text) <= max_chars:
         return text
-    head = text[:MAX_SUMMARY_CHARS]
+    head = text[:max_chars]
     ends = [match.end() for match in _SENTENCE_END.finditer(head)]
     return head[:ends[-1]].strip() if ends else head.rstrip() + "…"
 

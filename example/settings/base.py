@@ -331,6 +331,12 @@ UNFOLD = {
                         "permission": lambda request: request.user.has_perm("shop.view_shoporder"),
                     },
                     {
+                        "title": "매출 이상 징후",
+                        "icon": "troubleshoot",
+                        "link": reverse_lazy("admin:shop_shoporder_sales_anomalies"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shoporder"),
+                    },
+                    {
                         "title": "송장 일괄등록",
                         "icon": "local_shipping",
                         "link": reverse_lazy("admin:shop_shoporder_delivery_upload"),
@@ -929,6 +935,9 @@ G5_AI_CHAT_TIMEOUT = de_config("G5_AI_CHAT_TIMEOUT", default=120, cast=int)
 G5_AI_CHAT_REASONING_EFFORT = de_config("G5_AI_CHAT_REASONING_EFFORT", default="none").strip()
 G5_AI_REVIEW_SUMMARIES = bool_config("G5_AI_REVIEW_SUMMARIES", default=False)
 G5_AI_REVIEW_SUMMARY_MIN_REVIEWS = de_config("G5_AI_REVIEW_SUMMARY_MIN_REVIEWS", default=3, cast=int)
+# Phase 3: an "AI 설명" button on the admin 매출 이상 징후 page. The findings are rule-based and
+# shown without it; the chat model only words them (aggregate numbers only, no customer data).
+G5_AI_SALES_INSIGHTS = bool_config("G5_AI_SALES_INSIGHTS", default=False)
 
 # Unified DB search: PostgreSQL FTS or the portable token inverted index.
 G5_SEARCH_ENABLED = bool_config("G5_SEARCH_ENABLED", default=True)

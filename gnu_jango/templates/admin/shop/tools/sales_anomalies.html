@@ -1,0 +1,72 @@
+{% extends "admin/shop/tools/_layout.html" %}
+
+{% block hero_form %}
+<form class="g5-admin-report-filter g5-admin-report-filter-compact" method="get" action="{{ report_path }}">
+  <label><span>월</span><input class="input" type="month" name="month" value="{{ month_value }}"></label>
+  <div class="g5-admin-report-filter-actions">
+    <button class="button btn" type="submit">조회</button>
+    <a class="button btn g5-admin-button-secondary" href="{{ report_path }}?month={{ previous_month }}">이전 달</a>
+    {% if next_month %}<a class="button btn g5-admin-button-secondary" href="{{ report_path }}?month={{ next_month }}">다음 달</a>{% endif %}
+  </div>
+</form>
+{% endblock %}
+
+{% block tool_body %}
+<section class="g5-admin-report-metrics" aria-label="이번 기간 합계">
+  <article class="card g5-admin-report-metric"><span>입금</span><strong>{{ report.current.receipt|floatformat:"0g" }}</strong><em>{{ report.elapsed_days }}일, 환불 제외</em></article>
+  <article class="card g5-admin-report-metric"><span>주문</span><strong>{{ report.current.orders|floatformat:"0g" }}</strong><em>취소 {{ report.current.cancels|floatformat:"0g" }}건 별도</em></article>
+  <article class="card g5-admin-report-metric"><span>환불</span><strong>{{ report.current.refund|floatformat:"0g" }}</strong><em>원</em></article>
+  <article class="card g5-admin-report-metric"><span>비교 기간</span><strong>{{ report.baseline.orders|floatformat:"0g" }}건</strong><em>{{ report.baseline_start|date:"Y-m-d" }} ~ {{ report.baseline_end|date:"Y-m-d" }}</em></article>
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{{ report.month }} 점검 결과</p>
+      <h2>발견 사항</h2>
+    </div>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="table g5-admin-mini-table">
+      <thead><tr><th scope="col">구분</th><th scope="col">내용</th><th scope="col">근거</th></tr></thead>
+      <tbody>
+        {% for finding in report.findings %}
+        <tr>
+          <td><span class="g5-admin-badge g5-admin-badge-{% if finding.severity == 'high' %}danger{% elif finding.severity == 'medium' %}warning{% else %}info{% endif %}">{{ finding.severity_label }}</span></td>
+          <td><strong>{{ finding.title }}</strong></td>
+          <td>{{ finding.detail }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3" class="g5-admin-empty">이 달은 아직 점검할 날이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide" aria-labelledby="sales-briefing-title">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">선택 기능</p>
+      <h2 id="sales-briefing-title">AI 설명</h2>
+    </div>
+    {% if can_explain %}
+    <form method="post" action="{{ report_path }}">
+      {% csrf_token %}
+      <input type="hidden" name="month" value="{{ month_value }}">
+      <button class="button btn" type="submit">AI 설명 만들기</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if briefing %}
+  <p class="g5-admin-briefing">{{ briefing }}</p>
+  <p class="g5-admin-empty">위 발견 사항을 AI가 문장으로 옮긴 것입니다. 원인은 추측이며, 숫자는 점검 결과와 같은지 확인한 것만 보여 줍니다.</p>
+  {% elif briefing_error %}
+  <p class="g5-admin-briefing" role="status">{{ briefing_error }}</p>
+  {% elif can_explain %}
+  <p class="g5-admin-empty">버튼을 누르면 위 발견 사항을 AI가 운영자용 설명으로 정리합니다. 주문자 정보는 보내지 않고 합계와 발견 사항만 보냅니다.</p>
+  {% else %}
+  <p class="g5-admin-empty">AI 설명은 꺼져 있습니다 (G5_AI_SALES_INSIGHTS, G5_AI_BASE_URL, G5_AI_CHAT_MODEL). 발견 사항은 AI 없이 계산한 것입니다.</p>
+  {% endif %}
+</section>
+{% endblock %}

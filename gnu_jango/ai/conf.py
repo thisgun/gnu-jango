@@ -129,3 +129,7 @@ def review_summaries_requested():
 
 def review_summary_min_reviews():
     return _int("G5_AI_REVIEW_SUMMARY_MIN_REVIEWS", DEFAULT_REVIEW_SUMMARY_MIN_REVIEWS, 1, 1000)
+
+
+def sales_insights_requested():
+    return bool(getattr(settings, "G5_AI_SALES_INSIGHTS", False))

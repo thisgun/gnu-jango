@@ -444,6 +444,11 @@ def order_tool_urls(model_admin):
         path("delivery-upload/", _bind(model_admin, delivery_upload_view), name="shop_shoporder_delivery_upload"),
         # the sales tables show order amounts per order: the order view permission, as the reports
         path("sales/", _bind(model_admin, reports.sales_view, guard=model_admin.order_report_view), name="shop_shoporder_sales"),
+        path(
+            "sales-anomalies/",
+            _bind(model_admin, reports.sales_anomalies_view, guard=model_admin.order_report_view),
+            name="shop_shoporder_sales_anomalies",
+        ),
     ]
 
 
