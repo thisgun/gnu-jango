@@ -960,21 +960,29 @@ CANCELLED_LOOKUP = {"ResultCode": "0000", "TID": TID, "Status": "1"}
         ({"od_status": "입금"}, APPROVED_LOOKUP, "approved", None, "입금"),
         ({"od_status": "입금", "od_tno": "NICTESTOTHERTID000000001"}, APPROVED_LOOKUP, "uncertain",
          "nicepay_vbank_duplicate_deposit", "입금"),
-        ({"od_status": "준비"}, APPROVED_LOOKUP, "uncertain", "nicepay_order_not_payable", "준비"),
+        ({"od_status": "준비"}, APPROVED_LOOKUP, "approved", None, "준비"),
+        ({"od_status": "완료"}, APPROVED_LOOKUP, "approved", None, "완료"),
+        ({"od_status": "준비", "od_tno": "NICTESTOTHERTID000000001"}, APPROVED_LOOKUP, "uncertain",
+         "nicepay_vbank_duplicate_deposit", "준비"),
         ({"od_tno": "NICTESTOTHERTID000000001"}, APPROVED_LOOKUP, "uncertain", "nicepay_attempt_superseded", "주문"),
         ({"od_receipt_price": 6000}, APPROVED_LOOKUP, "uncertain", "payment_amount_mismatch", "주문"),
         ({}, CANCELLED_LOOKUP, "canceled", None, "취소"),
         ({"od_status": "취소"}, CANCELLED_LOOKUP, "canceled", None, "취소"),
         ({"od_status": "입금"}, CANCELLED_LOOKUP, "uncertain", "nicepay_vbank_cancel_paid_order", "입금"),
         ({"od_tno": "NICTESTOTHERTID000000001"}, CANCELLED_LOOKUP, "canceled", None, "주문"),
-        ({"od_status": "준비"}, CANCELLED_LOOKUP, "uncertain", "nicepay_vbank_cancel_state", "준비"),
+        ({"od_status": "준비"}, CANCELLED_LOOKUP, "uncertain", "nicepay_vbank_cancel_paid_order", "준비"),
+        ({"od_status": "완료"}, CANCELLED_LOOKUP, "uncertain", "nicepay_vbank_cancel_paid_order", "완료"),
+        ({"od_status": "배송"}, CANCELLED_LOOKUP, "uncertain", "nicepay_vbank_cancel_paid_order", "배송"),
         ({}, {"ResultCode": "0000", "TID": TID, "Status": "9"}, "pending_deposit", None, "주문"),
     ],
     ids=[
         "deposit found", "deposit for a cancelled order", "deposit recorded already", "deposit next to another payment",
-        "deposit for an order being prepared", "deposit while another TID waits", "deposit of another amount",
+        "deposit recorded before the order was prepared", "deposit recorded before the order was delivered",
+        "deposit next to the payment of an order being prepared",
+        "deposit while another TID waits", "deposit of another amount",
         "account closed", "account closed for a cancelled order", "account closed but the order is paid",
-        "an old account closed", "account closed for an order being prepared", "nothing deposited yet",
+        "an old account closed", "account closed for an order being prepared",
+        "account closed for a delivered order", "account closed for a shipped order", "nothing deposited yet",
     ],
 )
 def test_virtual_account_recovery_moves_money_only_for_the_orders_current_account(
@@ -994,6 +1002,9 @@ def test_virtual_account_recovery_moves_money_only_for_the_orders_current_accoun
         assert (order.od_misu, order.od_vbank_status, order.od_tno) == (0, "DONE", TID)
     if order_status == "취소" and not order_change:
         assert (order.od_vbank_status, order.od_refund_price, order.od_misu) == ("CANCELED", 0, 0)
+    if order_change.get("od_status") in {"준비", "배송", "완료"}:
+        # an order the shop moved on from 입금 is never re-stamped, refunded or cancelled by recovery
+        assert (order.od_receipt_price, order.od_misu, order.od_refund_price) == (5000, 5000, 0)
 
 
 def test_a_failing_local_cancel_keeps_the_closed_account_for_review(waiting_vbank):
@@ -1077,13 +1088,10 @@ def test_a_deposit_notification_pays_the_amount_the_lookup_confirms(waiting_vban
     assert order.od_misu == (0 if paid else 5000)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="BUG: PAID_STATUSES (api/shop_common.py:40) leaves out 준비/완료, so a repeated deposit "
-    "notification flips the approved attempt to uncertain (shop_nicepay.py:1761/1851) and the recovery "
-    "job then net-cancels the paid order's payment (shop_nicepay.py:816 -> superseded -> _net_cancel_attempt)",
-)
 def test_a_repeated_deposit_notification_after_the_order_moved_on_never_refunds_it(vbank_checkout, shop):
+    """준비 is still a paid order (PAID_STATUSES): the replayed deposit notification is a no-op and the
+    recovery job sees the attempt approved, instead of flipping it to uncertain and net-cancelling the
+    payment as superseded."""
     checkout = vbank_checkout
     checkout.confirm([(vbank_approval(checkout.order), 200)], PayMethod="VBANK")
     amount = f"{checkout.order.od_receipt_price:012d}"

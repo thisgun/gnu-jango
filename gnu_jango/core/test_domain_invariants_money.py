@@ -436,18 +436,7 @@ def test_the_shared_cancel_path_run_twice_gives_everything_back_once(buyer, shop
 TOSS_VBANK_SECRET = "vbank-fake-secret"
 
 
-@pytest.mark.parametrize(
-    "status",
-    [
-        "입금",
-        "배송",
-        pytest.param("준비", marks=pytest.mark.xfail(strict=True, reason=(
-            "BUG: PAID_STATUSES (api/shop_common.py:40) leaves out 준비/완료; the Toss vbank webhook "
-            "(api/v1_shop.py:2277) then cancels the paid order locally instead of flagging it"))),
-        pytest.param("완료", marks=pytest.mark.xfail(strict=True, reason=(
-            "BUG: PAID_STATUSES leaves out 완료; a delivered order's stock and payment record are wiped"))),
-    ],
-)
+@pytest.mark.parametrize("status", ["입금", "준비", "배송", "완료"])
 def test_a_toss_virtual_account_reported_cancelled_never_wipes_a_paid_order(buyer, shop, settings, status):
     """Toss reports the virtual account CANCELED (an operator refunded it in the Toss dashboard)
     while the shop already took the deposit: the order needs a person, not an automatic cancel that

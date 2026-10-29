@@ -1123,6 +1123,43 @@ class NicepayPaymentTests(PaymentTestBase):
         self.assertEqual(order.od_status, PAID)
         approval.assert_not_called()
 
+    def test_result_page_reports_an_order_moved_on_from_paid_as_done_without_touching_the_payment(self):
+        # 준비/완료 are paid: the page answers DONE and never looks up (or net-cancels) the payment
+        for index, status in enumerate(("준비", "완료")):
+            with self.subTest(status=status):
+                order = ShopOrder.objects.create(
+                    od_id=f"ODNICEMOVEDON{index}",
+                    user=self.member,
+                    od_name="Result page buyer",
+                    od_receipt_price=5000,
+                    od_misu=0,
+                    od_status=status,
+                    od_settle_case="신용카드",
+                    od_pg="nicepay",
+                    od_tno=f"NICTESTTID00000000000000M{index}",
+                )
+                attempt = ShopPaymentAttempt.objects.create(
+                    order=order, od_id=order.od_id, provider="nicepay", mode="test", mid=MID, amount=5000,
+                    pay_method="CARD", tid=order.od_tno, state="uncertain",
+                )
+                ShopPaymentAttempt.objects.filter(pk=attempt.pk).update(
+                    updated_at=timezone.now() - timedelta(minutes=30)
+                )
+                with patch("gnu_jango.api.shop_nicepay._lookup_transaction") as lookup, patch(
+                    "gnu_jango.api.shop_nicepay._nicepay_post"
+                ) as post:
+                    response = self.client.post(
+                        "/api/v1/shop/payment/nicepay/recover",
+                        {"order_id": order.od_id, "uid": order.uid},
+                        format="json",
+                    )
+                self.assertEqual(response.status_code, 200, response.content[:400])
+                self.assertEqual(response.json()["data"]["payment_status"], "DONE")
+                lookup.assert_not_called()
+                post.assert_not_called()
+                order.refresh_from_db()
+                self.assertEqual((order.od_status, order.od_receipt_price, order.od_misu), (status, 5000, 0))
+
     def test_recovery_command_isolates_failures_and_deleted_orders(self):
         deleted = ShopPaymentAttempt.objects.create(
             order=None,

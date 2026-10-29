@@ -100,7 +100,7 @@ from .shop_common import (
     ORDER_STATUS_CANCELLED,
     ORDER_STATUS_ORDERED,
     ORDER_STATUS_PAID,
-    ORDER_STATUS_SHIPPING,
+    FULFILMENT_STATUSES,
     PAID_STATUSES,
     PAYMENT_ADAPTER_PROVIDERS,
     ShopStaffPermission,
@@ -2249,7 +2249,10 @@ def process_toss_vbank_notification(order_id, transaction_key=""):
             locked = ShopOrder.objects.select_for_update().filter(pk=order_id).first()
             if not locked:
                 return api_error("Order not found.", status=drf_status.HTTP_404_NOT_FOUND, code="order_not_found")
-            if str(locked.od_status or "") in CANCELLED_STATUSES or str(locked.od_status or "") in {ORDER_STATUS_SHIPPING, "shipping"}:
+            # The bank took the deposit back (youngcart settle_toss_common.php: 입금 오류). Only an
+            # order still at 입금 is rolled back to 주문; one the shop has started preparing, shipped
+            # or delivered is left for a person, as is a cancelled one.
+            if str(locked.od_status or "") in CANCELLED_STATUSES or str(locked.od_status or "") in FULFILMENT_STATUSES:
                 record_payment_raw_log(locked, order_id, "toss-vbank", provider_payment_key, raw_data, prefix="toss-vbank-review")
                 return api_response(data={"order_id": locked.od_id, "processed": False, "manual_review": True})
             locked.od_vbank_status = provider_status
