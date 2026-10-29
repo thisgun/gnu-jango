@@ -5,6 +5,7 @@ from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseNotAllowed, HttpResponseRedirect
 from django.utils.translation import gettext_lazy as _
 from gnu_jango.core.models import NotificationAnnouncement, NotificationWork
+from gnu_jango.utils.date_ranges import local_days
 
 
 @admin.register(NotificationAnnouncement)
@@ -419,11 +420,7 @@ class VisitLogAdmin(ModelAdmin):
 
     def reports_view(self, request):
         start, end = admin_report_date_range(request)
-        visits = VisitLog.objects.all()
-        if start:
-            visits = visits.filter(created_at__date__gte=start)
-        if end:
-            visits = visits.filter(created_at__date__lte=end)
+        visits = VisitLog.objects.filter(local_days("created_at", start or None, end or None))
 
         unique_ips = visits.values("ip_address").exclude(ip_address__isnull=True).distinct().count()
         metrics = [
@@ -432,11 +429,7 @@ class VisitLogAdmin(ModelAdmin):
             {"label": _("Mobile visits"), "value": admin_number(visits.filter(device="mobile").count()), "hint": _("Mobile user agents")},
             {"label": _("Admin visits"), "value": admin_number(visits.filter(is_staff_area=True).count()), "hint": _("Admin console requests")},
         ]
-        action_logs = LogEntry.objects.all()
-        if start:
-            action_logs = action_logs.filter(action_time__date__gte=start)
-        if end:
-            action_logs = action_logs.filter(action_time__date__lte=end)
+        action_logs = LogEntry.objects.filter(local_days("action_time", start or None, end or None))
 
         context = {
             **self.admin_site.each_context(request),
@@ -529,11 +522,7 @@ class SearchKeywordAdmin(ModelAdmin):
 
     def reports_view(self, request):
         start, end = admin_report_date_range(request)
-        keywords = SearchKeyword.objects.all()
-        if start:
-            keywords = keywords.filter(last_searched_at__date__gte=start)
-        if end:
-            keywords = keywords.filter(last_searched_at__date__lte=end)
+        keywords = SearchKeyword.objects.filter(local_days("last_searched_at", start or None, end or None))
 
         metrics = [
             {"label": _("Keywords"), "value": admin_number(keywords.count()), "hint": _("Unique search terms")},

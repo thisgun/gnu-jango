@@ -76,6 +76,7 @@ from gnu_jango.core.forms import SiteMenuForms
 from django.db.models.functions import Substr, Length
 from django.db.models import Q, Max, Min, Sum
 from gnu_jango.utils.lib import chng_frm_base
+from gnu_jango.utils.date_ranges import local_days, period_days
 
 
 def admin_badge(label, tone="neutral"):
@@ -159,17 +160,8 @@ class AdminDatePeriodFilter(DropdownFilter):
         )
 
     def queryset(self, request, queryset):
-        value = self.value()
-        today = timezone.localdate()
-        if value == "today":
-            return queryset.filter(**{f"{self.field_name}__date": today})
-        if value == "7d":
-            return queryset.filter(**{f"{self.field_name}__date__gte": today - timedelta(days=6)})
-        if value == "month":
-            return queryset.filter(**{f"{self.field_name}__date__year": today.year, f"{self.field_name}__date__month": today.month})
-        if value == "year":
-            return queryset.filter(**{f"{self.field_name}__date__year": today.year})
-        return queryset
+        days = period_days(self.value(), timezone.localdate())
+        return queryset.filter(local_days(self.field_name, *days)) if days else queryset
 
 
 class TokenCreatedDateFilter(AdminDatePeriodFilter):

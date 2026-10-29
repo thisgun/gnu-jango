@@ -29,6 +29,7 @@ from django.utils.translation import gettext_lazy as _
 # )
 
 from gnu_jango.utils import editor
+from gnu_jango.utils.date_ranges import local_days
 from gnu_jango.utils.admin_display import (
     badge,
     compact_text,
@@ -303,12 +304,9 @@ class PostAdmin(ModelAdmin):
             post_rows = post_rows.none()
             comment_rows = comment_rows.none()
         else:
-            if start:
-                post_rows = post_rows.filter(wr_datetime__date__gte=start)
-                comment_rows = comment_rows.filter(wr_datetime__date__gte=start)
-            if end:
-                post_rows = post_rows.filter(wr_datetime__date__lte=end)
-                comment_rows = comment_rows.filter(wr_datetime__date__lte=end)
+            in_period = local_days("wr_datetime", start or None, end or None)
+            post_rows = post_rows.filter(in_period)
+            comment_rows = comment_rows.filter(in_period)
         if board_id:
             post_rows = post_rows.filter(board_id=board_id)
             comment_rows = comment_rows.filter(board_id=board_id)

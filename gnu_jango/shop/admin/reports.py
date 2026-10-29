@@ -18,6 +18,7 @@ from gnu_jango.shop import price_feed, sales_anomalies, sales_report
 from gnu_jango.shop.admin.bulk import product_tool_links, require_perms, tool_context
 from gnu_jango.shop.models import ShopProduct, ShopWishlist
 from gnu_jango.shop.spreadsheet import csv_download
+from gnu_jango.utils.date_ranges import local_days
 
 WISHLIST_LIMIT = 200
 FEED_PREVIEW_LINES = 20
@@ -40,11 +41,7 @@ def wishlist_report_view(model_admin, request):
     start = _date_param(request, "date_from")
     end = _date_param(request, "date_to")
     query = str(request.GET.get("q") or "").strip()[:120]
-    entries = ShopWishlist.objects.all()
-    if start:
-        entries = entries.filter(wi_time__date__gte=start)
-    if end:
-        entries = entries.filter(wi_time__date__lte=end)
+    entries = ShopWishlist.objects.filter(local_days("wi_time", start or None, end or None))
     if query:
         entries = entries.filter(Q(it_id__icontains=query) | Q(product__it_name__icontains=query))
     grouped = list(

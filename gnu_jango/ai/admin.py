@@ -1,10 +1,49 @@
+import logging
+
 from django.contrib import admin, messages
 from unfold.admin import ModelAdmin
 
-from . import conf
+from . import conf, indexing, review_summaries
 from .client import get_chat_provider, get_provider, semantic_search_enabled
 from .models import Embedding, ReviewSummary
 from .store import summary
+
+logger = logging.getLogger(__name__)
+
+
+def _pending(report, done_key):
+    return report[done_key] + report["deferred"] + report["pruned"]
+
+
+def embedding_backlog_message():
+    """A warning while ``build_embeddings`` has work left (counted with a dry run, no endpoint call)."""
+    if not semantic_search_enabled():
+        return None
+    provider = get_provider()
+    try:
+        backlog = {kind: _pending(indexing.build(kind, provider, dry_run=True), "would_embed") for kind in indexing.KINDS}
+    except Exception:  # The status line must never break the admin page.
+        logger.warning("Could not count the pending embeddings.", exc_info=True)
+        return None
+    waiting = ", ".join(f"{kind} {count}개" for kind, count in backlog.items() if count)
+    if not waiting:
+        return None
+    return f"갱신 대기: {waiting}. 검색과 비슷한 상품에 아직 반영되지 않았습니다. manage.py build_embeddings 를 실행하세요."
+
+
+def review_summary_backlog_message():
+    """A warning while ``summarize_reviews`` has work left (counted with a dry run, no model call)."""
+    provider = get_chat_provider()
+    if provider is None:
+        return None
+    try:
+        waiting = _pending(review_summaries.summarize(provider, dry_run=True), "would_summarize")
+    except Exception:  # The status line must never break the admin page.
+        logger.warning("Could not count the pending review summaries.", exc_info=True)
+        return None
+    if not waiting:
+        return None
+    return f"요약 대기: {waiting}개 상품. 후기가 바뀐 상품의 요약이 아직 예전 내용입니다. manage.py summarize_reviews 를 실행하세요."
 
 
 def status_message():
@@ -47,6 +86,10 @@ class EmbeddingAdmin(ModelAdmin):
 
     def changelist_view(self, request, extra_context=None):
         self.message_user(request, status_message(), messages.INFO)
+        # Counted on the plain list only: the count reads every source row, too much for each sort/page click.
+        backlog = None if request.GET else embedding_backlog_message()
+        if backlog:
+            self.message_user(request, backlog, messages.WARNING)
         return super().changelist_view(request, extra_context)
 
 
@@ -89,4 +132,8 @@ class ReviewSummaryAdmin(ModelAdmin):
 
     def changelist_view(self, request, extra_context=None):
         self.message_user(request, review_summary_status_message(), messages.INFO)
+        # Counted on the plain list only: one review query per product, too much for each sort/page click.
+        backlog = None if request.GET else review_summary_backlog_message()
+        if backlog:
+            self.message_user(request, backlog, messages.WARNING)
         return super().changelist_view(request, extra_context)

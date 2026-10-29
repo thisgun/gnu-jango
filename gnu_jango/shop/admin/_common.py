@@ -51,6 +51,7 @@ from gnu_jango.utils.admin_display import (
     money_sum,
     snapshot_panel,
 )
+from gnu_jango.utils.date_ranges import local_days, period_days
 
 
 def net_receipt_expression():
@@ -71,11 +72,7 @@ def report_date_range(request):
 
 
 def filter_datetime_range(queryset, field, start, end):
-    if start:
-        queryset = queryset.filter(**{f"{field}__date__gte": start})
-    if end:
-        queryset = queryset.filter(**{f"{field}__date__lte": end})
-    return queryset
+    return queryset.filter(local_days(field, start or None, end or None))
 
 
 def excerpt_text(value, limit=160):
@@ -353,17 +350,8 @@ class DatePeriodFilter(DropdownFilter):
         )
 
     def queryset(self, request, queryset):
-        value = self.value()
-        today = timezone.localdate()
-        if value == "today":
-            return queryset.filter(**{f"{self.field_name}__date": today})
-        if value == "7d":
-            return queryset.filter(**{f"{self.field_name}__date__gte": today - timedelta(days=6)})
-        if value == "month":
-            return queryset.filter(**{f"{self.field_name}__date__year": today.year, f"{self.field_name}__date__month": today.month})
-        if value == "year":
-            return queryset.filter(**{f"{self.field_name}__date__year": today.year})
-        return queryset
+        days = period_days(self.value(), timezone.localdate())
+        return queryset.filter(local_days(self.field_name, *days)) if days else queryset
 
 
 class OrderStatusFilter(DistinctValueDropdownFilter):

@@ -47,6 +47,7 @@ from gnu_jango.shop.order_lines import (
 from gnu_jango.shop.order_line_split import posted_line_quantities
 from gnu_jango.shop.order_points import run_save_order_points_safely, take_back_order_points
 from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES, STATUS_RETURNED
+from gnu_jango.utils.date_ranges import local_days
 
 FAILED_REFUND_WARN_DAYS = 30
 
@@ -660,7 +661,7 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
     def order_ops_context(self, request):
         orders = ShopOrder.objects.all()
         today = timezone.localdate()
-        today_orders = orders.filter(od_datetime__date=today)
+        today_orders = orders.filter(local_days("od_datetime", today, today))
         paid_orders = orders.filter(od_receipt_price__gt=0, od_misu__lte=0, od_cancel_price__lte=0)
         outstanding_orders = orders.filter(od_misu__gt=0)
         shipping_queue = paid_orders.filter(od_invoice="")
@@ -1564,11 +1565,7 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
         coupon_logs = filter_datetime_range(ShopCouponLog.objects.all(), "cl_datetime", start, end)
         raw_logs = filter_datetime_range(ShopOrderData.objects.all(), "dt_time", start, end)
         personal_pays = filter_datetime_range(ShopPersonalPay.objects.all(), "pp_time", start, end)
-        issued_coupons = ShopCoupon.objects.all()
-        if start:
-            issued_coupons = issued_coupons.filter(created_at__date__gte=start)
-        if end:
-            issued_coupons = issued_coupons.filter(created_at__date__lte=end)
+        issued_coupons = filter_datetime_range(ShopCoupon.objects.all(), "created_at", start, end)
 
         if export_type == "orders":
             return self.orders_csv(orders)

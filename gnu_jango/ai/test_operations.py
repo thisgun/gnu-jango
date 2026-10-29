@@ -89,3 +89,15 @@ def test_field_conversions():
 
     field.attname = "embedding"
     assert field.value_to_string(Row()) == "[1.0,2.0]"
+
+
+def test_admin_warns_while_embeddings_are_behind_without_calling_the_endpoint(fake_provider, catalogue):
+    client = Client()
+    client.force_login(MemberFactory(is_staff=True, is_superuser=True))
+    url = reverse("admin:ai_embedding_changelist")
+    with override_settings(**SEMANTIC_ON):
+        assert "갱신 대기: product 2개" in client.get(url).content.decode()
+        call_command("build_embeddings", stdout=StringIO())
+        fake_provider.calls.clear()
+        assert "갱신 대기" not in client.get(url).content.decode()
+    assert fake_provider.calls == []

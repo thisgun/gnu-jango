@@ -22,6 +22,7 @@ from django.utils.translation import gettext_lazy as _
 from simple_history.admin import SimpleHistoryAdmin
 from unfold.admin import ModelAdmin
 
+from gnu_jango.utils.date_ranges import local_days
 from gnu_jango.utils.lib import get_client_ip
 
 AUDIT_PAGE_SIZE = 50
@@ -291,10 +292,7 @@ def _audit_history_rows(
             queryset = queryset.filter(history_type=selected_action)
         if selected_user:
             queryset = queryset.filter(history_user__username__icontains=selected_user)
-        if date_from:
-            queryset = queryset.filter(history_date__date__gte=date_from)
-        if date_to:
-            queryset = queryset.filter(history_date__date__lte=date_to)
+        queryset = queryset.filter(local_days("history_date", date_from or None, date_to or None))
         if selected_query:
             query = Q(history_user__username__icontains=selected_query)
             for field in spec["search_fields"]:
