@@ -22,6 +22,8 @@ from .sales_report import METHOD_COLUMNS, settle_method
 BASELINE_MONTHS = 3
 # Fewer orders than this in the baseline months: too little history to call anything unusual.
 MIN_BASELINE_ORDERS = 10
+# Pace and refunds need this many finished days in the month; one or two days are mostly noise.
+MIN_COMPLETE_DAYS = 3
 # Month-to-date receipts this far from the baseline pace (fraction).
 PACE_CHANGE = 0.3
 PACE_HIGH = 0.5
@@ -259,6 +261,11 @@ def month_report(month, today):
     current_days, baseline_days = daily_sales(start, end), daily_sales(base_start, base_end)
     current, baseline = _totals(current_days, start, end), _totals(baseline_days, base_start, base_end)
     elapsed, base_span = _span(start, end), _span(base_start, base_end)
+    # Amounts are compared over finished days only: today's receipts are still coming in, so on
+    # the 1st a whole-day expectation against a few hours of sales would always read as a slump.
+    complete_end = end - timedelta(days=1) if end >= today else end
+    complete_days = _span(start, complete_end) if complete_end >= start else 0
+    complete = _totals(current_days, start, complete_end)
     enough = baseline["orders"] + baseline["cancels"] >= MIN_BASELINE_ORDERS
     report.update(elapsed_days=elapsed, current=current, baseline=baseline, enough_history=enough)
     if not enough:
@@ -271,9 +278,9 @@ def month_report(month, today):
         return report
     findings = [
         *_silent_methods(current_days, baseline, start, end),
-        *_pace(current, baseline, elapsed, base_span),
+        *(_pace(complete, baseline, complete_days, base_span) if complete_days >= MIN_COMPLETE_DAYS else []),
         *_cancel_rate(current, baseline),
-        *_refunds(current, baseline, elapsed, base_span),
+        *(_refunds(complete, baseline, complete_days, base_span) if complete_days >= MIN_COMPLETE_DAYS else []),
         *_average_order(current, baseline),
         *_days(current_days, baseline_days, start, end, base_start, base_end, today),
     ]

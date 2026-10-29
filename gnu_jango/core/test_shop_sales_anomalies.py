@@ -109,9 +109,30 @@ def test_a_rise_in_cancellations_and_refunds_is_flagged(steady):
     assert found["refund"]["numbers"]["refund"] == 120_000
 
 
+def test_the_first_days_of_a_month_raise_no_pace_alarm(steady):
+    # 10 a.m. on the 2nd: yesterday was a normal day and today has barely started
+    every_day(date(2026, 10, 1), date(2026, 10, 1), method="무통장")
+    every_day(date(2026, 10, 1), date(2026, 10, 1), method="신용카드")
+    assert "pace" not in keys(month_report(date(2026, 10, 2), date(2026, 10, 2)))
+
+
+def test_today_still_coming_in_does_not_count_as_a_slump(steady):
+    every_day(date(2026, 10, 1), TODAY - timedelta(days=1), method="무통장")
+    every_day(date(2026, 10, 1), TODAY - timedelta(days=1), method="신용카드")
+    # nothing yet today
+    assert keys(month_report(TODAY, TODAY)) == ["normal"]
+
+
+def test_a_past_month_compares_every_one_of_its_days(steady):
+    every_day(date(2026, 9, 1), date(2026, 9, 30), method="무통장", amount=4_000)
+    pace = next(f for f in month_report(date(2026, 9, 1), TODAY)["findings"] if f["key"] == "pace")
+    assert pace["numbers"]["days"] == 30
+
+
 def test_month_parameter_falls_back_to_this_month():
     assert _month_param("2026-07", TODAY) == date(2026, 7, 1)
     assert _month_param("2027-01", TODAY) == date(2026, 10, 1)
+    assert _month_param("0001-01", TODAY) == date(2000, 1, 1)
     assert _month_param("not-a-month", TODAY) == date(2026, 10, 1)
     assert _month_param(None, TODAY) == date(2026, 10, 1)
 

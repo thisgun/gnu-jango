@@ -181,14 +181,20 @@ BRIEFING_ERRORS = {
 }
 
 
+EARLIEST_MONTH = date(2000, 1, 1)
+
+
 def _month_param(value, today):
-    """The first day of a ``YYYY-MM`` month, this month when missing, invalid or in the future."""
+    """The first day of a ``YYYY-MM`` month, this month when missing, invalid or in the future.
+
+    Months before 2000 are moved up to it: the baseline reaches three months back, and year 1
+    would step past the first year a date can hold."""
     try:
         year, month = (int(part) for part in str(value or "").split("-")[:2])
         chosen = date(year, month, 1)
     except (TypeError, ValueError):
         return today.replace(day=1)
-    return min(chosen, today.replace(day=1))
+    return max(EARLIEST_MONTH, min(chosen, today.replace(day=1)))
 
 
 def sales_anomalies_view(model_admin, request):
