@@ -13,6 +13,7 @@ the source defect that stops it from holding today.
 import json
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase
@@ -967,6 +968,22 @@ class ProductHitSuggestNotifyTests(CatalogBase):
     def test_a_hit_from_a_new_session_counts_again(self):
         self.client.post(f"{API}/products/MO001/hit")
         self.assertTrue(APIClient().post(f"{API}/products/MO001/hit").json()["data"]["recorded"])
+
+    def test_a_guest_hit_never_starts_a_session_so_a_parallel_cart_add_keeps_its_session(self):
+        # The product page posts its hit as it opens. If that response started a session, a guest
+        # who pressed "장바구니" at the same moment could end up holding the hit's session cookie
+        # and see an empty cart.
+        guest = APIClient()
+        hit = guest.post(f"{API}/products/MO001/hit")
+        self.assertNotIn(settings.SESSION_COOKIE_NAME, hit.cookies)
+        self.assertIn("g5_viewed_products", hit.cookies)
+        self.assertTrue(hit.cookies["g5_viewed_products"]["httponly"])
+
+    def test_a_tampered_hit_cookie_is_ignored(self):
+        guest = APIClient()
+        guest.post(f"{API}/products/MO001/hit")
+        guest.cookies["g5_viewed_products"] = "2026-01-01|MO001"
+        self.assertTrue(guest.post(f"{API}/products/MO001/hit").json()["data"]["recorded"])
 
     def test_suggestions_need_two_characters_and_skip_unsold_products(self):
         self.make_product("SUG-1", "Sugar bowl", it_price=100, it_stock_qty=1)

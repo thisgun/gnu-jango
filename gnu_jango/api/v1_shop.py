@@ -1200,18 +1200,39 @@ def product_hit_view(request, it_id):
         return api_error("Product not found.", status=drf_status.HTTP_404_NOT_FOUND, code="product_not_found")
 
     today = timezone.localdate().isoformat()
-    session_hits = request.session.get("shop_viewed_products", {})
-    if not isinstance(session_hits, dict) or session_hits.get("date") != today:
-        session_hits = {"date": today, "ids": []}
-    stored_ids = session_hits.get("ids", [])
-    seen_ids = [str(value) for value in stored_ids] if isinstance(stored_ids, list) else []
+    seen_ids = _viewed_product_ids(request, today)
     recorded = str(it_id) not in seen_ids
     if recorded:
         ShopProduct.objects.filter(pk=product.pk).update(it_hit=F("it_hit") + 1)
-        session_hits["ids"] = (seen_ids + [str(it_id)])[-100:]
-        request.session["shop_viewed_products"] = session_hits
 
-    return api_response(data={"it_id": it_id, "recorded": recorded})
+    response = api_response(data={"it_id": it_id, "recorded": recorded})
+    if recorded and VIEWED_ID_RE.fullmatch(str(it_id)):
+        _remember_viewed_products(response, today, [*seen_ids, str(it_id)][-VIEWED_COOKIE_MAX_IDS:])
+    return response
+
+
+# The once-a-day hit memory is a cookie of its own, not the session. The product page posts its hit
+# as soon as it opens; a guest without a session would get a new session from that response, and a
+# cart added in the same moment would get another, so whichever Set-Cookie arrived last won and the
+# cart could vanish. A signed cookie holds no server state and cannot replace the session cookie.
+VIEWED_COOKIE = "g5_viewed_products"
+VIEWED_COOKIE_SALT = "gnu_jango.shop.product_hit"
+VIEWED_COOKIE_MAX_IDS = 50
+VIEWED_ID_RE = re.compile(r"[\w.-]{1,64}")
+
+
+def _viewed_product_ids(request, today):
+    raw = request.get_signed_cookie(VIEWED_COOKIE, default="", salt=VIEWED_COOKIE_SALT)
+    day, _, ids = str(raw or "").partition("|")
+    return [value for value in ids.split(",") if value] if day == today else []
+
+
+def _remember_viewed_products(response, today, ids):
+    response.set_signed_cookie(
+        VIEWED_COOKIE, f"{today}|{','.join(ids)}", salt=VIEWED_COOKIE_SALT, max_age=24 * 60 * 60,
+        path=settings.SESSION_COOKIE_PATH, domain=settings.SESSION_COOKIE_DOMAIN,
+        secure=settings.SESSION_COOKIE_SECURE, httponly=True, samesite=settings.SESSION_COOKIE_SAMESITE,
+    )
 
 
 @api_view(["GET"])
