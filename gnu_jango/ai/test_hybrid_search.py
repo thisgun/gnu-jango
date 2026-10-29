@@ -42,6 +42,12 @@ def ids(payload):
     return [(row["type"], row["id"]) for row in payload["data"]["results"]]
 
 
+def without_click_tokens(payload):
+    # click tokens are timestamp-signed, so two identical searches a second apart differ there
+    results = [{key: value for key, value in row.items() if key != "click_token"} for row in payload["data"]["results"]]
+    return {**payload, "data": {**payload["data"], "results": results}}
+
+
 def product_ids(query, **params):
     response = APIClient().get(PRODUCTS, {"q": query, **params})
     assert response.status_code == 200, response.content[:500]
@@ -80,8 +86,8 @@ def test_unified_search_ranks_lexical_and_semantic_agreement_first(indexed):
 
 def test_disabled_ai_returns_identical_results_and_never_calls_the_provider(indexed, fake_provider):
     for query in ("랩탑", "노트북", "반품"):
-        before = unified(query)
-        assert unified(query) == before
+        before = without_click_tokens(unified(query))
+        assert without_click_tokens(unified(query)) == before
     assert product_ids("랩탑") == []
     assert [row["wr_id"] for row in ask("환불 방법")] == [row["wr_id"] for row in ask("환불 방법")]
     assert fake_provider.calls == []
