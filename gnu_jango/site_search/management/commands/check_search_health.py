@@ -6,6 +6,7 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.management.base import BaseCommand, CommandError
 
+from gnu_jango.ai.client import semantic_search_enabled
 from gnu_jango.site_search.maintenance import SOURCES, audit_sources, index_health
 from gnu_jango.site_search.service import ranked_results
 
@@ -36,6 +37,9 @@ class Command(BaseCommand):
                 mismatches += result["mismatches"]
                 cache.set(key, result["cursor"] if result["has_more"] else "", timeout=None)
         report.update(audited_sources=audited, source_mismatches=mismatches)
+        if semantic_search_enabled():
+            from gnu_jango.ai.store import summary
+            report["embeddings"] = summary()
         report["ready"] = report["ready"] and not mismatches
         if report["ready"]:
             start = time.perf_counter()

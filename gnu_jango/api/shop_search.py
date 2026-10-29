@@ -1,6 +1,8 @@
 """Shop product search fields (YoungCart shop/search.php qname / qexplan / qid / qbasic)."""
 from django.db.models import Q
 
+from gnu_jango.ai.client import semantic_search_enabled
+
 from .search import apply_text_search
 
 # selector -> product column; search.php searches it_explan2, the tag-free copy of it_explan
@@ -36,7 +38,12 @@ def search_products(queryset, term, params):
     every_field = len(fields) == len(PRODUCT_SEARCH_FIELDS)
     if every_field:
         # the prepared index covers the name (title) and the other columns (body)
-        return apply_text_search(queryset, term, fallback)
+        lexical = apply_text_search(queryset, term, fallback)
+        if not semantic_search_enabled():
+            return lexical
+        # Optional (G5_AI_SEMANTIC_SEARCH): add on-sale products found by meaning, not words.
+        from gnu_jango.ai.search import fuse_product_queryset
+        return fuse_product_queryset(queryset, lexical, term)
     if fields == ["it_name"]:
         return apply_text_search(queryset, term, fallback, fields=("title",))
     # the index body mixes code, summary and description, so a narrower choice reads the columns

@@ -66,6 +66,13 @@ if _AUDIT_RETENTION_DAYS:
         ),
     )
 
+# Optional semantic search: keep embeddings in step with edits. Incremental (unchanged text is
+# skipped) and capped per run so one run stays inside the worker time limit.
+if getattr(settings, "G5_AI_SEMANTIC_SEARCH", False) and str(getattr(settings, "G5_AI_BASE_URL", "") or "").strip():
+    SCHEDULED_JOBS += (
+        ScheduledJob("build_embeddings", ("--json", "--limit", "200"), ("--json", "--dry-run"), 900),
+    )
+
 JOB_NAMES = tuple(job.name for job in SCHEDULED_JOBS)
 
 
