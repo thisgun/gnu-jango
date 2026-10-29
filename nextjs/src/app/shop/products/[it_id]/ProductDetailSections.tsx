@@ -276,6 +276,33 @@ export function RelatedProducts({
   );
 }
 
+/** 서버가 상품 임베딩으로 고른 비슷한 상품 — 설정이 꺼져 있거나 임베딩이 없으면 비어 있어 그리지 않는다. */
+export function SimilarProducts({
+  items,
+  productRewriteMode,
+}: {
+  items?: ShopProduct[];
+  productRewriteMode?: BbsRewriteMode;
+}) {
+  if (!items || items.length === 0) return null;
+
+  return (
+    <section className="product-related product-similar mt-12 border-t pt-8">
+      <h2 className="product-related-title mb-6 text-xl font-bold">비슷한 상품</h2>
+      <div className="product-related-grid grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+        {items.map((item) => (
+          <ProductGridCard
+            key={item.it_id}
+            item={item}
+            productRewriteMode={productRewriteMode}
+            showComparePrice
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function RecentlyViewed({
   currentId,
   productRewriteMode,

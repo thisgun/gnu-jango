@@ -461,6 +461,8 @@ export interface ShopProduct {
   review_avg?: number;
   qa_count?: number;
   related_items?: ShopProduct[];
+  /** 임베딩이 가까운 판매 중 상품(최대 4개, 관련 상품 제외) — G5_AI_SIMILAR_PRODUCTS 가 꺼져 있으면 []. */
+  similar_items?: ShopProduct[];
   prev_item?: ShopProductNavItem | null;
   next_item?: ShopProductNavItem | null;
 }

@@ -149,6 +149,9 @@ class ShopProductDetailSerializer(ShopProductSerializer):
     next_item = ShopProductSerializer(allow_null=True)
     # [] when de_rel_list_use is off
     related_items = ShopProductSerializer(many=True)
+    # up to 4 on-sale products nearest by embedding, never one of related_items;
+    # [] unless G5_AI_SIMILAR_PRODUCTS is on and this product has an embedding
+    similar_items = ShopProductSerializer(many=True)
 
 
 class ShopCategoryDetailSerializer(serializers.Serializer):

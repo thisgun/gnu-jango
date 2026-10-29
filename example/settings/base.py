@@ -909,6 +909,11 @@ G5_AI_QUERY_TIMEOUT = de_config("G5_AI_QUERY_TIMEOUT", default=3, cast=int)
 G5_AI_SEMANTIC_SEARCH = bool_config("G5_AI_SEMANTIC_SEARCH", default=False)
 # Nearest neighbours below this cosine similarity are not added to search results.
 G5_AI_SEMANTIC_MIN_SIMILARITY = de_config("G5_AI_SEMANTIC_MIN_SIMILARITY", default=0.5, cast=float)
+# Phase 2: "similar products" on the product page, from the stored product embeddings (no endpoint
+# call per page view). Follows G5_AI_SEMANTIC_SEARCH unless set. Product-to-product scores run
+# higher than query-to-product ones, hence the separate, stricter floor.
+G5_AI_SIMILAR_PRODUCTS = bool_config("G5_AI_SIMILAR_PRODUCTS", default=G5_AI_SEMANTIC_SEARCH)
+G5_AI_SIMILAR_MIN_SIMILARITY = de_config("G5_AI_SIMILAR_MIN_SIMILARITY", default=0.65, cast=float)
 
 # Unified DB search: PostgreSQL FTS or the portable token inverted index.
 G5_SEARCH_ENABLED = bool_config("G5_SEARCH_ENABLED", default=True)

@@ -10,7 +10,7 @@ import { sanitizeCommerceHtml } from "@/lib/sanitize";
 import type { ShopRelatedDisplay } from "@/lib/shop-display";
 import { productPointLabel } from "@/components/shop/productDetailHelpers";
 import { RecommendationDialog, RestockAlertDialog } from "./ProductDetailDialogs";
-import { ProductImageGallery, RecentlyViewed, RelatedProducts } from "./ProductDetailSections";
+import { ProductImageGallery, RecentlyViewed, RelatedProducts, SimilarProducts } from "./ProductDetailSections";
 import { ProductDetailTabs, type ProductDetailTab } from "./ProductDetailTabs";
 import { ProductPurchaseControls, type ProductPurchaseControlsProps } from "./ProductPurchaseControls";
 import { ProductPurchasePanel, type ShippingPaymentDisplay } from "./ProductPurchasePanel";
@@ -136,6 +136,8 @@ export function ProductDetailView({
       />
 
       <RelatedProducts items={product.related_items} productRewriteMode={productRewriteMode} display={relatedDisplay} />
+
+      <SimilarProducts items={product.similar_items} productRewriteMode={productRewriteMode} />
 
       <RecentlyViewed currentId={itId || product.it_id} productRewriteMode={productRewriteMode} />
 

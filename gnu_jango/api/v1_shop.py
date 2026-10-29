@@ -78,6 +78,7 @@ from gnu_jango.shop.shipping import (
     current_shipping_policy,
     shipping_quote,
 )
+from gnu_jango.ai.recommend import similar_products
 from gnu_jango.shop.product_relations import related_product_ids
 from gnu_jango.shop.shop_display import category_list_display, related_list_enabled
 from gnu_jango.shop.taxes import calculate_order_tax_amounts
@@ -517,6 +518,14 @@ def product_payload(product, request=None, *, detail=False):
             for item_id in related_ids
             if item_id in related_by_id
         ]
+        # Optional (G5_AI_SIMILAR_PRODUCTS): on-sale products nearest to this one by meaning,
+        # from the stored embeddings, leaving out the admin's related products.
+        similar = similar_products(
+            product,
+            annotate_product_coupon_badge(on_sale_products().select_related("category")),
+            exclude=related_ids,
+        )
+        data["similar_items"] = [product_payload(item) for item in similar]
     return data
 
 

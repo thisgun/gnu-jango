@@ -7472,6 +7472,12 @@
                         "items": {
                             "$ref": "#/components/schemas/ShopProduct"
                         }
+                    },
+                    "similar_items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopProduct"
+                        }
                     }
                 },
                 "required": [
@@ -7532,6 +7538,7 @@
                     "related_items",
                     "review_avg",
                     "review_count",
+                    "similar_items",
                     "stock_sms_privacy"
                 ]
             },

@@ -3163,6 +3163,7 @@ export interface components {
             prev_item: components["schemas"]["ShopProduct"] | null;
             next_item: components["schemas"]["ShopProduct"] | null;
             related_items: components["schemas"]["ShopProduct"][];
+            similar_items: components["schemas"]["ShopProduct"][];
         };
         ShopProductDetailEnvelope: {
             data: components["schemas"]["ShopProductDetail"];
