@@ -56,6 +56,7 @@ from .logo_uploads import delete_logo_file, logo_form_fields, store_logo
 from .sms import icode as sms_gateway
 from .sms.service import reserve_test_send, send_test_message, sms_settings
 from .shop_options import (
+    ALERT_OPTIONS,
     COMPANY_OPTIONS,
     HOME_LIST_TYPES,
     LIST_OPTIONS,
@@ -162,6 +163,9 @@ SETTINGS_GROUPS = (
     ("etc-group", "기타 설정", (
         ("reviews", "상품 후기", "상품 후기 작성 자격과 공개 방식입니다.", ["de_item_use_write", "de_item_use_use"]),
         ("cart", "장바구니", "장바구니에 담은 상품의 보관 방식입니다.", ["de_guest_cart_use", "de_cart_keep_term"]),
+        ("alerts", "알림·장바구니 메일",
+         "가격 인하 알림, 재입고 SMS 자동 발송, 장바구니 알림 메일입니다. 예약 작업(send_shop_alerts)이 보냅니다.",
+         [option.name for option in ALERT_OPTIONS]),
         ("coupon", "신규회원 쿠폰", "회원가입을 마친 회원에게 발행하는 쿠폰입니다.",
          ["de_member_reg_coupon_use", "de_member_reg_coupon_price", "de_member_reg_coupon_minimum",
           "de_member_reg_coupon_term"]),

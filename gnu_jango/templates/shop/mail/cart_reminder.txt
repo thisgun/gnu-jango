@@ -1,0 +1,10 @@
+{% load humanize %}{% autoescape off %}{{ member_name }}님, 장바구니에 담아 두신 상품이 아직 주문되지 않았습니다.
+{% for line in lines %}
+- {{ line.it_name }}{% if line.option %} ({{ line.option }}){% endif %} {{ line.qty }}개{% endfor %}
+{% if coupon %}
+{{ coupon.cp_price|intcomma }}원 할인 쿠폰을 드렸어요. {% if coupon.cp_minimum %}{{ coupon.cp_minimum|intcomma }}원 이상 주문 시, {% endif %}{{ coupon.cp_end|date:"Y-m-d" }}까지 사용할 수 있습니다.
+{% endif %}{% if cart_url %}
+장바구니: {{ cart_url }}
+{% endif %}
+{% if agreed_on %}{{ agreed_on }}에 {% endif %}정보 메일 수신에 동의하셔서 보내 드리는 광고성 메일입니다. 더 받지 않으려면 회원정보 수정{% if profile_url %}({{ profile_url }}){% endif %}에서 '정보 메일 수신'을 해제하세요.
+{% endautoescape %}

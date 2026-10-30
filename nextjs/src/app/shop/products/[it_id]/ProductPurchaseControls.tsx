@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BellOff, Heart, ShoppingCart } from "lucide-react";
+import { Bell, BellOff, BellRing, Heart, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ShopProduct } from "@/lib/api";
 import {
@@ -21,6 +21,11 @@ export type ProductPurchaseControlsProps = Omit<ProductOptionPickerProps, "produ
   onAddToCart: () => void;
   onBuyNow: () => void;
   onWishlist: () => void;
+  /** 가격 인하 알림 — 쇼핑몰이 켰을 때만 단추를 보인다(useProductPriceAlert). */
+  priceAlertEnabled: boolean;
+  priceAlerted: boolean;
+  priceAlertBusy: boolean;
+  onTogglePriceAlert: () => void;
 };
 
 /**
@@ -52,6 +57,10 @@ export function ProductPurchaseControls({
   onAddToCart,
   onBuyNow,
   onWishlist,
+  priceAlertEnabled,
+  priceAlerted,
+  priceAlertBusy,
+  onTogglePriceAlert,
   ...pickerProps
 }: ProductPurchaseControlsProps) {
   return (
@@ -94,6 +103,20 @@ export function ProductPurchaseControls({
               바로구매
             </Button>
           </>
+        )}
+        {priceAlertEnabled && canPurchaseProduct && (
+          <Button
+            className="product-action-price-alert"
+            variant="outline"
+            size="lg"
+            aria-label={priceAlerted ? "가격 인하 알림 해제" : "가격 인하 알림 신청"}
+            aria-pressed={priceAlerted}
+            title={priceAlerted ? "가격 인하 알림 해제" : "가격이 내려가면 알림 받기"}
+            onClick={onTogglePriceAlert}
+            disabled={priceAlertBusy}
+          >
+            <BellRing className="h-4 w-4" />
+          </Button>
         )}
         <Button
           className="product-action-wish"

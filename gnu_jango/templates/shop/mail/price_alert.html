@@ -1,0 +1,13 @@
+{% extends "shop/mail/_base.html" %}
+{% load humanize %}
+{% block heading %}관심 상품의 가격이 내려갔습니다{% endblock %}
+{% block content %}
+<table style="width:100%;border-collapse:collapse;"><tr>{% if image_url %}
+<td style="width:120px;vertical-align:top;padding-right:12px;">{% if product_url %}<a href="{{ product_url }}">{% endif %}<img src="{{ image_url }}" alt="{{ product.it_name }}" width="120" style="display:block;max-width:120px;border:1px solid #e7e5e4;border-radius:6px;">{% if product_url %}</a>{% endif %}</td>{% endif %}
+<td style="vertical-align:top;">
+<p style="margin:0;font-size:16px;font-weight:bold;">{{ product.it_name }}</p>
+<p style="margin:8px 0 0;"><span style="color:#a8a29e;text-decoration:line-through;">{{ old_price|intcomma }}원</span> → <strong style="color:#0a8f45;">{{ new_price|intcomma }}원</strong></p>{% if product_url %}
+<p style="margin:12px 0 0;"><a href="{{ product_url }}" style="display:inline-block;padding:8px 14px;background:#0a8f45;color:#ffffff;text-decoration:none;border-radius:6px;">상품 보러 가기</a></p>{% endif %}
+</td></tr></table>
+<p style="margin-top:16px;font-size:12px;color:#a8a29e;">상품 페이지에서 가격 인하 알림을 신청하셔서 한 번 보내 드리는 메일입니다. 가격은 바뀔 수 있습니다.</p>
+{% endblock %}

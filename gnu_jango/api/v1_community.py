@@ -368,6 +368,7 @@ def settings_view(request):
 
 def settings_response(request):
     from gnu_jango.shop.shop_display import list_display, public_logo_urls
+    from gnu_jango.shop.price_alerts import price_alerts_enabled
 
     data = config.get_all()
     visit_stats_payload = visit_stats()
@@ -396,6 +397,8 @@ def settings_response(request):
             "infinite_scroll": config_to_bool(data.get("cf_infinite_scroll")),
             "comment_editor": False,
             "pwa_enabled": False,
+            # de_price_alert_use: product pages offer the 가격 인하 알림 button
+            "price_alert_enabled": price_alerts_enabled(),
             "visit": visit_stats_payload,
             # Shop logos (uploaded in the shop settings; "" when not uploaded) and the
             # search / type-list / related-products layout from the shop display settings.
@@ -818,6 +821,11 @@ def member_me_view(request):
         if wanted_open != profile.open_profile:
             profile.open_profile = wanted_open
             profile.open_profile_date = timezone.now()  # register_form_update.php: mb_open_date = today
+    if "mb_mailling" in data:
+        wanted_mailing = truthy_flag(data.get("mb_mailling"))
+        if wanted_mailing != profile.mailing:
+            profile.mailing = wanted_mailing
+            profile.mailing_date = timezone.now()
 
     user.save()
     profile.save()
