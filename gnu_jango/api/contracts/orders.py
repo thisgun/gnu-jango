@@ -4,7 +4,7 @@
   guest's (the session), the same shape for both.
 * ``GET /api/v1/shop/orders`` - ``v1_shop.order_payload(order)`` per order, numbered-page meta.
 * ``GET /api/v1/shop/orders/{od_id}`` - ``order_payload(order, detail=True)``: the list shape plus
-  the order lines and the cash receipt offer.
+  the order lines, the cash receipt offer and the shipment tracking.
 
 Neither the cart lines nor the order lines nest a product payload: they copy the few product
 columns they need, so nothing of ``contracts.shop`` is reused here.
@@ -121,6 +121,35 @@ class ShopOrderCashReceiptSerializer(serializers.Serializer):
     request_url = serializers.CharField(allow_blank=True)
 
 
+class ShopOrderTrackingEventSerializer(serializers.Serializer):
+    """One Delivery Tracker event of ``shop.delivery_tracking.tracking_payload``."""
+
+    # RFC 3339 with the carrier's offset, "" when the carrier gave no time
+    time = serializers.CharField(allow_blank=True)
+    # Delivery Tracker TrackEventStatusCode (IN_TRANSIT, DELIVERED, ...)
+    status = serializers.CharField()
+    # the carrier's own wording, else the Korean label of the status
+    status_label = serializers.CharField()
+    location = serializers.CharField(allow_blank=True)
+    description = serializers.CharField(allow_blank=True)
+
+
+class ShopOrderShipmentTrackingSerializer(serializers.Serializer):
+    """``shop.delivery_tracking.tracking_payload``: the latest tracking of the order's invoice."""
+
+    carrier_id = serializers.CharField()
+    # TrackEventStatusCode of the most likely current event, "" before the first event
+    status = serializers.CharField(allow_blank=True)
+    status_label = serializers.CharField(allow_blank=True)
+    delivered = serializers.BooleanField()
+    # ISO date-times in the site's time zone, "" when unknown
+    delivered_at = serializers.CharField(allow_blank=True)
+    last_event_at = serializers.CharField(allow_blank=True)
+    last_checked_at = serializers.CharField(allow_blank=True)
+    # newest first, at most 30
+    events = ShopOrderTrackingEventSerializer(many=True)
+
+
 class ShopOrderSerializer(serializers.Serializer):
     """``v1_shop.order_payload(order)`` as the order list shows it.
 
@@ -234,7 +263,10 @@ class ShopOrderSerializer(serializers.Serializer):
 
 
 class ShopOrderDetailSerializer(ShopOrderSerializer):
-    """``order_payload(order, detail=True)``: the list shape plus the lines and the cash receipt."""
+    """``order_payload(order, detail=True)``: the list shape plus the lines, the cash receipt and
+    the shipment tracking."""
 
     cash_receipt = ShopOrderCashReceiptSerializer()
     items = ShopOrderLineSerializer(many=True)
+    # null unless 배송조회 is on with its keys and the invoice of a tracked courier has events
+    shipment_tracking = ShopOrderShipmentTrackingSerializer(allow_null=True)

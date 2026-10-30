@@ -1,0 +1,13 @@
+{% extends "shop/mail/_base.html" %}
+{% block heading %}배송완료 안내{% endblock %}
+{% block content %}
+<p>{{ order.od_name }}님, 주문하신 상품의 배송이 완료되었습니다.</p>
+<p style="margin:12px 0;"><strong>주문번호</strong> {{ order.od_id }}</p>
+{% include "shop/mail/_order_lines.html" with show_status=True %}
+<h2 style="font-size:15px;margin:16px 0 6px;">배송 정보</h2>
+<p style="margin:0;"><strong>배송회사</strong> {{ order.od_delivery_company }}</p>
+<p style="margin:0;"><strong>운송장번호</strong> {{ order.od_invoice }}</p>{% if delivered_at %}
+<p style="margin:0;"><strong>배송완료</strong> {{ delivered_at }}{% if delivered_location %} ({{ delivered_location }}){% endif %}</p>{% endif %}
+<p style="margin-top:12px;color:#57534e;">상품을 받지 못하셨다면 배송회사 또는 쇼핑몰 고객센터로 문의해 주세요.</p>{% if order_url %}
+<p style="margin-top:20px;"><a href="{{ order_url }}" style="display:inline-block;padding:10px 16px;background:#0a8f45;color:#ffffff;text-decoration:none;border-radius:6px;">주문 상세 보기</a></p>{% endif %}
+{% endblock %}

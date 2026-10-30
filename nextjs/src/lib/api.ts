@@ -673,6 +673,29 @@ export interface ShopOrderCashReceipt {
   request_url: string;
 }
 
+/** 배송조회(Delivery Tracker) 이벤트 하나. time 은 택배사 시간대의 ISO 문자열, 모르면 빈 값. */
+export interface ShopShipmentTrackingEvent {
+  time: string;
+  /** Delivery Tracker 상태 코드(IN_TRANSIT, DELIVERED …). */
+  status: string;
+  status_label: string;
+  location: string;
+  description: string;
+}
+
+/** 주문 상세에서만 오는 배송조회 결과 — 배송조회를 쓰지 않거나 아직 조회 결과가 없으면 null. */
+export interface ShopShipmentTracking {
+  carrier_id: string;
+  status: string;
+  status_label: string;
+  delivered: boolean;
+  delivered_at: string;
+  last_event_at: string;
+  last_checked_at: string;
+  /** 최신 이벤트가 먼저. */
+  events: ShopShipmentTrackingEvent[];
+}
+
 export interface ShopOrder {
   od_id: string;
   item_count?: number;
@@ -748,6 +771,8 @@ export interface ShopOrder {
   delivery_inquiry_url?: string;
   /** 배송회사 문의전화(영카트 get_delivery_inquiry) — 목록에 없는 배송회사면 빈 값. */
   delivery_inquiry_tel?: string;
+  /** 주문 상세에서만 오는 배송조회 타임라인. */
+  shipment_tracking?: ShopShipmentTracking | null;
   // 현금영수증 — PG 발급 결과. od_cash=1 이면 발급된 상태.
   od_cash?: number;
   od_cash_request?: boolean;

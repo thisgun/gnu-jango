@@ -19,6 +19,7 @@ from . import (
     v1_views,
 )
 from .shop_cash_receipts import order_cash_receipt_view
+from .shop_delivery_tracker import delivery_tracker_webhook_view
 from .shop_returns import order_return_withdraw_view, order_returns_view
 
 app_name = "api_v1"
@@ -144,6 +145,11 @@ urlpatterns = [
         name="shop-payment-nicepay-vbank-notification",
     ),
     path("shop/payment/toss/vbank/webhook", v1_shop.toss_vbank_webhook_view, name="shop-payment-toss-vbank-webhook"),
+    path(
+        "shop/delivery-tracker/webhook/<str:token>",
+        delivery_tracker_webhook_view,
+        name="shop-delivery-tracker-webhook",
+    ),
     path("shop/payment/callback/<str:provider>", v1_shop.payment_callback_view, name="shop-payment-callback"),
     path("shop/naverpay/order", v1_shop.naverpay_order_view, name="shop-naverpay-order"),
     path("shop/naverpay/wish", v1_shop.naverpay_wish_view, name="shop-naverpay-wish"),

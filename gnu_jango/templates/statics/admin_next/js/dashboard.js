@@ -17,6 +17,33 @@
       });
     });
 
+    // A POST button inside another form (e.g. 배송조회 '지금 조회' on the order change form):
+    // forms cannot nest, so post a small form of its own with the page's CSRF token. The button
+    // only names the action; the address is fixed here, relative to the object's change page.
+    var POST_ACTIONS = { 'tracking-refresh': '../tracking-refresh/' };
+    document.querySelectorAll('button[data-g5-post]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var token = document.querySelector('input[name="csrfmiddlewaretoken"]');
+        var action = Object.prototype.hasOwnProperty.call(POST_ACTIONS, button.getAttribute('data-g5-post'))
+          ? POST_ACTIONS[button.getAttribute('data-g5-post')]
+          : '';
+        if (!token || !action || button.disabled) {
+          return;
+        }
+        button.disabled = true;
+        var form = document.createElement('form');
+        form.method = 'post';
+        form.action = action;
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'csrfmiddlewaretoken';
+        input.value = token.value;
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+      });
+    });
+
     var toggle = document.querySelector('[data-admin-menu-toggle]');
     if (toggle) {
       toggle.addEventListener('click', function () {

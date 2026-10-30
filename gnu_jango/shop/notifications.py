@@ -1,8 +1,8 @@
 """Shop mails, after youngcart: the order mails of shop/ordermail1.inc.php and ordermail2.inc.php
 (a notice to the shop admin and an order summary to the customer), the processing mail of
 adm/shop_admin/ordermail.inc.php (입금 확인 / 배송 안내), the product recommendation of
-shop/itemrecommendmail.php, and the status mails of the customer's return / exchange requests
-(shop/returns.py).
+shop/itemrecommendmail.php, the 배송완료 안내 of the shipment tracking (not in youngcart) and the
+status mails of the customer's return / exchange requests (shop/returns.py).
 
 Every mail obeys cf_email_use (기본환경설정 > 메일발송 사용). Order mails are queued with
 transaction.on_commit so they only leave once the order is saved, and a mail server failure is
@@ -208,6 +208,28 @@ def send_order_status_mail(order_id, status):
     return True
 
 
+def send_order_delivered_mail(order_id):
+    """배송완료 안내: the shipment tracking found the order delivered and moved it to 완료
+    (shop/delivery_tracking.py, only with 배송완료 시 주문 완료 처리 on)."""
+    from gnu_jango.shop.models import ShopShipmentTracking
+
+    if not mail_enabled():
+        return False
+    order = ShopOrder.objects.filter(pk=order_id).first()
+    if order is None or not order.od_email:
+        return False
+    tracking = ShopShipmentTracking.objects.filter(order_id=order.pk).first()
+    delivered_at = ""
+    location = ""
+    if tracking and tracking.delivered_at:
+        delivered_at = timezone.localtime(tracking.delivered_at).strftime("%Y-%m-%d %H:%M")
+    if tracking and tracking.events and isinstance(tracking.events[-1], dict):
+        location = single_line(tracking.events[-1].get("location"))
+    context = {**order_context(order), "delivered_at": delivered_at, "delivered_location": location}
+    subject = f"{site_title()} - {order.od_name}님 주문 상품 배송완료 안내"
+    return send_shop_mail(subject, "order_delivered", context, [order.od_email])
+
+
 def _run_safely(callback, *args):
     try:
         callback(*args)
@@ -226,6 +248,11 @@ def queue_order_status_mail(order, status):
         return
     order_id = order.pk
     transaction.on_commit(lambda: _run_safely(send_order_status_mail, order_id, status))
+
+
+def queue_order_delivered_mail(order):
+    order_id = order.pk
+    transaction.on_commit(lambda: _run_safely(send_order_delivered_mail, order_id))
 
 
 def send_return_request_mails(request_id, status):

@@ -149,11 +149,23 @@ LIST_OPTIONS = (
                  min_value=1, max_value=4),
 )
 
+# Delivery Tracker shipment tracking (shop/delivery_tracking.py). Not youngcart settings: the
+# names are new, so the gnuboard import never fills them. The API keys are separate sealed rows
+# (shop/delivery_tracking_settings.py).
+TRACKING_OPTIONS = (
+    ConfigOption("de_tracking_use", "배송조회 사용", kind="bool", default="0",
+                 help_text="켜면 배송 중인 주문의 배송 상태를 Delivery Tracker에서 조회해 주문 상세에 표시합니다. "
+                           "Client ID와 Client Secret을 모두 등록해야 동작하며, 그 전에는 배송 조회 링크만 표시합니다."),
+    ConfigOption("de_tracking_complete_delivered", "배송완료 시 주문 완료 처리", kind="bool", default="0",
+                 help_text="켜면 배송완료가 확인된 배송 상태의 주문을 '완료'로 바꾸고 고객에게 배송완료 메일을 보냅니다. "
+                           "구매 포인트 지급과 주문 이력은 관리자가 완료 처리할 때와 같습니다."),
+)
+
 SHOP_CONFIG_OPTIONS = {
     option.name: option
     for option in (
         *COMPANY_OPTIONS, *ORDER_OPTIONS, *POINT_OPTIONS, *RETURN_OPTIONS, *ALERT_OPTIONS, *HOME_LIST_OPTIONS,
-        *LIST_OPTIONS,
+        *LIST_OPTIONS, *TRACKING_OPTIONS,
     )
 }
 

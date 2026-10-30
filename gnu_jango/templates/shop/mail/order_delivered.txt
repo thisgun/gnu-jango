@@ -1,0 +1,17 @@
+{% autoescape off %}[{{ site_title }}] 배송완료 안내
+
+{{ order.od_name }}님, 주문하신 상품의 배송이 완료되었습니다.
+
+주문번호: {{ order.od_id }}
+
+{% include "shop/mail/_order_lines.txt" with show_status=True %}
+
+[배송 정보]
+배송회사: {{ order.od_delivery_company }}
+운송장번호: {{ order.od_invoice }}{% if delivered_at %}
+배송완료: {{ delivered_at }}{% if delivered_location %} ({{ delivered_location }}){% endif %}{% endif %}
+
+상품을 받지 못하셨다면 배송회사 또는 쇼핑몰 고객센터로 문의해 주세요.{% if order_url %}
+
+주문 상세: {{ order_url }}{% endif %}
+{% endautoescape %}
