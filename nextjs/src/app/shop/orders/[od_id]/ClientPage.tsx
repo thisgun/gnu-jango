@@ -25,6 +25,7 @@ import { cancelMyOrder, getMyOrder } from "@/services/member";
 import { getClientPublicSettings } from "@/services/settings";
 import { CashReceiptPanel } from "./CashReceiptPanel";
 import { OrderDetailItems } from "./OrderDetailItems";
+import { ShipmentTimeline } from "./ShipmentTimeline";
 
 // 백엔드의 그누보드5 표준 상태값(주문·입금·준비·배송·완료·취소)을 그대로 쓰고, 라벨은 주문 목록과 같은 표를 쓴다.
 const TIMELINE_STEPS: readonly string[] = ORDER_PROGRESS_STEPS;
@@ -485,6 +486,7 @@ export default function OrderDetailPage() {
                       발송일: {formatDateTime(order.od_invoice_time)}
                     </p>
                   )}
+                {order.shipment_tracking && <ShipmentTimeline tracking={order.shipment_tracking} />}
               </div>
             ) : (
               <div className="sm:col-span-2 mt-2 rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">

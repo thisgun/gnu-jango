@@ -116,6 +116,7 @@ const API_MESSAGES: Record<string, string> = {
   "This payment method requires a verified payment provider.": "이 결제수단은 결제대행사 연동 후 사용할 수 있습니다.",
   "Invalid Toss virtual account callback.": "토스 가상계좌 입금 알림이 올바르지 않습니다.",
   "Invalid Toss virtual account callback secret.": "토스 가상계좌 입금 알림 인증값이 올바르지 않습니다.",
+  "Invalid Delivery Tracker callback.": "배송조회 알림이 올바르지 않습니다.",
   "Payment callback secret is not configured.": "결제 알림 인증값이 설정되어 있지 않습니다.",
   "Invalid payment callback secret.": "결제 알림 인증값이 올바르지 않습니다.",
   "Payment callback did not report success.": "결제가 완료되지 않았습니다.",

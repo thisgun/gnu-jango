@@ -56,6 +56,7 @@ from gnu_jango.shop.cash_receipts import customer_payload as cash_receipt_payloa
 from gnu_jango.shop.coupon_dates import coupon_end_date
 from gnu_jango.shop.inventory import StockAdjustmentError, cancel_order_with_stock_restore, reserve_product_stock
 from gnu_jango.shop.delivery import delivery_inquiry
+from gnu_jango.shop.delivery_tracking import tracking_payload
 from gnu_jango.shop.images import upload_product_images
 from gnu_jango.shop.item_info import item_info_rows, kind_title
 from gnu_jango.shop.notifications import queue_order_placed_mails
@@ -681,6 +682,8 @@ def order_payload(order, *, detail=False):
     }
     if detail:
         data["items"] = [order_item_payload(item) for item in items]
+        # Delivery Tracker's events for the courier and invoice above; null while tracking is off
+        data["shipment_tracking"] = tracking_payload(order)
     return data
 
 

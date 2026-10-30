@@ -964,6 +964,43 @@ class ShopPaymentAttempt(models.Model):
         return f"{self.od_id}/{self.provider}/{self.state}"
 
 
+class ShopShipmentTracking(models.Model):
+    """What Delivery Tracker (tracker.delivery) last said about an order's shipment.
+
+    One row per order, written by shop.delivery_tracking only. The row belongs to the courier
+    and invoice it was fetched for (``delivery_company`` / ``invoice`` as the order had them):
+    once the order's courier or invoice changes, the row is started over on the next fetch and
+    is not shown meanwhile. ``events`` keeps at most the newest 30 events, oldest first, as
+    {"time", "status", "name", "location", "description"} dicts."""
+
+    order = models.OneToOneField(ShopOrder, on_delete=models.CASCADE, related_name="shipment_tracking")
+    delivery_company = models.CharField(max_length=100, blank=True, default="")
+    invoice = models.CharField(max_length=100, blank=True, default="")
+    # the Delivery Tracker carrier id (e.g. kr.cjlogistics) and the invoice as it was sent
+    carrier_id = models.CharField(max_length=64, blank=True, default="")
+    tracking_number = models.CharField(max_length=100, blank=True, default="")
+    status_code = models.CharField(max_length=32, blank=True, default="")
+    status_label = models.CharField(max_length=100, blank=True, default="")
+    last_event_at = models.DateTimeField(null=True, blank=True)
+    events = models.JSONField(default=list, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    started_at = models.DateTimeField(default=timezone.now)
+    last_checked_at = models.DateTimeField(null=True, blank=True)
+    next_check_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    failures = models.PositiveSmallIntegerField(default=0)
+    last_error = models.CharField(max_length=255, blank=True, default="")
+    webhook_expires_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Shop shipment tracking")
+        verbose_name_plural = _("Shop shipment trackings")
+        indexes = [models.Index(fields=["carrier_id", "tracking_number"])]
+
+    def __str__(self):
+        return f"{self.order_id}/{self.carrier_id}/{self.status_code or '-'}"
+
+
 class ShopPersonalPay(models.Model):
     pp_id = models.CharField(max_length=40, primary_key=True)
     user = models.ForeignKey(

@@ -45,6 +45,49 @@
     </article>
   </div>
 
+  {% with tracking=order_detail_ops.tracking %}{% if tracking %}
+  <section class="g5-admin-order-tracking" aria-labelledby="g5-order-tracking-title">
+    <div class="g5-admin-order-tracking-head">
+      <div class="g5-admin-order-detail-section-title">
+        <p class="g5-admin-eyebrow">배송조회 · Delivery Tracker</p>
+        <h3 id="g5-order-tracking-title">
+          <span class="g5-admin-badge g5-admin-badge-{% if tracking.delivered %}success{% elif tracking.last_error %}warning{% else %}info{% endif %}">{{ tracking.status_label }}</span>
+        </h3>
+      </div>
+      {% if tracking.can_refresh %}
+      {# type="button": the change form's own submit stays the default for Enter; dashboard.js posts it #}
+      <button type="button" class="g5-admin-order-tracking-refresh" data-g5-post-url="{{ tracking.refresh_url }}">
+        <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
+        지금 조회
+      </button>
+      {% endif %}
+    </div>
+    {% if tracking.note %}<p class="g5-admin-order-tracking-note">{{ tracking.note }}</p>{% endif %}
+    {% if tracking.last_error %}<p class="g5-admin-order-tracking-note g5-admin-order-tracking-error" role="status">{{ tracking.last_error }}</p>{% endif %}
+    {% if tracking.has_row %}
+    <dl class="g5-admin-order-tracking-facts">
+      <div><dt>택배사 코드</dt><dd>{{ tracking.carrier_id }}</dd></div>
+      <div><dt>마지막 이벤트</dt><dd>{{ tracking.last_event_at }}</dd></div>
+      <div><dt>배송완료</dt><dd>{{ tracking.delivered_at }}</dd></div>
+      <div><dt>마지막 조회</dt><dd>{{ tracking.last_checked_at }}</dd></div>
+      <div><dt>다음 자동 조회</dt><dd>{{ tracking.next_check_at }}</dd></div>
+      <div><dt>웹훅 만료</dt><dd>{{ tracking.webhook_expires_at }}</dd></div>
+    </dl>
+    {% if tracking.events %}
+    <ol class="g5-admin-order-tracking-events" aria-label="최근 배송 이벤트">
+      {% for event in tracking.events %}
+      <li>
+        <time>{{ event.time }}</time>
+        <strong>{{ event.status_label }}</strong>
+        <small>{{ event.location|default:"-" }}{% if event.description %} · {{ event.description }}{% endif %}</small>
+      </li>
+      {% endfor %}
+    </ol>
+    {% endif %}
+    {% endif %}
+  </section>
+  {% endif %}{% endwith %}
+
   <div class="g5-admin-order-detail-grid">
     <section class="g5-admin-order-detail-risks" aria-label="{% translate 'Risk signals' %}">
       <div class="g5-admin-order-detail-section-title">

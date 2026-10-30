@@ -84,6 +84,14 @@ if (
         ScheduledJob("summarize_reviews", ("--json", "--limit", "20"), ("--json", "--dry-run"), 3600),
     )
 
+# Optional shipment tracking (Delivery Tracker): every 5 minutes, at most 30 lookups per run. The
+# keys live in the shop settings, so the command itself also does nothing until 배송조회 is on
+# with both keys saved.
+if getattr(settings, "SHOP_DELIVERY_TRACKING_JOB", False):
+    SCHEDULED_JOBS += (
+        ScheduledJob("track_shipments", ("--apply", "--json", "--limit", "30"), ("--json",), 300),
+    )
+
 JOB_NAMES = tuple(job.name for job in SCHEDULED_JOBS)
 
 

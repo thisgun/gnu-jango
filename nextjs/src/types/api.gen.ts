@@ -2918,7 +2918,10 @@ export interface components {
             message: string;
             request_url: string;
         };
-        /** @description ``order_payload(order, detail=True)``: the list shape plus the lines and the cash receipt. */
+        /**
+         * @description ``order_payload(order, detail=True)``: the list shape plus the lines, the cash receipt and
+         *     the shipment tracking.
+         */
         ShopOrderDetail: {
             od_id: string;
             uid: string;
@@ -3006,6 +3009,7 @@ export interface components {
             can_cancel: boolean;
             cancel_block_reason: string;
             items: components["schemas"]["ShopOrderLine"][];
+            shipment_tracking: components["schemas"]["ShopOrderShipmentTracking"] | null;
         };
         ShopOrderDetailEnvelope: {
             data: components["schemas"]["ShopOrderDetail"];
@@ -3039,6 +3043,25 @@ export interface components {
             ct_notax: number;
             ct_send_cost: number;
             image_url: string;
+        };
+        /** @description ``shop.delivery_tracking.tracking_payload``: the latest tracking of the order's invoice. */
+        ShopOrderShipmentTracking: {
+            carrier_id: string;
+            status: string;
+            status_label: string;
+            delivered: boolean;
+            delivered_at: string;
+            last_event_at: string;
+            last_checked_at: string;
+            events: components["schemas"]["ShopOrderTrackingEvent"][];
+        };
+        /** @description One Delivery Tracker event of ``shop.delivery_tracking.tracking_payload``. */
+        ShopOrderTrackingEvent: {
+            time: string;
+            status: string;
+            status_label: string;
+            location: string;
+            description: string;
         };
         ShopOrdersEnvelope: {
             data: components["schemas"]["ShopOrder"][];

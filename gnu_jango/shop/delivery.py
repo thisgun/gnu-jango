@@ -26,6 +26,29 @@ DELIVERY_COMPANIES = (
     ("UPS", "https://www.fedex.com/fedextrack/?trknbr=", "02-3496-7777"),
 )
 
+# Delivery Tracker carrier ids of the couriers above (its carrier list, 2026-10-30). A courier
+# missing here keeps only its tracking link. 우리택배 is left out: it is not clear which of
+# kr.honamlogis and kr.cway it is.
+DELIVERY_TRACKER_CARRIERS = {
+    "경동택배": "kr.kdexp",
+    "대신택배": "kr.daesin",
+    "로젠택배": "kr.logen",
+    "우체국": "kr.epost",
+    "한진택배": "kr.hanjin",
+    "롯데택배": "kr.lotte",
+    "CJ대한통운": "kr.cjlogistics",
+    "GS25편의점택배": "kr.cvsnet",
+    "합동택배": "kr.hdexp",
+    "CU편의점택배": "kr.cupost",
+    "천일택배": "kr.chunilps",
+    "건영택배": "kr.kunyoung",
+    "일양로지스": "kr.ilyanglogis",
+    "EMS": "kr.epost.ems",
+    "DHL": "de.dhl",
+    "FedEx": "us.fedex",
+    "UPS": "us.ups",
+}
+
 
 def find_delivery_company(company):
     """The courier entry for ``company``: an exact name, else YoungCart's partial match."""
@@ -40,6 +63,12 @@ def find_delivery_company(company):
         if company in entry[0]:
             return entry
     return None
+
+
+def tracker_carrier_id(company):
+    """The Delivery Tracker carrier id of ``company`` (matched like the link), "" when unmapped."""
+    entry = find_delivery_company(company)
+    return DELIVERY_TRACKER_CARRIERS.get(entry[0], "") if entry else ""
 
 
 def delivery_inquiry(company, invoice):

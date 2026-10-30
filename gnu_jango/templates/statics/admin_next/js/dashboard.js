@@ -17,6 +17,28 @@
       });
     });
 
+    // A POST button inside another form (e.g. 배송조회 '지금 조회' on the order change form):
+    // forms cannot nest, so post a small form of its own with the page's CSRF token.
+    document.querySelectorAll('button[data-g5-post-url]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var token = document.querySelector('input[name="csrfmiddlewaretoken"]');
+        if (!token || button.disabled) {
+          return;
+        }
+        button.disabled = true;
+        var form = document.createElement('form');
+        form.method = 'post';
+        form.action = button.getAttribute('data-g5-post-url');
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'csrfmiddlewaretoken';
+        input.value = token.value;
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+      });
+    });
+
     var toggle = document.querySelector('[data-admin-menu-toggle]');
     if (toggle) {
       toggle.addEventListener('click', function () {

@@ -699,6 +699,8 @@ REST_FRAMEWORK = {
         "docs-ask-answer": "5/min",
         "site-search": "60/min",
         "search-click": "30/min",
+        # Delivery Tracker webhook calls, per address (they only mark a shipment for a lookup)
+        "delivery-tracker-webhook": "600/min",
     },
     # 'DEFAULT_FILTER_BACKENDS': (
     #     'django_filters.rest_framework.DjangoFilterBackend',
@@ -870,6 +872,13 @@ SHOP_PAYMENT_ADAPTER_BASE_URL = de_config("SHOP_PAYMENT_ADAPTER_BASE_URL", defau
 SHOP_PAYMENT_ADAPTER_SECRET = de_config("SHOP_PAYMENT_ADAPTER_SECRET", default="")
 SHOP_PAYMENT_ADAPTER_PROVIDERS = de_config("SHOP_PAYMENT_ADAPTER_PROVIDERS", default="")
 SHOP_PAYMENT_ADAPTER_TIMEOUT = de_config("SHOP_PAYMENT_ADAPTER_TIMEOUT", default=10, cast=int)
+
+# Delivery Tracker shipment tracking (docs/04-deploy/delivery-tracking.md). The switch and the API
+# keys are shop settings; this only adds the track_shipments lookup to run_scheduled_jobs.
+SHOP_DELIVERY_TRACKING_JOB = bool_config("SHOP_DELIVERY_TRACKING_JOB", default=False)
+# The public https origin Delivery Tracker calls the webhook on (default SOCIAL_APP_BASE_URL);
+# without an https origin no webhook is registered and the job alone keeps the tracking fresh.
+SHOP_DELIVERY_TRACKER_CALLBACK_BASE_URL = de_config("SHOP_DELIVERY_TRACKER_CALLBACK_BASE_URL", default="")
 
 # SMS credentials live in environment variables and are never stored in admin Config rows.
 # G5_SMS_PROVIDER: empty or "icode" lets iCode send, "disabled" stops every text on this server.

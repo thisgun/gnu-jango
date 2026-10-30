@@ -6544,7 +6544,7 @@
             },
             "ShopOrderDetail": {
                 "type": "object",
-                "description": "``order_payload(order, detail=True)``: the list shape plus the lines and the cash receipt.",
+                "description": "``order_payload(order, detail=True)``: the list shape plus the lines, the cash receipt and\nthe shipment tracking.",
                 "properties": {
                     "od_id": {
                         "type": "string"
@@ -6806,6 +6806,14 @@
                         "items": {
                             "$ref": "#/components/schemas/ShopOrderLine"
                         }
+                    },
+                    "shipment_tracking": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ShopOrderShipmentTracking"
+                            }
+                        ],
+                        "nullable": true
                     }
                 },
                 "required": [
@@ -6894,6 +6902,7 @@
                     "od_vbank_status",
                     "od_zip",
                     "receipt_url",
+                    "shipment_tracking",
                     "uid"
                 ]
             },
@@ -7008,6 +7017,77 @@
                     "line_point",
                     "line_total",
                     "stock_adjusted"
+                ]
+            },
+            "ShopOrderShipmentTracking": {
+                "type": "object",
+                "description": "``shop.delivery_tracking.tracking_payload``: the latest tracking of the order's invoice.",
+                "properties": {
+                    "carrier_id": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "status_label": {
+                        "type": "string"
+                    },
+                    "delivered": {
+                        "type": "boolean"
+                    },
+                    "delivered_at": {
+                        "type": "string"
+                    },
+                    "last_event_at": {
+                        "type": "string"
+                    },
+                    "last_checked_at": {
+                        "type": "string"
+                    },
+                    "events": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopOrderTrackingEvent"
+                        }
+                    }
+                },
+                "required": [
+                    "carrier_id",
+                    "delivered",
+                    "delivered_at",
+                    "events",
+                    "last_checked_at",
+                    "last_event_at",
+                    "status",
+                    "status_label"
+                ]
+            },
+            "ShopOrderTrackingEvent": {
+                "type": "object",
+                "description": "One Delivery Tracker event of ``shop.delivery_tracking.tracking_payload``.",
+                "properties": {
+                    "time": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "status_label": {
+                        "type": "string"
+                    },
+                    "location": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "description",
+                    "location",
+                    "status",
+                    "status_label",
+                    "time"
                 ]
             },
             "ShopOrdersEnvelope": {

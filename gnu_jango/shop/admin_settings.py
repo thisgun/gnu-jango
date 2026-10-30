@@ -1,6 +1,7 @@
 """Unified shop settings, ordered like youngcart adm/shop_admin/configform.php: 사업자정보,
 진열, 결제설정, 배송설정, 기타 설정, SMS 설정. Toss and NICEPAY credentials entered here are
-sealed in Config (shop/admin_pg_settings.py); server environment keys still win over them."""
+sealed in Config (shop/admin_pg_settings.py); server environment keys still win over them. The
+Delivery Tracker keys of 배송조회 are sealed the same way (shop/admin_delivery_tracking_settings.py)."""
 
 import re
 
@@ -39,7 +40,14 @@ from .admin_pg_settings import (
     save_pg_changes,
     webhook_url,
 )
+from .admin_delivery_tracking_settings import (
+    add_tracking_fields,
+    clean_tracking_fields,
+    save_tracking_changes,
+    tracking_field_order,
+)
 from .delivery import delivery_company_form_field
+from .delivery_tracking_settings import KEY_ROWS as TRACKING_KEY_ROWS
 from .models import ShopShippingPolicy
 from .payment_options import (
     CASH_RECEIPT_ENABLED_FIELD,
@@ -158,6 +166,10 @@ SETTINGS_GROUPS = (
           "de_baesong_content", "de_change_content"]),
         ("hope-date", "희망배송일", "주문서에서 고객이 희망배송일을 고르게 합니다.",
          ["de_hope_date_use", "de_hope_date_after"]),
+        ("tracking", "배송조회 (Delivery Tracker)",
+         "배송 중인 주문의 배송 상태를 Delivery Tracker에서 받아 주문 상세에 보여 줍니다. 키는 암호화해 저장하며 "
+         "다시 표시하지 않습니다. 배송조회를 지원하지 않는 배송회사는 지금처럼 배송 조회 링크만 표시합니다.",
+         tracking_field_order()),
     )),
     ("etc-group", "기타 설정", (
         ("reviews", "상품 후기", "상품 후기 작성 자격과 공개 방식입니다.", ["de_item_use_write", "de_item_use_use"]),
@@ -248,12 +260,16 @@ class ShopSettingsForm(forms.ModelForm):
             "de_bank_use", "de_bank_account", "de_admin_company_tel",
             CASH_RECEIPT_ENABLED_FIELD, CASH_RECEIPT_TYPES_FIELD,
             *PAYMENT_OPTION_FIELDS.values(), *SHOP_CONFIG_OPTIONS, *SHOP_LOGO_FIELDS, *PG_SETTING_NAMES,
+            *TRACKING_KEY_ROWS.values(),
         ]
         self.config_values = dict(Config.objects.filter(name__in=names).values_list("name", "value"))
         add_pg_fields(self, {name: self.config_values[name] for name in PG_SETTING_NAMES if name in self.config_values})
         for name, option in SHOP_CONFIG_OPTIONS.items():
             self.fields[name] = option_form_field(option)
             self.initial[name] = to_python(option, self.config_values.get(name))
+        add_tracking_fields(
+            self, {name: self.config_values[name] for name in TRACKING_KEY_ROWS.values() if name in self.config_values}
+        )
         self.fields.update(logo_form_fields())
         self.logo_urls = shop_logo_urls()
         self.initial["de_bank_use"] = config_flag(self.config_values.get("de_bank_use", "0"))
@@ -343,6 +359,7 @@ class ShopSettingsForm(forms.ModelForm):
                 if not cleaned.get(name):
                     self.add_error(name, message)
         clean_pg_fields(self, cleaned)
+        clean_tracking_fields(self, cleaned)
         return cleaned
 
     def section_groups(self):
@@ -428,6 +445,7 @@ class ShopSettingsForm(forms.ModelForm):
             for path in replaced_logos:
                 transaction.on_commit(lambda path=path: delete_logo_file(path))
             pg_changes = save_pg_changes(self)
+            tracking_changes = save_tracking_changes(self)
             sync_shop_phone_from_policy(self.cleaned_data["de_admin_company_tel"])
             content_type = ContentType.objects.get_for_model(ShopShippingPolicy)
             LogEntry.objects.create(
@@ -448,10 +466,20 @@ class ShopSettingsForm(forms.ModelForm):
                     action_flag=CHANGE,
                     change_message=f"결제설정 변경: {', '.join(pg_changes)}"[:2000],
                 )
+            if tracking_changes:
+                # which key was registered or removed, never its value
+                LogEntry.objects.create(
+                    user_id=user.pk,
+                    content_type=content_type,
+                    object_id=str(policy.pk),
+                    object_repr="쇼핑몰 배송조회 설정",
+                    action_flag=CHANGE,
+                    change_message=f"배송조회 설정 변경: {', '.join(tracking_changes)}"[:2000],
+                )
             transaction.on_commit(lambda: signals.config_done.send(sender=Config))
 
 
-@sensitive_post_parameters(*TOSS_KEY_ROWS.values())
+@sensitive_post_parameters(*TOSS_KEY_ROWS.values(), *TRACKING_KEY_ROWS.values())
 @require_http_methods(["GET", "POST"])
 def shop_settings(request):
     if not request.user.is_superuser:
