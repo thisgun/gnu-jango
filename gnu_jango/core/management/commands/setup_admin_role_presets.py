@@ -46,6 +46,10 @@ ROLE_PRESETS = {
             ("shop", "shoporderitem"),
             ("shop", "shoppersonalpay"),
             ("shop", "generalinquiry"),
+            # customer return / exchange requests: approving, rejecting and completing them (completing
+            # also needs shop.change_shoporder, which this role has for the order screen already)
+            ("shop", "shopreturnrequest"),
+            ("shop", "shopreturnrequestline"),
             ("core", "notification"),
             ("core", "mailcampaign"),
             ("core", "mailsendlog"),
