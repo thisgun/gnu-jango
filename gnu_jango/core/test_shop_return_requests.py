@@ -28,7 +28,7 @@ from gnu_jango.shop.models import (
     ShopReturnRequestLine,
     ShopShippingPolicy,
 )
-from gnu_jango.shop.order_lines import change_order_lines
+from gnu_jango.shop.order_lines import admin_return_order, change_order_lines
 
 URLOPEN = "gnu_jango.api.shop_payments.urllib_request.urlopen"
 OD_ID = "YC-R"
@@ -468,14 +468,47 @@ class ReturnRequestWorkflowTests(ReturnRequestBase):
         order = self.make_order("완료")
         request = self.open_request()
         returns.approve_request(request.pk, actor="admin")
-        self.assertTrue(change_order_lines(order, [self.cap_line.pk], "반품"))
+        # returning the line on the order settles the request (closed as completed) ...
+        self.run_on_commit(change_order_lines, order, [self.cap_line.pk], "반품", actor="admin")
 
+        # ... so completing it again refunds nothing
         result = returns.complete_request(request.pk, actor="admin")
 
         self.assertFalse(result)
-        self.assertIn("반품", result.message)
         self.reload(order, request, self.cap)
-        self.assertEqual((order.od_refund_price, self.cap.it_stock_qty, request.status), (7000, 6, "approved"))
+        self.assertEqual((order.od_refund_price, self.cap.it_stock_qty, request.status), (7000, 6, "completed"))
+
+    def test_a_return_the_shop_settles_on_the_order_is_closed_as_completed(self):
+        order = self.make_order("완료")
+        request = self.open_request()
+        mail.outbox.clear()
+
+        self.run_on_commit(change_order_lines, order, [self.cap_line.pk], "반품", actor="admin")
+
+        self.reload(order, request)
+        self.assertEqual(request.status, "completed")
+        self.assertFalse(request.lines.filter(is_open=True).exists())
+        self.assertIn("주문에서 직접 반품 처리", order.od_mod_history)
+        self.assertTrue(any(message.to == ["buyer@example.test"] for message in mail.outbox))
+
+    def test_an_exchange_the_shop_settles_as_a_return_is_closed_with_the_reason(self):
+        order = self.make_order("완료")
+        request = self.open_request(kind="exchange")
+
+        self.assertTrue(self.run_on_commit(admin_return_order, order, actor="admin"))
+
+        self.reload(request)
+        self.assertEqual(request.status, "rejected")
+        self.assertEqual(request.reject_reason, returns.SETTLED_ON_ORDER_REASON)
+
+    def test_a_request_with_a_line_still_active_stays_open(self):
+        order = self.make_order("완료")
+        request = self.open_request(lines=[{"line_id": self.cap_line.pk, "qty": 1}, {"line_id": self.shirt_line.pk, "qty": 2}])
+
+        self.run_on_commit(change_order_lines, order, [self.cap_line.pk], "반품", actor="admin")
+
+        self.reload(request)
+        self.assertEqual(request.status, "requested")
 
     @override_settings(**FAKE_TOSS)
     def test_a_refund_made_before_a_failed_line_change_still_counts_on_the_request(self):

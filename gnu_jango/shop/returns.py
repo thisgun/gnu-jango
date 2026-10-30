@@ -154,7 +154,12 @@ def default_return_fee(request):
 
 
 def latest_request(order):
-    """The newest request of ``order`` the customer did not withdraw, or None (the order list badge)."""
+    """The newest request of ``order`` the customer did not withdraw, or None (the order list badge).
+    Uses the order's prefetched ``return_requests`` when the list view loaded them."""
+    prefetched = getattr(order, "_prefetched_objects_cache", {}).get("return_requests")
+    if prefetched is not None:
+        # ShopReturnRequest.Meta.ordering is newest first
+        return next((request for request in prefetched if request.status != ShopReturnRequest.STATUS_WITHDRAWN), None)
     return (
         ShopReturnRequest.objects.filter(order_id=order.pk)
         .exclude(status=ShopReturnRequest.STATUS_WITHDRAWN)
@@ -439,6 +444,38 @@ def reject_request(request_id, reason, *, actor=""):
         _append_order_history(request.order, f"{_label(request)} 거절 - {reason}", actor)
         _queue_notifications(request)
     return StatusChange(True, f"{_label(request)}을 거절했습니다.")
+
+
+SETTLED_ON_ORDER_REASON = "주문에서 직접 처리되어 신청을 닫았습니다. 주문 내역을 확인해 주세요."
+
+
+def close_settled_requests(order, *, actor=""):
+    """Close the open requests of ``order`` (locked by the caller) whose every line the shop has
+    already settled on the order itself - 취소, 반품 or 품절 through the admin's line change or
+    주문 반품 - so nothing is left to decide. A return whose lines all became 반품 counts as completed;
+    anything else is closed as rejected, the reason telling the customer it was handled on the
+    order. A request with a line still active (a part of its units, say) stays open."""
+    closed = 0
+    requests = (
+        ShopReturnRequest.objects.select_for_update()
+        .filter(order_id=order.pk, status__in=ShopReturnRequest.OPEN_STATUSES)
+        .prefetch_related("lines__item")
+    )
+    for request in requests:
+        statuses = {str(line.item.ct_status or "") for line in request.lines.all()}
+        if not statuses or not statuses <= INACTIVE_LINE_STATUSES:
+            continue
+        if request.kind == ShopReturnRequest.KIND_RETURN and statuses == {STATUS_RETURNED}:
+            _close(request, ShopReturnRequest.STATUS_COMPLETED, actor=actor)
+            history = f"{_label(request)} 완료 (주문에서 직접 반품 처리)"
+        else:
+            request.reject_reason = SETTLED_ON_ORDER_REASON
+            _close(request, ShopReturnRequest.STATUS_REJECTED, actor=actor, fields=["reject_reason"])
+            history = f"{_label(request)} 종료 (주문에서 직접 처리)"
+        _append_order_history(order, history, actor)
+        _queue_notifications(request)
+        closed += 1
+    return closed
 
 
 def _return_lines(request):

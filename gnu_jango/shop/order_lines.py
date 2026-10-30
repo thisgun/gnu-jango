@@ -439,9 +439,11 @@ def change_order_lines(
         locked = ShopOrder.objects.select_for_update().filter(pk=order.pk).first()
         if locked is None:
             return StatusChange(False, "주문을 찾을 수 없습니다.")
-        return change_locked_order_lines(
+        result = change_locked_order_lines(
             locked, line_ids, target, reason, actor=actor, quantities=quantities, expected=expected, return_fee=return_fee
         )
+        _close_settled_return_requests(locked, result, actor)
+        return result
 
 
 def preview_line_change(order, line_ids, target, *, quantities=None, expected=None, return_fee=0):
@@ -468,7 +470,24 @@ def admin_return_order(order, reason="", *, actor=""):
         error = transition_error(locked, STATUS_RETURNED)
         if error:
             return StatusChange(False, error)
-        return change_locked_order_lines(locked, active_line_ids(locked), STATUS_RETURNED, reason, actor=actor)
+        result = change_locked_order_lines(locked, active_line_ids(locked), STATUS_RETURNED, reason, actor=actor)
+        _close_settled_return_requests(locked, result, actor)
+        return result
+
+
+def _close_settled_return_requests(order, result, actor):
+    """A customer's return / exchange request whose lines the admin just settled on the order is
+    closed as well (shop/returns.py). Completing a request calls change_locked_order_lines itself
+    and closes its own request, so only these two admin entry points do this."""
+    if not result:
+        return
+    from gnu_jango.shop.returns import close_settled_requests
+
+    try:
+        with transaction.atomic():
+            close_settled_requests(order, actor=actor)
+    except Exception:  # noqa: BLE001 - the line change (and any refund) stands; the request can be closed by hand
+        logger.exception("order %s: could not close the return requests of the settled lines", order.od_id)
 
 
 def active_line_ids(order):

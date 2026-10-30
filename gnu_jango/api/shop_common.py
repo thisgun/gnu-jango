@@ -341,7 +341,7 @@ def order_cancel_state(order):
     if (
         normalize_order_status(order.od_status) != ORDER_STATUS_ORDERED
         or int(order.od_cancel_price or 0) > 0
-        or any(normalize_order_status(status) != ORDER_STATUS_ORDERED for status in order.items.values_list("ct_status", flat=True))
+        or any(normalize_order_status(item.ct_status) != ORDER_STATUS_ORDERED for item in order.items.all())
     ):
         return False, "취소할 수 있는 주문이 아닙니다."
     return True, ""

@@ -8,7 +8,7 @@ from django.core.exceptions import ValidationError
 from django.core.files.storage import default_storage
 from django.core.validators import validate_email
 from django.db import transaction
-from django.db.models import Avg, BooleanField, Case, Count, Exists, F, IntegerField, OuterRef, Q, Subquery, Value, When
+from django.db.models import Avg, BooleanField, Case, Count, Exists, F, IntegerField, OuterRef, Prefetch, Q, Subquery, Value, When
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
@@ -562,11 +562,14 @@ def order_item_payload(item):
     }
 
 
-def order_payload(order, *, detail=False):
-    items = list(order.items.select_related("product").all()) if detail else []
+def order_payload(order, *, detail=False, bank_accounts=None):
+    """``bank_accounts`` (configured_bank_accounts()) may be passed by a list that reads it once.
+    The list view prefetches items (with their products), coupon logs (with their coupons) and
+    return requests, so the .all() reads below cost no query there."""
+    items = list(order.items.select_related("product").all()) if detail else list(order.items.all())
     status_value = normalize_order_status(order.od_status)
     # a product coupon on a cancelled, returned or sold-out line no longer counts
-    coupons = order_coupon_totals(order, items=items if detail else None)
+    coupons = order_coupon_totals(order, logs=None if detail else list(order.coupon_logs.all()), items=items)
     cart_coupon, order_coupon, send_coupon = coupons.cart, coupons.order, coupons.send
     if status_value == ORDER_STATUS_CANCELLED:
         cart_coupon = 0
@@ -596,13 +599,13 @@ def order_payload(order, *, detail=False):
     if not bank_account and settle_case_is_bank(order.od_settle_case):
         # Older orders did not persist the selected account. Keep their prior
         # instructions available from current settings when possible.
-        bank_account = "\n".join(configured_bank_accounts())
+        bank_account = "\n".join(configured_bank_accounts() if bank_accounts is None else bank_accounts)
     data = {
         "od_id": order.od_id,
         "uid": order.uid,
         "mb_id": order.user.get_username() if order.user_id else "",
-        "item_count": order.items.count(),
-        "od_cart_count": order.items.count(),
+        "item_count": len(items),
+        "od_cart_count": len(items),
         "od_name": order.od_name,
         "od_tel": order.od_tel,
         "od_hp": order.od_hp,
@@ -1560,8 +1563,14 @@ def orders_view(request):
             queryset = queryset.filter(user=user)
         else:
             queryset = queryset.none()
+        queryset = queryset.select_related("user").prefetch_related(
+            Prefetch("items", queryset=ShopOrderItem.objects.select_related("product")),
+            Prefetch("coupon_logs", queryset=ShopCouponLog.objects.select_related("coupon")),
+            "return_requests",
+        )
         page, meta = paginate_queryset(request, queryset, default_per_page=10)
-        return api_response(data=[order_payload(order) for order in page], meta=meta)
+        bank_accounts = configured_bank_accounts()
+        return api_response(data=[order_payload(order, bank_accounts=bank_accounts) for order in page], meta=meta)
 
     try:
         order = create_order_from_request(request, request_data(request))
