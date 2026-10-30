@@ -15,6 +15,8 @@ from statistics import median
 from django.db.models import Count, F, IntegerField, Q, Sum
 from django.db.models.functions import TruncDate
 
+from gnu_jango.utils.date_ranges import local_days
+
 from .models import ShopOrder
 from .order_statuses import INACTIVE_LINE_STATUSES
 from .sales_report import METHOD_COLUMNS, settle_method
@@ -67,7 +69,7 @@ def daily_sales(start, end):
     """``{date: {"orders", "cancels", "receipt", "refund", "methods": {method: orders}}}``."""
     cancelled = Q(od_status__in=INACTIVE_LINE_STATUSES)
     rows = (
-        ShopOrder.objects.filter(od_datetime__date__gte=start, od_datetime__date__lte=end)
+        ShopOrder.objects.filter(local_days("od_datetime", start, end))
         .annotate(day=TruncDate("od_datetime"))
         .values("day", "od_settle_case")
         .annotate(

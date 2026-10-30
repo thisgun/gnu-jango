@@ -3,7 +3,8 @@ from io import StringIO
 
 import pytest
 from django.core.management import CommandError, call_command
-from django.test import override_settings
+from django.test import Client, override_settings
+from django.urls import reverse
 from rest_framework.test import APIClient
 
 from gnu_jango.ai.client import ChatError, OpenAICompatibleChat, chat_provider_override
@@ -12,6 +13,7 @@ from gnu_jango.ai.review_summaries import MAX_SUMMARY_CHARS, NO_SUMMARY, SYSTEM_
 from gnu_jango.ai.test_client import FakeOpener
 from gnu_jango.ai.testing import FakeChatProvider
 from gnu_jango.shop.models import ShopReview
+from gnu_jango.testing.factories import MemberFactory
 
 SUMMARIES_ON = {"G5_AI_REVIEW_SUMMARIES": True}
 
@@ -205,3 +207,16 @@ def test_chat_client_sends_a_key_only_over_https_or_to_this_host():
     with pytest.raises(ChatError) as raised:
         OpenAICompatibleChat("http://models.example.com/v1", "m", api_key="secret")
     assert raised.value.reason == "insecure_configuration"
+
+
+def test_the_admin_says_how_many_summaries_are_waiting(reviewed, chat):
+    client = Client()
+    client.force_login(MemberFactory(is_staff=True, is_superuser=True))
+    url = reverse("admin:ai_reviewsummary_changelist")
+    assert "요약 대기: 1개" in client.get(url).content.decode()
+    # sorting or paging the list does not count again
+    assert "요약 대기" not in client.get(url, {"o": "1"}).content.decode()
+    summarize()
+    assert "요약 대기" not in client.get(url).content.decode()
+    # only the run asked the model; the admin page counts with a dry run
+    assert len(chat.calls) == 1

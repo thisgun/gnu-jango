@@ -15,6 +15,7 @@ from gnu_jango.api.community_common import GENERAL_QA_PRODUCT_ID
 from gnu_jango.shop.models import ShopOrder, ShopOrderData, ShopPersonalPay, ShopProduct, ShopQA
 from gnu_jango.users.models import Profile, User_Memo, User_Point
 from gnu_jango.utils.admin_display import format_number, money_sum
+from gnu_jango.utils.date_ranges import local_days
 
 register = template.Library()
 User = get_user_model()
@@ -162,7 +163,7 @@ def _build_admin_ops_summary():
     today = timezone.localdate()
     now = timezone.now()
     orders = ShopOrder.objects.all()
-    today_orders = orders.filter(od_datetime__date=today)
+    today_orders = orders.filter(local_days("od_datetime", today, today))
     today_sales = money_sum(today_orders, "od_receipt_price") - money_sum(today_orders, "od_refund_price")
     products = ShopProduct.objects.all()
     low_stock = products.filter(it_use="1", it_stock_qty__lte=5)
@@ -174,15 +175,15 @@ def _build_admin_ops_summary():
     personal_pays = ShopPersonalPay.objects.all()
     pending_personal_pays = personal_pays.filter(active=True, pp_receipt_price__lte=0)
     visits = VisitLog.objects.all()
-    today_visits = visits.filter(created_at__date=today)
+    today_visits = visits.filter(local_days("created_at", today, today))
     admin_visits = today_visits.filter(is_staff_area=True)
     search_keywords = SearchKeyword.objects.all()
-    today_search_keywords = search_keywords.filter(last_searched_at__date=today)
+    today_search_keywords = search_keywords.filter(local_days("last_searched_at", today, today))
     mail_campaigns = MailCampaign.objects.all()
-    today_mail_campaigns = mail_campaigns.filter(created_at__date=today)
+    today_mail_campaigns = mail_campaigns.filter(local_days("created_at", today, today))
     failed_mail_logs = MailSendLog.objects.filter(status="failed")
     members = User.objects.select_related("profile").all()
-    today_members = members.filter(date_joined__date=today)
+    today_members = members.filter(local_days("date_joined", today, today))
     active_members = members.filter(is_active=True)
     blocked_members = members.filter(is_active=False)
     staff_members = members.filter(is_staff=True)

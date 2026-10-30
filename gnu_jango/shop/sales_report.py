@@ -14,6 +14,8 @@ from datetime import date, timedelta
 from django.db.models import Count, F, IntegerField, Sum
 from django.db.models.functions import TruncDate, TruncMonth, TruncYear
 
+from gnu_jango.utils.date_ranges import local_days
+
 from .models import ShopOrder
 
 PERIOD_TODAY = "today"
@@ -142,7 +144,7 @@ def _with_display(row):
 def sales_table(period, start, end, orders=None):
     """{"rows", "total", "columns"} for ``period`` between ``start`` and ``end`` (dates)."""
     orders = ShopOrder.objects.all() if orders is None else orders
-    orders = orders.filter(od_datetime__date__gte=start, od_datetime__date__lte=end)
+    orders = orders.filter(local_days("od_datetime", start, end))
     total = _empty_row("합계")
     if period == PERIOD_TODAY:
         rows = []
