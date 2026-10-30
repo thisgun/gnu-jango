@@ -53,6 +53,8 @@ export interface MyProfilePayload {
   mb_password_current?: string;
   // 정보공개 (g5_member.mb_open) — 1 공개, 0 비공개.
   mb_open?: number;
+  // 정보 메일 수신 (g5_member.mb_mailling) — 1 받음, 0 받지 않음.
+  mb_mailling?: number;
 }
 
 export interface MyProfileUpdateResult {

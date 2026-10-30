@@ -5,4 +5,4 @@ filters and inlines live in _common; the registered ModelAdmins are grouped
 by domain. Importing the submodules here runs their admin registrations.
 """
 
-from . import banners, catalog, orders, coupons, misc, returns  # noqa: F401
+from . import alerts, banners, catalog, orders, coupons, misc, returns  # noqa: F401

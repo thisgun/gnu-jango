@@ -1949,6 +1949,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/shop/price-alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v1_shop_price_alerts_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/shop/products": {
         parameters: {
             query?: never;
@@ -2008,6 +2024,22 @@ export interface paths {
         put?: never;
         post: operations["v1_shop_products_images_create"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shop/products/{it_id}/price-alert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v1_shop_products_price_alert_retrieve"];
+        put?: never;
+        post: operations["v1_shop_products_price_alert_create"];
+        delete: operations["v1_shop_products_price_alert_destroy"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2554,6 +2586,8 @@ export interface components {
             mb_today_login: string;
             mb_open: number;
             mb_open_date: string;
+            mb_mailling: number;
+            mb_mailling_date: string;
             is_staff: boolean;
             is_superuser: boolean;
             mb_hp: string;
@@ -3390,6 +3424,7 @@ export interface components {
             infinite_scroll: boolean;
             comment_editor: boolean;
             pwa_enabled: boolean;
+            price_alert_enabled: boolean;
             visit: components["schemas"]["VisitStats"];
             shop_logo: string;
             shop_logo_footer: string;
@@ -6130,6 +6165,24 @@ export interface operations {
             };
         };
     };
+    v1_shop_price_alerts_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     v1_shop_products_retrieve: {
         parameters: {
             query?: never;
@@ -6203,6 +6256,66 @@ export interface operations {
         responses: {
             /** @description No response body */
             200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_shop_products_price_alert_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                it_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_shop_products_price_alert_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                it_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_shop_products_price_alert_destroy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                it_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

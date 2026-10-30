@@ -3658,6 +3658,25 @@
                 }
             }
         },
+        "/api/v1/shop/price-alerts": {
+            "get": {
+                "operationId": "v1_shop_price_alerts_retrieve",
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
         "/api/v1/shop/products": {
             "get": {
                 "operationId": "v1_shop_products_retrieve",
@@ -3772,6 +3791,89 @@
                 ],
                 "responses": {
                     "200": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/v1/shop/products/{it_id}/price-alert": {
+            "get": {
+                "operationId": "v1_shop_products_price_alert_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "it_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "v1_shop_products_price_alert_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "it_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "v1_shop_products_price_alert_destroy",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "it_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "204": {
                         "description": "No response body"
                     }
                 }
@@ -5228,6 +5330,12 @@
                     "mb_open_date": {
                         "type": "string"
                     },
+                    "mb_mailling": {
+                        "type": "integer"
+                    },
+                    "mb_mailling_date": {
+                        "type": "string"
+                    },
                     "is_staff": {
                         "type": "boolean"
                     },
@@ -5275,6 +5383,8 @@
                     "mb_icon_path",
                     "mb_id",
                     "mb_level",
+                    "mb_mailling",
+                    "mb_mailling_date",
                     "mb_name",
                     "mb_nick",
                     "mb_no",
@@ -8279,6 +8389,9 @@
                     "pwa_enabled": {
                         "type": "boolean"
                     },
+                    "price_alert_enabled": {
+                        "type": "boolean"
+                    },
                     "visit": {
                         "$ref": "#/components/schemas/VisitStats"
                     },
@@ -8319,6 +8432,7 @@
                     "de_bank_account",
                     "de_bank_use",
                     "infinite_scroll",
+                    "price_alert_enabled",
                     "pwa_enabled",
                     "shop_display",
                     "shop_logo",

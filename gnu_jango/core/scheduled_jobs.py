@@ -49,6 +49,8 @@ SCHEDULED_JOBS: tuple[ScheduledJob, ...] = (
     ScheduledJob("retry_search_index", ("--apply", "--json"), ("--json",), 30),
     ScheduledJob("check_search_health", ("--json",), ("--json", "--audit-limit", "0"), 600),
     ScheduledJob("save_order_points", ("--apply", "--json"), ("--json",)),
+    # Each kind of alert checks its own shop setting, so the job does nothing until one is on.
+    ScheduledJob("send_shop_alerts", ("--apply", "--json"), ("--json",), 600),
 )
 
 try:

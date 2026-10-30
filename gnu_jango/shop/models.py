@@ -518,6 +518,28 @@ class ShopStockNotificationSendLog(models.Model):
         return f"{self.product_it_id}: {self.get_status_display()} #{self.pk}"
 
 
+class ShopPriceAlert(models.Model):
+    """가격 인하 알림: a member asked to hear once when the product costs less than ``pa_price``, its price
+    when they asked. Asking again after the notice re-arms the same row at the price of that moment."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="shop_price_alerts")
+    product = models.ForeignKey(ShopProduct, on_delete=models.CASCADE, related_name="price_alerts")
+    pa_price = models.IntegerField("신청 당시 가격")
+    created_at = models.DateTimeField("신청일시", default=timezone.now)
+    notified_at = models.DateTimeField("알림일시", null=True, blank=True)
+    notified_price = models.IntegerField("알림 당시 가격", null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "가격 인하 알림"
+        verbose_name_plural = "가격 인하 알림"
+        constraints = [models.UniqueConstraint(fields=["user", "product"], name="shop_price_alert_once")]
+        indexes = [models.Index(fields=["notified_at", "product"])]
+
+    def __str__(self):
+        return f"{self.product_id}: {self.pa_price}"
+
+
 class ShopWishlist(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -685,6 +707,27 @@ class ShopCouponLog(models.Model):
             models.Index(fields=["od_id"]),
             models.Index(fields=["user", "cl_datetime"]),
         ]
+
+
+class ShopCartReminder(models.Model):
+    """One 장바구니 알림 메일: the member's cart as of its newest line (``cart_time``, unix seconds of
+    ct_time) and the coupon that came with it. The pair is unique, so a cart is reminded of only once."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="shop_cart_reminders")
+    cart_time = models.BigIntegerField("장바구니 기준 시각")
+    line_count = models.PositiveIntegerField("상품 줄 수", default=0)
+    coupon = models.ForeignKey(ShopCoupon, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    sent = models.BooleanField("발송됨", default=False)
+    created_at = models.DateTimeField("생성일시", default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "장바구니 알림 메일"
+        verbose_name_plural = "장바구니 알림 메일"
+        constraints = [models.UniqueConstraint(fields=["user", "cart_time"], name="shop_cart_reminder_once")]
+
+    def __str__(self):
+        return f"{self.user_id}: {self.cart_time}"
 
 
 class ShopAddress(models.Model):
