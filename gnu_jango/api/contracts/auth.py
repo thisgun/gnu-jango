@@ -24,6 +24,8 @@ class CurrentMemberSerializer(serializers.Serializer):
     # 1 / 0 int flag
     mb_open = serializers.IntegerField()
     mb_open_date = serializers.CharField(allow_blank=True)
+    mb_mailling = serializers.IntegerField()
+    mb_mailling_date = serializers.CharField(allow_blank=True)
     is_staff = serializers.BooleanField()
     is_superuser = serializers.BooleanField()
     mb_hp = serializers.CharField(allow_blank=True)

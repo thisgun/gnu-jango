@@ -55,6 +55,7 @@ class SiteSettingsSerializer(serializers.Serializer):
     infinite_scroll = serializers.BooleanField()
     comment_editor = serializers.BooleanField()
     pwa_enabled = serializers.BooleanField()
+    price_alert_enabled = serializers.BooleanField()
     visit = VisitStatsSerializer()
     shop_logo = serializers.CharField(allow_blank=True)
     shop_logo_footer = serializers.CharField(allow_blank=True)

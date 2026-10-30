@@ -681,6 +681,8 @@ REST_FRAMEWORK = {
         "member-password": "5/min",
         "comment-write": "20/min",
         "stock-notify": "10/min",
+        # 가격 인하 알림 asks and removals of a member
+        "price-alert": "30/min",
         # product recommendation mails a member may send (itemrecommendmail.php)
         "shop-recommend": "5/hour",
         # the same, per address (any account, so several accounts cannot multiply it)

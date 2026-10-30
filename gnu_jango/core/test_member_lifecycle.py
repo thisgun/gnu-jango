@@ -552,6 +552,30 @@ class OpenProfileTests(LifecycleTestBase):
         self.register(mb_open=0)
         self.assertFalse(self.profile(self.user_model.objects.get(username="life_member")).open_profile)
 
+    def test_information_mail_is_off_unless_the_new_member_ticks_it(self):
+        self.register()
+        self.assertFalse(self.profile(self.user_model.objects.get(username="life_member")).mailing)
+
+    def test_a_registration_can_agree_to_information_mail(self):
+        self.register(mb_mailling=1)
+        profile = self.profile(self.user_model.objects.get(username="life_member"))
+        self.assertTrue(profile.mailing)
+        self.assertIsNotNone(profile.mailing_date)
+
+    def test_the_member_can_change_the_information_mail_answer(self):
+        response = self.client_for(self.target).patch("/api/v1/members/me", {"mb_mailling": 1}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["member"]["mb_mailling"], 1)
+        profile = self.profile(self.target)
+        self.assertTrue(profile.mailing)
+        agreed_at = profile.mailing_date
+        self.assertIsNotNone(agreed_at)
+        # Sending the unchanged answer keeps the date of the consent.
+        self.client_for(self.target).patch("/api/v1/members/me", {"mb_mailling": True}, format="json")
+        self.assertEqual(self.profile(self.target).mailing_date, agreed_at)
+        self.client_for(self.target).patch("/api/v1/members/me", {"mb_mailling": 0}, format="json")
+        self.assertFalse(self.profile(self.target).mailing)
+
     def test_the_member_can_close_the_profile(self):
         response = self.client_for(self.target).patch("/api/v1/members/me", {"mb_open": 0}, format="json")
         self.assertEqual(response.status_code, 200)

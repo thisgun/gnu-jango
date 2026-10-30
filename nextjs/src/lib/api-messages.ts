@@ -160,6 +160,7 @@ const API_MESSAGES: Record<string, string> = {
   "Product is currently in stock.": "현재 재고가 있는 상품입니다.",
   "Restock notifications are not enabled for this product.": "이 상품은 재입고 알림을 신청할 수 없습니다.",
   "Already subscribed.": "이미 신청하셨습니다.",
+  "Price drop alerts are not enabled.": "가격 인하 알림을 사용할 수 없습니다.",
   "Toss virtual account payments are not enabled.": "토스 가상계좌 결제를 사용할 수 없습니다.",
   "Not enough points.": "보유 포인트가 부족합니다.",
   "Event not found.": "이벤트를 찾을 수 없습니다.",
