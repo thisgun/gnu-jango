@@ -10,6 +10,7 @@
 from rest_framework import serializers
 
 from . import PageMetaSerializer
+from .subscriptions import ShopSubscriptionOfferSerializer
 
 
 class CategoryListDisplaySerializer(serializers.Serializer):
@@ -163,6 +164,8 @@ class ShopProductDetailSerializer(ShopProductSerializer):
     similar_items = ShopProductSerializer(many=True)
     # null unless G5_AI_REVIEW_SUMMARIES is on and summarize_reviews wrote a summary that is not hidden
     ai_review_summary = ShopAiReviewSummarySerializer(allow_null=True)
+    # null unless subscriptions are on and this product offers them (it_subscription_use)
+    subscription = ShopSubscriptionOfferSerializer(allow_null=True)
 
 
 class ShopCategoryDetailSerializer(serializers.Serializer):

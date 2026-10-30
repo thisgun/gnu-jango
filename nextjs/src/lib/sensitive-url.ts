@@ -6,6 +6,9 @@ export const SENSITIVE_QUERY_PATHS: readonly string[] = [
   "/forgot-password",
   "/login/social-callback",
   "/register",
+  // 정기구독 카드 등록 결과: the registration token and Toss's one-time authKey
+  "/shop/subscriptions/billing/success",
+  "/shop/subscriptions/billing/fail",
 ];
 
 function normalizedPath(pathname: string): string {

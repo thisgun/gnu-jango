@@ -30,6 +30,9 @@ v1 API의 응답 모양을 OpenAPI 스키마로 고정하고, 그 스키마에�
 | `GET /api/v1/shop/orders` | `ShopOrdersEnvelope` (meta: `PageMeta`) |
 | `GET /api/v1/shop/orders/{od_id}` | `ShopOrderDetailEnvelope` |
 | `GET /api/v1/auth/me` | `AuthMeEnvelope` |
+| `GET /api/v1/shop/subscriptions`, `GET /api/v1/shop/subscriptions/{id}` | `ShopSubscriptionsEnvelope`, `ShopSubscriptionDetailEnvelope` (정기구독, [운영 설정](toss-billing-subscriptions.md)) |
+| `POST /api/v1/shop/subscriptions/start`, `POST /api/v1/shop/subscriptions/{id}/card` | `ShopSubscriptionRegistrationEnvelope`, `ShopSubscriptionCardRegistrationEnvelope` |
+| `POST /api/v1/shop/subscriptions/billing-auth`, `POST /api/v1/shop/subscriptions/{id}/action` | `ShopSubscriptionBillingResultEnvelope`, `ShopSubscriptionActionEnvelope` |
 
 나머지 API는 아직 응답 모양이 없어 생성 타입에서 `never`가 됩니다. 하나씩 늘려 갑니다.
 

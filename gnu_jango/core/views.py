@@ -435,6 +435,7 @@ def _nextjs25_robots_response(request):
         "Disallow: /shop/payment",
         "Disallow: /shop/personalpay",
         "Disallow: /shop/search",
+        "Disallow: /shop/subscriptions",
         "Disallow: /shop/wishlist",
         "",
         f"Host: {origin}",

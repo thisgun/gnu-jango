@@ -69,6 +69,18 @@ POINT_OPTIONS = (
     ConfigOption("de_member_reg_coupon_term", "쿠폰 유효기간 (일)", kind="int", default="0", max_value=3650),
 )
 
+# 정기구독 (shop/subscriptions.py): off until the admin turns it on. The server must also allow it
+# (SHOP_SUBSCRIPTIONS_ENABLED), which registers the daily charge job.
+SUBSCRIPTION_OPTIONS = (
+    ConfigOption("de_subscription_use", "정기구독 사용", kind="bool", default="0",
+                 help_text="켜면 '정기구독 가능'으로 설정한 상품을 회원이 카드 자동결제로 정기구독할 수 있습니다. "
+                           "토스페이먼츠 자동결제(빌링) 계약과 서버 설정 SHOP_SUBSCRIPTIONS_ENABLED=True가 필요합니다."),
+    ConfigOption("de_subscription_notice_days", "결제 예정 안내 (일 전)", kind="int", default="3", min_value=1,
+                 max_value=14, help_text="결제일 이 일수 전에 회원에게 결제 예정 메일과 알림을 보냅니다."),
+    ConfigOption("de_subscription_retry_limit", "결제 실패 시 시도 횟수", kind="int", default="3", min_value=1,
+                 max_value=7, help_text="결제가 실패하면 다음 날 다시 시도합니다. 이 횟수만큼 실패하면 구독을 일시정지하고 회원에게 알립니다."),
+)
+
 HOME_LIST_TYPES = (
     (1, "히트상품"),
     (2, "추천상품"),
@@ -119,7 +131,9 @@ LIST_OPTIONS = (
 
 SHOP_CONFIG_OPTIONS = {
     option.name: option
-    for option in (*COMPANY_OPTIONS, *ORDER_OPTIONS, *POINT_OPTIONS, *HOME_LIST_OPTIONS, *LIST_OPTIONS)
+    for option in (
+        *COMPANY_OPTIONS, *ORDER_OPTIONS, *POINT_OPTIONS, *SUBSCRIPTION_OPTIONS, *HOME_LIST_OPTIONS, *LIST_OPTIONS,
+    )
 }
 
 # adm/shop_admin/configform.php SMS 설정 (cf_sms_use, cf_sms_type, de_sms_hp, de_sms_use1..5 and

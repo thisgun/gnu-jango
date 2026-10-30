@@ -57,3 +57,5 @@ body[data-g5-theme-source="default"] .solune-shop-page .btn.btn-circle { border-
    children are placed by `order` (solune-shop.detail.css), so a child without
    one would jump to the top: N Pay sits right under the cart/buy row. */
 body[data-g5-theme-source="default"] .solune-shop-page .product-naverpay { order: 15; margin-top: 12px; }
+/* 정기구독 (ProductSubscriptionPanel): right under the cart/buy row, before N Pay and the prev/next links. */
+body[data-g5-theme-source="default"] .solune-shop-page .product-subscription { order: 15; margin-top: 16px; }

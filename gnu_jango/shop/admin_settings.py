@@ -62,6 +62,7 @@ from .shop_options import (
     SHOP_CONFIG_OPTIONS,
     SHOP_LOGO_FIELDS,
     SMS_OPTIONS,
+    SUBSCRIPTION_OPTIONS,
     shop_logo_urls,
     to_python,
     to_stored,
@@ -151,6 +152,10 @@ SETTINGS_GROUPS = (
          "포인트를 사용하려면 기본환경설정의 포인트 사용도 켜져 있어야 합니다. 구매 포인트는 상품의 포인트 설정에 따라 "
          "주문 상품이 완료된 뒤 회원에게 지급합니다.",
          ["de_settle_min_point", "de_settle_max_point", "de_settle_point_unit", "de_card_point", "de_point_days"]),
+        ("subscription", "정기구독 (카드 자동결제)",
+         "회원이 카드를 한 번 등록하면 고른 주기마다 토스페이먼츠 자동결제로 결제하고 일반 주문을 만듭니다. 결제 금액은 "
+         "결제하는 날의 상품 가격입니다. 상품마다 '정기구독 가능'과 배송 주기를 따로 설정합니다.",
+         [option.name for option in SUBSCRIPTION_OPTIONS]),
     )),
     ("delivery-group", "배송설정", (
         ("shipping", "배송비와 배송 안내", "상품별 배송비와 지역별 추가 배송비는 해당 상품·지역 설정이 함께 적용됩니다.",

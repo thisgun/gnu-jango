@@ -2173,6 +2173,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/shop/subscriptions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v1_shop_subscriptions_retrieve"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shop/subscriptions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v1_shop_subscriptions_retrieve_2"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shop/subscriptions/{id}/action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["v1_shop_subscriptions_action_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shop/subscriptions/{id}/card": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["v1_shop_subscriptions_card_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shop/subscriptions/billing-auth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["v1_shop_subscriptions_billing_auth_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shop/subscriptions/billing-auth/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["v1_shop_subscriptions_billing_auth_cancel_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shop/subscriptions/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["v1_shop_subscriptions_start_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/shop/wishlist": {
         parameters: {
             query?: never;
@@ -3172,6 +3284,7 @@ export interface components {
             related_items: components["schemas"]["ShopProduct"][];
             similar_items: components["schemas"]["ShopProduct"][];
             ai_review_summary: components["schemas"]["ShopAiReviewSummary"] | null;
+            subscription: components["schemas"]["ShopSubscriptionOffer"] | null;
         };
         ShopProductDetailEnvelope: {
             data: components["schemas"]["ShopProductDetail"];
@@ -3217,6 +3330,208 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        ShopSubscription: {
+            id: number;
+            status: string;
+            status_label: string;
+            pause_reason: string;
+            pause_reason_label: string;
+            it_id: string;
+            it_name: string;
+            io_id: string;
+            option_label: string;
+            qty: number;
+            cycle: string;
+            cycle_label: string;
+            cycle_choices: components["schemas"]["ShopSubscriptionCycle"][];
+            discount_rate: number;
+            /** Format: date */
+            next_charge_date: string | null;
+            /** Format: date */
+            retry_date: string | null;
+            cycle_no: number;
+            failure_count: number;
+            estimated_amount: number | null;
+            card: components["schemas"]["ShopSubscriptionCard"] | null;
+            delivery: components["schemas"]["ShopSubscriptionDelivery"];
+            image_url: string;
+            last_error: string;
+            charge_in_progress: boolean;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            cancelled_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ShopSubscriptionActionEnvelope: {
+            data: components["schemas"]["ShopSubscriptionDetail"];
+            success: boolean;
+            ok: boolean;
+            message: string;
+            meta: {
+                [key: string]: unknown;
+            };
+            errors: {
+                [key: string]: unknown;
+            };
+        };
+        ShopSubscriptionBillingResult: {
+            subscription: components["schemas"]["ShopSubscriptionDetail"];
+            order_id: string;
+            charge_status: string;
+        };
+        ShopSubscriptionBillingResultEnvelope: {
+            data: components["schemas"]["ShopSubscriptionBillingResult"];
+            success: boolean;
+            ok: boolean;
+            message: string;
+            meta: {
+                [key: string]: unknown;
+            };
+            errors: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description The registered card as Toss described it (the number comes masked from Toss). */
+        ShopSubscriptionCard: {
+            company: string;
+            number: string;
+            type: string;
+        };
+        ShopSubscriptionCardRegistrationEnvelope: {
+            data: components["schemas"]["ShopSubscriptionRegistration"];
+            success: boolean;
+            ok: boolean;
+            message: string;
+            meta: {
+                [key: string]: unknown;
+            };
+            errors: {
+                [key: string]: unknown;
+            };
+        };
+        ShopSubscriptionCharge: {
+            id: number;
+            cycle_no: number;
+            attempt: number;
+            /** Format: date */
+            scheduled_date: string;
+            status: string;
+            status_label: string;
+            amount: number;
+            order_id: string;
+            failure_message: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        ShopSubscriptionCycle: {
+            value: string;
+            label: string;
+        };
+        ShopSubscriptionDelivery: {
+            name: string;
+            tel: string;
+            hp: string;
+            zip: string;
+            addr1: string;
+            addr2: string;
+            addr3: string;
+        };
+        ShopSubscriptionDetail: {
+            id: number;
+            status: string;
+            status_label: string;
+            pause_reason: string;
+            pause_reason_label: string;
+            it_id: string;
+            it_name: string;
+            io_id: string;
+            option_label: string;
+            qty: number;
+            cycle: string;
+            cycle_label: string;
+            cycle_choices: components["schemas"]["ShopSubscriptionCycle"][];
+            discount_rate: number;
+            /** Format: date */
+            next_charge_date: string | null;
+            /** Format: date */
+            retry_date: string | null;
+            cycle_no: number;
+            failure_count: number;
+            estimated_amount: number | null;
+            card: components["schemas"]["ShopSubscriptionCard"] | null;
+            delivery: components["schemas"]["ShopSubscriptionDelivery"];
+            image_url: string;
+            last_error: string;
+            charge_in_progress: boolean;
+            /** Format: date-time */
+            started_at: string | null;
+            /** Format: date-time */
+            cancelled_at: string | null;
+            /** Format: date-time */
+            created_at: string;
+            charges: components["schemas"]["ShopSubscriptionCharge"][];
+        };
+        ShopSubscriptionDetailEnvelope: {
+            data: components["schemas"]["ShopSubscriptionDetail"];
+            success: boolean;
+            ok: boolean;
+            message: string;
+            meta: {
+                [key: string]: unknown;
+            };
+            errors: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * @description ``subscription`` of the product detail: what the product page offers (null when it cannot
+         *     be subscribed to or the feature is off).
+         */
+        ShopSubscriptionOffer: {
+            cycles: components["schemas"]["ShopSubscriptionCycle"][];
+            discount_rate: number;
+            price: number;
+        };
+        /**
+         * @description What the browser needs to open the Toss billing window (payment({customerKey})
+         *     .requestBillingAuth). The registration token goes back with the authKey on the success page.
+         */
+        ShopSubscriptionRegistration: {
+            subscription_id: number;
+            registration_token: string;
+            customer_key: string;
+            client_key: string;
+            customer_name: string;
+            customer_email: string;
+            /** Format: date-time */
+            expires_at: string | null;
+        };
+        ShopSubscriptionRegistrationEnvelope: {
+            data: components["schemas"]["ShopSubscriptionRegistration"];
+            success: boolean;
+            ok: boolean;
+            message: string;
+            meta: {
+                [key: string]: unknown;
+            };
+            errors: {
+                [key: string]: unknown;
+            };
+        };
+        ShopSubscriptionsEnvelope: {
+            data: components["schemas"]["ShopSubscription"][];
+            success: boolean;
+            ok: boolean;
+            message: string;
+            meta: {
+                [key: string]: unknown;
+            };
+            errors: {
+                [key: string]: unknown;
+            };
+        };
         SiteSettings: {
             cf_title: string;
             cf_company_name: string;
@@ -3240,6 +3555,7 @@ export interface components {
             } | null;
             cf_bbs_rewrite: number;
             infinite_scroll: boolean;
+            shop_subscriptions: boolean;
             comment_editor: boolean;
             pwa_enabled: boolean;
             visit: components["schemas"]["VisitStats"];
@@ -6334,6 +6650,144 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    v1_shop_subscriptions_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopSubscriptionsEnvelope"];
+                };
+            };
+        };
+    };
+    v1_shop_subscriptions_retrieve_2: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopSubscriptionDetailEnvelope"];
+                };
+            };
+        };
+    };
+    v1_shop_subscriptions_action_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopSubscriptionActionEnvelope"];
+                };
+            };
+        };
+    };
+    v1_shop_subscriptions_card_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopSubscriptionCardRegistrationEnvelope"];
+                };
+            };
+        };
+    };
+    v1_shop_subscriptions_billing_auth_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopSubscriptionBillingResultEnvelope"];
+                };
+            };
+        };
+    };
+    v1_shop_subscriptions_billing_auth_cancel_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No response body */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    v1_shop_subscriptions_start_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopSubscriptionRegistrationEnvelope"];
+                };
             };
         };
     };

@@ -82,6 +82,7 @@ from gnu_jango.ai.recommend import similar_products
 from gnu_jango.ai.review_summaries import review_summary_payload
 from gnu_jango.shop.product_relations import related_product_ids
 from gnu_jango.shop.shop_display import category_list_display, related_list_enabled
+from gnu_jango.shop.subscriptions import product_offer as subscription_offer
 from gnu_jango.shop.taxes import calculate_order_tax_amounts
 from gnu_jango.users import point_ledger
 from gnu_jango.users.models import Profile
@@ -529,6 +530,8 @@ def product_payload(product, request=None, *, detail=False):
         data["similar_items"] = [product_payload(item) for item in similar]
         # Optional (G5_AI_REVIEW_SUMMARIES): the stored AI summary of the published reviews.
         data["ai_review_summary"] = review_summary_payload(product)
+        # 정기구독: the cycles and discount members may subscribe with (null when off or not offered)
+        data["subscription"] = subscription_offer(product)
     return data
 
 
@@ -702,16 +705,43 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
             "장바구니 금액에 변동사항이 있습니다. 장바구니를 다시 확인해 주세요.",
             code="cart_price_changed",
         )
-    hope_date = order_hope_date(data)
-    order_id = order_id or generate_numeric_order_id()
     selected_ct_ids = {str(item["ct_id"]) for item in cart["items"]}
-    cart_total = cart["total_price"]
-    product_coupons = product_coupon_entries(user, cart["items"])
+    order = create_order_from_lines(
+        user,
+        cart["items"],
+        data,
+        order_id=order_id,
+        force_status=force_status,
+        client_ip=get_client_ip(request),
+        guest_password=guest_password,
+    )
+    remaining_items = [item for item in cart_items(request) if str(item.get("ct_id")) not in selected_ct_ids]
+    save_cart_items(request, remaining_items)
+    if not user:
+        guest_order_ids = list(request.session.get("g5_guest_order_ids", []))
+        if order.od_id not in guest_order_ids:
+            guest_order_ids.append(order.od_id)
+        request.session["g5_guest_order_ids"] = guest_order_ids[-20:]
+        request.session.modified = True
+    return order
+
+
+def create_order_from_lines(user, lines, data, *, order_id=None, force_status=None, client_ip=None,
+                            guest_password="", subscription=False):
+    """Create an order (with its lines, stock, coupons, points and address) from ``lines``: cart
+    line dicts as ``cart_item_payload`` builds them. The checkout passes the selected cart lines;
+    a subscription charge (shop/subscriptions.py) passes its one line and ``subscription=True``,
+    which skips the checkout's payment-method switches (the registered card pays it) and the
+    희망배송일 (a subscription's delivery follows its cycle)."""
+    hope_date = None if subscription else order_hope_date(data)
+    order_id = order_id or generate_numeric_order_id()
+    cart_total = sum(safe_int(item.get("line_total"), 0) for item in lines)
+    product_coupons = product_coupon_entries(user, lines)
     item_coupon_entries = [(coupon, discount) for _, coupon, discount in product_coupons]
     # each product coupon is at most its product's total, so together they never pass cart_total
     cart_coupon = sum(discount for _, discount in item_coupon_entries)
     # the lines as ordered: each product's validated coupon on its first line (tax split, snapshot)
-    coupon_lines = items_with_product_coupon_prices(cart["items"], product_coupons)
+    coupon_lines = items_with_product_coupon_prices(lines, product_coupons)
     orderer_zip = normalize_zip_from_keys(
         data,
         full_keys=("od_zip", "zip"),
@@ -723,11 +753,11 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
         split_keys=("od_b_zip1", "od_b_zip2"),
         default=orderer_zip,
     )
-    shipping = shipping_quote(cart_total, recipient_zip, items=cart["items"])
+    shipping = shipping_quote(cart_total, recipient_zip, items=lines)
     send_cost = shipping["base"]
     send_cost2 = shipping["extra"]
     settle_case = str(data.get("od_settle_case") or data.get("payment_method") or "bank")
-    if not online_payment_method_enabled(settle_case):
+    if not subscription and not online_payment_method_enabled(settle_case):
         raise StockAdjustmentError(
             "사용할 수 없는 결제수단입니다. 결제수단을 다시 선택해 주세요.",
             code="payment_method_disabled",
@@ -959,9 +989,9 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
             od_cash_request=cash_receipt_request,
             od_cash_type=cash_receipt_type,
             od_receipt_time=now_label,
-            od_ip=get_client_ip(request),
+            od_ip=client_ip,
         )))
-        for item in cart["items"]:
+        for item in lines:
             product = reserve_product_stock(item["it_id"], item["ct_qty"], item.get("ct_option") or "", item.get("io_type") or 0)
             ShopOrderItem.objects.create(
                 order=order,
@@ -1049,15 +1079,6 @@ def create_order_from_request(request, data, *, order_id=None, force_status=None
                 "dt_time": timezone.now(),
             },
         )
-
-    remaining_items = [item for item in cart_items(request) if str(item.get("ct_id")) not in selected_ct_ids]
-    save_cart_items(request, remaining_items)
-    if not user:
-        guest_order_ids = list(request.session.get("g5_guest_order_ids", []))
-        if order.od_id not in guest_order_ids:
-            guest_order_ids.append(order.od_id)
-        request.session["g5_guest_order_ids"] = guest_order_ids[-20:]
-        request.session.modified = True
     return order
 
 

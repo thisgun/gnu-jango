@@ -19,6 +19,7 @@ import {
   type ProductPurchaseControlsProps,
 } from "./ProductPurchaseControls";
 import type { ProductNaverPayActions } from "./useProductNaverPay";
+import { ProductSubscriptionPanel } from "./ProductSubscriptionPanel";
 
 export type ShippingPaymentDisplay = {
   label: string;
@@ -37,6 +38,8 @@ export type ProductPurchasePanelProps = ProductPurchaseControlsProps & {
   onOpenRecommendDialog: () => void;
   /** 네이버페이가 켜진 쇼핑몰에서만 준다. */
   naverPay: ProductNaverPayActions | null;
+  /** 로그인하지 않았으면 로그인 화면으로 보내고 false — 정기구독 신청이 쓴다. */
+  onRequireLogin: () => boolean;
 };
 
 /** 깨진 글자(U+FFFD)가 섞인 옛 데이터는 보이지 않게 비운다. */
@@ -58,6 +61,7 @@ export function ProductPurchasePanel({
   onCtSendCostSelectionChange,
   onOpenRecommendDialog,
   naverPay,
+  onRequireLogin,
   ...controlProps
 }: ProductPurchasePanelProps) {
   const { product, isTelInquiry, canPurchaseProduct, isSoldOut } = controlProps;
@@ -226,6 +230,18 @@ export function ProductPurchasePanel({
       </div>
 
       <ProductPurchaseControls {...controlProps} />
+
+      {/* 정기구독(카드 자동결제): 쇼핑몰이 켰고 이 상품이 정기구독을 받을 때만 서버가 subscription 을 보낸다. */}
+      {product.subscription && canPurchaseProduct && (
+        <ProductSubscriptionPanel
+          product={product}
+          offer={product.subscription}
+          hasOptionSubjects={controlProps.optionSubjects.length > 0}
+          selectedCartOptions={controlProps.selectedCartOptions}
+          quantity={controlProps.quantity}
+          onRequireLogin={onRequireLogin}
+        />
+      )}
 
       {naverPay && canPurchaseProduct && (
         <div className="product-naverpay grid gap-2 sm:grid-cols-2">

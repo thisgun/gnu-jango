@@ -38,7 +38,8 @@ from gnu_jango.shop.admin.catalog_tools import (
 from gnu_jango.shop.admin.item_info_form import ItemInfoTextField, clean_item_info, item_info_kind_field
 from gnu_jango.shop.product_copy import copy_product, next_product_id
 from gnu_jango.shop.product_relations import mirror_product_relations
-from gnu_jango.shop.models import ShopProduct, ShopProductRelation, ShopStockAdjustment
+from gnu_jango.shop.models import ShopProduct, ShopProductRelation, ShopStockAdjustment, ShopSubscription
+from gnu_jango.shop.subscriptions import parse_cycles
 from gnu_jango.shop.import_export_resources import ShopProductResource
 from gnu_jango.core.audit import AdminExportAuditMixin, UnfoldHistoryAdmin
 
@@ -129,8 +130,23 @@ class ShopProductActionForm(ActionForm):
     )
 
 
+class CycleChoiceField(forms.MultipleChoiceField):
+    """The 정기구독 cycle checkboxes; an empty value (a form re-posted by a script) means none."""
+
+    def to_python(self, value):
+        return [item for item in super().to_python(value) if item]
+
+
 class ShopProductAdminForm(ProductOptionFormMixin, forms.ModelForm):
     it_info_value = ItemInfoTextField()
+    # 정기구독 배송 주기: stored as a comma list in the model's order (1w,2w,4w,1m)
+    it_subscription_cycles = CycleChoiceField(
+        label="정기구독 배송 주기",
+        choices=ShopSubscription.CYCLE_CHOICES,
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="고객이 고를 수 있는 주기입니다. 정기구독 가능을 켜면 하나 이상 고르세요.",
+    )
 
     class Meta:
         model = ShopProduct
@@ -142,9 +158,24 @@ class ShopProductAdminForm(ProductOptionFormMixin, forms.ModelForm):
             # itemform.php: the notice kind comes from lib/iteminfo.lib.php
             self.fields["it_info_gubun"] = item_info_kind_field(self.instance.it_info_gubun)
         self.setup_option_builder()
+        if "it_subscription_cycles" in self.fields:
+            self.initial["it_subscription_cycles"] = list(parse_cycles(self.instance.it_subscription_cycles))
+        if "it_subscription_discount" in self.fields:
+            # a product form saved without the 정기구독 tab (imports, older scripts) keeps "no discount"
+            self.fields["it_subscription_discount"].required = False
+
+    def clean_it_subscription_discount(self):
+        value = self.cleaned_data.get("it_subscription_discount")
+        return 0 if value is None else value
+
+    def clean_it_subscription_cycles(self):
+        return ",".join(parse_cycles(",".join(self.cleaned_data.get("it_subscription_cycles") or [])))
 
     def clean(self):
-        return self.clean_option_fields(clean_item_info(self, super().clean()))
+        cleaned = self.clean_option_fields(clean_item_info(self, super().clean()))
+        if cleaned.get("it_subscription_use") and not cleaned.get("it_subscription_cycles"):
+            self.add_error("it_subscription_cycles", "정기구독을 켜려면 배송 주기를 하나 이상 고르세요.")
+        return cleaned
 
     def clean_it_stock_qty(self):
         stock = self.cleaned_data.get("it_stock_qty")
@@ -341,6 +372,18 @@ class ShopProductAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAd
                     ("it_stock_qty", "stock_adjustment_link", "it_stock_sms"),
                     ("it_buy_min_qty", "it_buy_max_qty"),
                     ("it_tel_inq", "it_soldout", "it_use"),
+                ),
+            },
+        ),
+        (
+            "정기구독",
+            {
+                "classes": ("tab",),
+                "description": "쇼핑몰 설정 > 결제설정의 정기구독 사용이 켜져 있어야 상품 상세에 표시됩니다.",
+                "fields": (
+                    "it_subscription_use",
+                    "it_subscription_cycles",
+                    "it_subscription_discount",
                 ),
             },
         ),

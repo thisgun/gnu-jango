@@ -316,6 +316,19 @@ UNFOLD = {
                         "icon": "payments",
                         "link": reverse_lazy("admin:shop_shoppersonalpay_changelist"),
                     },
+                    {
+                        # 정기구독 (Toss card billing, shop/subscriptions.py)
+                        "title": "정기구독",
+                        "icon": "autorenew",
+                        "link": reverse_lazy("admin:shop_shopsubscription_changelist"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopsubscription"),
+                    },
+                    {
+                        "title": "정기구독 결제",
+                        "icon": "credit_card",
+                        "link": reverse_lazy("admin:shop_shopsubscriptioncharge_changelist"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopsubscriptioncharge"),
+                    },
                 ],
             },
             {
@@ -694,6 +707,8 @@ REST_FRAMEWORK = {
         "shop-guest-order": "20/hour",
         # cash receipt requests after the order (each try may reach the Toss cash receipt API)
         "shop-cash-receipt": "10/hour",
+        # subscription card registrations and changes (each may reach the Toss billing API)
+        "shop-subscription": "20/hour",
         "guest-password": "10/min",
         "docs-ask": "30/min",
         "docs-ask-answer": "5/min",
@@ -831,6 +846,9 @@ SHOP_TOSS_CLIENT_KEY = de_config("SHOP_TOSS_CLIENT_KEY", default="")
 SHOP_TOSS_SECRET_KEY = de_config("SHOP_TOSS_SECRET_KEY", default="")
 SHOP_TOSS_API_BASE_URL = de_config("SHOP_TOSS_API_BASE_URL", default="https://api.tosspayments.com")
 SHOP_TOSS_VBANK_ENABLED = bool_config("SHOP_TOSS_VBANK_ENABLED", default=False)
+# 정기구독 (Toss card billing): needs a Toss 자동결제 contract. On, the admin may switch the feature
+# on (de_subscription_use) and run_scheduled_jobs charges due subscriptions (charge_shop_subscriptions).
+SHOP_SUBSCRIPTIONS_ENABLED = bool_config("SHOP_SUBSCRIPTIONS_ENABLED", default=False)
 # The admin shop settings can hold a Toss key pair (sealed in Config). The two env keys above win
 # when either is set; False ignores the admin pair (disposable previews).
 SHOP_TOSS_ADMIN_KEYS_ENABLED = bool_config("SHOP_TOSS_ADMIN_KEYS_ENABLED", default=True)

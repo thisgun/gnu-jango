@@ -92,7 +92,7 @@
     "test:payment": "playwright test tests/payment-shared.spec.ts tests/payment-kcp.spec.ts tests/payment-nicepay.spec.ts tests/payment-return.spec.ts tests/payment-inicis.spec.ts tests/payment-toss.spec.ts",
     "test:payment:kcp": "playwright test tests/payment-kcp.spec.ts",
     "test:payment:nicepay": "playwright test tests/payment-nicepay.spec.ts",
-    "test:payment:return": "playwright test tests/payment-return.spec.ts",
+    "test:payment:return": "playwright test tests/payment-return.spec.ts tests/subscription-billing.spec.ts",
     "test:payment:inicis": "playwright test tests/payment-inicis.spec.ts",
     "test:payment:toss": "playwright test tests/payment-toss.spec.ts",
     "test:order": "playwright test tests/order-discount-preview.spec.ts tests/order-submit.spec.ts tests/order-submit-feedback.spec.ts tests/order-submit-flow.spec.ts tests/order-submit-actions.spec.ts tests/order-submit-handler.spec.ts",

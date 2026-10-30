@@ -1,0 +1,11 @@
+{% extends "shop/mail/_base.html" %}
+{% block heading %}{{ title }}{% endblock %}
+{% block content %}
+<p>{{ name }}님, 정기구독 안내입니다.</p>
+<p style="margin:12px 0;">{{ body }}</p>
+<p style="margin:0;"><strong>상품</strong> {{ subscription.it_name }} {{ subscription.qty }}개</p>
+<p style="margin:0;"><strong>주기</strong> {{ subscription.get_cycle_display }}</p>{% if subscription.card_company or subscription.card_number %}
+<p style="margin:0;"><strong>결제 카드</strong> {{ subscription.card_company }} {{ subscription.card_number }}</p>{% endif %}{% if link %}
+<p style="margin-top:20px;"><a href="{{ link }}" style="display:inline-block;padding:10px 16px;background:#0a8f45;color:#ffffff;text-decoration:none;border-radius:6px;">자세히 보기</a></p>{% endif %}
+<p style="margin-top:16px;font-size:12px;color:#78716c;">정기구독 결제 금액은 결제하는 날의 상품 가격으로 정해집니다. 마이페이지 &gt; 정기구독에서 일시정지, 건너뛰기, 주기 변경, 해지할 수 있습니다.</p>
+{% endblock %}

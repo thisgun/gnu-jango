@@ -734,6 +734,8 @@ export const publicSettingsSchema = z
     cf_home_gallery: optionalString,
     cf_bbs_rewrite: numberValue.optional(),
     infinite_scroll: booleanValue.optional(),
+    /** 정기구독(카드 자동결제)을 쓸 수 있다 — 마이페이지 메뉴와 상품 상세의 정기구독 칸. */
+    shop_subscriptions: booleanValue.optional(),
     comment_editor: booleanValue.optional(),
     pwa_enabled: booleanValue.optional(),
     /** 쇼핑몰 설정에서 올린 로고(없으면 ""): 상단 · 하단 · 모바일 상단 · 모바일 하단. */

@@ -14,7 +14,7 @@ API_DIR = Path(__file__).resolve().parents[1] / "api"
 SHOP_DIR = Path(__file__).resolve().parents[1] / "shop"
 MESSAGES_TS = Path(__file__).resolve().parents[2] / "nextjs" / "src" / "lib" / "api-messages.ts"
 SKIPPED_MODULES = set()
-ERROR_CALLS = {"api_error", "StockAdjustmentError"}
+ERROR_CALLS = {"api_error", "StockAdjustmentError", "SubscriptionError"}
 
 
 def _has_hangul(text):
@@ -23,7 +23,7 @@ def _has_hangul(text):
 
 def api_messages():
     messages = set()
-    for path in [*API_DIR.glob("*.py"), SHOP_DIR / "inventory.py"]:
+    for path in [*API_DIR.glob("*.py"), SHOP_DIR / "inventory.py", SHOP_DIR / "subscriptions.py"]:
         if path.name in SKIPPED_MODULES:
             continue
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):

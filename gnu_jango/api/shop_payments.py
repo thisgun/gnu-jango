@@ -637,6 +637,7 @@ def redact_payment_data(data):
                 "holder",
                 "merchant_key",
                 "access_token",
+                "billing_key",
                 "identity_number",
                 "registration_number",
                 "business_no",
