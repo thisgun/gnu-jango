@@ -22,13 +22,20 @@
     document.querySelectorAll('button[data-g5-post-url]').forEach(function (button) {
       button.addEventListener('click', function () {
         var token = document.querySelector('input[name="csrfmiddlewaretoken"]');
-        if (!token || button.disabled) {
+        var target;
+        try {
+          target = new URL(button.getAttribute('data-g5-post-url') || '', window.location.href);
+        } catch (error) {
+          return;
+        }
+        // same-origin admin paths only: never a javascript: or foreign URL from the markup
+        if (!token || button.disabled || target.origin !== window.location.origin) {
           return;
         }
         button.disabled = true;
         var form = document.createElement('form');
         form.method = 'post';
-        form.action = button.getAttribute('data-g5-post-url');
+        form.action = target.pathname + target.search;
         var input = document.createElement('input');
         input.type = 'hidden';
         input.name = 'csrfmiddlewaretoken';
