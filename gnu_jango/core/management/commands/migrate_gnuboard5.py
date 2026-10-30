@@ -717,6 +717,9 @@ class Command(BaseCommand):
             profile.email_certify = optional_datetime_value(scalar(row, "mb_email_certify"))
             profile.email_certify_token = text(row, "mb_email_certify2", max_length=255)
             profile.open_profile = integer(row, "mb_open", 0) > 0
+            # g5_member.mb_mailling keeps no date of its own; the import is when it was carried over.
+            profile.mailing = integer(row, "mb_mailling", 0) > 0
+            profile.mailing_date = timezone.now() if profile.mailing else None
             open_date = date_value(scalar(row, "mb_open_date"))
             profile.open_profile_date = (
                 timezone.make_aware(datetime.combine(open_date, time.min)) if open_date else None

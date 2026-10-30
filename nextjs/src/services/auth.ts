@@ -21,6 +21,8 @@ export interface RegisterPayload {
   captcha_key?: string;
   agree_terms: boolean;
   agree_privacy: boolean;
+  // 정보 메일 수신 동의 (mb_mailling) — 고르지 않으면 받지 않는다.
+  mb_mailling?: number;
   mb_recommend?: string;
   // 본인인증(KG 이니시스 간편인증) 결과 — gnuboard5 admin cf_cert_use=1 일 때 필수.
   cert_type?: string;

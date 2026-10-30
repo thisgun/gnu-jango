@@ -5,8 +5,6 @@ from django import forms
 from unfold.forms import ActionForm
 from django.contrib import messages
 from django.contrib.admin import ActionLocation
-from django.db import transaction
-from django.utils import timezone
 from django.utils.html import format_html_join, strip_tags
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
@@ -165,7 +163,8 @@ class ShopStockNotificationAdmin(ModelAdmin):
             self.message_user(request, _("Send at most 25 messages per operation."), level=messages.ERROR)
             return
 
-        from gnu_jango.shop.sms.service import send_message, sms_settings
+        from gnu_jango.shop.restock import send_restock_sms
+        from gnu_jango.shop.sms.service import sms_settings
 
         counts = {"accepted": 0, "rejected": 0, "unknown": 0, "skipped": 0}
         sms = sms_settings()
@@ -186,59 +185,8 @@ class ShopStockNotificationAdmin(ModelAdmin):
             return
 
         for notification_id in selected_ids:
-            with transaction.atomic():
-                notification = (
-                    # PostgreSQL refuses FOR UPDATE on the nullable side of the product join
-                    ShopStockNotification.objects.select_for_update(of=("self",))
-                    .select_related("product")
-                    .filter(pk=notification_id)
-                    .first()
-                )
-                if not notification or notification.ss_send:
-                    counts["skipped"] += 1
-                    continue
-                previous = notification.send_logs.order_by("-created_at", "-pk").first()
-                if previous and previous.status in {"sending", "unknown"}:
-                    counts["skipped"] += 1
-                    continue
-                product = notification.product
-                if (
-                    not product
-                    or str(product.it_soldout or "0") == "1"
-                    or int(product.it_stock_qty or 0) <= 0
-                ):
-                    counts["skipped"] += 1
-                    continue
-                message_text = f"[{sender_name}] {product.it_name} 상품이 재입고되었습니다."
-                digits = "".join(character for character in str(notification.ss_hp or "") if character.isdigit())
-                send_log = ShopStockNotificationSendLog.objects.create(
-                    notification=notification,
-                    product_it_id=notification.it_id,
-                    recipient_last4=digits[-4:],
-                    message=message_text,
-                    requested_by=request.user,
-                )
-
-            # never raises: configuration, gateway and network failures come back as a result
-            result = send_message(
-                notification.ss_hp, message_text, current=sms, purpose=f"재입고 {notification.it_id}"
-            )
-            final_status = result.status
-            error_text = result.error_text
-            provider_code = result.provider_code
-
-            with transaction.atomic():
-                send_log.status = final_status
-                send_log.error_text = error_text[:2000]
-                send_log.provider_code = provider_code[:40]
-                send_log.completed_at = timezone.now()
-                send_log.save(update_fields=("status", "error_text", "provider_code", "completed_at"))
-                if final_status == "accepted":
-                    ShopStockNotification.objects.filter(pk=notification_id, ss_send=False).update(
-                        ss_send=True,
-                        ss_send_time=timezone.now(),
-                    )
-            counts[final_status] = counts.get(final_status, 0) + 1
+            status = send_restock_sms(notification_id, sms=sms, sender_name=sender_name, requested_by=request.user)
+            counts[status] = counts.get(status, 0) + 1
 
         self.message_user(
             request,

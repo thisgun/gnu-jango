@@ -3111,6 +3111,130 @@
                 }
             }
         },
+        "/api/v1/shop/orders/{od_id}/returns": {
+            "get": {
+                "operationId": "v1_shop_orders_returns_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "od_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ShopOrderReturnsEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            },
+            "post": {
+                "operationId": "v1_shop_orders_returns_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "od_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/ShopReturnCreate"
+                            }
+                        }
+                    },
+                    "required": true
+                },
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ShopOrderReturnsEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/shop/orders/{od_id}/returns/{request_id}/withdraw": {
+            "post": {
+                "operationId": "v1_shop_orders_returns_withdraw_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "od_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    },
+                    {
+                        "in": "path",
+                        "name": "request_id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ShopOrderReturnsEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v1/shop/orders/legacy-data": {
             "post": {
                 "operationId": "v1_shop_orders_legacy_data_create",
@@ -3534,6 +3658,25 @@
                 }
             }
         },
+        "/api/v1/shop/price-alerts": {
+            "get": {
+                "operationId": "v1_shop_price_alerts_retrieve",
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
         "/api/v1/shop/products": {
             "get": {
                 "operationId": "v1_shop_products_retrieve",
@@ -3648,6 +3791,89 @@
                 ],
                 "responses": {
                     "200": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/v1/shop/products/{it_id}/price-alert": {
+            "get": {
+                "operationId": "v1_shop_products_price_alert_retrieve",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "it_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "post": {
+                "operationId": "v1_shop_products_price_alert_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "it_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
+                    }
+                }
+            },
+            "delete": {
+                "operationId": "v1_shop_products_price_alert_destroy",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "it_id",
+                        "schema": {
+                            "type": "string"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "204": {
                         "description": "No response body"
                     }
                 }
@@ -5104,6 +5330,12 @@
                     "mb_open_date": {
                         "type": "string"
                     },
+                    "mb_mailling": {
+                        "type": "integer"
+                    },
+                    "mb_mailling_date": {
+                        "type": "string"
+                    },
                     "is_staff": {
                         "type": "boolean"
                     },
@@ -5151,6 +5383,8 @@
                     "mb_icon_path",
                     "mb_id",
                     "mb_level",
+                    "mb_mailling",
+                    "mb_mailling_date",
                     "mb_name",
                     "mb_nick",
                     "mb_no",
@@ -6417,6 +6651,12 @@
                     },
                     "cancel_block_reason": {
                         "type": "string"
+                    },
+                    "return_request_kind": {
+                        "type": "string"
+                    },
+                    "return_request_status": {
+                        "type": "string"
                     }
                 },
                 "required": [
@@ -6504,6 +6744,8 @@
                     "od_vbank_status",
                     "od_zip",
                     "receipt_url",
+                    "return_request_kind",
+                    "return_request_status",
                     "uid"
                 ]
             },
@@ -6801,6 +7043,12 @@
                     "cancel_block_reason": {
                         "type": "string"
                     },
+                    "return_request_kind": {
+                        "type": "string"
+                    },
+                    "return_request_status": {
+                        "type": "string"
+                    },
                     "items": {
                         "type": "array",
                         "items": {
@@ -6902,6 +7150,8 @@
                     "od_vbank_status",
                     "od_zip",
                     "receipt_url",
+                    "return_request_kind",
+                    "return_request_status",
                     "shipment_tracking",
                     "uid"
                 ]
@@ -7017,6 +7267,95 @@
                     "line_point",
                     "line_total",
                     "stock_adjusted"
+                ]
+            },
+            "ShopOrderReturns": {
+                "type": "object",
+                "description": "``returns.customer_payload(order)``.",
+                "properties": {
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "request_days": {
+                        "type": "integer"
+                    },
+                    "return_shipping_fee": {
+                        "type": "integer"
+                    },
+                    "can_request": {
+                        "type": "boolean"
+                    },
+                    "block_reason": {
+                        "type": "string"
+                    },
+                    "kinds": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopReturnKindOption"
+                        }
+                    },
+                    "reasons": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopReturnReasonOption"
+                        }
+                    },
+                    "lines": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopReturnOrderLine"
+                        }
+                    },
+                    "requests": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopReturnRequest"
+                        }
+                    }
+                },
+                "required": [
+                    "block_reason",
+                    "can_request",
+                    "enabled",
+                    "kinds",
+                    "lines",
+                    "reasons",
+                    "request_days",
+                    "requests",
+                    "return_shipping_fee"
+                ]
+            },
+            "ShopOrderReturnsEnvelope": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ShopOrderReturns"
+                    },
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "ok": {
+                        "type": "boolean"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "errors": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "errors",
+                    "message",
+                    "meta",
+                    "ok",
+                    "success"
                 ]
             },
             "ShopOrderShipmentTracking": {
@@ -7780,6 +8119,285 @@
                     "success"
                 ]
             },
+            "ShopReturnCreate": {
+                "type": "object",
+                "description": "The body of ``POST /api/v1/shop/orders/{od_id}/returns`` (a guest also sends ``uid``).",
+                "properties": {
+                    "kind": {
+                        "$ref": "#/components/schemas/ShopReturnKindEnum"
+                    },
+                    "reason": {
+                        "$ref": "#/components/schemas/ShopReturnReasonEnum"
+                    },
+                    "detail": {
+                        "type": "string"
+                    },
+                    "lines": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopReturnLineInput"
+                        }
+                    },
+                    "uid": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "kind",
+                    "lines",
+                    "reason"
+                ]
+            },
+            "ShopReturnKindEnum": {
+                "enum": [
+                    "return",
+                    "exchange"
+                ],
+                "type": "string",
+                "description": "* `return` - return\n* `exchange` - exchange"
+            },
+            "ShopReturnKindOption": {
+                "type": "object",
+                "properties": {
+                    "value": {
+                        "$ref": "#/components/schemas/ShopReturnKindEnum"
+                    },
+                    "label": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "label",
+                    "value"
+                ]
+            },
+            "ShopReturnLineInput": {
+                "type": "object",
+                "properties": {
+                    "line_id": {
+                        "type": "integer"
+                    },
+                    "qty": {
+                        "type": "integer",
+                        "minimum": 1
+                    }
+                },
+                "required": [
+                    "line_id",
+                    "qty"
+                ]
+            },
+            "ShopReturnOrderLine": {
+                "type": "object",
+                "description": "One order line and whether it may be asked for now.",
+                "properties": {
+                    "line_id": {
+                        "type": "integer"
+                    },
+                    "ct_id": {
+                        "type": "string"
+                    },
+                    "it_id": {
+                        "type": "string"
+                    },
+                    "it_name": {
+                        "type": "string"
+                    },
+                    "ct_option": {
+                        "type": "string"
+                    },
+                    "ct_qty": {
+                        "type": "integer"
+                    },
+                    "ct_status": {
+                        "type": "string"
+                    },
+                    "line_total": {
+                        "type": "integer"
+                    },
+                    "eligible": {
+                        "type": "boolean"
+                    },
+                    "block_reason": {
+                        "type": "string"
+                    },
+                    "deadline": {
+                        "type": "string"
+                    },
+                    "open_request_id": {
+                        "type": "integer",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "block_reason",
+                    "ct_id",
+                    "ct_option",
+                    "ct_qty",
+                    "ct_status",
+                    "deadline",
+                    "eligible",
+                    "it_id",
+                    "it_name",
+                    "line_id",
+                    "line_total",
+                    "open_request_id"
+                ]
+            },
+            "ShopReturnReasonEnum": {
+                "enum": [
+                    "change_of_mind",
+                    "defective",
+                    "wrong_item",
+                    "other"
+                ],
+                "type": "string",
+                "description": "* `change_of_mind` - change_of_mind\n* `defective` - defective\n* `wrong_item` - wrong_item\n* `other` - other"
+            },
+            "ShopReturnReasonOption": {
+                "type": "object",
+                "properties": {
+                    "value": {
+                        "$ref": "#/components/schemas/ShopReturnReasonEnum"
+                    },
+                    "label": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "label",
+                    "value"
+                ]
+            },
+            "ShopReturnRequest": {
+                "type": "object",
+                "description": "``returns.request_payload``: one request; times are ISO strings or \"\".",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "kind": {
+                        "$ref": "#/components/schemas/ShopReturnKindEnum"
+                    },
+                    "kind_label": {
+                        "type": "string"
+                    },
+                    "status": {
+                        "$ref": "#/components/schemas/ShopReturnStatusEnum"
+                    },
+                    "status_label": {
+                        "type": "string"
+                    },
+                    "reason": {
+                        "$ref": "#/components/schemas/ShopReturnReasonEnum"
+                    },
+                    "reason_label": {
+                        "type": "string"
+                    },
+                    "detail": {
+                        "type": "string"
+                    },
+                    "reject_reason": {
+                        "type": "string"
+                    },
+                    "return_fee": {
+                        "type": "integer"
+                    },
+                    "refund_amount": {
+                        "type": "integer"
+                    },
+                    "exchange_delivery_company": {
+                        "type": "string"
+                    },
+                    "exchange_invoice": {
+                        "type": "string"
+                    },
+                    "exchange_inquiry_url": {
+                        "type": "string"
+                    },
+                    "can_withdraw": {
+                        "type": "boolean"
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "approved_at": {
+                        "type": "string"
+                    },
+                    "closed_at": {
+                        "type": "string"
+                    },
+                    "lines": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopReturnRequestLine"
+                        }
+                    }
+                },
+                "required": [
+                    "approved_at",
+                    "can_withdraw",
+                    "closed_at",
+                    "created_at",
+                    "detail",
+                    "exchange_delivery_company",
+                    "exchange_inquiry_url",
+                    "exchange_invoice",
+                    "id",
+                    "kind",
+                    "kind_label",
+                    "lines",
+                    "reason",
+                    "reason_label",
+                    "refund_amount",
+                    "reject_reason",
+                    "return_fee",
+                    "status",
+                    "status_label"
+                ]
+            },
+            "ShopReturnRequestLine": {
+                "type": "object",
+                "properties": {
+                    "line_id": {
+                        "type": "integer"
+                    },
+                    "ct_id": {
+                        "type": "string"
+                    },
+                    "it_name": {
+                        "type": "string"
+                    },
+                    "ct_option": {
+                        "type": "string"
+                    },
+                    "qty": {
+                        "type": "integer"
+                    },
+                    "amount": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "amount",
+                    "ct_id",
+                    "ct_option",
+                    "it_name",
+                    "line_id",
+                    "qty"
+                ]
+            },
+            "ShopReturnStatusEnum": {
+                "enum": [
+                    "requested",
+                    "approved",
+                    "completed",
+                    "rejected",
+                    "withdrawn"
+                ],
+                "type": "string",
+                "description": "* `requested` - requested\n* `approved` - approved\n* `completed` - completed\n* `rejected` - rejected\n* `withdrawn` - withdrawn"
+            },
             "SiteSettings": {
                 "type": "object",
                 "properties": {
@@ -7851,6 +8469,9 @@
                     "pwa_enabled": {
                         "type": "boolean"
                     },
+                    "price_alert_enabled": {
+                        "type": "boolean"
+                    },
                     "visit": {
                         "$ref": "#/components/schemas/VisitStats"
                     },
@@ -7891,6 +8512,7 @@
                     "de_bank_account",
                     "de_bank_use",
                     "infinite_scroll",
+                    "price_alert_enabled",
                     "pwa_enabled",
                     "shop_display",
                     "shop_logo",

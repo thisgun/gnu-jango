@@ -9,6 +9,7 @@ from . import (
     page_bootstrap,
     shop_nicepay,
     shop_personal_pay,
+    shop_price_alerts,
     v1_auth,
     v1_board,
     v1_community,
@@ -19,6 +20,7 @@ from . import (
 )
 from .shop_cash_receipts import order_cash_receipt_view
 from .shop_delivery_tracker import delivery_tracker_webhook_view
+from .shop_returns import order_return_withdraw_view, order_returns_view
 
 app_name = "api_v1"
 
@@ -97,6 +99,8 @@ urlpatterns = [
     path("shop/products/suggest", v1_shop.product_suggest_view, name="shop-product-suggest"),
     path("shop/products/<str:it_id>/hit", v1_shop.product_hit_view, name="shop-product-hit"),
     path("shop/products/<str:it_id>/stock-notify", v1_shop.product_stock_notify_view, name="shop-product-stock-notify"),
+    path("shop/products/<str:it_id>/price-alert", shop_price_alerts.product_price_alert_view, name="shop-product-price-alert"),
+    path("shop/price-alerts", shop_price_alerts.price_alert_list_view, name="shop-price-alerts"),
     path("shop/products/<str:it_id>/recommend", v1_shop.product_recommend_view, name="shop-product-recommend"),
     path("shop/products/<str:it_id>/images", v1_shop.upload_product_image, name="shop-product-images"),
     path("shop/products/<str:it_id>", v1_shop.product_detail_view, name="shop-product-detail"),
@@ -121,6 +125,12 @@ urlpatterns = [
     path("shop/orders/lookup", v1_shop.order_lookup_view, name="shop-order-lookup"),
     path("shop/orders/legacy-data", v1_shop.order_legacy_data_view, name="shop-order-legacy-data"),
     path("shop/orders/<str:od_id>/cash-receipt", order_cash_receipt_view, name="shop-order-cash-receipt"),
+    path("shop/orders/<str:od_id>/returns", order_returns_view, name="shop-order-returns"),
+    path(
+        "shop/orders/<str:od_id>/returns/<int:request_id>/withdraw",
+        order_return_withdraw_view,
+        name="shop-order-return-withdraw",
+    ),
     path("shop/orders/<str:od_id>", v1_shop.order_detail_view, name="shop-order-detail"),
     path("shop/orders", v1_shop.orders_view, name="shop-orders"),
     path("shop/payment/config", v1_shop.payment_config_view, name="shop-payment-config"),

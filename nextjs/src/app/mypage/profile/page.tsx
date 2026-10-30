@@ -31,6 +31,8 @@ export default function ProfilePage() {
   });
   // 정보공개 (mb_open) — 다른 회원이 내 자기소개를 볼 수 있는지.
   const [openProfile, setOpenProfile] = useState(true);
+  // 정보 메일 수신 (mb_mailling) — 장바구니 알림 같은 광고성 메일.
+  const [mailing, setMailing] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [msg, setMsg] = useState({ type: "", text: "" });
   const [loading, setLoading] = useState(false);
@@ -46,6 +48,7 @@ export default function ProfilePage() {
         mb_email: user.mb_email || "",
       });
       setOpenProfile(user.mb_open === undefined ? true : user.mb_open === 1);
+      setMailing(user.mb_mailling === 1);
       setCurrentPassword("");
       setAvatarUrl(user.mb_icon_path || null);
     }
@@ -100,6 +103,7 @@ export default function ProfilePage() {
       const response = await updateMyProfile({
         ...form,
         mb_open: openProfile ? 1 : 0,
+        mb_mailling: mailing ? 1 : 0,
         ...(emailChanged ? { mb_password_current: currentPassword } : {}),
       });
       if (response.data?.email_certify_required) {
@@ -235,6 +239,28 @@ export default function ProfilePage() {
                 <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
                   다른 회원이 나의 정보를 볼 수 있도록 합니다. 정보를 공개하지 않으면 다른 회원의 정보도 볼 수
                   없습니다. 정보공개를 바꾸면 일정 기간 동안 다시 바꿀 수 없을 수 있습니다.
+                </span>
+              </span>
+            </label>
+            <label
+              htmlFor="mb_mailling"
+              className="flex cursor-pointer items-start gap-2 rounded-[4px] border border-border bg-base-200 p-3 text-sm"
+            >
+              <input
+                id="mb_mailling"
+                name="mb_mailling"
+                type="checkbox"
+                checked={mailing}
+                onChange={(event) => {
+                  setMailing(event.target.checked);
+                  setMsg({ type: "", text: "" });
+                }}
+                className="mt-0.5 size-4 rounded border-border accent-primary"
+              />
+              <span className="min-w-0">
+                <span className="block font-bold text-base-content">정보 메일 수신</span>
+                <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">
+                  할인 쿠폰, 장바구니 알림 같은 광고성 정보를 메일로 받습니다. 주문·배송 안내 메일은 이 설정과 관계없이 보냅니다.
                 </span>
               </span>
             </label>

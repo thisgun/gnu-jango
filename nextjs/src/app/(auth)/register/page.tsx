@@ -79,6 +79,7 @@ export default function RegisterPage() {
     captcha_key: "",
     agree_terms: false,
     agree_privacy: false,
+    mb_mailling: false,
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
@@ -424,6 +425,7 @@ export default function RegisterPage() {
         mb_email: formData.mb_email,
         agree_terms: formData.agree_terms,
         agree_privacy: formData.agree_privacy,
+        mb_mailling: formData.mb_mailling ? 1 : 0,
         ...(!socialSignup
           ? {
               mb_id: formData.mb_id,
@@ -786,6 +788,21 @@ export default function RegisterPage() {
                 {errors.agree_privacy && (
                   <p className="text-sm text-destructive">{errors.agree_privacy}</p>
                 )}
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="mb_mailling"
+                name="mb_mailling"
+                checked={formData.mb_mailling}
+                onChange={handleChange}
+                disabled={loading}
+              />
+              <div className="space-y-1">
+                <Label htmlFor="mb_mailling">정보 메일 수신 (선택)</Label>
+                <p className="text-xs text-muted-foreground">
+                  할인 쿠폰, 장바구니 알림 같은 광고성 정보를 메일로 받습니다. 동의하지 않아도 가입할 수 있고, 회원정보 수정에서 언제든 바꿀 수 있습니다.
+                </p>
               </div>
             </div>
           </div>

@@ -14,6 +14,8 @@ interface User {
   // 정보공개 (g5_member.mb_open) 와 마지막으로 바꾼 때 (mb_open_date).
   mb_open?: number;
   mb_open_date?: string;
+  // 정보 메일 수신 (g5_member.mb_mailling) — 1이면 장바구니 알림 같은 광고성 메일을 받는다.
+  mb_mailling?: number;
   // 그누보드 cf_admin 일치 여부. 게시판/그룹 관리자 권한은 board context가 필요해
   // 단건 글 응답의 admin_role / can_manage 필드로 별도 전달.
   is_super_admin?: boolean;
@@ -51,6 +53,7 @@ function normalizeUser(
     mb_icon_path: member.mb_icon_path ? String(member.mb_icon_path) : undefined,
     mb_open: member.mb_open === undefined ? undefined : Number(member.mb_open),
     mb_open_date: member.mb_open_date ? String(member.mb_open_date) : undefined,
+    mb_mailling: member.mb_mailling === undefined ? undefined : Number(member.mb_mailling),
     is_super_admin: options.isSuperAdmin,
   };
 }

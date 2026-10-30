@@ -518,6 +518,28 @@ class ShopStockNotificationSendLog(models.Model):
         return f"{self.product_it_id}: {self.get_status_display()} #{self.pk}"
 
 
+class ShopPriceAlert(models.Model):
+    """가격 인하 알림: a member asked to hear once when the product costs less than ``pa_price``, its price
+    when they asked. Asking again after the notice re-arms the same row at the price of that moment."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="shop_price_alerts")
+    product = models.ForeignKey(ShopProduct, on_delete=models.CASCADE, related_name="price_alerts")
+    pa_price = models.IntegerField("신청 당시 가격")
+    created_at = models.DateTimeField("신청일시", default=timezone.now)
+    notified_at = models.DateTimeField("알림일시", null=True, blank=True)
+    notified_price = models.IntegerField("알림 당시 가격", null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "가격 인하 알림"
+        verbose_name_plural = "가격 인하 알림"
+        constraints = [models.UniqueConstraint(fields=["user", "product"], name="shop_price_alert_once")]
+        indexes = [models.Index(fields=["notified_at", "product"])]
+
+    def __str__(self):
+        return f"{self.product_id}: {self.pa_price}"
+
+
 class ShopWishlist(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -685,6 +707,27 @@ class ShopCouponLog(models.Model):
             models.Index(fields=["od_id"]),
             models.Index(fields=["user", "cl_datetime"]),
         ]
+
+
+class ShopCartReminder(models.Model):
+    """One 장바구니 알림 메일: the member's cart as of its newest line (``cart_time``, unix seconds of
+    ct_time) and the coupon that came with it. The pair is unique, so a cart is reminded of only once."""
+
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="shop_cart_reminders")
+    cart_time = models.BigIntegerField("장바구니 기준 시각")
+    line_count = models.PositiveIntegerField("상품 줄 수", default=0)
+    coupon = models.ForeignKey(ShopCoupon, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    sent = models.BooleanField("발송됨", default=False)
+    created_at = models.DateTimeField("생성일시", default=timezone.now, db_index=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "장바구니 알림 메일"
+        verbose_name_plural = "장바구니 알림 메일"
+        constraints = [models.UniqueConstraint(fields=["user", "cart_time"], name="shop_cart_reminder_once")]
+
+    def __str__(self):
+        return f"{self.user_id}: {self.cart_time}"
 
 
 class ShopAddress(models.Model):
@@ -1041,6 +1084,114 @@ class ShopPersonalPay(models.Model):
 
     def __str__(self):
         return self.pp_id
+
+
+class ShopReturnRequest(models.Model):
+    """A customer's request to return (반품) or exchange (교환) delivered lines of an order
+    (shop/returns.py). requested → approved → completed, or rejected / withdrawn; completing a
+    return refunds through the admin line change (shop/order_lines.py)."""
+
+    KIND_RETURN = "return"
+    KIND_EXCHANGE = "exchange"
+    KINDS = ((KIND_RETURN, "반품"), (KIND_EXCHANGE, "교환"))
+
+    STATUS_REQUESTED = "requested"
+    STATUS_APPROVED = "approved"
+    STATUS_COMPLETED = "completed"
+    STATUS_REJECTED = "rejected"
+    STATUS_WITHDRAWN = "withdrawn"
+    STATUSES = (
+        (STATUS_REQUESTED, "신청"),
+        (STATUS_APPROVED, "승인"),
+        (STATUS_COMPLETED, "완료"),
+        (STATUS_REJECTED, "거절"),
+        (STATUS_WITHDRAWN, "철회"),
+    )
+    # a line in an open request cannot be asked for again
+    OPEN_STATUSES = frozenset({STATUS_REQUESTED, STATUS_APPROVED})
+
+    REASON_CHANGE_OF_MIND = "change_of_mind"
+    REASON_DEFECTIVE = "defective"
+    REASON_WRONG_ITEM = "wrong_item"
+    REASON_OTHER = "other"
+    REASONS = (
+        (REASON_CHANGE_OF_MIND, "단순변심"),
+        (REASON_DEFECTIVE, "상품불량"),
+        (REASON_WRONG_ITEM, "오배송"),
+        (REASON_OTHER, "기타"),
+    )
+
+    order = models.ForeignKey(ShopOrder, on_delete=models.CASCADE, related_name="return_requests")
+    # the member who asked; empty for a guest order
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="shop_return_requests",
+        verbose_name="신청 회원",
+    )
+    kind = models.CharField("구분", max_length=10, choices=KINDS)
+    status = models.CharField("상태", max_length=10, choices=STATUSES, default=STATUS_REQUESTED, db_index=True)
+    reason = models.CharField("사유", max_length=20, choices=REASONS)
+    detail = models.TextField("상세 사유", blank=True, default="")
+    # shown to the customer when the shop turns the request down
+    reject_reason = models.CharField("거절 사유", max_length=500, blank=True, default="")
+    # a completed return: the return shipping fee kept back and what was refunded
+    return_fee = models.IntegerField("반품 배송비", default=0)
+    refund_amount = models.IntegerField("환불금액", default=0)
+    # a completed exchange: the re-shipment
+    exchange_delivery_company = models.CharField("교환 배송회사", max_length=100, blank=True, default="")
+    exchange_invoice = models.CharField("교환 운송장번호", max_length=100, blank=True, default="")
+    admin_memo = models.TextField("관리자 메모", blank=True, default="")
+    processed_by = models.CharField("처리자", max_length=150, blank=True, default="")
+    created_at = models.DateTimeField("신청일시", default=timezone.now)
+    approved_at = models.DateTimeField("승인일시", null=True, blank=True)
+    # completed, rejected or withdrawn
+    closed_at = models.DateTimeField("종료일시", null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "반품·교환 신청"
+        verbose_name_plural = "반품·교환 신청"
+        indexes = [models.Index(fields=["status", "created_at"])]
+
+    def __str__(self):
+        return f"{self.order_id} {self.get_kind_display()} #{self.pk}"
+
+    @property
+    def is_open(self):
+        return self.status in self.OPEN_STATUSES
+
+
+class ShopReturnRequestLine(models.Model):
+    """One order line (and how many of its units) in a return or exchange request."""
+
+    request = models.ForeignKey(ShopReturnRequest, on_delete=models.CASCADE, related_name="lines")
+    item = models.ForeignKey(ShopOrderItem, on_delete=models.CASCADE, related_name="return_request_lines")
+    qty = models.PositiveIntegerField("수량", default=1)
+    # what the line was when it was asked for (the line may be split or renamed later)
+    it_name = models.CharField(max_length=255, blank=True, default="")
+    ct_option = models.CharField(max_length=255, blank=True, default="")
+    amount = models.IntegerField(default=0)
+    # kept in step with the request status: one open request per order line
+    is_open = models.BooleanField("처리 중", default=True)
+
+    class Meta:
+        ordering = ["pk"]
+        verbose_name = "반품·교환 신청 상품"
+        verbose_name_plural = "반품·교환 신청 상품"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item"],
+                condition=models.Q(is_open=True),
+                name="shop_return_one_open_request_per_line",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.it_name} x {self.qty}"
 
 
 class ShopReview(models.Model):

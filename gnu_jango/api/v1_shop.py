@@ -60,6 +60,7 @@ from gnu_jango.shop.delivery_tracking import tracking_payload
 from gnu_jango.shop.images import upload_product_images
 from gnu_jango.shop.item_info import item_info_rows, kind_title
 from gnu_jango.shop.notifications import queue_order_placed_mails
+from gnu_jango.shop.returns import latest_request as latest_return_request
 from gnu_jango.shop.sms.notifications import queue_order_placed_sms
 from gnu_jango.shop.order_points import (
     item_purchase_point,
@@ -587,6 +588,7 @@ def order_payload(order, *, detail=False):
     delivery_inquiry_url = inquiry["url"]
     cash_receipt_url = safe_receipt_url(order.od_cash_res)
     cash_receipt = cash_receipt_payload(order) if detail else None
+    latest_return = latest_return_request(order)
     bank_account = str(order.od_bank_account or "").strip()
     if not bank_account and settle_case_is_bank(order.od_settle_case):
         # Older orders did not persist the selected account. Keep their prior
@@ -679,6 +681,9 @@ def order_payload(order, *, detail=False):
         "cash_receipt": cash_receipt,
         "can_cancel": can_cancel,
         "cancel_block_reason": cancel_block_reason,
+        # the newest return / exchange request the customer did not withdraw (shop/returns.py)
+        "return_request_kind": latest_return.kind if latest_return else "",
+        "return_request_status": latest_return.status if latest_return else "",
     }
     if detail:
         data["items"] = [order_item_payload(item) for item in items]

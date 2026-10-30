@@ -1,0 +1,138 @@
+{% extends "admin/base_site.html" %}
+{% load i18n humanize %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:shop_shopreturnrequest_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; <a href="{{ change_url }}">#{{ request_obj.pk }}</a>
+  &rsaquo; {{ step_title }}
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="g5-admin-dashboard-hero g5-admin-report-hero">
+  <div>
+    <p class="g5-admin-eyebrow">주문 {{ order.od_id }} · {{ order.od_status }} · {{ order.od_settle_case|default:"-" }} · {{ request_obj.get_status_display }}</p>
+    <h1>{{ request_obj.get_kind_display }} {{ step_title }}</h1>
+    <p class="g5-admin-hero-copy">
+      {% if step == "approve" %}
+      신청을 승인하면 고객에게 알리고, 상품을 회수한 뒤 '완료'로 처리할 수 있습니다. 아직 주문은 바뀌지 않습니다.
+      {% elif step == "reject" %}
+      거절 사유는 고객의 주문 상세와 알림·메일에 그대로 표시됩니다. 거절한 상품은 다시 신청할 수 있습니다.
+      {% elif request_obj.kind == "return" %}
+      완료하면 신청한 상품(수량)을 반품 처리합니다. 주문의 '상품 취소·반품·품절'과 같은 방법으로 재고를 되돌리고, 남은 상품으로 배송비와 쿠폰을 다시 계산해
+      더 받은 금액을 토스페이먼츠·NICEPAY에서 부분취소하거나 직접 환불할 금액으로 기록합니다.
+      {% else %}
+      완료하면 교환 상품을 보낸 배송회사와 운송장번호를 기록하고 고객에게 알립니다. 주문 상품의 상태와 금액은 바뀌지 않습니다.
+      {% endif %}
+    </p>
+  </div>
+  <div class="g5-admin-report-filter-actions">
+    <a class="button btn g5-admin-button-secondary" href="{{ change_url }}">신청으로 돌아가기</a>
+  </div>
+</section>
+
+{% if error %}
+<div role="alert" class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide" aria-label="신청 상품">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{{ request_obj.get_reason_display }}{% if request_obj.detail %} · {{ request_obj.detail|truncatechars:120 }}{% endif %}</p>
+      <h2>신청 상품</h2>
+    </div>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="table g5-admin-mini-table">
+      <thead>
+        <tr><th scope="col">상품</th><th scope="col">신청 수량</th><th scope="col">현재 상태 · 수량</th><th scope="col">신청 금액</th></tr>
+      </thead>
+      <tbody>
+        {% for line in lines %}
+        <tr>
+          <td>{{ line.label }}</td>
+          <td>{{ line.qty }}</td>
+          <td>{{ line.status }} · {{ line.current_qty }}</td>
+          <td>{{ line.amount|intcomma }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="g5-admin-empty">신청 상품이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% if plan %}
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide" aria-label="완료 후 금액">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">미리보기 · 아직 바뀌지 않았습니다</p>
+      <h2>상품 {{ plan.lines|length }}건 반품 처리 후{% if plan.all_inactive %} — 주문 전체 {{ plan.order_status }}{% endif %}</h2>
+    </div>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="table g5-admin-mini-table">
+      <tbody>
+        {% for split in plan.splits %}
+        <tr><th scope="row">수량 분할</th><td colspan="3">{{ split.label }}: {{ split.before }}개 중 {{ split.moved }}개를 반품 처리하고 {{ split.kept }}개는 그대로 둡니다.</td></tr>
+        {% endfor %}
+        <tr><th scope="row">남는 상품금액</th><td>{{ plan.cart_price|intcomma }}</td><th scope="row">취소·반품·품절 금액</th><td>{{ plan.cancel_price|intcomma }}</td></tr>
+        <tr><th scope="row">배송비</th><td>{{ plan.send_cost|intcomma }} (추가 {{ plan.send_cost2|intcomma }})</td><th scope="row">반품 배송비 차감</th><td>{{ plan.return_fee|intcomma }}</td></tr>
+        <tr><th scope="row">주문 합계</th><td>{{ plan.total|intcomma }}</td><th scope="row">결제 · 이미 환불</th><td>{{ plan.paid|intcomma }} · {{ plan.refunded|intcomma }}</td></tr>
+        <tr>
+          <th scope="row">이번 환불</th>
+          <td><strong>{{ plan.refund|intcomma }}</strong> {% if plan.method == "toss" or plan.method == "nicepay" %}(PG {% if plan.full_pg_cancel %}전체취소{% else %}부분취소{% endif %} {{ plan.pg_refund|intcomma }}{% if plan.manual_refund %} · 직접 환불 {{ plan.manual_refund|intcomma }}{% endif %}){% elif plan.method == "manual" %}(직접 환불){% endif %}</td>
+          <th scope="row">변경 후 미수금</th><td>{{ plan.misu|intcomma }}</td>
+        </tr>
+        {% if plan.point_excess %}
+        <tr><th scope="row">포인트 조정</th><td colspan="3">포인트로 결제된 {{ plan.point_excess|intcomma }}점은 자동으로 돌려주지 않습니다. 회원 포인트에서 직접 조정하세요.</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+{% if can_apply %}
+<form method="post" action="">
+  {% csrf_token %}
+  <section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+    <div class="g5-admin-report-filter">
+      {% if step == "reject" %}
+      <label>
+        <span>거절 사유 (고객에게 표시)</span>
+        <input class="input" type="text" name="reject_reason" maxlength="500" value="{{ values.reject_reason }}" required>
+      </label>
+      {% elif step == "complete" and request_obj.kind == "return" %}
+      <label>
+        <span>반품 배송비 차감 (원{% if request_obj.reason == "change_of_mind" %} · 단순변심{% endif %})</span>
+        <input class="input" type="number" name="return_fee" min="0" step="1" value="{{ values.return_fee }}">
+      </label>
+      {% elif step == "complete" %}
+      <label>
+        <span>교환 상품 배송회사</span>
+        <select class="select" name="delivery_company" required>
+          {% for value, label in delivery_companies %}
+          <option value="{{ value }}"{% if value == values.delivery_company %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span>운송장번호</span>
+        <input class="input" type="text" name="invoice" maxlength="100" value="{{ values.invoice }}" required>
+      </label>
+      {% endif %}
+      <div class="g5-admin-report-filter-actions">
+        {% if step == "complete" and request_obj.kind == "return" %}
+        <button class="button btn g5-admin-button-secondary" type="submit" name="recalc" value="1">금액 다시 계산</button>
+        {% endif %}
+        <button class="button btn btn-primary" type="submit" name="confirm" value="1">{{ step_label }} 확정</button>
+      </div>
+    </div>
+  </section>
+</form>
+{% endif %}
+{% endblock %}

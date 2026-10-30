@@ -1,0 +1,11 @@
+{% extends "shop/mail/_base.html" %}
+{% load humanize %}
+{% block heading %}{{ request.get_kind_display }} 신청 알림{% endblock %}
+{% block content %}
+<p>{{ order.od_name }}님이 주문 {{ order.od_id }}의 상품 {{ request_lines|length }}건을 {{ request.get_kind_display }} 신청했습니다.</p>
+<ul>{% for line in request_lines %}
+<li>{{ line.it_name }}{% if line.ct_option and line.ct_option != line.it_name %} ({{ line.ct_option }}){% endif %} x {{ line.qty|intcomma }}</li>{% endfor %}
+</ul>
+<p><strong>사유</strong> {{ request.get_reason_display }}{% if request.detail %} - {{ request.detail }}{% endif %}</p>
+<p>관리자 화면의 쇼핑몰관리 &gt; 반품·교환 신청에서 승인하거나 거절하세요.</p>
+{% endblock %}

@@ -48,6 +48,7 @@ import {
 } from "./useProductDetailFocusScroll";
 import { useProductDetailMetadata } from "./useProductDetailMetadata";
 import { useProductMemberActions } from "./useProductMemberActions";
+import { useProductPriceAlert } from "./useProductPriceAlert";
 import { useProductNaverPay } from "./useProductNaverPay";
 import { ProductDetailEmpty, ProductDetailLoading } from "./ProductDetailSections";
 import { ProductDetailView } from "./ProductDetailView";
@@ -128,6 +129,8 @@ export default function ProductDetailClient({
     displayTotal,
   } = useProductOptions({ product, resetKey: it_id });
   const memberActions = useProductMemberActions(product);
+  const [priceAlertEnabled, setPriceAlertEnabled] = useState(false);
+  const priceAlert = useProductPriceAlert(product, priceAlertEnabled, memberActions);
   const {
     user,
     isAuthInitialized,
@@ -157,6 +160,7 @@ export default function ProductDetailClient({
         if (!alive) return;
         setProductRewriteMode(settings.cf_bbs_rewrite);
         setRelatedDisplay(shopListDisplayOf(settings).related);
+        setPriceAlertEnabled(Boolean(settings.price_alert_enabled));
       })
       .catch(() => {
         if (alive) setProductRewriteMode(0);
@@ -628,6 +632,10 @@ export default function ProductDetailClient({
     onAddToCart: handleAddToCart,
     onBuyNow: handleBuyNow,
     onWishlist: handleWishlist,
+    priceAlertEnabled: priceAlert.priceAlertEnabled,
+    priceAlerted: priceAlert.priceAlerted,
+    priceAlertBusy: priceAlert.priceAlertBusy,
+    onTogglePriceAlert: priceAlert.togglePriceAlert,
   };
 
   return (

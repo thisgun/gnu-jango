@@ -73,6 +73,9 @@ class StatusChange:
     manual_refund: bool = False
     # the change went through but the admin has something to do (shown as a warning)
     warning: bool = False
+    # a line change: the cash it sent back, and the return shipping fee kept from it
+    refund: int = 0
+    return_fee: int = 0
 
     def __bool__(self):
         return self.ok
