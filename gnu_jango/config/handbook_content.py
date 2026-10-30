@@ -4,6 +4,7 @@ from html import escape
 import re
 
 from .handbook_audit_content import AUDIT_GUIDES
+from .handbook_commerce_content import COMMERCE_GUIDES
 from .handbook_search_content import SEARCH_GUIDES
 from .handbook_notification_content import NOTIFICATION_GUIDES
 
@@ -925,6 +926,7 @@ GUIDES = {
 GUIDES.update(SEARCH_GUIDES)
 GUIDES.update(NOTIFICATION_GUIDES)
 GUIDES.update(AUDIT_GUIDES)
+GUIDES.update(COMMERCE_GUIDES)
 
 
 def _inline_text(value):
