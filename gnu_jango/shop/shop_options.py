@@ -81,6 +81,38 @@ SUBSCRIPTION_OPTIONS = (
                  max_value=7, help_text="결제가 실패하면 다음 날 다시 시도합니다. 이 횟수만큼 실패하면 구독을 일시정지하고 회원에게 알립니다."),
 )
 
+# Customer return / exchange requests (shop/returns.py)
+RETURN_OPTIONS = (
+    ConfigOption("de_return_request_use", "반품·교환 신청 사용", kind="bool", default="1",
+                 help_text="켜면 고객이 배송된 상품을 주문 상세에서 반품·교환 신청할 수 있습니다. 끄면 신청 버튼을 숨기고 새 신청을 받지 않습니다."),
+    ConfigOption("de_return_request_days", "반품·교환 신청 기간 (일)", kind="int", default="7", min_value=1, max_value=365,
+                 help_text="상품이 배송완료(완료)된 때부터 이 일수 동안 신청할 수 있습니다. 배송중인 상품은 언제든 신청할 수 있습니다."),
+    ConfigOption("de_return_shipping_fee", "단순변심 반품 배송비 (원)", kind="int", default="0", max_value=1_000_000,
+                 help_text="단순변심 반품을 완료할 때 환불금액에서 빼는 반품 배송비입니다. 완료 화면에서 건마다 바꿀 수 있고, 환불금액보다 많이 빼지 않습니다."),
+)
+
+# 알림·장바구니 메일 (gnu_jango/shop/price_alerts.py, restock.py, cart_reminders.py): sent by the
+# send_shop_alerts scheduled job. Everything is off until the shop turns it on.
+ALERT_OPTIONS = (
+    ConfigOption("de_price_alert_use", "가격 인하 알림", kind="bool", default="0",
+                 help_text="켜면 회원이 상품 페이지에서 가격 인하 알림을 신청할 수 있고, 신청했을 때보다 가격이 내려가면 "
+                           "메일과 사이트 알림으로 한 번 알려 줍니다."),
+    ConfigOption("de_stock_sms_auto", "재입고 SMS 자동 발송", kind="bool", default="0",
+                 help_text="켜면 재고가 다시 생긴 상품의 재입고 알림 신청자에게 SMS를 자동으로 보냅니다(한 번에 25건). "
+                           "한 번 보내려고 했던 신청은 자동으로 다시 보내지 않으니, 실패한 건은 재입고 알림 목록에서 직접 보내세요."),
+    ConfigOption("de_cart_reminder_use", "장바구니 알림 메일", kind="bool", default="0",
+                 help_text="상품을 담아 두고 주문하지 않은 회원에게 알림 메일을 보냅니다. 광고성 정보이므로 정보 메일 수신에 "
+                           "동의한 회원에게만 보내고 제목에 (광고)를 붙입니다. 한 회원에게는 7일에 한 번까지만 보냅니다."),
+    ConfigOption("de_cart_reminder_hours", "장바구니 알림 대기 시간 (시간)", kind="int", default="24", min_value=1,
+                 max_value=720, help_text="마지막으로 상품을 담은 뒤 이 시간이 지나도 주문하지 않으면 보냅니다."),
+    ConfigOption("de_cart_reminder_coupon_price", "알림 쿠폰 할인금액 (원)", kind="int", default="0", max_value=10_000_000,
+                 help_text="0이면 쿠폰 없이 메일만 보냅니다. 회원에게 아직 쓰지 않은 알림 쿠폰이 있으면 새로 발행하지 않습니다."),
+    ConfigOption("de_cart_reminder_coupon_minimum", "알림 쿠폰 주문 최소금액 (원)", kind="int", default="0",
+                 max_value=100_000_000),
+    ConfigOption("de_cart_reminder_coupon_term", "알림 쿠폰 유효기간 (일)", kind="int", default="7", min_value=1,
+                 max_value=365),
+)
+
 HOME_LIST_TYPES = (
     (1, "히트상품"),
     (2, "추천상품"),
@@ -129,10 +161,23 @@ LIST_OPTIONS = (
                  min_value=1, max_value=4),
 )
 
+# Delivery Tracker shipment tracking (shop/delivery_tracking.py). Not youngcart settings: the
+# names are new, so the gnuboard import never fills them. The API keys are separate sealed rows
+# (shop/delivery_tracking_settings.py).
+TRACKING_OPTIONS = (
+    ConfigOption("de_tracking_use", "배송조회 사용", kind="bool", default="0",
+                 help_text="켜면 배송 중인 주문의 배송 상태를 Delivery Tracker에서 조회해 주문 상세에 표시합니다. "
+                           "Client ID와 Client Secret을 모두 등록해야 동작하며, 그 전에는 배송 조회 링크만 표시합니다."),
+    ConfigOption("de_tracking_complete_delivered", "배송완료 시 주문 완료 처리", kind="bool", default="0",
+                 help_text="켜면 배송완료가 확인된 배송 상태의 주문을 '완료'로 바꾸고 고객에게 배송완료 메일을 보냅니다. "
+                           "구매 포인트 지급과 주문 이력은 관리자가 완료 처리할 때와 같습니다."),
+)
+
 SHOP_CONFIG_OPTIONS = {
     option.name: option
     for option in (
-        *COMPANY_OPTIONS, *ORDER_OPTIONS, *POINT_OPTIONS, *SUBSCRIPTION_OPTIONS, *HOME_LIST_OPTIONS, *LIST_OPTIONS,
+        *COMPANY_OPTIONS, *ORDER_OPTIONS, *POINT_OPTIONS, *SUBSCRIPTION_OPTIONS, *RETURN_OPTIONS, *ALERT_OPTIONS,
+        *HOME_LIST_OPTIONS, *LIST_OPTIONS, *TRACKING_OPTIONS,
     )
 }
 

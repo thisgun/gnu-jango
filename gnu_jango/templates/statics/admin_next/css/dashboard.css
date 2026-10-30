@@ -1789,6 +1789,138 @@ body.g5-admin-unfold {
   gap: 2px;
 }
 
+/* 배송조회 (Delivery Tracker) card of the order change page */
+.g5-admin-order-tracking {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--g5-admin-border);
+  border-radius: var(--g5-admin-radius);
+  background: var(--g5-admin-surface);
+}
+
+.g5-admin-order-tracking-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.g5-admin-order-tracking-head .g5-admin-order-detail-section-title {
+  margin-bottom: 0;
+}
+
+.g5-admin-order-tracking-refresh {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: 1px solid var(--g5-admin-primary);
+  border-radius: 6px;
+  background: var(--g5-admin-primary);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.g5-admin-order-tracking-refresh:hover {
+  background: var(--g5-admin-primary-dark);
+}
+
+.g5-admin-order-tracking-refresh:focus-visible {
+  outline: 2px solid var(--g5-admin-primary-dark);
+  outline-offset: 2px;
+}
+
+.g5-admin-order-tracking-refresh:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.g5-admin-order-tracking-refresh .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.g5-admin-order-tracking-note {
+  margin: 0;
+  color: var(--g5-admin-muted);
+  font-size: 13px;
+}
+
+.g5-admin-order-tracking-error {
+  color: var(--g5-admin-warning);
+  font-weight: 700;
+}
+
+.g5-admin-order-tracking-facts {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.g5-admin-order-tracking-facts div {
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--g5-admin-surface-muted);
+}
+
+.g5-admin-order-tracking-facts dt {
+  color: var(--g5-admin-muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.g5-admin-order-tracking-facts dd {
+  margin: 3px 0 0;
+  color: var(--g5-admin-surface-strong);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.g5-admin-order-tracking-events {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.g5-admin-order-tracking-events li {
+  display: grid;
+  grid-template-columns: 130px 110px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 6px 0;
+  border-top: 1px solid var(--g5-admin-border);
+  font-size: 13px;
+}
+
+.g5-admin-order-tracking-events time,
+.g5-admin-order-tracking-events small {
+  color: var(--g5-admin-muted);
+}
+
+.g5-admin-order-tracking-events strong {
+  color: var(--g5-admin-surface-strong);
+}
+
+@media (max-width: 900px) {
+  .g5-admin-order-tracking-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .g5-admin-order-tracking-events li {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
 .g5-admin-order-panel {
   min-width: 0;
   padding: 14px;

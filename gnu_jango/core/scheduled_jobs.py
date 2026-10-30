@@ -49,6 +49,8 @@ SCHEDULED_JOBS: tuple[ScheduledJob, ...] = (
     ScheduledJob("retry_search_index", ("--apply", "--json"), ("--json",), 30),
     ScheduledJob("check_search_health", ("--json",), ("--json", "--audit-limit", "0"), 600),
     ScheduledJob("save_order_points", ("--apply", "--json"), ("--json",)),
+    # Each kind of alert checks its own shop setting, so the job does nothing until one is on.
+    ScheduledJob("send_shop_alerts", ("--apply", "--json"), ("--json",), 600),
 )
 
 try:
@@ -91,6 +93,14 @@ if (
 if getattr(settings, "SHOP_SUBSCRIPTIONS_ENABLED", False):
     SCHEDULED_JOBS += (
         ScheduledJob("charge_shop_subscriptions", ("--apply", "--json", "--limit", "50"), ("--json",), 3600),
+    )
+
+# Optional shipment tracking (Delivery Tracker): every 5 minutes, at most 30 lookups per run. The
+# keys live in the shop settings, so the command itself also does nothing until 배송조회 is on
+# with both keys saved.
+if getattr(settings, "SHOP_DELIVERY_TRACKING_JOB", False):
+    SCHEDULED_JOBS += (
+        ScheduledJob("track_shipments", ("--apply", "--json", "--limit", "30"), ("--json",), 300),
     )
 
 JOB_NAMES = tuple(job.name for job in SCHEDULED_JOBS)

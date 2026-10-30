@@ -1011,6 +1011,8 @@ def member_payload(user, request=None):
         "mb_today_login": timezone.now().isoformat(),
         "mb_open": 1 if profile.open_profile else 0,
         "mb_open_date": profile.open_profile_date.isoformat() if profile.open_profile_date else "",
+        "mb_mailling": 1 if profile.mailing else 0,
+        "mb_mailling_date": profile.mailing_date.isoformat() if profile.mailing_date else "",
         "is_staff": user.is_staff,
         "is_superuser": user.is_superuser,
     }
@@ -1314,6 +1316,8 @@ def register_view(request):
     )
     # register_form.skin.php checks mb_open for a new member.
     open_profile = truthy_flag(data.get("mb_open")) if "mb_open" in data else True
+    # register_form.skin.php mb_mailling: information mail only when the member ticks it.
+    mailing = truthy_flag(data.get("mb_mailling"))
 
     if social_signup_ticket and not social_signup:
         return api_error(
@@ -1372,6 +1376,8 @@ def register_view(request):
                 profile.user_level = 2
             profile.open_profile = open_profile
             profile.open_profile_date = timezone.now()  # register_form_update.php: mb_open_date = today
+            profile.mailing = mailing
+            profile.mailing_date = timezone.now()
             # register_form_update.php: without e-mail certification the address counts as certified now;
             # with it, the member is stored uncertified with the link's token in the same transaction.
             profile.email_certify = None if needs_certify else timezone.now()
@@ -1379,7 +1385,7 @@ def register_view(request):
             profile.save(
                 update_fields=[
                     "nickname", "realname", "user_level", "open_profile", "open_profile_date",
-                    "email_certify", "email_certify_token",
+                    "mailing", "mailing_date", "email_certify", "email_certify_token",
                 ]
             )
             if social_signup:

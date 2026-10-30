@@ -6,6 +6,7 @@ import { ProductImageFallback } from "@/components/shop/ProductImageFallback";
 import type { ShopOrder } from "@/lib/api";
 import { shouldBypassImageOptimization } from "@/lib/image";
 import { ORDER_STATUS_BADGE_CLASS, orderStatusLabel } from "@/lib/order-status";
+import { returnRequestBadge } from "@/lib/shop-returns";
 import { cn, formatDateTime, formatPrice } from "@/lib/utils";
 import { ChevronRight } from "lucide-react";
 
@@ -51,6 +52,7 @@ export function ShopOrderListCard({ order }: { order: ShopOrder }) {
   const dateText = order.od_time || order.od_receipt_time;
   const listPrice = orderListPrice(order);
   const misuPrice = orderMisuPrice(order);
+  const returnBadge = returnRequestBadge(order.return_request_kind, order.return_request_status);
 
   return (
     // order-card · -thumb · -body · -amounts · -go: 레퍼런스와 같은 손잡이 — solune-theme.internal-pages.css 가
@@ -78,6 +80,17 @@ export function ShopOrderListCard({ order }: { order: ShopOrder }) {
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-sm font-semibold">{order.od_id}</span>
           <StatusBadge status={order.od_status} />
+          {returnBadge && (
+            // 가장 최근 반품·교환 신청(철회한 것은 빼고)
+            <span
+              className={cn(
+                "order-card-return inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium",
+                ORDER_STATUS_BADGE_CLASS[returnBadge.tone]
+              )}
+            >
+              {returnBadge.label}
+            </span>
+          )}
           <span className="text-xs text-muted-foreground">
             상품수 {itemCount.toLocaleString()}개
           </span>

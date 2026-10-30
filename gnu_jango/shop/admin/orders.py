@@ -10,7 +10,7 @@ from django.contrib.admin.utils import unquote
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db.models import Q
-from django.http import Http404
+from django.http import Http404, HttpResponseNotAllowed
 from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -25,6 +25,8 @@ from gnu_jango.shop.admin.bulk import copy_selected_personal_pays, create_person
 from gnu_jango.shop.admin.cash_receipts import order_cash_receipt_page
 from gnu_jango.shop.cash_receipts import admin_risk as cash_receipt_admin_risk
 from gnu_jango.shop.delivery import delivery_company_form_field
+from gnu_jango.shop.delivery_tracking import admin_summary as tracking_admin_summary
+from gnu_jango.shop.delivery_tracking import refresh_order_tracking
 from gnu_jango.shop.import_export_resources import ShopOrderRegistrationResource, ShopOrderResource
 from gnu_jango.shop.models import ORDER_ITEM_STATUS_COMPLETED
 from gnu_jango.shop.order_flow import (
@@ -938,6 +940,7 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
                 {"label": _("Personal pay"), "value": format_number(personal_pay_count), "hint": _("Linked personal payments")},
             ],
             "risks": risks,
+            "tracking": self.order_tracking_context(request, order),
             "links": [
                 {"label": _("Back to orders"), "url": "../../", "icon": "arrow_back"},
                 *(
@@ -954,6 +957,18 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
                 {"label": _("Order print"), "url": "../../order-print/?q=%s" % order.od_id, "icon": "print"},
                 {"label": _("Payment logs"), "url": "/admin/shop/shoporderdata/?q=%s" % order.od_id, "icon": "fact_check"},
             ],
+        }
+
+    def order_tracking_context(self, request, order):
+        """The 배송조회 card, for an order with a courier and an invoice (or an earlier lookup)."""
+        summary = tracking_admin_summary(order)
+        if not (order.od_delivery_company and order.od_invoice) and not summary["has_row"]:
+            return None
+        can_refresh = summary["can_refresh"] and self.has_change_permission(request, order)
+        return {
+            **summary,
+            "can_refresh": can_refresh,
+            "refresh_url": reverse("admin:shop_shoporder_tracking_refresh", args=[order.pk]) if can_refresh else "",
         }
 
     @admin.display(description=_("Order ID"), ordering="od_id")
@@ -1215,8 +1230,37 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
                 self.admin_site.admin_view(partial(order_cash_receipt_page, self)),
                 name="shop_shoporder_cash_receipt",
             ),
+            path(
+                "<path:object_id>/tracking-refresh/",
+                self.admin_site.admin_view(self.tracking_refresh_view),
+                name="shop_shoporder_tracking_refresh",
+            ),
         ]
         return custom_urls + urls
+
+    def tracking_refresh_view(self, request, object_id):
+        """배송조회 '지금 조회': one Delivery Tracker lookup of this order now (POST only). A
+        delivered shipment completes the order like the scheduled run, when that is switched on."""
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+        order = self.get_object(request, unquote(object_id))
+        if order is None:
+            raise Http404
+        if not self.has_change_permission(request, order):
+            raise PermissionDenied
+        result = refresh_order_tracking(order, actor=request.user.get_username())
+        if result.completed:
+            self.log_change(request, order, "배송조회: 배송완료 확인, 주문 상태를 '완료'(으)로 변경")
+            self.message_user(request, "배송완료가 확인되어 주문을 '완료'로 바꿨습니다.", messages.SUCCESS)
+        elif result.status == "updated":
+            self.message_user(request, f"배송 상태를 조회했습니다: {result.message}", messages.SUCCESS)
+        elif result.status == "delivered":
+            self.message_user(request, result.message, messages.SUCCESS)
+        elif result.status == "not_found":
+            self.message_user(request, result.message, messages.WARNING)
+        else:
+            self.message_user(request, result.message, messages.ERROR)
+        return redirect(reverse("admin:shop_shoporder_change", args=[order.pk]))
 
     @admin.action(description=_("Export selected orders CSV"))
     def export_selected_orders_csv(self, request, queryset):

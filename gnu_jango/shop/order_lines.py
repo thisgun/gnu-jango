@@ -22,7 +22,7 @@ from django.db.models import Sum
 
 from django.db import transaction
 
-from gnu_jango.shop.models import ShopCouponLog, ShopOrder, ShopPersonalPay
+from gnu_jango.shop.models import ShopCouponLog, ShopOrder, ShopPersonalPay, ShopReturnRequest
 from gnu_jango.shop.order_coupons import order_coupon_totals
 from gnu_jango.shop.order_line_split import split_order_lines
 from gnu_jango.shop.order_flow import (
@@ -101,6 +101,8 @@ class LineChangePlan:
     coupon_log_prices: dict = field(default_factory=dict)
     # partial quantities: the lines split so only some of their units change (LineSplit)
     splits: tuple = ()
+    # the return shipping fee kept back from ``refund`` (a customer's 단순변심 return, shop/returns.py)
+    return_fee: int = 0
 
     @property
     def manual_refund(self):
@@ -121,6 +123,19 @@ class LineChangePlan:
             f"{self.target}|{line_ids}|{self.pg_refund}|{self.refund}|{self.refunded}".encode()
         ).hexdigest()[:24]
         return f"admin-part-{self.lines[0].order_id}-{digest}"
+
+
+def kept_return_fees(order):
+    """The return shipping fees the order's completed customer returns kept back (shop/returns.py).
+    A fee kept while lines remained is charged as 추가배송비 (od_send_cost2), so it is part of the
+    total until the last line goes; then nothing ships and the rest of the payment goes back, less
+    these fees."""
+    return int(
+        ShopReturnRequest.objects.filter(
+            order_id=order.pk, kind=ShopReturnRequest.KIND_RETURN, status=ShopReturnRequest.STATUS_COMPLETED
+        ).aggregate(total=Sum("return_fee"))["total"]
+        or 0
+    )
 
 
 def personal_pay_receipts(order):
@@ -277,10 +292,12 @@ def _selection_error(order, selected, target):
     return ""
 
 
-def plan_line_change(order, line_ids, target, *, splits=()):
+def plan_line_change(order, line_ids, target, *, splits=(), return_fee=0):
     """Work out what changing the lines ``line_ids`` of ``order`` to ``target`` does; returns
     (plan, "") or (None, the reason in Korean). Nothing is saved. ``splits`` names the lines
-    split_order_lines split already (their product coupons are judged again)."""
+    split_order_lines split already (their product coupons are judged again). ``return_fee`` (반품
+    only) is a return shipping fee the customer bears: it comes off the refund, never more than
+    the refund."""
     from gnu_jango.shop.shipping import items_shipping_cost
 
     items = list(order.items.select_related("product").order_by("pk"))
@@ -334,16 +351,26 @@ def plan_line_change(order, line_ids, target, *, splits=()):
     point = max(0, int(order.od_receipt_point or 0))
     refundable = max(0, paid - refunded)
     if all_inactive:
-        # the whole rest goes back; the points used go back to the member with the order
-        refund, point_excess = refundable, 0
+        # the whole rest goes back (less the return shipping fees earlier returns kept); the
+        # points used go back to the member with the order
+        refund, point_excess = max(0, refundable - kept_return_fees(order)), 0
     else:
         overpaid = paid + point - refunded - total
         refund = max(0, min(overpaid, refundable))
         point_excess = max(0, overpaid - refund)
+    return_fee = min(max(0, int(return_fee or 0)), refund) if target == STATUS_RETURNED else 0
+    if return_fee:
+        refund -= return_fee
+        if not all_inactive:
+            # charged as 추가배송비 while lines remain, so a later change does not pay it back
+            send_cost2 += return_fee
+            total += return_fee
     misu = 0 if all_inactive else max(0, total - (paid + point - refunded - refund))
     method, note, pg_refund, full_pg_cancel = _refund_method(
         order, refund, paid=paid, refunded=refunded, all_inactive=all_inactive
     )
+    if return_fee:
+        note += f" 반품 배송비 {return_fee:,}원 차감"
     tax = (
         {"od_tax_mny": 0, "od_vat_mny": 0, "od_free_mny": 0}
         if all_inactive
@@ -389,12 +416,15 @@ def plan_line_change(order, line_ids, target, *, splits=()):
                 if (price := coupon_log_prices.get(log.pk, int(log.cp_price or 0))) != stored_prices[log.pk]
             },
             splits=tuple(splits),
+            return_fee=return_fee,
         ),
         "",
     )
 
 
-def change_order_lines(order, line_ids, target, reason="", *, actor="", quantities=None, expected=None):
+def change_order_lines(
+    order, line_ids, target, reason="", *, actor="", quantities=None, expected=None, return_fee=0
+):
     """Change the lines ``line_ids`` of ``order`` to 취소, 반품 or 품절 from the admin.
 
     ``quantities`` ({line pk: units}) changes only that many units of a line (the line is split);
@@ -410,18 +440,18 @@ def change_order_lines(order, line_ids, target, reason="", *, actor="", quantiti
         if locked is None:
             return StatusChange(False, "주문을 찾을 수 없습니다.")
         return change_locked_order_lines(
-            locked, line_ids, target, reason, actor=actor, quantities=quantities, expected=expected
+            locked, line_ids, target, reason, actor=actor, quantities=quantities, expected=expected, return_fee=return_fee
         )
 
 
-def preview_line_change(order, line_ids, target, *, quantities=None, expected=None):
+def preview_line_change(order, line_ids, target, *, quantities=None, expected=None, return_fee=0):
     """plan_line_change for the admin preview, partial quantities included. Nothing is kept: a
     split is made in a transaction that is rolled back."""
     if not quantities and not expected:
-        return plan_line_change(order, line_ids, target)
+        return plan_line_change(order, line_ids, target, return_fee=return_fee)
     with transaction.atomic():
         try:
-            return _split_and_plan(order, line_ids, target, quantities, expected), ""
+            return _split_and_plan(order, line_ids, target, quantities, expected, return_fee), ""
         except _ChangeRefused as exc:
             return None, str(exc)
         finally:
@@ -449,13 +479,13 @@ class _ChangeRefused(Exception):
     """The change cannot go ahead; the savepoint around the split and the refund is rolled back."""
 
 
-def _split_and_plan(order, line_ids, target, quantities, expected):
+def _split_and_plan(order, line_ids, target, quantities, expected, return_fee=0):
     splits = ()
     if quantities or expected:
         line_ids, splits, error = split_order_lines(order, line_ids, quantities or {}, expected)
         if error:
             raise _ChangeRefused(error)
-    plan, error = plan_line_change(order, line_ids, target, splits=splits)
+    plan, error = plan_line_change(order, line_ids, target, splits=splits, return_fee=return_fee)
     if error:
         raise _ChangeRefused(error)
     return plan
@@ -516,13 +546,15 @@ def _refund_at_pg(order, plan, reason):
     return plan
 
 
-def change_locked_order_lines(order, line_ids, target, reason="", *, actor="", quantities=None, expected=None):
+def change_locked_order_lines(
+    order, line_ids, target, reason="", *, actor="", quantities=None, expected=None, return_fee=0
+):
     """change_order_lines for an order the caller has locked (select_for_update) already."""
     pg_refunded = False
     try:
         # a savepoint: a split line is put back when the change is refused or Toss refuses the refund
         with transaction.atomic():
-            plan = _split_and_plan(order, line_ids, target, quantities, expected)
+            plan = _split_and_plan(order, line_ids, target, quantities, expected, return_fee)
             if plan.method in {REFUND_TOSS, REFUND_NICEPAY}:
                 plan = _refund_at_pg(order, plan, reason)
                 pg_refunded = True
@@ -541,7 +573,13 @@ def change_locked_order_lines(order, line_ids, target, reason="", *, actor="", q
             False,
             f"PG에서 {plan.pg_refund:,}원을 환불했지만 상품 상태를 바꾸지 못했습니다. 환불은 주문에 기록했으니 주문을 확인해 주세요.",
         )
-    return StatusChange(True, _success_message(order, plan), manual_refund=plan.manual_refund > 0)
+    return StatusChange(
+        True,
+        _success_message(order, plan),
+        manual_refund=plan.manual_refund > 0,
+        refund=plan.refund,
+        return_fee=plan.return_fee,
+    )
 
 
 def _record_pg_answer(order, plan, answer, *, provider="toss"):
@@ -641,6 +679,7 @@ def _apply_plan(order, plan, reason, actor):
         locked.od_cart_price = plan.cart_price + plan.cancel_price
         locked.od_cancel_price = plan.cancel_price
         locked.od_send_cost = plan.send_cost
+        locked.od_send_cost2 = plan.send_cost2  # a kept return shipping fee is added here
         locked.od_coupon = plan.od_coupon
         locked.od_send_coupon = plan.send_coupon
         locked.od_refund_price = plan.refunded + plan.refund
@@ -654,6 +693,7 @@ def _apply_plan(order, plan, reason, actor):
                 "od_cart_price",
                 "od_cancel_price",
                 "od_send_cost",
+                "od_send_cost2",
                 "od_coupon",
                 "od_send_coupon",
                 "od_refund_price",

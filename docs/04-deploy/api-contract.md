@@ -29,6 +29,7 @@ v1 API의 응답 모양을 OpenAPI 스키마로 고정하고, 그 스키마에�
 | `GET /api/v1/shop/cart` | `ShopCartEnvelope` |
 | `GET /api/v1/shop/orders` | `ShopOrdersEnvelope` (meta: `PageMeta`) |
 | `GET /api/v1/shop/orders/{od_id}` | `ShopOrderDetailEnvelope` |
+| `GET`·`POST /api/v1/shop/orders/{od_id}/returns`, `POST /api/v1/shop/orders/{od_id}/returns/{request_id}/withdraw` | `ShopOrderReturnsEnvelope` (POST 요청 본문: `ShopReturnCreate`) |
 | `GET /api/v1/auth/me` | `AuthMeEnvelope` |
 | `GET /api/v1/shop/subscriptions`, `GET /api/v1/shop/subscriptions/{id}` | `ShopSubscriptionsEnvelope`, `ShopSubscriptionDetailEnvelope` (정기구독, [운영 설정](toss-billing-subscriptions.md)) |
 | `POST /api/v1/shop/subscriptions/start`, `POST /api/v1/shop/subscriptions/{id}/card` | `ShopSubscriptionRegistrationEnvelope`, `ShopSubscriptionCardRegistrationEnvelope` |
@@ -60,7 +61,7 @@ v1 API의 응답 모양을 OpenAPI 스키마로 고정하고, 그 스키마에�
 
 ETag는 응답 본문의 해시라 서버의 조회 비용은 그대로이고, 전송량과 브라우저의 JSON 처리만 줄어듭니다.
 
-선택지(enum) 컴포넌트 이름은 `SPECTACULAR_SETTINGS["ENUM_NAME_OVERRIDES"]`로 고정합니다(`PostAdminRoleEnum`, `CashReceiptStateEnum`, `CashReceiptTypeEnum`). 새 선택지 칸을 선언하면 `StateEnum`처럼 일반적인 이름이 생기지 않도록 여기에 추가하세요.
+선택지(enum) 컴포넌트 이름은 `SPECTACULAR_SETTINGS["ENUM_NAME_OVERRIDES"]`로 고정합니다(`PostAdminRoleEnum`, `CashReceiptStateEnum`, `CashReceiptTypeEnum`, `ShopReturnKindEnum`, `ShopReturnStatusEnum`, `ShopReturnReasonEnum`). 새 선택지 칸을 선언하면 `StateEnum`처럼 일반적인 이름이 생기지 않도록 여기에 추가하세요.
 
 ## 커서 페이지네이션 (게시판 글 목록)
 

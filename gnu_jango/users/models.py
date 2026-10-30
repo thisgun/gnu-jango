@@ -122,6 +122,10 @@ class Profile(models.Model):
     # g5_member.mb_open / mb_open_date: whether other members may see the profile, and when it changed.
     open_profile = models.BooleanField(_("정보공개"), default=True)
     open_profile_date = models.DateTimeField(_("정보공개 변경일"), null=True, blank=True)
+    # g5_member.mb_mailling: the member agreed to information (advertising) mail, such as the shop's
+    # cart reminders; off unless they tick it. mailing_date records when the answer last changed.
+    mailing = models.BooleanField(_("정보 메일 수신"), default=False)
+    mailing_date = models.DateTimeField(_("정보 메일 수신 변경일"), null=True, blank=True)
 
     __original_avatar = None
     __original_icon = None

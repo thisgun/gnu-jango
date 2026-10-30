@@ -1,0 +1,10 @@
+{% load humanize %}{% autoescape off %}[{{ site_title }}] {{ request.get_kind_display }} 신청 알림
+
+{{ order.od_name }}님이 주문 {{ order.od_id }}의 상품 {{ request_lines|length }}건을 {{ request.get_kind_display }} 신청했습니다.
+
+{% for line in request_lines %}- {{ line.it_name }}{% if line.ct_option and line.ct_option != line.it_name %} ({{ line.ct_option }}){% endif %} x {{ line.qty|intcomma }}
+{% endfor %}
+사유: {{ request.get_reason_display }}{% if request.detail %} - {{ request.detail }}{% endif %}
+
+관리자 화면의 쇼핑몰관리 > 반품·교환 신청에서 승인하거나 거절하세요.
+{% endautoescape %}

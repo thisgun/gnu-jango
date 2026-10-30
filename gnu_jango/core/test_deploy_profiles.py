@@ -400,6 +400,7 @@ class ScheduledJobsRunnerTests(TestCase):
                 "retry_search_index",
                 "check_search_health",
                 "save_order_points",
+                "send_shop_alerts",
             ],
         )
         for name, args in runner.calls:

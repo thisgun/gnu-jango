@@ -1,0 +1,16 @@
+{% extends "shop/mail/_base.html" %}
+{% load humanize %}
+{% block heading %}장바구니에 담아 두신 상품이 기다리고 있어요{% endblock %}
+{% block content %}
+<p style="margin:0 0 12px;">{{ member_name }}님, 장바구니에 담아 두신 상품이 아직 주문되지 않았습니다.</p>
+<table style="width:100%;border-collapse:collapse;margin:0 0 16px;">{% for line in lines %}
+<tr><td style="padding:8px 0;border-bottom:1px solid #f5f5f4;">{{ line.it_name }}{% if line.option %}<br><span style="font-size:12px;color:#78716c;">{{ line.option }}</span>{% endif %}</td>
+<td style="padding:8px 0;border-bottom:1px solid #f5f5f4;text-align:right;white-space:nowrap;">{{ line.qty }}개</td></tr>{% endfor %}
+</table>{% if coupon %}
+<div style="margin:0 0 16px;padding:12px;background:#f0fdf4;border-radius:6px;">
+<p style="margin:0;font-weight:bold;color:#0a8f45;">{{ coupon.cp_price|intcomma }}원 할인 쿠폰을 드렸어요</p>
+<p style="margin:4px 0 0;font-size:13px;color:#57534e;">{% if coupon.cp_minimum %}{{ coupon.cp_minimum|intcomma }}원 이상 주문 시, {% endif %}{{ coupon.cp_end|date:"Y-m-d" }}까지 사용할 수 있습니다.</p>
+</div>{% endif %}{% if cart_url %}
+<p style="margin:0;"><a href="{{ cart_url }}" style="display:inline-block;padding:8px 14px;background:#0a8f45;color:#ffffff;text-decoration:none;border-radius:6px;">장바구니 보러 가기</a></p>{% endif %}
+<p style="margin-top:20px;font-size:12px;color:#a8a29e;">{% if agreed_on %}{{ agreed_on }}에 {% endif %}정보 메일 수신에 동의하셔서 보내 드리는 광고성 메일입니다. 더 받지 않으려면 {% if profile_url %}<a href="{{ profile_url }}" style="color:#78716c;">회원정보 수정</a>{% else %}회원정보 수정{% endif %}에서 '정보 메일 수신'을 해제하세요.</p>
+{% endblock %}

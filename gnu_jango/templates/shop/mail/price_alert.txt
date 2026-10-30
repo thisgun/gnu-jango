@@ -1,0 +1,8 @@
+{% load humanize %}{% autoescape off %}관심 상품의 가격이 내려갔습니다.
+
+상품: {{ product.it_name }}
+가격: {{ old_price|intcomma }}원 → {{ new_price|intcomma }}원{% if product_url %}
+바로가기: {{ product_url }}{% endif %}
+
+상품 페이지에서 가격 인하 알림을 신청하셔서 한 번 보내 드리는 메일입니다. 가격은 바뀔 수 있습니다.
+{% endautoescape %}

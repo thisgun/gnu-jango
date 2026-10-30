@@ -738,6 +738,8 @@ export const publicSettingsSchema = z
     shop_subscriptions: booleanValue.optional(),
     comment_editor: booleanValue.optional(),
     pwa_enabled: booleanValue.optional(),
+    /** 가격 인하 알림 (de_price_alert_use): 상품 페이지에 알림 단추를 보인다. */
+    price_alert_enabled: booleanValue.optional(),
     /** 쇼핑몰 설정에서 올린 로고(없으면 ""): 상단 · 하단 · 모바일 상단 · 모바일 하단. */
     shop_logo: optionalString,
     shop_logo_footer: optionalString,

@@ -329,6 +329,13 @@ UNFOLD = {
                         "link": reverse_lazy("admin:shop_shopsubscriptioncharge_changelist"),
                         "permission": lambda request: request.user.has_perm("shop.view_shopsubscriptioncharge"),
                     },
+                    {
+                        # customer return / exchange requests (gnu_jango/shop/admin/returns.py)
+                        "title": "반품·교환 신청",
+                        "icon": "assignment_return",
+                        "link": reverse_lazy("admin:shop_shopreturnrequest_changelist"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopreturnrequest"),
+                    },
                 ],
             },
             {
@@ -515,6 +522,7 @@ UNFOLD = {
         {
             "models": [
                 "shop.shoporder",
+                "shop.shopreturnrequest",
             ],
             "items": [
                 {
@@ -544,6 +552,10 @@ UNFOLD = {
                 {
                     "title": _("Personal pay"),
                     "link": reverse_lazy("admin:shop_shoppersonalpay_changelist"),
+                },
+                {
+                    "title": "반품·교환 신청",
+                    "link": reverse_lazy("admin:shop_shopreturnrequest_changelist"),
                 },
                 {
                     "title": _("Coupons"),
@@ -694,6 +706,8 @@ REST_FRAMEWORK = {
         "member-password": "5/min",
         "comment-write": "20/min",
         "stock-notify": "10/min",
+        # 가격 인하 알림 asks and removals of a member
+        "price-alert": "30/min",
         # product recommendation mails a member may send (itemrecommendmail.php)
         "shop-recommend": "5/hour",
         # the same, per address (any account, so several accounts cannot multiply it)
@@ -709,11 +723,15 @@ REST_FRAMEWORK = {
         "shop-cash-receipt": "10/hour",
         # subscription card registrations and changes (each may reach the Toss billing API)
         "shop-subscription": "20/hour",
+        # return / exchange requests and withdrawals after delivery, per member or address
+        "shop-return-request": "20/hour",
         "guest-password": "10/min",
         "docs-ask": "30/min",
         "docs-ask-answer": "5/min",
         "site-search": "60/min",
         "search-click": "30/min",
+        # Delivery Tracker webhook calls, per address (they only mark a shipment for a lookup)
+        "delivery-tracker-webhook": "600/min",
     },
     # 'DEFAULT_FILTER_BACKENDS': (
     #     'django_filters.rest_framework.DjangoFilterBackend',
@@ -730,6 +748,9 @@ SPECTACULAR_SETTINGS = {
         "CashReceiptStateEnum": "gnu_jango.api.contracts.orders.CASH_RECEIPT_STATES",
         "CashReceiptTypeEnum": "gnu_jango.api.contracts.orders.CASH_RECEIPT_TYPES",
         "PostAdminRoleEnum": "gnu_jango.api.contracts.boards.POST_ADMIN_ROLES",
+        "ShopReturnKindEnum": "gnu_jango.api.contracts.returns.RETURN_REQUEST_KINDS",
+        "ShopReturnStatusEnum": "gnu_jango.api.contracts.returns.RETURN_REQUEST_STATUSES",
+        "ShopReturnReasonEnum": "gnu_jango.api.contracts.returns.RETURN_REQUEST_REASONS",
     },
 }
 
@@ -888,6 +909,13 @@ SHOP_PAYMENT_ADAPTER_BASE_URL = de_config("SHOP_PAYMENT_ADAPTER_BASE_URL", defau
 SHOP_PAYMENT_ADAPTER_SECRET = de_config("SHOP_PAYMENT_ADAPTER_SECRET", default="")
 SHOP_PAYMENT_ADAPTER_PROVIDERS = de_config("SHOP_PAYMENT_ADAPTER_PROVIDERS", default="")
 SHOP_PAYMENT_ADAPTER_TIMEOUT = de_config("SHOP_PAYMENT_ADAPTER_TIMEOUT", default=10, cast=int)
+
+# Delivery Tracker shipment tracking (docs/04-deploy/delivery-tracking.md). The switch and the API
+# keys are shop settings; this only adds the track_shipments lookup to run_scheduled_jobs.
+SHOP_DELIVERY_TRACKING_JOB = bool_config("SHOP_DELIVERY_TRACKING_JOB", default=False)
+# The public https origin Delivery Tracker calls the webhook on (default SOCIAL_APP_BASE_URL);
+# without an https origin no webhook is registered and the job alone keeps the tracking fresh.
+SHOP_DELIVERY_TRACKER_CALLBACK_BASE_URL = de_config("SHOP_DELIVERY_TRACKER_CALLBACK_BASE_URL", default="")
 
 # SMS credentials live in environment variables and are never stored in admin Config rows.
 # G5_SMS_PROVIDER: empty or "icode" lets iCode send, "disabled" stops every text on this server.

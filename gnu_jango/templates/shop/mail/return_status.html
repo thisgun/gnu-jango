@@ -1,0 +1,19 @@
+{% extends "shop/mail/_base.html" %}
+{% load humanize %}
+{% block heading %}{{ title }}{% endblock %}
+{% block content %}
+<p>{{ order.od_name }}님, {{ request.get_kind_display }} 신청의 처리 상황을 알려 드립니다.</p>
+<p style="margin:12px 0;"><strong>주문번호</strong> {{ order.od_id }} · <strong>신청번호</strong> {{ request.pk }} · <strong>상태</strong> {{ request.get_status_display }}</p>
+<table style="width:100%;border-collapse:collapse;font-size:13px;">
+<thead><tr><th style="text-align:left;padding:6px;border-bottom:1px solid #e7e5e4;">상품</th><th style="text-align:right;padding:6px;border-bottom:1px solid #e7e5e4;">수량</th></tr></thead>
+<tbody>{% for line in request_lines %}
+<tr><td style="padding:6px;border-bottom:1px solid #f5f5f4;">{{ line.it_name }}{% if line.ct_option and line.ct_option != line.it_name %} ({{ line.ct_option }}){% endif %}</td><td style="text-align:right;padding:6px;border-bottom:1px solid #f5f5f4;">{{ line.qty|intcomma }}</td></tr>{% endfor %}
+</tbody>
+</table>
+<p style="margin:12px 0 0;"><strong>사유</strong> {{ request.get_reason_display }}{% if request.detail %} - {{ request.detail }}{% endif %}</p>{% if request.status == "rejected" and request.reject_reason %}
+<p style="margin:12px 0 0;padding:10px;background:#fef2f2;border-radius:6px;"><strong>거절 사유</strong> {{ request.reject_reason }}</p>{% endif %}{% if request.status == "approved" %}
+<p style="margin:12px 0 0;">상품을 회수해 확인한 뒤 {% if request.kind == "return" %}환불{% else %}교환 상품 발송{% endif %}을 진행합니다.</p>{% endif %}{% if request.status == "completed" and request.kind == "return" %}
+<p style="margin:12px 0 0;"><strong>환불금액</strong> {{ request.refund_amount|intcomma }}원{% if request.return_fee %} (반품 배송비 {{ request.return_fee|intcomma }}원 차감){% endif %}</p>{% endif %}{% if request.status == "completed" and request.kind == "exchange" %}
+<p style="margin:12px 0 0;"><strong>교환 상품 발송</strong> {{ request.exchange_delivery_company }} {{ request.exchange_invoice }}</p>{% endif %}{% if order_url %}
+<p style="margin-top:20px;"><a href="{{ order_url }}" style="display:inline-block;padding:10px 16px;background:#0a8f45;color:#ffffff;text-decoration:none;border-radius:6px;">주문 상세 보기</a></p>{% endif %}
+{% endblock %}
