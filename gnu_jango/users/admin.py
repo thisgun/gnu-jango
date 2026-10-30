@@ -4,6 +4,7 @@ from datetime import timedelta
 
 from django import forms
 from django.contrib import admin, messages
+from django.contrib.admin import ActionLocation
 from django.contrib.admin.sites import NotRegistered
 from django.contrib.auth import get_user_model
 from django.contrib.auth.admin import GroupAdmin as BaseGroupAdmin
@@ -265,8 +266,8 @@ class UserAdmin(AdminExportAuditMixin, ImportExportMixin, BaseUserAdmin, ModelAd
         if blocked or changed.intersection(TOKEN_REVOKING_CHANGES):
             revoke_member_tokens(form.instance)
 
-    def get_actions(self, request):
-        actions = super().get_actions(request)
+    def get_actions(self, request, action_location=ActionLocation.CHANGE_LIST):
+        actions = super().get_actions(request, action_location)
         if not request.user.is_superuser:
             actions.pop("export_selected_members_csv", None)
         return actions

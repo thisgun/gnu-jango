@@ -62,6 +62,7 @@ class TossReadOnlyConnectionTests(TestCase):
         error = urllib_error.HTTPError(
             "https://api.tosspayments.com", 404, "Not Found", {}, io.BytesIO(b'{"code":"NOT_FOUND_PAYMENT"}')
         )
+        self.addCleanup(error.close)
         with patch("gnu_jango.api.shop_payments.urllib_request.urlopen", side_effect=error) as urlopen:
             result = check_toss_connection()
 
@@ -76,6 +77,7 @@ class TossReadOnlyConnectionTests(TestCase):
         error = urllib_error.HTTPError(
             "https://api.tosspayments.com", 401, "Unauthorized", {}, io.BytesIO(b'{"code":"UNAUTHORIZED_KEY"}')
         )
+        self.addCleanup(error.close)
         with patch("gnu_jango.api.shop_payments.urllib_request.urlopen", side_effect=error):
             result = check_toss_connection()
         self.assertEqual(result, {"status": "invalid_credentials", "connected": False})

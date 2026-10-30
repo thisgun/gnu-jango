@@ -1167,6 +1167,7 @@ class PaymentCancelVirtualAccountTests(PaymentTestBase):
     def test_a_toss_failure_leaves_the_virtual_account_order_untouched(self):
         order = self.vbank_order()
         failure = urllib_error.HTTPError("https://api.invalid", 500, "boom", {}, None)
+        failure.close()  # the body comes from read below
         failure.read = lambda: b"{}"
 
         response, _ = self.provider_cancel(order, self.waiting_payment(order), urlopen_result=failure)
@@ -1900,6 +1901,7 @@ def fake_http_response(payload):
 
 def http_error(code, payload=b"{}"):
     error = urllib_error.HTTPError("https://provider.invalid", code, "err", {}, None)
+    error.close()  # the body comes from read below
     error.read = lambda: payload
     return error
 

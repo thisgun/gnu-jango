@@ -4,6 +4,7 @@ from urllib.parse import quote, unquote, urlencode, urlsplit
 from django import forms
 from django.conf import settings
 from django.contrib import messages
+from django.contrib.admin import ActionLocation
 from django.core.exceptions import PermissionDenied, ValidationError
 from import_export.admin import ImportExportMixin
 from unfold.forms import ActionForm
@@ -399,8 +400,8 @@ class ShopProductAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAd
         fields = tuple(super().get_readonly_fields(request, obj))
         return fields + (("it_stock_qty",) if obj else ())
 
-    def get_actions(self, request):
-        actions = super().get_actions(request)
+    def get_actions(self, request, action_location=ActionLocation.CHANGE_LIST):
+        actions = super().get_actions(request, action_location)
         if not request.user.has_perm("shop.add_shopeventitem") or not request.user.has_perm("shop.change_shopeventitem"):
             actions.pop("add_selected_to_event", None)
         return actions

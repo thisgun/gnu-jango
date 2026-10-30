@@ -58,7 +58,8 @@ def _resizable(kind, path):
 
 
 def _signature(width, kind, path):
-    return salted_hmac(SIGNATURE_SALT, f"{width}/{kind}/{path}").hexdigest()[:SIGNATURE_LENGTH]
+    # sha1 pinned: the default becomes sha256 in Django 7, which would change every published copy URL.
+    return salted_hmac(SIGNATURE_SALT, f"{width}/{kind}/{path}", algorithm="sha1").hexdigest()[:SIGNATURE_LENGTH]
 
 
 def _copy_url(width, kind, path, version=""):

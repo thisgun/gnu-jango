@@ -1699,6 +1699,7 @@ class SocialHttpTests(AuthTestBase):
 
     def test_a_refusal_by_the_provider_becomes_an_oauth_error_with_its_status(self):
         error = urllib.error.HTTPError(self.URL, 401, "no", {}, BytesIO(b'{"error": "invalid_client"}'))
+        self.addCleanup(error.close)
         with mock.patch.object(v1_auth.urllib_request, "urlopen", side_effect=error):
             with self.assertRaises(v1_auth.SocialOAuthError) as caught:
                 v1_auth._http_json_request(self.URL)
@@ -1723,6 +1724,7 @@ class SocialHttpTests(AuthTestBase):
     @override_settings(SOCIAL_KAKAO_REST_KEY="kakao-key")
     def test_the_provider_error_text_stays_out_of_the_redirect_the_visitor_sees(self):
         error = urllib.error.HTTPError(self.URL, 400, "no", {}, BytesIO(b"secret-detail-from-provider"))
+        self.addCleanup(error.close)
         client = APIClient()
         response = client.get(START_URL, {"provider": "kakao", "redirect": "/back"})
         state = query_of(response["Location"])["state"]

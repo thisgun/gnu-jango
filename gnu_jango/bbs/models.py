@@ -697,7 +697,10 @@ class Post_file(models.Model):
         # self.bf_height = 0
         # self.bf_filesize = 0
 
-        if self.bf_file and hasattr(self.bf_file, "file"):
+        # A new upload is measured as it arrives; a stored file only while its size is unknown, because
+        # reading it opens it from storage (downloads it, on remote storage), and that copy is closed again.
+        stored = bool(self.bf_file) and self.bf_file._committed
+        if self.bf_file and (not stored or not self.bf_filesize) and hasattr(self.bf_file, "file"):
 
             trial_image = {}
 
@@ -714,6 +717,8 @@ class Post_file(models.Model):
                 pass
 
             self.bf_filesize = self.bf_file.file.size
+            if stored:
+                self.bf_file.close()
 
         if self.bf_datetime is None:
             self.bf_datetime = timezone.now()

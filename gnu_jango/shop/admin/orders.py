@@ -1,8 +1,10 @@
 from gnu_jango.shop.admin._common import *  # noqa: F401,F403
 from functools import partial, update_wrapper
+from dataclasses import replace
 
 from django import forms
 from django.contrib import messages
+from django.contrib.admin import ActionLocation
 from django.contrib.admin.actions import delete_selected
 from django.contrib.admin.utils import unquote
 from django.core.exceptions import PermissionDenied
@@ -343,11 +345,10 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
             return False
         return obj is None or not order_delete_block_reason(obj)
 
-    def get_actions(self, request):
-        actions = super().get_actions(request)
+    def get_actions(self, request, action_location=ActionLocation.CHANGE_LIST):
+        actions = super().get_actions(request, action_location)
         if "delete_selected" in actions:
-            _func, name, description = actions["delete_selected"]
-            actions["delete_selected"] = (type(self).delete_selected_orders, name, description)
+            actions["delete_selected"] = replace(actions["delete_selected"], func=type(self).delete_selected_orders)
         return actions
 
     def delete_selected_orders(self, request, queryset):
@@ -2442,15 +2443,15 @@ class ShopPaymentAttemptAdmin(ModelAdmin):
             and request.user.has_perm("shop.change_shoppaymentattempt")
         )
 
-    def get_actions(self, request):
+    def get_actions(self, request, action_location=ActionLocation.CHANGE_LIST):
         if not self.has_recovery_permission(request):
             return {}
-        actions = super().get_actions(request)
+        actions = super().get_actions(request, action_location)
         if actions:
             return actions
-        action = self.get_action("recover_selected_attempts")
+        action = self.get_action("recover_selected_attempts", action_location)
         if action is not None:
-            actions[action[0].__name__] = action
+            actions[action.name] = action
         return actions
 
     @admin.action(description=_("NICEPAY 거래조회로 복구"))
