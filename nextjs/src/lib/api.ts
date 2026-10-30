@@ -465,6 +465,8 @@ export interface ShopProduct {
   similar_items?: ShopProduct[];
   /** 승인된 후기를 AI(G5_AI_CHAT_MODEL)가 미리 요약한 글 — G5_AI_REVIEW_SUMMARIES 가 꺼져 있거나 요약이 없으면 null. */
   ai_review_summary?: ShopAiReviewSummary | null;
+  /** 정기구독 주기 · 할인 — 쇼핑몰이 정기구독을 껐거나 이 상품이 받지 않으면 null(상세에만 온다). */
+  subscription?: ShopSubscriptionOffer | null;
   prev_item?: ShopProductNavItem | null;
   next_item?: ShopProductNavItem | null;
 }
@@ -475,6 +477,14 @@ export interface ShopAiReviewSummary {
   /** 요약에 쓴 최근 승인 후기 수(최대 40). */
   review_count: number;
   updated_at: string;
+}
+
+export interface ShopSubscriptionOffer {
+  /** 1w | 2w | 4w | 1m 과 그 이름(예: 2주마다). */
+  cycles: { value: string; label: string }[];
+  discount_rate: number;
+  /** 오늘 기준 정기구독가(기본가 - 할인). 실제 결제 금액은 결제일의 가격. */
+  price: number;
 }
 
 export interface ShopProductNavItem {

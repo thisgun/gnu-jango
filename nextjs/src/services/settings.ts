@@ -7,6 +7,7 @@ import { currentBootstrapScope, getPageBootstrap } from "./page-bootstrap";
 export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
   cf_bbs_rewrite: 0,
   infinite_scroll: false,
+  shop_subscriptions: false,
   comment_editor: false,
   pwa_enabled: false,
 };

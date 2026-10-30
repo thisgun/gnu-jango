@@ -8,7 +8,7 @@ from gnu_jango.site_search.source import SearchIndexedSource
 from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from django.core.validators import FileExtensionValidator
+from django.core.validators import FileExtensionValidator, MaxValueValidator
 from simple_history.models import HistoricalRecords
 
 
@@ -325,6 +325,26 @@ class ShopProduct(SearchIndexedSource):
         "쿠폰적용안함",
         default=False,
         help_text="체크하면 개별상품 · 분류 쿠폰을 이 상품에 쓸 수 없습니다. 주문 · 배송비 쿠폰은 그대로 적용됩니다.",
+    )
+    # 정기구독 (shop/subscriptions.py): members may take this product as a recurring delivery paid
+    # by a registered card. Shown only while the shop setting de_subscription_use is on as well.
+    it_subscription_use = models.BooleanField(
+        "정기구독 가능",
+        default=False,
+        help_text="켜면 회원이 상품 상세에서 배송 주기를 골라 카드 자동결제로 정기구독할 수 있습니다.",
+    )
+    it_subscription_cycles = models.CharField(
+        "정기구독 배송 주기",
+        max_length=50,
+        blank=True,
+        default="",
+        help_text="고객이 고를 수 있는 주기입니다.",
+    )
+    it_subscription_discount = models.PositiveSmallIntegerField(
+        "정기구독 할인율 (%)",
+        default=0,
+        validators=[MaxValueValidator(50)],
+        help_text="정기구독 결제 때 상품 기본가에서 깎아 주는 비율입니다(옵션 추가금액은 그대로). 0이면 할인하지 않습니다.",
     )
     image_url = models.CharField(max_length=1000, blank=True, default="")
     images = models.JSONField(default=list, blank=True)
@@ -1192,6 +1212,185 @@ class ShopReturnRequestLine(models.Model):
 
     def __str__(self):
         return f"{self.it_name} x {self.qty}"
+
+
+class ShopBillingCustomer(models.Model):
+    """The Toss customerKey of a member for card billing (자동결제). Toss binds every billing key to
+    the customerKey it was issued for and asks for it again with each charge. It is a random value,
+    never the member id: Toss warns that a guessable customerKey is unsafe."""
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="shop_billing_customer")
+    customer_key = models.CharField(max_length=50, unique=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        verbose_name = "자동결제 고객키"
+        verbose_name_plural = "자동결제 고객키"
+
+    def __str__(self):
+        return str(self.user_id)
+
+
+class ShopSubscription(models.Model):
+    """A member's 정기구독 of one product line (option, quantity), charged every cycle with the
+    card registered through Toss billing. Each successful charge becomes an ordinary paid ShopOrder
+    (ShopSubscriptionCharge links the two). The billing key is kept sealed and is never shown."""
+
+    STATUS_PENDING = "pending"
+    STATUS_ACTIVE = "active"
+    STATUS_PAUSED = "paused"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_CHOICES = (
+        (STATUS_PENDING, "카드 등록 대기"),
+        (STATUS_ACTIVE, "구독 중"),
+        (STATUS_PAUSED, "일시정지"),
+        (STATUS_CANCELLED, "해지"),
+    )
+    PAUSE_MEMBER = "member"
+    PAUSE_PAYMENT = "payment_failed"
+    PAUSE_ADMIN = "admin"
+    PAUSE_CHOICES = (
+        ("", "-"),
+        (PAUSE_MEMBER, "회원 요청"),
+        (PAUSE_PAYMENT, "결제 실패"),
+        (PAUSE_ADMIN, "관리자"),
+    )
+    CYCLE_CHOICES = (
+        ("1w", "1주마다"),
+        ("2w", "2주마다"),
+        ("4w", "4주마다"),
+        ("1m", "매월"),
+    )
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="shop_subscriptions", verbose_name="회원"
+    )
+    product = models.ForeignKey(
+        ShopProduct, on_delete=models.SET_NULL, null=True, blank=True, related_name="subscriptions"
+    )
+    it_id = models.CharField(max_length=40, db_index=True)
+    it_name = models.CharField("상품명", max_length=255, blank=True, default="")
+    # the chosen option (io_type 0); "" for a product without options
+    io_id = models.CharField("옵션", max_length=255, blank=True, default="")
+    qty = models.PositiveIntegerField("수량", default=1)
+    cycle = models.CharField("주기", max_length=3, choices=CYCLE_CHOICES, default="1m")
+    # 매월: the day of the month charges fall on (a shorter month takes its last day)
+    billing_day = models.PositiveSmallIntegerField(default=1)
+    status = models.CharField("상태", max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    pause_reason = models.CharField("일시정지 사유", max_length=20, choices=PAUSE_CHOICES, blank=True, default="")
+    # the scheduled date of the current cycle; a failed charge is tried again on retry_date
+    next_charge_date = models.DateField("회차 결제일", null=True, blank=True)
+    retry_date = models.DateField("재시도일", null=True, blank=True)
+    cycle_no = models.PositiveIntegerField("회차", default=1)
+    failure_count = models.PositiveSmallIntegerField("연속 실패", default=0)
+    # the cycle whose 결제 예정 notice went out, so a rerun does not send it twice
+    notice_cycle_no = models.PositiveIntegerField(default=0)
+    customer_key = models.CharField(max_length=50, blank=True, default="")
+    billing_key_sealed = models.TextField(blank=True, default="")
+    # the Toss key pair the billing key belongs to (od_test: 1 = 테스트, 0 = 실결제)
+    toss_mode = models.CharField("토스 키 (1 테스트 / 0 실결제)", max_length=1, blank=True, default="")
+    card_company = models.CharField(max_length=50, blank=True, default="")
+    card_number = models.CharField(max_length=30, blank=True, default="")
+    card_type = models.CharField(max_length=20, blank=True, default="")
+    card_registered_at = models.DateTimeField(null=True, blank=True)
+    od_name = models.CharField(max_length=100, blank=True, default="")
+    od_email = models.EmailField(blank=True, default="")
+    od_hp = models.CharField(max_length=50, blank=True, default="")
+    od_b_name = models.CharField(max_length=100, blank=True, default="")
+    od_b_tel = models.CharField(max_length=50, blank=True, default="")
+    od_b_hp = models.CharField(max_length=50, blank=True, default="")
+    od_b_zip = models.CharField(max_length=20, blank=True, default="")
+    od_b_addr1 = models.CharField(max_length=255, blank=True, default="")
+    od_b_addr2 = models.CharField(max_length=255, blank=True, default="")
+    od_b_addr3 = models.CharField(max_length=255, blank=True, default="")
+    od_b_addr_jibeon = models.CharField(max_length=255, blank=True, default="")
+    od_memo = models.CharField(max_length=255, blank=True, default="")
+    # a card registration in progress (new subscription or card change): the one-time token the
+    # success page sends back, hashed, and until when it is good
+    auth_token_hash = models.CharField(max_length=64, blank=True, default="", db_index=True)
+    auth_expires_at = models.DateTimeField(null=True, blank=True)
+    # the key pair (od_test) the registration window was opened with
+    auth_mode = models.CharField(max_length=1, blank=True, default="")
+    last_error = models.CharField(max_length=255, blank=True, default="")
+    started_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField("신청 시각", default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "정기구독"
+        verbose_name_plural = "정기구독"
+        indexes = [
+            models.Index(fields=["status", "next_charge_date"]),
+            models.Index(fields=["status", "retry_date"]),
+            models.Index(fields=["user", "status"]),
+        ]
+
+    def __str__(self):
+        return f"#{self.pk} {self.it_name or self.it_id}"
+
+
+class ShopSubscriptionCharge(models.Model):
+    """One charge attempt of a subscription cycle. At most one attempt per cycle is pending, done
+    or under review (a database constraint), so a rerun or a second scheduler can never charge a
+    cycle twice; every attempt carries its own Toss Idempotency-Key."""
+
+    STATUS_PENDING = "pending"
+    STATUS_DONE = "done"
+    STATUS_FAILED = "failed"
+    STATUS_SKIPPED = "skipped"
+    STATUS_REVIEW = "review"
+    STATUS_CHOICES = (
+        (STATUS_PENDING, "결제 처리 중"),
+        (STATUS_DONE, "결제 완료"),
+        (STATUS_FAILED, "결제 실패"),
+        (STATUS_SKIPPED, "건너뜀"),
+        (STATUS_REVIEW, "확인 필요"),
+    )
+    SOURCE_CHOICES = (
+        ("first", "첫 결제"),
+        ("schedule", "정기 결제"),
+        ("admin", "관리자 재시도"),
+        ("member", "회원 요청"),
+    )
+
+    subscription = models.ForeignKey(ShopSubscription, on_delete=models.CASCADE, related_name="charges")
+    cycle_no = models.PositiveIntegerField("회차")
+    attempt = models.PositiveSmallIntegerField("시도", default=1)
+    scheduled_date = models.DateField("결제 예정일")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING, db_index=True)
+    source = models.CharField("구분", max_length=10, choices=SOURCE_CHOICES, default="schedule")
+    order = models.ForeignKey(
+        ShopOrder, on_delete=models.SET_NULL, null=True, blank=True, related_name="subscription_charges"
+    )
+    od_id = models.CharField(max_length=40, blank=True, default="", db_index=True)
+    amount = models.IntegerField("금액", default=0)
+    idempotency_key = models.CharField(max_length=100, unique=True)
+    payment_key = models.CharField(max_length=200, blank=True, default="")
+    failure_code = models.CharField(max_length=64, blank=True, default="")
+    failure_message = models.CharField("사유", max_length=255, blank=True, default="")
+    created_at = models.DateTimeField("만든 시각", default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+        verbose_name = "정기구독 결제"
+        verbose_name_plural = "정기구독 결제"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["subscription", "cycle_no", "attempt"], name="shop_subscription_charge_attempt_unique"
+            ),
+            models.UniqueConstraint(
+                fields=["subscription", "cycle_no"],
+                condition=models.Q(status__in=["pending", "done", "review"]),
+                name="shop_subscription_charge_once_per_cycle",
+            ),
+        ]
+        indexes = [models.Index(fields=["status", "updated_at"])]
+
+    def __str__(self):
+        return f"{self.subscription_id}/{self.cycle_no}-{self.attempt}"
 
 
 class ShopReview(models.Model):

@@ -368,6 +368,7 @@ def settings_view(request):
 
 def settings_response(request):
     from gnu_jango.shop.shop_display import list_display, public_logo_urls
+    from gnu_jango.shop.subscriptions import feature_enabled as subscriptions_enabled
     from gnu_jango.shop.price_alerts import price_alerts_enabled
 
     data = config.get_all()
@@ -395,6 +396,8 @@ def settings_response(request):
             "cf_bbs_rewrite": _safe_int(data.get("cf_bbs_rewrite"), 0),
             # cf_infinite_scroll: board lists load the next posts on scroll (cursor paging)
             "infinite_scroll": config_to_bool(data.get("cf_infinite_scroll")),
+            # 정기구독 is on (server switch and de_subscription_use): the theme shows its pages
+            "shop_subscriptions": subscriptions_enabled(),
             "comment_editor": False,
             "pwa_enabled": False,
             # de_price_alert_use: product pages offer the 가격 인하 알림 button

@@ -63,6 +63,7 @@ PRIVATE_NOINDEX_PREFIXES = (
     "/shop/personalpay",
     "/shop/payment/success",
     "/shop/payment/fail",
+    "/shop/subscriptions",
     "/shop/wishlist",
 )
 
@@ -82,6 +83,7 @@ PRIVATE_API_PREFIXES = (
     "/api/v1/shop/points",
     "/api/v1/shop/reviews",
     "/api/v1/shop/personalpay",
+    "/api/v1/shop/subscriptions",
     "/api/v1/boards",
     "/api/v1/posts",
     "/api/v1/polls",

@@ -4312,6 +4312,211 @@
                 }
             }
         },
+        "/api/v1/shop/subscriptions": {
+            "get": {
+                "operationId": "v1_shop_subscriptions_retrieve",
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ShopSubscriptionsEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/shop/subscriptions/{id}": {
+            "get": {
+                "operationId": "v1_shop_subscriptions_retrieve_2",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ShopSubscriptionDetailEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/shop/subscriptions/{id}/action": {
+            "post": {
+                "operationId": "v1_shop_subscriptions_action_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ShopSubscriptionActionEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/shop/subscriptions/{id}/card": {
+            "post": {
+                "operationId": "v1_shop_subscriptions_card_create",
+                "parameters": [
+                    {
+                        "in": "path",
+                        "name": "id",
+                        "schema": {
+                            "type": "integer"
+                        },
+                        "required": true
+                    }
+                ],
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ShopSubscriptionCardRegistrationEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/shop/subscriptions/billing-auth": {
+            "post": {
+                "operationId": "v1_shop_subscriptions_billing_auth_create",
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ShopSubscriptionBillingResultEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
+        "/api/v1/shop/subscriptions/billing-auth/cancel": {
+            "post": {
+                "operationId": "v1_shop_subscriptions_billing_auth_cancel_create",
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "200": {
+                        "description": "No response body"
+                    }
+                }
+            }
+        },
+        "/api/v1/shop/subscriptions/start": {
+            "post": {
+                "operationId": "v1_shop_subscriptions_start_create",
+                "tags": [
+                    "v1"
+                ],
+                "security": [
+                    {
+                        "basicAuth": []
+                    },
+                    {}
+                ],
+                "responses": {
+                    "201": {
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ShopSubscriptionRegistrationEnvelope"
+                                }
+                            }
+                        },
+                        "description": ""
+                    }
+                }
+            }
+        },
         "/api/v1/shop/wishlist": {
             "get": {
                 "operationId": "v1_shop_wishlist_retrieve",
@@ -7926,6 +8131,14 @@
                             }
                         ],
                         "nullable": true
+                    },
+                    "subscription": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ShopSubscriptionOffer"
+                            }
+                        ],
+                        "nullable": true
                     }
                 },
                 "required": [
@@ -7988,7 +8201,8 @@
                     "review_avg",
                     "review_count",
                     "similar_items",
-                    "stock_sms_privacy"
+                    "stock_sms_privacy",
+                    "subscription"
                 ]
             },
             "ShopProductDetailEnvelope": {
@@ -8398,6 +8612,679 @@
                 "type": "string",
                 "description": "* `requested` - requested\n* `approved` - approved\n* `completed` - completed\n* `rejected` - rejected\n* `withdrawn` - withdrawn"
             },
+            "ShopSubscription": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "status_label": {
+                        "type": "string"
+                    },
+                    "pause_reason": {
+                        "type": "string"
+                    },
+                    "pause_reason_label": {
+                        "type": "string"
+                    },
+                    "it_id": {
+                        "type": "string"
+                    },
+                    "it_name": {
+                        "type": "string"
+                    },
+                    "io_id": {
+                        "type": "string"
+                    },
+                    "option_label": {
+                        "type": "string"
+                    },
+                    "qty": {
+                        "type": "integer"
+                    },
+                    "cycle": {
+                        "type": "string"
+                    },
+                    "cycle_label": {
+                        "type": "string"
+                    },
+                    "cycle_choices": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopSubscriptionCycle"
+                        }
+                    },
+                    "discount_rate": {
+                        "type": "integer"
+                    },
+                    "next_charge_date": {
+                        "type": "string",
+                        "format": "date",
+                        "nullable": true
+                    },
+                    "retry_date": {
+                        "type": "string",
+                        "format": "date",
+                        "nullable": true
+                    },
+                    "cycle_no": {
+                        "type": "integer"
+                    },
+                    "failure_count": {
+                        "type": "integer"
+                    },
+                    "estimated_amount": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "card": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ShopSubscriptionCard"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "delivery": {
+                        "$ref": "#/components/schemas/ShopSubscriptionDelivery"
+                    },
+                    "image_url": {
+                        "type": "string"
+                    },
+                    "last_error": {
+                        "type": "string"
+                    },
+                    "charge_in_progress": {
+                        "type": "boolean"
+                    },
+                    "started_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "cancelled_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "cancelled_at",
+                    "card",
+                    "charge_in_progress",
+                    "created_at",
+                    "cycle",
+                    "cycle_choices",
+                    "cycle_label",
+                    "cycle_no",
+                    "delivery",
+                    "discount_rate",
+                    "estimated_amount",
+                    "failure_count",
+                    "id",
+                    "image_url",
+                    "io_id",
+                    "it_id",
+                    "it_name",
+                    "last_error",
+                    "next_charge_date",
+                    "option_label",
+                    "pause_reason",
+                    "pause_reason_label",
+                    "qty",
+                    "retry_date",
+                    "started_at",
+                    "status",
+                    "status_label"
+                ]
+            },
+            "ShopSubscriptionActionEnvelope": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ShopSubscriptionDetail"
+                    },
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "ok": {
+                        "type": "boolean"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "errors": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "errors",
+                    "message",
+                    "meta",
+                    "ok",
+                    "success"
+                ]
+            },
+            "ShopSubscriptionBillingResult": {
+                "type": "object",
+                "properties": {
+                    "subscription": {
+                        "$ref": "#/components/schemas/ShopSubscriptionDetail"
+                    },
+                    "order_id": {
+                        "type": "string"
+                    },
+                    "charge_status": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "charge_status",
+                    "order_id",
+                    "subscription"
+                ]
+            },
+            "ShopSubscriptionBillingResultEnvelope": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ShopSubscriptionBillingResult"
+                    },
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "ok": {
+                        "type": "boolean"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "errors": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "errors",
+                    "message",
+                    "meta",
+                    "ok",
+                    "success"
+                ]
+            },
+            "ShopSubscriptionCard": {
+                "type": "object",
+                "description": "The registered card as Toss described it (the number comes masked from Toss).",
+                "properties": {
+                    "company": {
+                        "type": "string"
+                    },
+                    "number": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "company",
+                    "number",
+                    "type"
+                ]
+            },
+            "ShopSubscriptionCardRegistrationEnvelope": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ShopSubscriptionRegistration"
+                    },
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "ok": {
+                        "type": "boolean"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "errors": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "errors",
+                    "message",
+                    "meta",
+                    "ok",
+                    "success"
+                ]
+            },
+            "ShopSubscriptionCharge": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "cycle_no": {
+                        "type": "integer"
+                    },
+                    "attempt": {
+                        "type": "integer"
+                    },
+                    "scheduled_date": {
+                        "type": "string",
+                        "format": "date"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "status_label": {
+                        "type": "string"
+                    },
+                    "amount": {
+                        "type": "integer"
+                    },
+                    "order_id": {
+                        "type": "string"
+                    },
+                    "failure_message": {
+                        "type": "string"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    }
+                },
+                "required": [
+                    "amount",
+                    "attempt",
+                    "created_at",
+                    "cycle_no",
+                    "failure_message",
+                    "id",
+                    "order_id",
+                    "scheduled_date",
+                    "status",
+                    "status_label"
+                ]
+            },
+            "ShopSubscriptionCycle": {
+                "type": "object",
+                "properties": {
+                    "value": {
+                        "type": "string"
+                    },
+                    "label": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "label",
+                    "value"
+                ]
+            },
+            "ShopSubscriptionDelivery": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string"
+                    },
+                    "tel": {
+                        "type": "string"
+                    },
+                    "hp": {
+                        "type": "string"
+                    },
+                    "zip": {
+                        "type": "string"
+                    },
+                    "addr1": {
+                        "type": "string"
+                    },
+                    "addr2": {
+                        "type": "string"
+                    },
+                    "addr3": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "addr1",
+                    "addr2",
+                    "addr3",
+                    "hp",
+                    "name",
+                    "tel",
+                    "zip"
+                ]
+            },
+            "ShopSubscriptionDetail": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "integer"
+                    },
+                    "status": {
+                        "type": "string"
+                    },
+                    "status_label": {
+                        "type": "string"
+                    },
+                    "pause_reason": {
+                        "type": "string"
+                    },
+                    "pause_reason_label": {
+                        "type": "string"
+                    },
+                    "it_id": {
+                        "type": "string"
+                    },
+                    "it_name": {
+                        "type": "string"
+                    },
+                    "io_id": {
+                        "type": "string"
+                    },
+                    "option_label": {
+                        "type": "string"
+                    },
+                    "qty": {
+                        "type": "integer"
+                    },
+                    "cycle": {
+                        "type": "string"
+                    },
+                    "cycle_label": {
+                        "type": "string"
+                    },
+                    "cycle_choices": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopSubscriptionCycle"
+                        }
+                    },
+                    "discount_rate": {
+                        "type": "integer"
+                    },
+                    "next_charge_date": {
+                        "type": "string",
+                        "format": "date",
+                        "nullable": true
+                    },
+                    "retry_date": {
+                        "type": "string",
+                        "format": "date",
+                        "nullable": true
+                    },
+                    "cycle_no": {
+                        "type": "integer"
+                    },
+                    "failure_count": {
+                        "type": "integer"
+                    },
+                    "estimated_amount": {
+                        "type": "integer",
+                        "nullable": true
+                    },
+                    "card": {
+                        "allOf": [
+                            {
+                                "$ref": "#/components/schemas/ShopSubscriptionCard"
+                            }
+                        ],
+                        "nullable": true
+                    },
+                    "delivery": {
+                        "$ref": "#/components/schemas/ShopSubscriptionDelivery"
+                    },
+                    "image_url": {
+                        "type": "string"
+                    },
+                    "last_error": {
+                        "type": "string"
+                    },
+                    "charge_in_progress": {
+                        "type": "boolean"
+                    },
+                    "started_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "cancelled_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time"
+                    },
+                    "charges": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopSubscriptionCharge"
+                        }
+                    }
+                },
+                "required": [
+                    "cancelled_at",
+                    "card",
+                    "charge_in_progress",
+                    "charges",
+                    "created_at",
+                    "cycle",
+                    "cycle_choices",
+                    "cycle_label",
+                    "cycle_no",
+                    "delivery",
+                    "discount_rate",
+                    "estimated_amount",
+                    "failure_count",
+                    "id",
+                    "image_url",
+                    "io_id",
+                    "it_id",
+                    "it_name",
+                    "last_error",
+                    "next_charge_date",
+                    "option_label",
+                    "pause_reason",
+                    "pause_reason_label",
+                    "qty",
+                    "retry_date",
+                    "started_at",
+                    "status",
+                    "status_label"
+                ]
+            },
+            "ShopSubscriptionDetailEnvelope": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ShopSubscriptionDetail"
+                    },
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "ok": {
+                        "type": "boolean"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "errors": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "errors",
+                    "message",
+                    "meta",
+                    "ok",
+                    "success"
+                ]
+            },
+            "ShopSubscriptionOffer": {
+                "type": "object",
+                "description": "``subscription`` of the product detail: what the product page offers (null when it cannot\nbe subscribed to or the feature is off).",
+                "properties": {
+                    "cycles": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopSubscriptionCycle"
+                        }
+                    },
+                    "discount_rate": {
+                        "type": "integer"
+                    },
+                    "price": {
+                        "type": "integer"
+                    }
+                },
+                "required": [
+                    "cycles",
+                    "discount_rate",
+                    "price"
+                ]
+            },
+            "ShopSubscriptionRegistration": {
+                "type": "object",
+                "description": "What the browser needs to open the Toss billing window (payment({customerKey})\n.requestBillingAuth). The registration token goes back with the authKey on the success page.",
+                "properties": {
+                    "subscription_id": {
+                        "type": "integer"
+                    },
+                    "registration_token": {
+                        "type": "string"
+                    },
+                    "customer_key": {
+                        "type": "string"
+                    },
+                    "client_key": {
+                        "type": "string"
+                    },
+                    "customer_name": {
+                        "type": "string"
+                    },
+                    "customer_email": {
+                        "type": "string"
+                    },
+                    "expires_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "nullable": true
+                    }
+                },
+                "required": [
+                    "client_key",
+                    "customer_email",
+                    "customer_key",
+                    "customer_name",
+                    "expires_at",
+                    "registration_token",
+                    "subscription_id"
+                ]
+            },
+            "ShopSubscriptionRegistrationEnvelope": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "$ref": "#/components/schemas/ShopSubscriptionRegistration"
+                    },
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "ok": {
+                        "type": "boolean"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "errors": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "errors",
+                    "message",
+                    "meta",
+                    "ok",
+                    "success"
+                ]
+            },
+            "ShopSubscriptionsEnvelope": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopSubscription"
+                        }
+                    },
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "ok": {
+                        "type": "boolean"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "meta": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    },
+                    "errors": {
+                        "type": "object",
+                        "additionalProperties": {}
+                    }
+                },
+                "required": [
+                    "data",
+                    "errors",
+                    "message",
+                    "meta",
+                    "ok",
+                    "success"
+                ]
+            },
             "SiteSettings": {
                 "type": "object",
                 "properties": {
@@ -8463,6 +9350,9 @@
                     "infinite_scroll": {
                         "type": "boolean"
                     },
+                    "shop_subscriptions": {
+                        "type": "boolean"
+                    },
                     "comment_editor": {
                         "type": "boolean"
                     },
@@ -8519,6 +9409,7 @@
                     "shop_logo_footer",
                     "shop_logo_mobile",
                     "shop_logo_mobile_footer",
+                    "shop_subscriptions",
                     "theme_settings",
                     "visit"
                 ]

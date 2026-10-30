@@ -734,6 +734,8 @@ export const publicSettingsSchema = z
     cf_home_gallery: optionalString,
     cf_bbs_rewrite: numberValue.optional(),
     infinite_scroll: booleanValue.optional(),
+    /** 정기구독(카드 자동결제)을 쓸 수 있다 — 마이페이지 메뉴와 상품 상세의 정기구독 칸. */
+    shop_subscriptions: booleanValue.optional(),
     comment_editor: booleanValue.optional(),
     pwa_enabled: booleanValue.optional(),
     /** 가격 인하 알림 (de_price_alert_use): 상품 페이지에 알림 단추를 보인다. */

@@ -53,6 +53,8 @@ class SiteSettingsSerializer(serializers.Serializer):
     theme_settings = FreeformObjectField(allow_null=True)
     cf_bbs_rewrite = serializers.IntegerField()
     infinite_scroll = serializers.BooleanField()
+    # 정기구독 (shop/subscriptions.py) is available to members
+    shop_subscriptions = serializers.BooleanField()
     comment_editor = serializers.BooleanField()
     pwa_enabled = serializers.BooleanField()
     price_alert_enabled = serializers.BooleanField()

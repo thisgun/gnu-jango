@@ -1,0 +1,14 @@
+{% autoescape off %}[{{ site_title }}] {{ title }}
+
+{{ name }}님, 정기구독 안내입니다.
+
+{{ body }}
+
+상품: {{ subscription.it_name }} {{ subscription.qty }}개
+주기: {{ subscription.get_cycle_display }}{% if subscription.card_company or subscription.card_number %}
+결제 카드: {{ subscription.card_company }} {{ subscription.card_number }}{% endif %}{% if link %}
+
+자세히 보기: {{ link }}{% endif %}
+
+정기구독 결제 금액은 결제하는 날의 상품 가격으로 정해집니다. 마이페이지 > 정기구독에서 일시정지, 건너뛰기, 주기 변경, 해지할 수 있습니다.
+{% endautoescape %}

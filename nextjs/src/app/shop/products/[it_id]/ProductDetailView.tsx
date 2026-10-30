@@ -117,6 +117,7 @@ export function ProductDetailView({
         <ProductPurchasePanel
           {...purchaseControls}
           onOpenRecommendDialog={memberActions.openRecommendDialog}
+          onRequireLogin={memberActions.requireLogin}
           productRewriteMode={productRewriteMode}
           pointLabel={productPointLabel(product)}
           shippingPayment={shippingPayment}

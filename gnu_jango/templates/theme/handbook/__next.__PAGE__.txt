@@ -1,28 +1,28 @@
 2:"$Sreact.fragment"
-3:"/_next/static/chunks/2ynl5538ql5o1.js"
-4:"/_next/static/chunks/41kvb8ky-fnav.js"
-5:"/_next/static/chunks/449oooc38ak_t.js"
-6:"/_next/static/chunks/1770h0iqsjo1q.js"
-7:"/_next/static/chunks/0sztyposj8q8k.js"
-8:"/_next/static/chunks/1z8ihuoc31fyv.js"
-9:"/_next/static/chunks/26gfylf1y0_oj.js"
-a:"/_next/static/chunks/3rou55ppbmoin.js"
-b:"/_next/static/chunks/2dbqxlxaaqkiz.js"
-c:"/_next/static/chunks/2xtnc5kjha0ov.js"
-d:"/_next/static/chunks/3qa4n4dqqe1fr.js"
-e:"/_next/static/chunks/1nprcg-envb17.js"
-f:"/_next/static/chunks/2acj-i68iy_bs.js"
+3:"/_next/static/chunks/3iz5k-91mfwp5.js"
+4:"/_next/static/chunks/3-l0u7djo9tu2.js"
+5:"/_next/static/chunks/1ee22lm3liz0n.js"
+6:"/_next/static/chunks/20g1qdkqa0mr3.js"
+7:"/_next/static/chunks/0zfos1xp1k3i9.js"
+8:"/_next/static/chunks/1d5ckkypb87lg.js"
+9:"/_next/static/chunks/2qer6qau37s-4.js"
+a:"/_next/static/chunks/08blbk2m56zmn.js"
+b:"/_next/static/chunks/1st8ze7b4bm6_.js"
+c:"/_next/static/chunks/1c9m8xoq5lgcv.js"
+d:"/_next/static/chunks/3yeddmvpugbuk.js"
+e:"/_next/static/chunks/1pe0ed1ytpb6c.js"
+f:"/_next/static/chunks/16ihdml76-p3n.js"
 10:"HandbookHomeContent"
-11:I[77743,["$3","$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e","$f"],"$10"]
-12:I[78780,["$3","$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e"],"OutletBoundary"]
+11:I[8653,["$3","$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e","$f"],"$10"]
+12:I[22872,["$3","$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e"],"OutletBoundary"]
 13:"$Sreact.suspense"
 17:"ViewportBoundary"
-18:I[78780,["$3","$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e"],"$17"]
+18:I[22872,["$3","$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e"],"$17"]
 19:"MetadataBoundary"
-1a:I[78780,["$3","$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e"],"$19"]
-1b:I[93426,["$3","$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e"],"IconMark"]
+1a:I[22872,["$3","$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e"],"$19"]
+1b:I[72566,["$3","$4","$5","$6","$7","$8","$9","$a","$b","$c","$d","$e"],"IconMark"]
 16:X
-1:[["children",{"s":"__PAGE__","h":128,"d":{"r":["$","$2","c",{"children":[["$","$L11",null,{"name":"매뉴얼","description":"필요한 매뉴얼을 고르고, 장을 차례로 따라 읽어 보세요."}],[["$","script","script-0",{"src":"/_next/static/chunks/2acj-i68iy_bs.js","async":true}]],["$","$L12",null,{"children":["$","$13",null,{"name":"Next.MetadataOutlet","children":"$@14"}]}]]}],"p":"$@15","v":null,"s":"$16"}}]]
+1:[["children",{"s":"__PAGE__","h":128,"d":{"r":["$","$2","c",{"children":[["$","$L11",null,{"name":"매뉴얼","description":"필요한 매뉴얼을 고르고, 장을 차례로 따라 읽어 보세요."}],[["$","script","script-0",{"src":"/_next/static/chunks/16ihdml76-p3n.js","async":true}]],["$","$L12",null,{"children":["$","$13",null,{"name":"Next.MetadataOutlet","children":"$@14"}]}]]}],"p":"$@15","v":null,"s":"$16"}}]]
 0:{"t":{"t":{"s":"","h":20,"c":"$Q1"},"h":{"r":["$","$2","h",{"children":[null,["$","$L18",null,{"children":[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]}],["$","$L1a",null,{"children":[["$","div",null,{"hidden":true,"children":["$","$13",null,{"name":"Next.Metadata","children":[["$","title","0",{"children":"그누보드5"}],["$","meta","1",{"name":"description","content":"그누보드5 커뮤니티 게시판과 FAQ, 갤러리, 새 댓글을 확인하세요."}],["$","meta","2",{"name":"application-name","content":"매뉴얼"}],["$","link","3",{"rel":"manifest","href":"/manifest.webmanifest"}],["$","meta","4",{"name":"robots","content":"index, follow"}],["$","meta","5",{"name":"googlebot","content":"index, follow, max-image-preview:large"}],["$","link","6",{"rel":"canonical","href":"http://localhost:3000"}],["$","meta","7",{"property":"og:title","content":"그누보드5"}],["$","meta","8",{"property":"og:description","content":"그누보드5 커뮤니티 게시판과 FAQ, 갤러리, 새 댓글을 확인하세요."}],["$","meta","9",{"property":"og:url","content":"http://localhost:3000"}],["$","meta","10",{"property":"og:image","content":"http://localhost:3000/og-default.png"}],["$","meta","11",{"property":"og:image:alt","content":"그누보드5"}],["$","meta","12",{"property":"og:type","content":"website"}],["$","meta","13",{"name":"twitter:card","content":"summary_large_image"}],["$","meta","14",{"name":"twitter:title","content":"그누보드5"}],["$","meta","15",{"name":"twitter:description","content":"그누보드5 커뮤니티 게시판과 FAQ, 갤러리, 새 댓글을 확인하세요."}],["$","meta","16",{"name":"twitter:image","content":"http://localhost:3000/og-default.png"}],["$","link","17",{"rel":"shortcut icon","href":"/icon-192.png"}],["$","link","18",{"rel":"icon","href":"/icon-192.png","type":"image/png","sizes":"192x192"}],["$","link","19",{"rel":"apple-touch-icon","href":"/icon-512.png","sizes":"512x512"}],["$","$L1b","20",{}]]}]}],null]}],null]}],"p":"$@1c","v":null,"s":"$16"}},"a":"$@1d","u":"$@1e","b":"g5-handbook-static"}
 14:null
 1e:true

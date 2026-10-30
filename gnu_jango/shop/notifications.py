@@ -237,6 +237,32 @@ def _run_safely(callback, *args):
         logger.exception("Shop mail callback %s failed for %s", callback.__name__, args)
 
 
+def send_subscription_mail(subscription_id, title, body, path):
+    """정기구독 notices (결제 예정, 결제 완료/실패, 일시정지, 건너뜀, 해지) to the subscriber, with a
+    link to the subscription (or the order a charge made)."""
+    from gnu_jango.shop.models import ShopSubscription
+
+    if not mail_enabled():
+        return False
+    subscription = ShopSubscription.objects.select_related("user").filter(pk=subscription_id).first()
+    if subscription is None:
+        return False
+    recipient = subscription.od_email or subscription.user.email
+    context = {
+        "subscription": subscription,
+        "title": title,
+        "body": body,
+        "link": site_link(path),
+        "name": subscription.od_name or subscription.user.get_username(),
+    }
+    return send_shop_mail(f"[{site_title()}] {title}", "subscription_notice", context, [recipient])
+
+
+def queue_subscription_mail(subscription, *, title, body, path):
+    subscription_id = subscription.pk
+    transaction.on_commit(lambda: _run_safely(send_subscription_mail, subscription_id, title, body, path))
+
+
 def queue_order_placed_mails(order):
     """Send the order mails once the surrounding transaction commits."""
     order_id = order.pk

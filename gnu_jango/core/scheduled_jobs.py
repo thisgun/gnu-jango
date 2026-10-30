@@ -86,6 +86,15 @@ if (
         ScheduledJob("summarize_reviews", ("--json", "--limit", "20"), ("--json", "--dry-run"), 3600),
     )
 
+# Optional 정기구독 (Toss card billing): hourly, so a due subscription is charged early in its day
+# and a charge whose answer was lost is looked up within the hour; at most 50 a run (the rest wait for
+# the next hour), as an approval may take up to 60 s. The command itself does nothing
+# while the admin switch de_subscription_use is off.
+if getattr(settings, "SHOP_SUBSCRIPTIONS_ENABLED", False):
+    SCHEDULED_JOBS += (
+        ScheduledJob("charge_shop_subscriptions", ("--apply", "--json", "--limit", "50"), ("--json",), 3600),
+    )
+
 # Optional shipment tracking (Delivery Tracker): every 5 minutes, at most 30 lookups per run. The
 # keys live in the shop settings, so the command itself also does nothing until 배송조회 is on
 # with both keys saved.

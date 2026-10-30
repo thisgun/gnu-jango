@@ -24,10 +24,12 @@ import {
   Bookmark,
   HelpCircle,
   MonitorSmartphone,
+  Repeat,
 } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/breadcrumb";
 import { formatDate } from "@/lib/utils";
 import { getMyMemberDetails, getMyUsableCouponCount } from "@/services/member";
+import { getClientPublicSettings } from "@/services/settings";
 import type { MyMemberDetails } from "@/lib/types";
 
 interface MenuItem {
@@ -75,6 +77,18 @@ const MENU_GROUPS: MenuGroup[] = [
   },
 ];
 
+const SUBSCRIPTIONS_ITEM: MenuItem = { href: "/mypage/subscriptions", label: "정기구독", icon: Repeat };
+
+/** 정기구독이 켜진 쇼핑몰(설정 shop_subscriptions)에서만 주문 내역 아래에 정기구독 메뉴를 넣는다. */
+function menuGroupsFor(subscriptionsOn: boolean): MenuGroup[] {
+  if (!subscriptionsOn) return MENU_GROUPS;
+  return MENU_GROUPS.map((group) => {
+    const index = group.items.findIndex((item) => item.href === "/mypage/orders");
+    if (index < 0) return group;
+    return { ...group, items: [...group.items.slice(0, index + 1), SUBSCRIPTIONS_ITEM, ...group.items.slice(index + 1)] };
+  });
+}
+
 function memberAddress(details: MyMemberDetails | null): string {
   if (!details) return "불러오는 중…";
   return (
@@ -99,6 +113,19 @@ export default function MyPageClientLayout({
   const { user, isInitialized } = useAuthStore();
   const [memberDetails, setMemberDetails] = useState<MyMemberDetails | null>(null);
   const [usableCouponCount, setUsableCouponCount] = useState<number | null>(null);
+  const [subscriptionsOn, setSubscriptionsOn] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    getClientPublicSettings()
+      .then((settings) => {
+        if (alive) setSubscriptionsOn(settings.shop_subscriptions === true);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!user?.mb_id) {
@@ -153,7 +180,8 @@ export default function MyPageClientLayout({
   }
 
   // Find current menu label for breadcrumb
-  const allItems = MENU_GROUPS.flatMap((g) => g.items);
+  const menuGroups = menuGroupsFor(subscriptionsOn || pathname.startsWith(SUBSCRIPTIONS_ITEM.href));
+  const allItems = menuGroups.flatMap((g) => g.items);
   const currentItem = allItems.find(
     (item) =>
       pathname === item.href ||
@@ -237,7 +265,7 @@ export default function MyPageClientLayout({
         {/* Sidebar */}
         <aside>
           <nav className="mypage-nav sticky top-4 space-y-6 rounded-lg border bg-card p-4">
-            {MENU_GROUPS.map((group) => (
+            {menuGroups.map((group) => (
               <div key={group.title}>
                 <h3 className="mb-2 px-2 text-xs font-semibold uppercase text-muted-foreground">
                   {group.title}
