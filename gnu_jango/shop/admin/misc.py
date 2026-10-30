@@ -4,6 +4,7 @@ from gnu_jango.shop.admin._common import *  # noqa: F401,F403
 from django import forms
 from unfold.forms import ActionForm
 from django.contrib import messages
+from django.contrib.admin import ActionLocation
 from django.db import transaction
 from django.utils import timezone
 from django.utils.html import format_html_join, strip_tags
@@ -137,8 +138,8 @@ class ShopStockNotificationAdmin(ModelAdmin):
     def has_add_permission(self, request):
         return False
 
-    def get_actions(self, request):
-        actions = super().get_actions(request)
+    def get_actions(self, request, action_location=ActionLocation.CHANGE_LIST):
+        actions = super().get_actions(request, action_location)
         if not request.user.is_superuser:
             actions.pop("send_restock_sms", None)
         return actions

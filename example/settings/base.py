@@ -1134,6 +1134,9 @@ USE_I18N = True
 
 USE_TZ = True
 
+# Bare domains that urlize turns into links get https://, the Django 7 default.
+URLIZE_ASSUME_HTTPS = True
+
 CELERY_BROKER_URL = de_config("CELERY_BROKER_URL", default="redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = de_config("CELERY_RESULT_BACKEND", default=CELERY_BROKER_URL)
 CELERY_TASK_ALWAYS_EAGER = bool_config("CELERY_TASK_ALWAYS_EAGER", default=not IS_PRODUCTION)
