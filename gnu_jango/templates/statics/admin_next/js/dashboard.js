@@ -18,24 +18,22 @@
     });
 
     // A POST button inside another form (e.g. 배송조회 '지금 조회' on the order change form):
-    // forms cannot nest, so post a small form of its own with the page's CSRF token.
-    document.querySelectorAll('button[data-g5-post-url]').forEach(function (button) {
+    // forms cannot nest, so post a small form of its own with the page's CSRF token. The button
+    // only names the action; the address is fixed here, relative to the object's change page.
+    var POST_ACTIONS = { 'tracking-refresh': '../tracking-refresh/' };
+    document.querySelectorAll('button[data-g5-post]').forEach(function (button) {
       button.addEventListener('click', function () {
         var token = document.querySelector('input[name="csrfmiddlewaretoken"]');
-        var target;
-        try {
-          target = new URL(button.getAttribute('data-g5-post-url') || '', window.location.href);
-        } catch (error) {
-          return;
-        }
-        // same-origin admin paths only: never a javascript: or foreign URL from the markup
-        if (!token || button.disabled || target.origin !== window.location.origin) {
+        var action = Object.prototype.hasOwnProperty.call(POST_ACTIONS, button.getAttribute('data-g5-post'))
+          ? POST_ACTIONS[button.getAttribute('data-g5-post')]
+          : '';
+        if (!token || !action || button.disabled) {
           return;
         }
         button.disabled = true;
         var form = document.createElement('form');
         form.method = 'post';
-        form.action = target.pathname + target.search;
+        form.action = action;
         var input = document.createElement('input');
         input.type = 'hidden';
         input.name = 'csrfmiddlewaretoken';

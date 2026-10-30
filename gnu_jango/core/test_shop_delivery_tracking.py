@@ -665,7 +665,9 @@ def test_the_order_page_shows_the_tracking_and_refreshes_on_post(db, admin_web_c
     change_url = reverse("admin:shop_shoporder_change", args=[order.pk])
     refresh_url = reverse("admin:shop_shoporder_tracking_refresh", args=[order.pk])
     page = admin_web_client.get(change_url).content.decode()
-    assert "지금 조회" in page and f'data-g5-post-url="{refresh_url}"' in page
+    assert "지금 조회" in page and 'data-g5-post="tracking-refresh"' in page
+    # dashboard.js posts to "../tracking-refresh/" relative to the change page
+    assert refresh_url == change_url.replace("/change/", "/tracking-refresh/")
     with patch(TRACK) as track:
         assert admin_web_client.get(refresh_url).status_code == 405
     track.assert_not_called()
@@ -683,4 +685,4 @@ def test_the_order_page_explains_an_untracked_courier(db, admin_web_client):
     order = shipped_order(company="우리택배")
     page = admin_web_client.get(reverse("admin:shop_shoporder_change", args=[order.pk])).content.decode()
     assert "배송조회를 지원하지 않는 배송회사" in page
-    assert "data-g5-post-url" not in page
+    assert "data-g5-post=" not in page

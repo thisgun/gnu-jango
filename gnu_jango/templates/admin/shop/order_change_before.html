@@ -56,7 +56,7 @@
       </div>
       {% if tracking.can_refresh %}
       {# type="button": the change form's own submit stays the default for Enter; dashboard.js posts it #}
-      <button type="button" class="g5-admin-order-tracking-refresh" data-g5-post-url="{{ tracking.refresh_url }}">
+      <button type="button" class="g5-admin-order-tracking-refresh" data-g5-post="tracking-refresh">
         <span class="material-symbols-outlined" aria-hidden="true">refresh</span>
         지금 조회
       </button>
