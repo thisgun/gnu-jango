@@ -18,6 +18,7 @@ from . import (
     v1_views,
 )
 from .shop_cash_receipts import order_cash_receipt_view
+from .shop_returns import order_return_withdraw_view, order_returns_view
 
 app_name = "api_v1"
 
@@ -120,6 +121,12 @@ urlpatterns = [
     path("shop/orders/lookup", v1_shop.order_lookup_view, name="shop-order-lookup"),
     path("shop/orders/legacy-data", v1_shop.order_legacy_data_view, name="shop-order-legacy-data"),
     path("shop/orders/<str:od_id>/cash-receipt", order_cash_receipt_view, name="shop-order-cash-receipt"),
+    path("shop/orders/<str:od_id>/returns", order_returns_view, name="shop-order-returns"),
+    path(
+        "shop/orders/<str:od_id>/returns/<int:request_id>/withdraw",
+        order_return_withdraw_view,
+        name="shop-order-return-withdraw",
+    ),
     path("shop/orders/<str:od_id>", v1_shop.order_detail_view, name="shop-order-detail"),
     path("shop/orders", v1_shop.orders_view, name="shop-orders"),
     path("shop/payment/config", v1_shop.payment_config_view, name="shop-payment-config"),

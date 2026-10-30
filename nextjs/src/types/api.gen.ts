@@ -1615,6 +1615,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/shop/orders/{od_id}/returns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["v1_shop_orders_returns_retrieve"];
+        put?: never;
+        post: operations["v1_shop_orders_returns_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/shop/orders/{od_id}/returns/{request_id}/withdraw": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["v1_shop_orders_returns_withdraw_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/shop/orders/legacy-data": {
         parameters: {
             query?: never;
@@ -2908,6 +2940,8 @@ export interface components {
             cash_receipt: components["schemas"]["ShopOrderCashReceipt"] | null;
             can_cancel: boolean;
             cancel_block_reason: string;
+            return_request_kind: string;
+            return_request_status: string;
         };
         /** @description ``shop.cash_receipts.customer_payload``: whether the customer may request a cash receipt. */
         ShopOrderCashReceipt: {
@@ -3005,6 +3039,8 @@ export interface components {
             cash_receipt: components["schemas"]["ShopOrderCashReceipt"];
             can_cancel: boolean;
             cancel_block_reason: string;
+            return_request_kind: string;
+            return_request_status: string;
             items: components["schemas"]["ShopOrderLine"][];
         };
         ShopOrderDetailEnvelope: {
@@ -3039,6 +3075,30 @@ export interface components {
             ct_notax: number;
             ct_send_cost: number;
             image_url: string;
+        };
+        /** @description ``returns.customer_payload(order)``. */
+        ShopOrderReturns: {
+            enabled: boolean;
+            request_days: number;
+            return_shipping_fee: number;
+            can_request: boolean;
+            block_reason: string;
+            kinds: components["schemas"]["ShopReturnKindOption"][];
+            reasons: components["schemas"]["ShopReturnReasonOption"][];
+            lines: components["schemas"]["ShopReturnOrderLine"][];
+            requests: components["schemas"]["ShopReturnRequest"][];
+        };
+        ShopOrderReturnsEnvelope: {
+            data: components["schemas"]["ShopOrderReturns"];
+            success: boolean;
+            ok: boolean;
+            message: string;
+            meta: {
+                [key: string]: unknown;
+            };
+            errors: {
+                [key: string]: unknown;
+            };
         };
         ShopOrdersEnvelope: {
             data: components["schemas"]["ShopOrder"][];
@@ -3217,6 +3277,94 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** @description The body of ``POST /api/v1/shop/orders/{od_id}/returns`` (a guest also sends ``uid``). */
+        ShopReturnCreate: {
+            kind: components["schemas"]["ShopReturnKindEnum"];
+            reason: components["schemas"]["ShopReturnReasonEnum"];
+            detail?: string;
+            lines: components["schemas"]["ShopReturnLineInput"][];
+            uid?: string;
+        };
+        /**
+         * @description * `return` - return
+         *     * `exchange` - exchange
+         * @enum {string}
+         */
+        ShopReturnKindEnum: "return" | "exchange";
+        ShopReturnKindOption: {
+            value: components["schemas"]["ShopReturnKindEnum"];
+            label: string;
+        };
+        ShopReturnLineInput: {
+            line_id: number;
+            qty: number;
+        };
+        /** @description One order line and whether it may be asked for now. */
+        ShopReturnOrderLine: {
+            line_id: number;
+            ct_id: string;
+            it_id: string;
+            it_name: string;
+            ct_option: string;
+            ct_qty: number;
+            ct_status: string;
+            line_total: number;
+            eligible: boolean;
+            block_reason: string;
+            deadline: string;
+            open_request_id: number | null;
+        };
+        /**
+         * @description * `change_of_mind` - change_of_mind
+         *     * `defective` - defective
+         *     * `wrong_item` - wrong_item
+         *     * `other` - other
+         * @enum {string}
+         */
+        ShopReturnReasonEnum: "change_of_mind" | "defective" | "wrong_item" | "other";
+        ShopReturnReasonOption: {
+            value: components["schemas"]["ShopReturnReasonEnum"];
+            label: string;
+        };
+        /** @description ``returns.request_payload``: one request; times are ISO strings or "". */
+        ShopReturnRequest: {
+            id: number;
+            kind: components["schemas"]["ShopReturnKindEnum"];
+            kind_label: string;
+            status: components["schemas"]["ShopReturnStatusEnum"];
+            status_label: string;
+            reason: components["schemas"]["ShopReturnReasonEnum"];
+            reason_label: string;
+            detail: string;
+            reject_reason: string;
+            return_fee: number;
+            refund_amount: number;
+            exchange_delivery_company: string;
+            exchange_invoice: string;
+            exchange_inquiry_url: string;
+            can_withdraw: boolean;
+            created_at: string;
+            approved_at: string;
+            closed_at: string;
+            lines: components["schemas"]["ShopReturnRequestLine"][];
+        };
+        ShopReturnRequestLine: {
+            line_id: number;
+            ct_id: string;
+            it_name: string;
+            ct_option: string;
+            qty: number;
+            amount: number;
+        };
+        /**
+         * @description * `requested` - requested
+         *     * `approved` - approved
+         *     * `completed` - completed
+         *     * `rejected` - rejected
+         *     * `withdrawn` - withdrawn
+         * @enum {string}
+         */
+        ShopReturnStatusEnum: "requested" | "approved" | "completed" | "rejected" | "withdrawn";
         SiteSettings: {
             cf_title: string;
             cf_company_name: string;
@@ -5575,6 +5723,74 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    v1_shop_orders_returns_retrieve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                od_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopOrderReturnsEnvelope"];
+                };
+            };
+        };
+    };
+    v1_shop_orders_returns_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                od_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShopReturnCreate"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopOrderReturnsEnvelope"];
+                };
+            };
+        };
+    };
+    v1_shop_orders_returns_withdraw_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                od_id: string;
+                request_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShopOrderReturnsEnvelope"];
+                };
             };
         };
     };

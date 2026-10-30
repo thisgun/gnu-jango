@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useId, useRef, type FormEvent } from "react";
+import { useEffect, useMemo, useState, useCallback, useId, useRef, type FormEvent } from "react";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "@bprogress/next/app";
 import { G5Link as Link } from "@/components/ui/g5-link";
@@ -25,6 +25,7 @@ import { cancelMyOrder, getMyOrder } from "@/services/member";
 import { getClientPublicSettings } from "@/services/settings";
 import { CashReceiptPanel } from "./CashReceiptPanel";
 import { OrderDetailItems } from "./OrderDetailItems";
+import { OrderReturnsPanel, ReturnRequestDialog, useOrderReturns } from "./OrderReturns";
 
 // 백엔드의 그누보드5 표준 상태값(주문·입금·준비·배송·완료·취소)을 그대로 쓰고, 라벨은 주문 목록과 같은 표를 쓴다.
 const TIMELINE_STEPS: readonly string[] = ORDER_PROGRESS_STEPS;
@@ -140,6 +141,13 @@ export default function OrderDetailPage() {
   const [productRewriteMode, setProductRewriteMode] = useState<BbsRewriteMode>(0);
   const cancellingRef = useRef(false);
   const cancelReasonId = useId();
+  // 반품·교환 신청(배송·완료된 상품) — 주문을 불러온 뒤에 따로 불러온다.
+  const { state: returnState, setState: setReturnState } = useOrderReturns(od_id, guestUid, isInitialized && order !== null);
+  const [returnFormLines, setReturnFormLines] = useState<number[] | null>(null);
+  const returnLines = useMemo(
+    () => new Map((returnState?.lines ?? []).map((line) => [line.ct_id, line])),
+    [returnState]
+  );
 
   useEffect(() => {
     let alive = true;
@@ -430,7 +438,21 @@ export default function OrderDetailPage() {
         </section>
 
         {/* Order Items — 상품별로 묶는다(영카트 orderinquiryview.php) */}
-        <OrderDetailItems items={order.items ?? []} productRewriteMode={productRewriteMode} />
+        <OrderDetailItems
+          items={order.items ?? []}
+          productRewriteMode={productRewriteMode}
+          returnLines={returnLines}
+          onRequestReturn={returnState?.can_request ? setReturnFormLines : undefined}
+        />
+
+        {/* 반품·교환 — 신청 버튼과 신청 내역(배송·완료된 상품이 있거나 신청한 적이 있을 때만) */}
+        <OrderReturnsPanel
+          orderId={order.od_id}
+          guestUid={guestUid}
+          state={returnState}
+          onStateChange={setReturnState}
+          onOpenForm={setReturnFormLines}
+        />
 
         {/* Shipping Info */}
         <section className="shop-order-section rounded-lg border p-6">
@@ -665,6 +687,17 @@ export default function OrderDetailPage() {
           )}
         </section>
       </div>
+
+      {returnState && returnFormLines && (
+        <ReturnRequestDialog
+          orderId={order.od_id}
+          guestUid={guestUid}
+          state={returnState}
+          initialLineIds={returnFormLines}
+          onClose={() => setReturnFormLines(null)}
+          onSubmitted={setReturnState}
+        />
+      )}
 
       {cancelDialogOpen && (
         <div

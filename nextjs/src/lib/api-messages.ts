@@ -190,6 +190,22 @@ const API_MESSAGES: Record<string, string> = {
   "Product is not available for order.": "주문할 수 없는 상품입니다.",
   "Selected option was not found.": "선택한 옵션을 찾을 수 없습니다.",
   "Selected option is not available.": "선택한 옵션은 주문할 수 없습니다.",
+  // 반품·교환 신청 (shop/returns.py)
+  "Return and exchange requests are not available.": "반품·교환 신청을 받지 않습니다. 고객센터로 문의해 주세요.",
+  "This order cannot be returned or exchanged.": "반품·교환을 신청할 수 없는 주문입니다.",
+  "Choose a return or an exchange.": "반품 또는 교환을 선택해 주세요.",
+  "Choose a reason for the request.": "신청 사유를 선택해 주세요.",
+  "The detail is too long.": "상세 사유는 1,000자 이내로 입력해 주세요.",
+  "Describe the reason for the request.": "기타 사유를 입력해 주세요.",
+  "Choose the items to return or exchange again.": "신청할 상품을 다시 선택해 주세요.",
+  "Choose at least one item.": "신청할 상품을 하나 이상 선택해 주세요.",
+  "An item is not part of this order.": "이 주문의 상품이 아닌 항목이 있습니다. 화면을 새로 고친 뒤 다시 선택해 주세요.",
+  "This item already has an open return or exchange request.": "이미 반품·교환을 신청해 처리 중인 상품입니다.",
+  "This item cannot be returned or exchanged.": "배송이 시작된 상품만 반품·교환을 신청할 수 있습니다.",
+  "The request period for this item has ended.": "반품·교환 신청 기간이 지난 상품입니다.",
+  "Enter a quantity between 1 and the ordered quantity.": "신청 수량은 1개 이상, 주문 수량 이하로 입력해 주세요.",
+  "Return request not found.": "반품·교환 신청을 찾을 수 없습니다.",
+  "Only a request that is still waiting can be withdrawn.": "접수 대기 중인 신청만 철회할 수 있습니다.",
   "API Error": "요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.",
 };
 

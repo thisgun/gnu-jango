@@ -1,7 +1,8 @@
 """Shop mails, after youngcart: the order mails of shop/ordermail1.inc.php and ordermail2.inc.php
 (a notice to the shop admin and an order summary to the customer), the processing mail of
-adm/shop_admin/ordermail.inc.php (입금 확인 / 배송 안내) and the product recommendation of
-shop/itemrecommendmail.php.
+adm/shop_admin/ordermail.inc.php (입금 확인 / 배송 안내), the product recommendation of
+shop/itemrecommendmail.php, and the status mails of the customer's return / exchange requests
+(shop/returns.py).
 
 Every mail obeys cf_email_use (기본환경설정 > 메일발송 사용). Order mails are queued with
 transaction.on_commit so they only leave once the order is saved, and a mail server failure is
@@ -225,6 +226,46 @@ def queue_order_status_mail(order, status):
         return
     order_id = order.pk
     transaction.on_commit(lambda: _run_safely(send_order_status_mail, order_id, status))
+
+
+def send_return_request_mails(request_id, status):
+    """A return or exchange request (shop/returns.py) moved to ``status``: the customer hears of
+    every change, the shop of a new request. ``status`` is the one queued, so a later change
+    committed before this runs does not mail the same status twice."""
+    from gnu_jango.shop.models import ShopReturnRequest
+    from gnu_jango.shop.returns import notification_body, notification_title
+
+    if not mail_enabled():
+        return 0
+    request = ShopReturnRequest.objects.select_related("order").filter(pk=request_id).first()
+    if request is None:
+        return 0
+    order = request.order
+    request.status = status
+    context = {
+        **order_context(order),
+        "request": request,
+        "title": notification_title(request),
+        "summary": notification_body(request),
+        "request_lines": list(request.lines.order_by("pk")),
+    }
+    sent = 0
+    if send_shop_mail(f"{site_title()} - {notification_title(request)}", "return_status", context, [order.od_email]):
+        sent += 1
+    if status == ShopReturnRequest.STATUS_REQUESTED and send_shop_mail(
+        f"{site_title()} - {request.get_kind_display()} 신청 알림 ({order.od_name})",
+        "return_admin",
+        context,
+        [admin_email()],
+        reply_to=[order.od_email],
+    ):
+        sent += 1
+    return sent
+
+
+def queue_return_request_mails(request):
+    request_id, status = request.pk, request.status
+    transaction.on_commit(lambda: _run_safely(send_return_request_mails, request_id, status))
 
 
 def send_product_recommend_mail(request, product, sender, to_email, subject, content):
