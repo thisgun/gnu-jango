@@ -28,6 +28,14 @@ from .handbook_audit_content import (
     AUDIT_LINK_MARKER,
     AUDIT_LINK_TITLES,
 )
+from .handbook_commerce_content import (
+    COMMERCE_BOOK_PARTS,
+    COMMERCE_BOOK_TABLE,
+    COMMERCE_BOOK_TITLE,
+    COMMERCE_LINK_HTML,
+    COMMERCE_LINK_MARKER,
+    COMMERCE_LINK_TITLES,
+)
 from .handbook_content import LEGACY_SAMPLE_MARKER, chapter_body
 
 GROUP_ID = "manual"
@@ -124,6 +132,17 @@ BOOKS = (
         AUDIT_BOOK_TITLE,
         AUDIT_BOOK_PARTS,
     ),
+    Book(
+        COMMERCE_BOOK_TABLE,
+        COMMERCE_BOOK_TITLE,
+        COMMERCE_BOOK_PARTS,
+    ),
+)
+
+# (chapter titles, link html, marker): "see also" links appended once to existing chapters.
+LINK_BLOCKS = (
+    (AUDIT_LINK_TITLES, AUDIT_LINK_HTML, AUDIT_LINK_MARKER),
+    (COMMERCE_LINK_TITLES, COMMERCE_LINK_HTML, COMMERCE_LINK_MARKER),
 )
 
 
@@ -241,20 +260,18 @@ def _chapters(board, book, created_at, *, refresh=False):
     return len(missing), updated
 
 
-def _add_audit_links():
-    """Point key existing chapters at the audit book without replacing their content."""
+def _add_links():
+    """Point key existing chapters at the newer books (audit, commerce) without replacing their content."""
     added = 0
-    posts = Post.objects.filter(
-        board__bo_table__in=_book_table_names(),
-        wr_subject__in=AUDIT_LINK_TITLES,
-    )
-    for post in posts:
-        content = post.wr_content or ""
-        if AUDIT_LINK_MARKER in content:
-            continue
-        post.wr_content = content.rstrip() + "\n" + AUDIT_LINK_HTML + "\n" + AUDIT_LINK_MARKER
-        post.save(update_fields=("wr_content",))
-        added += 1
+    for titles, link_html, marker in LINK_BLOCKS:
+        posts = Post.objects.filter(board__bo_table__in=_book_table_names(), wr_subject__in=titles)
+        for post in posts:
+            content = post.wr_content or ""
+            if marker in content:
+                continue
+            post.wr_content = content.rstrip() + "\n" + link_html + "\n" + marker
+            post.save(update_fields=("wr_content",))
+            added += 1
     return added
 
 
@@ -285,7 +302,7 @@ def ensure_samples(*, stable_dates=False, refresh=False):
         created_count, updated_count = _chapters(board, book, now, refresh=refresh)
         created += created_count
         updated += updated_count
-    links_added = _add_audit_links()
+    links_added = _add_links()
     docs_group, _created = Config.objects.get_or_create(name=DOCS_GROUP_KEY, defaults={"value": GROUP_ID})
     if not (docs_group.value or "").strip():
         # Point the theme at the samples only when no manual group was chosen yet.
