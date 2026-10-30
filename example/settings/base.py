@@ -316,6 +316,13 @@ UNFOLD = {
                         "icon": "payments",
                         "link": reverse_lazy("admin:shop_shoppersonalpay_changelist"),
                     },
+                    {
+                        # customer return / exchange requests (gnu_jango/shop/admin/returns.py)
+                        "title": "반품·교환 신청",
+                        "icon": "assignment_return",
+                        "link": reverse_lazy("admin:shop_shopreturnrequest_changelist"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopreturnrequest"),
+                    },
                 ],
             },
             {
@@ -502,6 +509,7 @@ UNFOLD = {
         {
             "models": [
                 "shop.shoporder",
+                "shop.shopreturnrequest",
             ],
             "items": [
                 {
@@ -531,6 +539,10 @@ UNFOLD = {
                 {
                     "title": _("Personal pay"),
                     "link": reverse_lazy("admin:shop_shoppersonalpay_changelist"),
+                },
+                {
+                    "title": "반품·교환 신청",
+                    "link": reverse_lazy("admin:shop_shopreturnrequest_changelist"),
                 },
                 {
                     "title": _("Coupons"),
@@ -696,6 +708,8 @@ REST_FRAMEWORK = {
         "shop-guest-order": "20/hour",
         # cash receipt requests after the order (each try may reach the Toss cash receipt API)
         "shop-cash-receipt": "10/hour",
+        # return / exchange requests and withdrawals after delivery, per member or address
+        "shop-return-request": "20/hour",
         "guest-password": "10/min",
         "docs-ask": "30/min",
         "docs-ask-answer": "5/min",
@@ -717,6 +731,9 @@ SPECTACULAR_SETTINGS = {
         "CashReceiptStateEnum": "gnu_jango.api.contracts.orders.CASH_RECEIPT_STATES",
         "CashReceiptTypeEnum": "gnu_jango.api.contracts.orders.CASH_RECEIPT_TYPES",
         "PostAdminRoleEnum": "gnu_jango.api.contracts.boards.POST_ADMIN_ROLES",
+        "ShopReturnKindEnum": "gnu_jango.api.contracts.returns.RETURN_REQUEST_KINDS",
+        "ShopReturnStatusEnum": "gnu_jango.api.contracts.returns.RETURN_REQUEST_STATUSES",
+        "ShopReturnReasonEnum": "gnu_jango.api.contracts.returns.RETURN_REQUEST_REASONS",
     },
 }
 

@@ -17,6 +17,7 @@ import {
   type PointItem,
 } from "@/lib/schemas";
 import type { ShopOrder } from "@/lib/api";
+import type { ShopOrderReturns, ShopReturnCreate } from "@/lib/shop-returns";
 import type { MemberProfile, MyMemberDetails } from "@/lib/types";
 
 export interface PointsResult {
@@ -271,6 +272,55 @@ export async function requestOrderCashReceipt(
     message: String(response.data?.message ?? ""),
     order: parsed.success ? parsed.data : null,
   };
+}
+
+// 반품·교환 신청 응답(ShopOrderReturns): 화면이 기대는 칸만 확인하고 나머지는 그대로 둔다.
+const orderReturnsSchema = z
+  .object({
+    enabled: z.boolean(),
+    can_request: z.boolean(),
+    lines: z.array(z.object({ line_id: z.number() }).passthrough()),
+    requests: z.array(z.object({ id: z.number() }).passthrough()),
+  })
+  .passthrough() as unknown as z.ZodType<ShopOrderReturns>;
+
+function orderReturnsPath(orderId: string, uid: string, suffix = "") {
+  const query = uid ? `?uid=${encodeURIComponent(uid)}` : "";
+  return `/shop/orders/${encodeURIComponent(orderId.trim())}/returns${suffix}${query}`;
+}
+
+function parseOrderReturns(data: unknown): ShopOrderReturns | null {
+  const parsed = orderReturnsSchema.safeParse(data);
+  return parsed.success ? parsed.data : null;
+}
+
+/** 주문의 반품·교환 신청 상태 — 신청할 수 있는 상품과 신청 내역(회원 본인 또는 비회원 주문 조회 uid). */
+export async function getOrderReturns(orderId: string, uid = ""): Promise<ShopOrderReturns | null> {
+  if (!orderId.trim()) return null;
+  const response = await apiClient.get<unknown>(orderReturnsPath(orderId, uid));
+  return parseOrderReturns(response.data);
+}
+
+export type OrderReturnInput = Omit<ShopReturnCreate, "uid">;
+
+/** 반품·교환 신청 — 응답은 신청 뒤의 상태 전체. */
+export async function requestOrderReturn(
+  orderId: string,
+  input: OrderReturnInput,
+  uid = ""
+): Promise<ShopOrderReturns | null> {
+  const response = await apiClient.post<unknown>(orderReturnsPath(orderId, uid), input);
+  return parseOrderReturns(response.data);
+}
+
+/** 아직 접수 대기 중인 신청을 철회한다. */
+export async function withdrawOrderReturn(
+  orderId: string,
+  requestId: number,
+  uid = ""
+): Promise<ShopOrderReturns | null> {
+  const response = await apiClient.post<unknown>(orderReturnsPath(orderId, uid, `/${requestId}/withdraw`), {});
+  return parseOrderReturns(response.data);
 }
 
 export function cancelMyOrder(orderId: string, reason = "본인 취소", uid = "") {

@@ -227,6 +227,10 @@ class ShopOrderSerializer(serializers.Serializer):
     cash_receipt = ShopOrderCashReceiptSerializer(allow_null=True)
     can_cancel = serializers.BooleanField()
     cancel_block_reason = serializers.CharField(allow_blank=True)
+    # the newest return / exchange request not withdrawn (shop/returns.py): "" when there is none,
+    # else "return" / "exchange" and requested / approved / completed / rejected
+    return_request_kind = serializers.CharField(allow_blank=True)
+    return_request_status = serializers.CharField(allow_blank=True)
 
 
 class ShopOrderDetailSerializer(ShopOrderSerializer):

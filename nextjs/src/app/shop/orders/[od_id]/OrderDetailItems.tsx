@@ -1,12 +1,14 @@
 "use client";
 
 import Image from "next/image";
+import { Button } from "@/components/ui/button";
 import type { ShopOrderItem } from "@/lib/api";
 import type { BbsRewriteMode } from "@/lib/board-url";
 import { shouldBypassImageOptimization } from "@/lib/image";
 import { shopProductHref } from "@/lib/product-url";
 import { getShopCartShippingPaymentLabel } from "@/lib/shop-shipping-label";
 import { isClosedOrderStatus } from "@/lib/order-status";
+import type { ShopReturnOrderLine } from "@/lib/shop-returns";
 import { formatCartOption, formatPrice } from "@/lib/utils";
 import { ProductImageFallback } from "@/components/shop/ProductImageFallback";
 
@@ -46,19 +48,31 @@ function lineLabel(line: ShopOrderItem): string {
   return `${label} ${line.ct_qty}개 (${ioPrice >= 0 ? "+" : ""}${formatPrice(ioPrice)})${closed}`;
 }
 
-/** 주문 상세의 "주문 상품" — 상품마다 한 칸, 그 아래에 옵션 줄 · 총수량 · 배송비 · 상품별 합계. */
+/**
+ * 주문 상세의 "주문 상품" — 상품마다 한 칸, 그 아래에 옵션 줄 · 총수량 · 배송비 · 상품별 합계.
+ * returnLines(ct_id → 반품·교환 신청 상태)가 오면 신청할 수 있는 줄이 있는 상품에 "반품/교환 신청" 버튼을 단다.
+ */
 export function OrderDetailItems({
   items,
   productRewriteMode,
+  returnLines,
+  onRequestReturn,
 }: {
   items: ShopOrderItem[];
   productRewriteMode: BbsRewriteMode;
+  returnLines?: Map<string, ShopReturnOrderLine>;
+  onRequestReturn?: (lineIds: number[]) => void;
 }) {
   return (
     <section className="shop-order-section rounded-lg border p-6">
       <h2 className="mb-4 text-lg font-bold">주문 상품</h2>
       <div className="space-y-3">
-        {groupOrderLines(items).map(({ itId, first, lines }) => (
+        {groupOrderLines(items).map(({ itId, first, lines }) => {
+          const returnable = lines
+            .map((line) => returnLines?.get(line.ct_id))
+            .filter((line): line is ShopReturnOrderLine => Boolean(line?.eligible))
+            .map((line) => line.line_id);
+          return (
           <div key={itId} className="shop-order-detail-item flex items-start gap-4 rounded-md border p-3">
             <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-muted">
               {first.image_url ? (
@@ -82,6 +96,9 @@ export function OrderDetailItems({
                 {lines.map((line) => (
                   <li key={line.ct_id} className="break-words text-xs text-muted-foreground">
                     {lineLabel(line)}
+                    {returnLines?.get(line.ct_id)?.open_request_id ? (
+                      <span className="ml-1 font-medium text-amber-700">· 반품·교환 처리 중</span>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -92,11 +109,24 @@ export function OrderDetailItems({
                 배송비: {getShopCartShippingPaymentLabel(first, items)}
               </p>
             </div>
-            <span className="text-sm font-bold">
-              {formatPrice(lines.reduce((sum, line) => sum + lineTotal(line), 0))}
-            </span>
+            <div className="flex flex-col items-end gap-2">
+              <span className="text-sm font-bold">
+                {formatPrice(lines.reduce((sum, line) => sum + lineTotal(line), 0))}
+              </span>
+              {onRequestReturn && returnable.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shop-order-return-button"
+                  onClick={() => onRequestReturn(returnable)}
+                >
+                  반품/교환 신청
+                </Button>
+              )}
+            </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

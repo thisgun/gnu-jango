@@ -60,6 +60,7 @@ from .shop_options import (
     COMPANY_OPTIONS,
     HOME_LIST_TYPES,
     LIST_OPTIONS,
+    RETURN_OPTIONS,
     SHOP_CONFIG_OPTIONS,
     SHOP_LOGO_FIELDS,
     SMS_OPTIONS,
@@ -159,6 +160,10 @@ SETTINGS_GROUPS = (
           "de_baesong_content", "de_change_content"]),
         ("hope-date", "희망배송일", "주문서에서 고객이 희망배송일을 고르게 합니다.",
          ["de_hope_date_use", "de_hope_date_after"]),
+        ("returns", "반품·교환 신청",
+         "고객이 주문 상세에서 배송·완료된 상품의 반품·교환을 신청합니다. 신청은 쇼핑몰관리 > 반품·교환 신청에서 승인·거절·완료하며, "
+         "반품을 완료하면 상품 반품 처리와 같은 방법으로 재고를 되돌리고 환불합니다.",
+         [option.name for option in RETURN_OPTIONS]),
     )),
     ("etc-group", "기타 설정", (
         ("reviews", "상품 후기", "상품 후기 작성 자격과 공개 방식입니다.", ["de_item_use_write", "de_item_use_use"]),

@@ -1,0 +1,47 @@
+{% load humanize %}
+{% if return_request_ops %}
+{% with ops=return_request_ops req=return_request_ops.request %}
+<section class="g5-admin-order-detail-console" aria-label="반품·교환 신청 처리">
+  <div class="g5-admin-order-detail-header">
+    <div>
+      <p class="g5-admin-eyebrow">{{ req.get_kind_display }} 신청 #{{ req.pk }}</p>
+      <h2>주문 {{ req.order_id }}</h2>
+      <p>
+        <strong>{{ req.order.od_name|default:"-" }}</strong>
+        <span>{{ req.order.od_email }}</span>
+        <span>{{ req.order.od_hp|default:req.order.od_tel }}</span>
+      </p>
+    </div>
+    <nav class="g5-admin-order-detail-actions" aria-label="신청 처리">
+      <a href="{{ ops.order_url }}">
+        <span class="material-symbols-outlined" aria-hidden="true">receipt_long</span>
+        주문 보기
+      </a>
+      {% for step in ops.steps %}
+      <a href="{{ step.url }}"{% if step.danger %} class="g5-admin-danger-link"{% endif %}>
+        <span class="material-symbols-outlined" aria-hidden="true">{% if step.danger %}block{% else %}task_alt{% endif %}</span>
+        {{ step.label }}
+      </a>
+      {% endfor %}
+    </nav>
+  </div>
+  <div class="g5-admin-order-detail-status">
+    <article>
+      <span>상태</span>
+      <strong class="g5-admin-badge g5-admin-badge-{{ ops.status_tone }}">{{ req.get_status_display }}</strong>
+      <small>신청 {{ req.created_at|date:"Y-m-d H:i" }}</small>
+    </article>
+    <article>
+      <span>사유</span>
+      <strong>{{ req.get_reason_display }}</strong>
+      <small>{{ req.detail|default:"상세 사유 없음"|truncatechars:80 }}</small>
+    </article>
+    <article>
+      <span>처리</span>
+      <strong>{% if req.status == "completed" and req.kind == "return" %}환불 {{ req.refund_amount|intcomma }}원{% elif req.status == "completed" %}{{ req.exchange_delivery_company }} {{ req.exchange_invoice }}{% elif req.status == "rejected" %}거절{% else %}{{ req.processed_by|default:"대기" }}{% endif %}</strong>
+      <small>{% if req.return_fee %}반품 배송비 {{ req.return_fee|intcomma }}원{% elif req.reject_reason %}{{ req.reject_reason|truncatechars:60 }}{% elif req.status == "requested" %}승인하면 고객에게 회수를 안내합니다.{% elif req.status == "approved" %}상품을 회수해 확인한 뒤 완료하세요.{% else %}{{ req.closed_at|date:"Y-m-d H:i" }}{% endif %}</small>
+    </article>
+  </div>
+</section>
+{% endwith %}
+{% endif %}

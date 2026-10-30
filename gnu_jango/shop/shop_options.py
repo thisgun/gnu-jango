@@ -69,6 +69,16 @@ POINT_OPTIONS = (
     ConfigOption("de_member_reg_coupon_term", "쿠폰 유효기간 (일)", kind="int", default="0", max_value=3650),
 )
 
+# Customer return / exchange requests (shop/returns.py)
+RETURN_OPTIONS = (
+    ConfigOption("de_return_request_use", "반품·교환 신청 사용", kind="bool", default="1",
+                 help_text="켜면 고객이 배송된 상품을 주문 상세에서 반품·교환 신청할 수 있습니다. 끄면 신청 버튼을 숨기고 새 신청을 받지 않습니다."),
+    ConfigOption("de_return_request_days", "반품·교환 신청 기간 (일)", kind="int", default="7", min_value=1, max_value=365,
+                 help_text="상품이 배송완료(완료)된 때부터 이 일수 동안 신청할 수 있습니다. 배송중인 상품은 언제든 신청할 수 있습니다."),
+    ConfigOption("de_return_shipping_fee", "단순변심 반품 배송비 (원)", kind="int", default="0", max_value=1_000_000,
+                 help_text="단순변심 반품을 완료할 때 환불금액에서 빼는 반품 배송비입니다. 완료 화면에서 건마다 바꿀 수 있고, 환불금액보다 많이 빼지 않습니다."),
+)
+
 # 알림·장바구니 메일 (gnu_jango/shop/price_alerts.py, restock.py, cart_reminders.py): sent by the
 # send_shop_alerts scheduled job. Everything is off until the shop turns it on.
 ALERT_OPTIONS = (
@@ -141,7 +151,10 @@ LIST_OPTIONS = (
 
 SHOP_CONFIG_OPTIONS = {
     option.name: option
-    for option in (*COMPANY_OPTIONS, *ORDER_OPTIONS, *POINT_OPTIONS, *ALERT_OPTIONS, *HOME_LIST_OPTIONS, *LIST_OPTIONS)
+    for option in (
+        *COMPANY_OPTIONS, *ORDER_OPTIONS, *POINT_OPTIONS, *RETURN_OPTIONS, *ALERT_OPTIONS, *HOME_LIST_OPTIONS,
+        *LIST_OPTIONS,
+    )
 }
 
 # adm/shop_admin/configform.php SMS 설정 (cf_sms_use, cf_sms_type, de_sms_hp, de_sms_use1..5 and

@@ -1,0 +1,18 @@
+{% load humanize %}{% autoescape off %}[{{ site_title }}] {{ title }}
+
+{{ order.od_name }}님, {{ request.get_kind_display }} 신청의 처리 상황을 알려 드립니다.
+
+주문번호: {{ order.od_id }}
+신청번호: {{ request.pk }}
+상태: {{ request.get_status_display }}
+
+{% for line in request_lines %}- {{ line.it_name }}{% if line.ct_option and line.ct_option != line.it_name %} ({{ line.ct_option }}){% endif %} x {{ line.qty|intcomma }}
+{% endfor %}
+사유: {{ request.get_reason_display }}{% if request.detail %} - {{ request.detail }}{% endif %}{% if request.status == "rejected" and request.reject_reason %}
+거절 사유: {{ request.reject_reason }}{% endif %}{% if request.status == "approved" %}
+상품을 회수해 확인한 뒤 {% if request.kind == "return" %}환불{% else %}교환 상품 발송{% endif %}을 진행합니다.{% endif %}{% if request.status == "completed" and request.kind == "return" %}
+환불금액: {{ request.refund_amount|intcomma }}원{% if request.return_fee %} (반품 배송비 {{ request.return_fee|intcomma }}원 차감){% endif %}{% endif %}{% if request.status == "completed" and request.kind == "exchange" %}
+교환 상품 발송: {{ request.exchange_delivery_company }} {{ request.exchange_invoice }}{% endif %}{% if order_url %}
+
+주문 상세: {{ order_url }}{% endif %}
+{% endautoescape %}

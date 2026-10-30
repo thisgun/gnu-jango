@@ -700,6 +700,9 @@ export interface ShopOrder {
   od_receipt_time: string;
   can_cancel?: boolean;
   cancel_block_reason?: string;
+  /** 철회하지 않은 가장 최근 반품·교환 신청 — 없으면 빈 값(lib/shop-returns.ts 의 배지). */
+  return_request_kind?: string;
+  return_request_status?: string;
   od_settle_case: string;
   // 결제 결과 (PG/입금 정보). 가상계좌 결제면 od_bank_account 에 은행/계좌 안내가 들어옴.
   od_bank_account?: string;
