@@ -18,7 +18,6 @@ attempt sends its own Idempotency-Key to Toss. A charge whose answer was lost st
 the scheduler looks the payment up by its orderId (reconcile_stale_charges).
 """
 
-import hashlib
 import logging
 import secrets
 from calendar import monthrange
@@ -30,7 +29,7 @@ from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.db.models import F, Max, Q
 from django.utils import timezone
-from django.utils.crypto import constant_time_compare
+from django.utils.crypto import constant_time_compare, salted_hmac
 from django.views.decorators.debug import sensitive_variables
 
 from . import toss_billing
@@ -314,7 +313,9 @@ def billing_customer(user):
 
 
 def _token_hash(token):
-    return hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
+    """What the database keeps of a one-time registration token (32 random bytes): a digest keyed
+    with SECRET_KEY, never the token itself."""
+    return salted_hmac("gnu_jango.shop.subscriptions.registration", str(token or ""), algorithm="sha256").hexdigest()
 
 
 def toss_context():
