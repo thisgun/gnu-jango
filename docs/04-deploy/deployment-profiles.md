@@ -149,7 +149,8 @@ Django 전체가 하나의 Vercel Python 함수(Fluid compute)로 실행됩니�
      `.tmp-nextjs-runtime/`, 테스트(`tests.py`, `test_*.py`, `test/`), `scripts/`, `build/`, `dist/`, `media/`,
      `*.sqlite3`, 로그를 함수 번들에서 뺍니다(Python 함수 번들 한도 500MB, 자동 tree-shaking 없음).
      `gnu_jango/templates/`(테마·`theme_static` 포함)는 런타임에 Django가 직접 읽으므로 번들에 남깁니다.
-   - `crons`: `/api/internal/cron`을 매일 `0 18 * * *`(UTC, 한국 시간 03시)에 호출합니다.
+   - `crons`: `/api/internal/cron`을 매일 `0 1 * * *`(UTC, 한국 시간 10시)에 호출합니다. 장바구니 알림 메일은
+     08~21시에만 나가므로 이 시각을 그 안에 둡니다(`core/test_shop_alerts.py`가 확인).
 4. 정적 파일: `STATIC_ROOT`가 있으므로 Vercel이 빌드 중 `collectstatic`을 자동 실행하고 CDN에서 `/static/`을
    서빙합니다. WhiteNoise `CompressedManifestStaticFilesStorage`는 Vercel이 지원하는 백엔드이며, 정적 파일
    저장소는 S3로 바꾸지 않습니다(`MEDIA_STORAGE`는 업로드 전용).

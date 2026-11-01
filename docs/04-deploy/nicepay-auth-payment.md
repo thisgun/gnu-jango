@@ -186,7 +186,7 @@ fail-open이 아닙니다.
 - 입금통보 `ResultCode=4110`인데 거래조회가 아직 `Status=9`이면 200으로 삼키지 않고
   503을 반환해 NICEPAY 재통보를 유도합니다. 재통보가 끝난 뒤에도 미입금이면
   `pending_deposit`으로 남고, 이후 예약 복구가 `Status=0`을 확인합니다.
-- Vercel의 `vercel.json` cron은 하루 1회(`0 18 * * *`)이므로 5분 복구 주기를 보장하지
+- Vercel의 `vercel.json` cron은 하루 1회(`0 1 * * *`)이므로 5분 복구 주기를 보장하지
   않습니다. Vercel에서는 결제자가 같은 주문으로 다시 결제를 시작할 때(서버의 새 attempt
   생성 경로), 또는 결과 페이지를 다시 열 때 오래된 `approving`/`uncertain`/
   `pending_deposit` 시도를 거래조회로 복구합니다. 결과 페이지의 `nicepay=1` 오류 상태는
