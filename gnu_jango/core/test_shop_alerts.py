@@ -270,7 +270,9 @@ def test_a_reminder_can_bring_one_coupon_at_a_time(db, reminders_on):
     assert "3,000원" in mail.outbox[0].body
 
     # a week later, another forgotten cart: no second coupon while the first is unused
-    ShopCartReminder.objects.update(created_at=timezone.now() - timedelta(days=8))
+    ShopCartReminder.objects.update(
+        created_at=datetime.fromtimestamp(DAYTIME, tz=timezone.get_current_timezone()) - timedelta(days=8)
+    )
     put_in_cart(member, ShopProductFactory(), hours_ago=25)
     assert send_due_cart_reminders() == {"due": 1, "sent": 1, "coupons": 0}
 
