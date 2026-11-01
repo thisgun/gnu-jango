@@ -113,6 +113,27 @@ python manage.py rebuild_search_index
 
 `ensure_handbook_samples`는 **「검색 운영 · 통합 검색 가이드」** 책(`hb_search`)과 10개 장을 추가합니다. 사용법, 설치, 호스팅별 적용, 한국어 검색, 열람 권한, 순위·클릭 기록, API 연결, 문제 해결과 품질 점검을 설명합니다. 새 책을 추가할 때 `--refresh`를 붙이지 않습니다. 소스 파일만 배포하면 DB에 새 책이 생성되지 않으므로 위 명령을 해당 핸드북 DB에서 실행해야 합니다.
 
+## 쇼핑몰 알림·반품·배송조회·정기구독 안내
+
+`ensure_handbook_samples`는 **「쇼핑몰 운영 · 알림·반품·배송조회·정기구독」** 책(`hb_commerce`)과 9개 장을 추가합니다.
+샘플 원본은 `gnu_jango/config/handbook_commerce_content.py`입니다.
+
+- **먼저 읽기**: 새 기능의 기본값과 켜는 곳, 새 관리자 메뉴, 고객 화면 변화, 역할 프리셋 권한.
+- **고객 알림**: 가격 인하·재입고 알림, 장바구니 알림 메일(정보통신망법 제50조 규칙, 발송 시간, Vercel 크론 주의).
+- **주문 이후**: 반품·교환 신청 처리(주문 화면에서 직접 처리하면 신청이 자동으로 닫히는 것 포함), Delivery Tracker 배송조회.
+- **정기구독**: 토스페이먼츠 자동결제 켜는 순서, 결제 회차·실패·확인 필요 처리.
+- **개발·운영용**: 예약 작업(`send_shop_alerts` · `track_shipments` · `charge_shop_subscriptions`), 마이그레이션
+  `shop.0039`~`0042` · `users.0016`, 배포 순서, 주문 목록 쿼리 수와 Django 7 대비.
+
+기존 책의 「장바구니와 주문 흐름」「배송과 주문 상태 관리」「결제 설정과 테스트」「회원가입과 로그인」 장 끝에는 이 책으로 가는
+‘함께 보기’ 링크를 한 번만 덧붙이고 본문은 그대로 둡니다. 이미 배포한 핸드북 DB에 반영하려면 그 DB에서 다음을 실행합니다
+(`--refresh`는 붙이지 않습니다).
+
+```bash
+python manage.py ensure_handbook_samples
+python manage.py rebuild_search_index
+```
+
 ## 주의
 
 - 두 프로젝트가 같은 `main` 을 보므로 push 한 번에 **둘 다** 배포됩니다. 한쪽만 배포하려면 프로젝트의 Ignored Build Step 을 쓰세요.
