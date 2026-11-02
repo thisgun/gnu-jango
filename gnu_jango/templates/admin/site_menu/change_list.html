@@ -60,8 +60,8 @@
             <tr class="menu_list menu_group_{{ row.me_code|slice:":2" }}">
               <td class="td_category {% if row.me_code|length == 4 %}sub_menu_class{% endif %}">
                   <input type="hidden" name="code[]" value="{{ row.me_code|slice:":2" }}">
-                  <input type="hidden" name="me_type[]" value="{{ row.me_type }}">
-                  <input type="hidden" name="me_type_pk[]" value="{{ row.me_type_pk }}">
+                  <input type="hidden" name="me_type[]" value="{{ row.me_type|default_if_none:'' }}">
+                  <input type="hidden" name="me_type_pk[]" value="{{ row.me_type_pk|default_if_none:0 }}">
                   <label for="me_name_{{ forloop.counter0 }}" class="sound_only">{% if row.me_code|length == 4 %}<span class="sound_only">{{ row.me_name }}의 서브</span>{% endif %} 메뉴<strong class="sound_only"> 필수</strong></label>
                   <input type="text" name="me_name[]" value="{{ row.me_name }}" id="me_name_{{ forloop.counter0 }}" required class="required tbl_input full_input">
               </td>
@@ -78,7 +78,7 @@
               </td>
               <td class="td_num">
                   <label for="me_order_{{ forloop.counter0 }}" class="sound_only">순서</label>
-                  <input type="text" name="me_order[]" value="{{ row.me_order }}" id="me_order_{{ forloop.counter0 }}" class="tbl_input" size="5">
+                  <input type="text" name="me_order[]" value="{{ row.me_order|default_if_none:0 }}" id="me_order_{{ forloop.counter0 }}" class="tbl_input" size="5">
               </td>
               <td class="td_mng">
                   <label for="me_use_{{ forloop.counter0 }}" class="sound_only">PC사용</label>
