@@ -69,7 +69,7 @@ django_settings_module = "example.settings"
 # new tests may be plain functions using the fixtures in conftest.py and the factories in
 # gnu_jango/testing/factories.py.
 DJANGO_SETTINGS_MODULE = "example.settings"
-testpaths = ["gnu_jango"]
+testpaths = ["gnu_jango", "gnu_plugins"]
 python_files = ["tests.py", "test_*.py"]
 addopts = "-p no:cacheprovider --strict-markers"
 

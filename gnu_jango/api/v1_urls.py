@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import include, path
 
 from gnu_jango.core import thumbnails
 from gnu_jango.notifications.api import ticket_view
@@ -43,6 +43,7 @@ urlpatterns = [
     path("auth/login", v1_auth.login_view, name="auth-login"),
     path("auth/register", v1_auth.register_view, name="auth-register"),
     path("auth/me", v1_auth.me_view, name="auth-me"),
+    path("plugins/", include("gnu_jango.plugins.api_urls")),
     path("auth/refresh", v1_auth.refresh_view, name="auth-refresh"),
     path("auth/logout", v1_auth.logout_view, name="auth-logout"),
     path("auth/register-result", v1_auth.register_result_view, name="auth-register-result"),
