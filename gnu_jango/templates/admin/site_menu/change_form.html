@@ -128,7 +128,8 @@ $(document).on("click", "#add_manual", function() {
   var me_name = $.trim($("#me_name").val());
   var me_link = $.trim($("#me_link").val());
 
-  add_menu_list(me_name, me_link, menu_code);
+  // A typed-in link has no target board: empty type, type key 0.
+  add_menu_list(me_name, me_link, "", "0", menu_code);
 });
 
 $(document).on("click", ".add_select", function() {
