@@ -18,6 +18,8 @@ from django.conf import settings
 from django.core.cache import cache
 from django.core.management import call_command
 
+from gnu_jango.plugins import state as plugin_state
+
 from .job_registry import ScheduledJob, build_scheduled_jobs
 
 logger = logging.getLogger(__name__)
@@ -73,6 +75,9 @@ def _summarize_output(output: str):
 
 
 def run_job(job: ScheduledJob, *, dry_run: bool, runner) -> dict:
+    if job.plugin and not plugin_state.is_enabled(job.plugin):
+        # Switched off in the admin (/admin/plugins/): not run, and not a failure.
+        return {"name": job.name, "status": "skipped", "duration_ms": 0, "summary": "plugin switched off", "error": ""}
     stdout, stderr = StringIO(), StringIO()
     started = time.monotonic()
     error = ""

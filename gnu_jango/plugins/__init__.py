@@ -2,11 +2,14 @@
 
 A plugin package holds
 
-- ``plugin.py`` with ``PLUGIN = Plugin(...)``: the URLs, admin links and scheduled jobs the core
-  mounts for it. The core reads it while the settings load (the Celery Beat schedule needs the
-  jobs), so it must not import models or anything that needs the app registry;
+- ``plugin.py`` with ``PLUGIN = Plugin(...)``: the URLs, admin links, scheduled jobs and settings
+  the core mounts for it. The core reads it while the settings load (the Celery Beat schedule needs
+  the jobs), so it must not import models or anything that needs the app registry;
 - an ordinary Django app (``apps.py``, models, migrations, admin) whose ``AppConfig.ready()``
   imports the module that registers its hooks (``gnu_jango.plugins.hooks``).
+
+Installing a plugin (G5_PLUGINS) takes a deploy; switching an installed one off and on, and editing
+its settings, happen in the admin (/admin/plugins/, gnu_jango.plugins.state).
 
 See docs/04-deploy/plugins.md.
 """
@@ -17,8 +20,12 @@ from importlib import import_module
 
 from django.core.exceptions import ImproperlyConfigured
 
-# A slug is part of the plugin's URLs: /plugins/<slug>/ and /api/v1/plugins/<slug>/.
-SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
+# A slug is part of the plugin's URLs (/plugins/<slug>/, /api/v1/plugins/<slug>/) and of the Config
+# names that hold its state ("plugin.<slug>.enabled"), whose column takes 50 characters.
+SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,29}$")
+SETTING_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{1,59}$")
+CONFIG_NAME_LENGTH = 50
+SETTING_TYPES = (bool, int, str)
 
 # The version of this contract (Plugin, hooks, mounts). A change that breaks existing plugins raises
 # it; a plugin declares the version it was written for and the core refuses any other.
@@ -46,6 +53,16 @@ class AdminLink:
 
 
 @dataclass(frozen=True)
+class Setting:
+    """A value the admin may edit on /admin/plugins/; its type is the type of ``default``."""
+
+    name: str
+    label: str
+    default: bool | int | str
+    help: str = ""
+
+
+@dataclass(frozen=True)
 class Plugin:
     slug: str
     title: str
@@ -54,7 +71,27 @@ class Plugin:
     api_urls: str = ""  # URLconf module mounted at /api/v1/plugins/<slug>/
     admin_links: tuple[AdminLink, ...] = ()
     jobs: tuple[Job, ...] = ()
+    settings: tuple[Setting, ...] = ()
     api_version: int = 0  # must be declared: the PLUGIN_API_VERSION the plugin was written for
+
+    def setting(self, name):
+        for setting in self.settings:
+            if setting.name == name:
+                return setting
+        raise KeyError(f"The plugin {self.slug!r} declares no setting {name!r}.")
+
+
+def _check_settings(module_name, plugin):
+    for setting in plugin.settings:
+        if not SETTING_NAME_PATTERN.match(setting.name):
+            raise ImproperlyConfigured(f"{module_name}: the setting {setting.name!r} must be UPPER_CASE.")
+        if not isinstance(setting.default, SETTING_TYPES):
+            raise ImproperlyConfigured(f"{module_name}: {setting.name} needs a bool, int or str default.")
+        if len(f"plugin.{plugin.slug}.{setting.name}") > CONFIG_NAME_LENGTH:
+            raise ImproperlyConfigured(f"{module_name}: the slug and {setting.name} together are too long.")
+    names = [setting.name for setting in plugin.settings]
+    if len(set(names)) != len(names):
+        raise ImproperlyConfigured(f"{module_name} declares a setting twice.")
 
 
 def _manifest(name):
@@ -70,13 +107,14 @@ def _manifest(name):
         raise ImproperlyConfigured(f"{module_name} must define PLUGIN = Plugin(...).")
     if not SLUG_PATTERN.match(plugin.slug):
         raise ImproperlyConfigured(
-            f"{module_name}: the slug {plugin.slug!r} must be 2-40 lowercase letters, digits or _."
+            f"{module_name}: the slug {plugin.slug!r} must be 2-30 lowercase letters, digits or _."
         )
     if plugin.api_version != PLUGIN_API_VERSION:
         raise ImproperlyConfigured(
             f"{module_name} declares api_version={plugin.api_version}; this core supports "
             f"api_version={PLUGIN_API_VERSION}."
         )
+    _check_settings(module_name, plugin)
     return plugin
 
 
@@ -91,8 +129,18 @@ def load_plugins(names):
     return tuple(plugins)
 
 
-def installed_plugins():
-    """The manifests of the plugins this site runs (settings.G5_PLUGINS)."""
+def _installed_names():
     from django.conf import settings
 
-    return load_plugins(getattr(settings, "G5_PLUGINS", ()) or ())
+    return tuple(getattr(settings, "G5_PLUGINS", ()) or ())
+
+
+def installed_plugins():
+    """The manifests of the plugins this site runs (settings.G5_PLUGINS)."""
+    return load_plugins(_installed_names())
+
+
+def installed_plugin_packages():
+    """(package name, manifest) of each installed plugin."""
+    names = _installed_names()
+    return tuple(zip(names, load_plugins(names)))

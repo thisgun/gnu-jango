@@ -1,0 +1,164 @@
+/* /admin/plugins/ — the plugin manager. Colours follow the admin's text colour so light and dark both work. */
+.g5-plugins {
+  --g5-plugin-line: rgb(127 127 127 / 0.28);
+  --g5-plugin-soft: rgb(127 127 127 / 0.08);
+  --g5-plugin-on: #15803d;
+  --g5-plugin-off: #b45309;
+  display: grid;
+  gap: 1.25rem;
+  max-width: 64rem;
+}
+
+.g5-plugins-hero h1 {
+  margin: 0.15rem 0 0.4rem;
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.g5-plugins-hero p {
+  margin: 0;
+  max-width: 44rem;
+  opacity: 0.8;
+  line-height: 1.6;
+}
+
+.g5-plugins-eyebrow {
+  letter-spacing: 0.14em;
+  font-size: 0.72rem;
+  font-weight: 600;
+  opacity: 0.6;
+}
+
+.g5-plugin {
+  border: 1px solid var(--g5-plugin-line);
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.4rem;
+  display: grid;
+  gap: 1.1rem;
+}
+
+.g5-plugin.is-off {
+  background: var(--g5-plugin-soft);
+}
+
+.g5-plugin-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.g5-plugin-head > div {
+  flex: 1 1 14rem;
+}
+
+.g5-plugin-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+
+.g5-plugin-meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  opacity: 0.7;
+}
+
+.g5-plugin-status {
+  border-radius: 999px;
+  padding: 0.15rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--g5-plugin-on);
+  border: 1px solid currentColor;
+}
+
+.g5-plugin.is-off .g5-plugin-status {
+  color: var(--g5-plugin-off);
+}
+
+.g5-plugin-settings {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 1rem 1.25rem;
+  border-top: 1px solid var(--g5-plugin-line);
+  padding-top: 1.1rem;
+}
+
+.g5-plugin-field {
+  display: grid;
+  gap: 0.35rem;
+  align-content: start;
+}
+
+.g5-plugin-field > label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.g5-plugin-field input[type="number"],
+.g5-plugin-field input[type="text"] {
+  border: 1px solid var(--g5-plugin-line);
+  border-radius: 0.45rem;
+  padding: 0.45rem 0.6rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.g5-plugin-field input:focus-visible,
+.g5-plugin-check input:focus-visible {
+  outline: 2px solid var(--g5-plugin-on);
+  outline-offset: 2px;
+}
+
+.g5-plugin-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.g5-plugin-help {
+  margin: 0;
+  font-size: 0.78rem;
+  opacity: 0.7;
+  line-height: 1.5;
+}
+
+.g5-plugin-actions {
+  grid-column: 1 / -1;
+}
+
+.g5-plugin .button {
+  border-radius: 0.45rem;
+  padding: 0.5rem 1.05rem;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.g5-plugin .button:focus-visible {
+  outline: 2px solid var(--g5-plugin-on);
+  outline-offset: 2px;
+}
+
+/* Unfold marks dark mode with html.dark; the media query covers the browser setting before it loads. */
+html.dark .g5-plugins {
+  --g5-plugin-on: #4ade80;
+  --g5-plugin-off: #fbbf24;
+}
+
+@media (prefers-color-scheme: dark) {
+  html:not(.light) .g5-plugins {
+    --g5-plugin-on: #4ade80;
+    --g5-plugin-off: #fbbf24;
+  }
+}
+
+@media (max-width: 40rem) {
+  .g5-plugin {
+    padding: 1rem;
+  }
+}
