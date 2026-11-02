@@ -1,6 +1,3 @@
-from django.views import View
-from django.http import HttpResponse, JsonResponse
-
 # class Boards:
     
 #     def __init__(self, request):

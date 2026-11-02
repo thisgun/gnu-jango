@@ -19,7 +19,6 @@ from gnu_jango.core.test_shop_payments_api import (
     CONFIG_URL,
     ORDERED,
     PAID,
-    PREPARE_URL,
     PaymentTestBase,
 )
 from gnu_jango.core.test_shop_pg_settings import NO_ENV, ShopSettingsPgAdminTests

@@ -30,7 +30,6 @@ from gnu_jango.shop.admin_settings import ShopSettingsForm
 from gnu_jango.shop.models import (
     ShopCategory,
     ShopCoupon,
-    ShopCouponLog,
     ShopOrder,
     ShopOrderData,
     ShopOrderItem,

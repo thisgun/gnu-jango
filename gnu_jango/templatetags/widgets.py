@@ -71,7 +71,6 @@ def to_class_name(value):
 @register.simple_tag(takes_context=True)
 def outlogin(context, skin_dir="basic"):
 
-    is_auth = False
     nickname = ""
     point = 0
 

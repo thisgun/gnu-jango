@@ -25,7 +25,7 @@ class SiteMenuForms(forms.Form):
 
     def is_valid(self):
 
-        form_validated = super().is_valid()
+        super().is_valid()
 
         return True
 

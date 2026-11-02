@@ -5,7 +5,7 @@ def add_sample_data():
     g1 = Group(gr_id='커뮤니티', gr_subject='커뮤니티')
     try:
         g1.save()
-    except IntegrityError as e:
+    except IntegrityError:
         pass
         
     if g1.id:

@@ -188,8 +188,6 @@ from .shop_nicepay import (
     cancel_pending_nicepay_vbank,
     confirm_nicepay_payment,
     create_nicepay_attempt,
-    nicepay_cancel_payment,
-    order_paid_through_nicepay,
     recover_stale_nicepay_attempts,
 )
 from .shop_payments import (

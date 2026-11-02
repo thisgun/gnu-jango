@@ -143,7 +143,6 @@ def unseal_nicepay_value(mode, kind, token):
 
 def nicepay_value_error(mode, kind, value):
     """Why ``value`` cannot be a NICEPAY ``mode`` ``kind`` value ("" when it can)."""
-    label = "MID" if kind == "mid" else "MerchantKey"
     pattern = NICEPAY_MID_PATTERN if kind == "mid" else NICEPAY_MERCHANT_KEY_PATTERN
     if not pattern.fullmatch(value or ""):
         if kind == "mid":

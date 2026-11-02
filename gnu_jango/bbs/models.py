@@ -713,7 +713,7 @@ class Post_file(models.Model):
                 trial_image.verify()
                 self.bf_width, self.bf_height = trial_image.size
 
-            except (IOError, SyntaxError) as e:
+            except (IOError, SyntaxError):
                 pass
 
             self.bf_filesize = self.bf_file.file.size

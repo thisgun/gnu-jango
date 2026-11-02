@@ -62,8 +62,8 @@ jobs:
           pip install -r requirements-dev.txt
       - name: Python quality smoke
         # F601 catches duplicate dict keys (one silently overwrote a computed
-        # editor flag), F811 redefinitions, E722 bare excepts.
-        run: ruff check gnu_jango example --select E9,F63,F7,F82,F601,F811,E722
+        # editor flag), F811 redefinitions, E722 bare excepts, F401/F841 unused imports and variables.
+        run: ruff check gnu_jango example --select E9,F63,F7,F82,F601,F811,E722,F401,F841
       - name: Django checks
         run: python manage.py check
       - name: OpenAPI schema is up to date
