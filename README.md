@@ -8,6 +8,7 @@ GNU Jango는 그누보드5·영카트의 게시판, 회원, 쇼핑몰 기능을 
 - 그누보드5 비밀번호 해시를 호환하고, `migrate_gnuboard5` 명령으로 기존 데이터베이스의 데이터를 가져올 수 있습니다.
 - `/api/v1/`에서 프런트엔드용 REST API를 제공하며, JWT 기반 인증과 기존 그누보드 회원 호환 기능을 포함합니다.
 - Django 관리자에서 테마를 선택하고(`/admin/theme/`), 데모용 샘플 콘텐츠를 추가·삭제할 수 있습니다(`/admin/sample-data/`).
+- 쇼핑몰은 가격 인하·재입고 알림, 장바구니 알림 메일, 반품·교환 신청, 배송조회, 정기구독(카드 자동결제)을 지원합니다.
 - Next.js 프런트엔드는 커뮤니티·쇼핑몰 테마와 매뉴얼 테마를 제공하며, 정적 테마 빌드와 독립 서버 실행을 지원합니다.
 
 ## 데모
@@ -144,6 +145,8 @@ npm run build:theme:handbook         # handbook
 
 상품·회원·주문 CSV/XLSX 가져오기·내보내기, 운영 KPI, 지원용 회원 impersonation, 주문·배송 일괄 작업은 [관리자 운영 도구](docs/04-deploy/admin-operations.md)를 참고하세요.
 
+쇼핑몰에는 가격 인하·재입고 알림과 장바구니 알림 메일([쇼핑몰 알림](docs/04-deploy/shop-alerts.md)), 반품·교환 신청, 배송조회([Delivery Tracker 연동](docs/04-deploy/delivery-tracking.md)), 정기구독([토스페이먼츠 자동결제](docs/04-deploy/toss-billing-subscriptions.md))이 있습니다. 반품·교환 신청만 기본으로 켜져 있고, 나머지는 관리자 쇼핑몰 설정에서 켭니다. 정기구독은 서버 환경 변수 `SHOP_SUBSCRIPTIONS_ENABLED=True`도 필요합니다. 운영자용 단계별 설명은 핸드북의 [쇼핑몰 운영 책](https://gnu-jango-handbook.vercel.app/bbs/hb_commerce)에 있습니다.
+
 프런트엔드 소스 폴더는 `nextjs/`, 새 기본 테마 산출물은 `nextjs_default`입니다. 기존 사이트 설정과 주소의 호환성을 위해 `nextjs25` 이름이 일부 저장값·URL·배포 자료에 남아 있으며, 새 빌드가 사용하는 소스 폴더와는 구분됩니다. 테마 전환의 배경과 호환 규칙은 [테마 플랜](docs/01-plan/features/nextjs-default-theme.plan.md)과 [PRD](docs/01-plan/features/nextjs-default-theme.prd.md)를 참고하세요.
 
 ## 배포 방식
@@ -271,7 +274,7 @@ python manage.py migrate
 python manage.py collectstatic --noinput
 ```
 
-샘플 매뉴얼의 새 장을 반영하려면 `python manage.py ensure_handbook_samples`도 실행합니다. 이미 있는 샘플 장의 고쳐진 문구까지 반영하려면 `--refresh`를 붙이세요(샘플 장 제목을 가진 글의 본문을 다시 씁니다). 테마 소스를 바꾼 경우에는 로컬에서 테마를 빌드하고 생성 결과 두 폴더를 함께 Git에 올려야 합니다. PythonAnywhere에서는 Next.js `npm run dev`가 아니라 Django Web 앱을 실행합니다.
+샘플 매뉴얼의 새 책·장을 반영하려면 `python manage.py ensure_handbook_samples`를 실행하고, 검색에도 나오도록 이어서 `python manage.py rebuild_search_index`를 실행합니다. `ensure_handbook_samples`는 이미 있는 장의 본문을 바꾸지 않습니다. `--refresh`를 붙이면 샘플 장 제목을 가진 모든 글의 본문을 저장소 원고로 다시 쓰므로 관리자에서 고친 내용도 사라집니다. 고쳐진 문구 하나만 반영하려면 관리자에서 그 장을 직접 수정하세요. 테마 소스를 바꾼 경우에는 로컬에서 테마를 빌드하고 생성 결과 두 폴더를 함께 Git에 올려야 합니다. PythonAnywhere에서는 Next.js `npm run dev`가 아니라 Django Web 앱을 실행합니다.
 
 무료 계정의 웹 앱은 한 달 뒤 멈춥니다. 만료 전에 Web 탭의 연장 버튼을 눌러야 하며, 사이트를 주기적으로 호출하는 것만으로는 연장되지 않습니다.
 
@@ -288,6 +291,8 @@ docker compose up --build
 ### Vercel 참고 사항
 
 Vercel 프로젝트는 저장소 루트를 기준으로 설정합니다. 테마 빌드 결과를 바꿨다면 두 테마 디렉터리의 산출물을 함께 커밋해야 합니다. 별도 handbook 데모처럼 같은 브랜치에 연결된 Vercel 프로젝트가 여러 개면 `main` 푸시가 모두 배포를 시작합니다. handbook 프로젝트의 테마 기본값과 DB 준비는 [handbook 데모 안내](docs/04-deploy/handbook-demo.md)를 참고하세요.
+
+Vercel Cron은 Hobby 요금제에서 하루 한 번만 실행할 수 있어, `vercel.json`은 매일 10:00(KST)에 `/api/internal/cron`으로 예약 작업 전체를 한 번 부릅니다. 장바구니 알림 메일은 08~21시에만 나가므로 이 시각을 그 밖으로 옮기지 마세요. 결제 복구(5분), 쇼핑몰 알림(10분), 배송조회(5분)처럼 더 자주 돌아야 하는 작업은 Supabase pg_cron 같은 외부 스케줄러가 같은 주소를 `Authorization: Bearer <CRON_SECRET>`으로 부르게 하세요.
 
 ### 공통 운영 점검
 
