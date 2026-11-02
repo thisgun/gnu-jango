@@ -19,7 +19,6 @@ from django.conf import settings
 #     return obj.__dict__
 
 def save_variable_as_text_file(variable):
-    fileDir = os.path.join(settings.MEDIA_ROOT, 'log')
     fileName = str(datetime.date.today()) +  ".txt"
     
     # with open(fileName, 'wb') as file:
@@ -57,7 +56,7 @@ def log_write(msg=None):
         fid.write(msg)
         fid.close()
 
-    except OSError as e:
+    except OSError:
         pass
     
 def log_save(exDict):

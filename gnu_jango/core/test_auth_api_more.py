@@ -745,7 +745,7 @@ class LogoutTests(AuthTestBase):
 
 class SessionEndpointTests(AuthTestBase):
     def test_the_session_list_names_and_can_revoke_the_current_browser(self):
-        member = self.make_member("sess_member")
+        self.make_member("sess_member")
         client = APIClient()
         login = self.login(
             {"mb_id": "sess_member", "mb_password": PASSWORD},

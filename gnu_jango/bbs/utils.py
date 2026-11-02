@@ -304,7 +304,6 @@ def get_bbs_list(row, board, skin_url="", subject_len=40, **kwargs):
 
     files = kwargs.get("files") or []
     request = kwargs.get("request") or None
-    is_detailview = kwargs.get("is_detailview") or 0
     params = kwargs.get("params", {})
 
     if subject_len:

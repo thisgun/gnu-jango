@@ -151,7 +151,6 @@ class Board_Move_update:
 
     def update_reply(self, post_id, board_id, parent_id, move_board_id):
 
-        user = self.user
 
         rows = self.check_get_list(post_id, board_id)
 

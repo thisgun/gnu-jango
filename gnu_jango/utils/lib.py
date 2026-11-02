@@ -305,6 +305,5 @@ def get_url_merge_params(request, url, params=""):
     q["filter"] = "other"
     q["sort"] = "newest"
     q.setlist("values", [1, 2, "c"])
-    query_string = q.urlencode()
 
     return url

@@ -163,7 +163,6 @@ def get_sideview_data(user, name="", email="", homepage="", **kwargs):
     if user and isinstance(user, int):
         user = get_user_model().objects.filter(pk=user).first()
 
-    tmp_name = ""
 
     is_user = False
 
@@ -312,7 +311,6 @@ def get_sideview(user, name="", email="", homepage="", **kwargs):
 
         title = _("%(name)s 자기소개") % {"name": name}
 
-        is_user = True
         tmp_name = (
             '<a href="#" class="sv_user" title="'
             + title
