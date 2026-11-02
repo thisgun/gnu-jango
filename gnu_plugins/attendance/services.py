@@ -17,6 +17,10 @@ from .models import Attendance
 # The ledger's relation for these points: one row per member and day (or month), never two.
 POINT_TABLE = "@attendance"
 
+# The default monthly-bonus run looks back this many finished months, so a bonus missed while the
+# job was down or points were off is paid later; the ledger keeps each bonus to one payment.
+CATCH_UP_MONTHS = 3
+
 
 def rules():
     return {
@@ -86,6 +90,14 @@ def parse_month(text):
 
 def last_month(today=None):
     return ((today or timezone.localdate()).replace(day=1) - timedelta(days=1)).replace(day=1)
+
+
+def recent_months(count=CATCH_UP_MONTHS, today=None):
+    """The first days of the last ``count`` finished months, newest first."""
+    months = [last_month(today)]
+    while len(months) < count:
+        months.append(last_month(months[-1]))
+    return months
 
 
 def summary(user, month=None):

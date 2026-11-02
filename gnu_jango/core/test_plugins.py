@@ -66,6 +66,18 @@ def test_slugs_must_be_url_safe_and_unique(monkeypatch):
         load_plugins(["gnu_plugins.attendance", "gnu_plugins.attendance"])
 
 
+def test_a_plugin_must_declare_the_plugin_api_version_it_was_written_for(monkeypatch):
+    fake_plugin_package(monkeypatch, "fake_plugin_c", Plugin(slug="future", title="Future", api_version=99))
+    with pytest.raises(ImproperlyConfigured, match="api_version=99"):
+        load_plugins(["fake_plugin_c"])
+
+    fake_plugin_package(monkeypatch, "fake_plugin_d", Plugin(slug="undeclared", title="Undeclared"))
+    with pytest.raises(ImproperlyConfigured, match="api_version=0"):
+        load_plugins(["fake_plugin_d"])
+
+
+# Listeners run in a savepoint, so even these need the database.
+@pytest.mark.django_db
 def test_emit_calls_listeners_by_priority_and_survives_a_failing_one(no_listeners, caplog):
     calls = []
 
@@ -87,6 +99,8 @@ def test_emit_calls_listeners_by_priority_and_survives_a_failing_one(no_listener
     assert "test.event" in caplog.text and "broken" in caplog.text
 
 
+# Listeners run in a savepoint, so even these need the database.
+@pytest.mark.django_db
 def test_replace_chains_listeners_and_keeps_the_value_when_one_fails(no_listeners):
     @hooks.on("test.price")
     def double(value, **kwargs):
@@ -104,6 +118,25 @@ def test_replace_chains_listeners_and_keeps_the_value_when_one_fails(no_listener
     assert hooks.replace("test.unknown", 10) == 10
 
 
+@pytest.mark.django_db
+def test_a_failing_listener_s_database_writes_are_rolled_back(no_listeners, member):
+    from django.db import transaction
+
+    from gnu_jango.config.models import Config
+
+    @hooks.on("test.write")
+    def write_then_fail(**kwargs):
+        Config.objects.create(name="plugin_half_done", value="1")
+        raise RuntimeError("plugin bug after a write")
+
+    with transaction.atomic():
+        hooks.emit("test.write")
+        # The caller's transaction is still usable and holds none of the listener's work.
+        assert not Config.objects.filter(name="plugin_half_done").exists()
+
+
+# Listeners run in a savepoint, so even these need the database.
+@pytest.mark.django_db
 def test_registering_the_same_function_again_replaces_it(no_listeners):
     calls = []
 

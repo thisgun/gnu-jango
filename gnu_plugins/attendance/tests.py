@@ -130,6 +130,32 @@ def test_a_visit_checks_in_only_when_the_site_turns_it_on(member_client, member)
     assert Attendance.objects.filter(user=member).count() == 1
 
 
+def test_after_today_s_check_in_further_visits_skip_the_database(member_client, member):
+    from unittest.mock import patch
+
+    from . import services
+
+    with override_settings(ATTENDANCE_AUTO_CHECK_IN=True), patch(
+        "gnu_plugins.attendance.listeners.services.check_in", wraps=services.check_in
+    ) as spy:
+        for _ in range(3):
+            member_client.get("/api/v1/auth/me")
+
+    assert spy.call_count == 1
+    assert Attendance.objects.filter(user=member).count() == 1
+
+
+def test_the_api_limits_request_floods(member_client):
+    from unittest.mock import patch
+
+    from .api import AttendanceThrottle
+
+    with patch.object(AttendanceThrottle, "rate", "2/min"):
+        codes = [member_client.get(ME_URL).status_code for _ in range(3)]
+
+    assert codes == [200, 200, 429]
+
+
 def run_monthly_bonus(*args):
     stdout = StringIO()
     call_command("attendance_monthly_bonus", "--json", *args, stdout=stdout)
@@ -152,11 +178,27 @@ def test_members_who_attended_every_day_get_the_monthly_bonus_once():
     assert point_balance(regular) == 300 and point_balance(sometimes) == 0
 
 
-def test_the_monthly_bonus_defaults_to_last_month():
+def test_by_default_the_monthly_bonus_catches_up_the_last_three_months():
     report = run_monthly_bonus()
 
     first_of_this_month = timezone.localdate().replace(day=1)
-    assert report["month"] == (first_of_this_month - timedelta(days=1)).strftime("%Y-%m")
+    last_month = (first_of_this_month - timedelta(days=1)).strftime("%Y-%m")
+    assert [month["month"] for month in report["months"]][0] == last_month
+    assert len(report["months"]) == 3 and report["dry_run"] is True
+
+
+@override_settings(ATTENDANCE_MONTHLY_BONUS=300)
+def test_a_bonus_skipped_while_points_were_off_is_paid_once_they_are_back(monkeypatch):
+    from gnu_jango.config.models import Config
+
+    regular = MemberFactory()
+    attend(regular, *[date(2026, 10, day) for day in range(1, 32)])
+    Config.objects.update_or_create(name="cf_use_point", defaults={"value": "0"})
+    assert run_monthly_bonus("--month", "2026-10", "--apply")["awarded"] == 0
+
+    Config.objects.update_or_create(name="cf_use_point", defaults={"value": "1"})
+    assert run_monthly_bonus("--month", "2026-10", "--apply")["awarded"] == 1
+    assert point_balance(regular) == 300
 
 
 def test_the_plugin_migrations_match_its_models():

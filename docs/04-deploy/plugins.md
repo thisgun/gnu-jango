@@ -19,7 +19,7 @@ python manage.py check          # 플러그인 선언 확인 (잘못되면 여�
 - 끌 때는 `G5_PLUGINS`에서 지우고 다시 배포합니다. 테이블과 포인트 기록은 남습니다(지우려면 끄기 전에 `python manage.py migrate attendance zero`).
 - Vercel은 실행 중에 패키지를 설치할 수 없으므로, 플러그인 코드는 저장소에 두거나 `requirements.txt`에 넣어 배포합니다.
 - 플러그인은 코어와 같은 권한으로 실행되는 Python 코드입니다. 신뢰하는 코드만 설치하세요.
-- 테스트(pytest)는 `G5_PLUGINS`를 따로 정하지 않으면 예제 플러그인을 켠 상태로 돕니다. 코어의 연결 지점이 테스트에서 늘 검증되게 하기 위해서입니다.
+- 테스트(pytest)는 `.env`의 `G5_PLUGINS`와 상관없이 예제 플러그인을 더해서 돕니다. 코어의 연결 지점이 테스트에서 늘 검증되게 하기 위해서입니다.
 
 ## 플러그인 구조
 
@@ -42,7 +42,8 @@ from gnu_jango.plugins import AdminLink, Job, Plugin
 PLUGIN = Plugin(
     slug="attendance",                       # URL에 쓰임: 소문자·숫자·_ 2~40자, 플러그인끼리 겹치면 안 됨
     title="출석체크",
-    version="1.0.0",
+    version="1.0.0",                         # 플러그인 자신의 버전 (표시용)
+    api_version=1,                           # 반드시 적음: 이 플러그인이 맞춰 만든 플러그인 규격 버전
     urls="",                                 # 있으면 /plugins/<slug>/ 아래에 연결
     api_urls="gnu_plugins.attendance.api_urls",   # /api/v1/plugins/<slug>/ 아래에 연결
     admin_links=(AdminLink("출석체크 기록", "admin:attendance_attendance_changelist",
@@ -52,6 +53,8 @@ PLUGIN = Plugin(
 ```
 
 `plugin.py`는 settings를 읽는 중에(Celery Beat 일정을 만들 때) 읽힙니다. 그래서 모델이나 앱 레지스트리가 필요한 것을 import하면 안 됩니다.
+
+`api_version`은 코어의 `gnu_jango.plugins.PLUGIN_API_VERSION`(지금 1)과 같아야 합니다. 적지 않았거나 다르면 시작할 때 오류로 멈춥니다. 코어가 기존 플러그인을 깨는 방식으로 규격을 바꿀 때 이 번호를 올리므로, 맞지 않는 플러그인이 조용히 잘못 동작하는 일을 막습니다.
 
 | 항목 | 코어가 하는 일 |
 |---|---|
@@ -78,7 +81,8 @@ def double_on_weekends(point, user, streak, day, **kwargs):
 ```
 
 - 리스너는 `priority`가 작은 것부터 실행됩니다(기본 10).
-- 리스너가 예외를 내면 로그만 남기고 건너뜁니다. 값 바꾸기는 직전 값을 그대로 씁니다. 플러그인 오류가 로그인이나 출석 같은 요청을 깨뜨리지 않습니다.
+- 리스너는 하나씩 savepoint(`transaction.atomic()`) 안에서 실행됩니다. 리스너가 예외를 내면 로그만 남기고 건너뛰며, 그 리스너가 한 DB 작업은 되돌립니다. 값 바꾸기는 직전 값을 그대로 씁니다. 그래서 플러그인 오류가 로그인·출석 같은 요청이나, hook을 보낸 쪽의 트랜잭션을 깨뜨리지 않습니다.
+- 리스너는 요청 안에서 바로 실행됩니다. 외부 API 호출처럼 오래 걸리는 일은 백그라운드 작업으로 넘기세요.
 - 앞으로 인자가 늘어날 수 있으니 리스너는 항상 `**kwargs`를 받으세요.
 - 리스너는 `AppConfig.ready()`에서 import해 등록합니다. 같은 함수를 다시 등록하면 덮어씁니다.
 
@@ -103,10 +107,11 @@ def double_on_weekends(point, user, streak, day, **kwargs):
 |---|---|
 | 출석 | `POST /api/v1/plugins/attendance/check-in` (로그인 필요). 하루 한 번, 처음이면 201·이미 했으면 200. |
 | 조회 | `GET /api/v1/plugins/attendance/me?month=2026-10` 그 달 출석일, 연속 출석일, 규칙 |
+| 요청 제한 | 두 API 모두 회원당 분당 60회 (넘으면 429) |
 | 포인트 | 코어 포인트 원장(`insert_point`)으로 지급, `@attendance` 관계로 같은 날 두 번 주지 않음. 사이트 포인트가 꺼져 있으면 출석만 기록 |
 | 연속 보너스 | N일째마다 보너스 |
-| 개근 보너스 | 매일 도는 `attendance_monthly_bonus`가 지난달 매일 출석한 회원에게 한 번 지급 |
-| 자동 출석 | `ATTENDANCE_AUTO_CHECK_IN=True`이면 `member.visited`를 받아 방문 시 자동 출석 |
+| 개근 보너스 | 매일 도는 `attendance_monthly_bonus`가 최근 끝난 3개월을 다시 확인해, 매일 출석한 활성 회원에게 달마다 한 번 지급. 작업이 멈췄거나 포인트가 꺼져 있던 달도 3개월 안이면 나중에 지급 |
+| 자동 출석 | `ATTENDANCE_AUTO_CHECK_IN=True`이면 `member.visited`를 받아 방문 시 자동 출석. 그날 출석 뒤의 방문은 캐시로 DB 조회 없이 넘어감 |
 | 관리자 | 사이드바 **플러그인 › 출석체크 기록** (읽기 전용) |
 
 설정(Django settings 또는 같은 이름의 환경 변수):
@@ -120,8 +125,9 @@ def double_on_weekends(point, user, streak, day, **kwargs):
 | `ATTENDANCE_AUTO_CHECK_IN` | False |
 
 ```bash
-python manage.py attendance_monthly_bonus --month 2026-10          # 대상만 세기
-python manage.py attendance_monthly_bonus --month 2026-10 --apply  # 지급
+python manage.py attendance_monthly_bonus                          # 최근 3개월 대상만 세기
+python manage.py attendance_monthly_bonus --apply                  # 최근 3개월 지급 (예약 작업이 하는 일)
+python manage.py attendance_monthly_bonus --month 2026-10 --apply  # 한 달만
 ```
 
 ## 앞으로

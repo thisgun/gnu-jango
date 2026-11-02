@@ -3,9 +3,11 @@
 - ``emit(name, **payload)`` calls every listener of ``name`` and ignores what they return.
 - ``replace(name, value, **context)`` passes ``value`` through the listeners and returns the result.
 
-Listeners run in ``priority`` order (lower first). A listener that raises is logged and skipped, so a
-plugin bug never breaks the request that sent the hook. Register listeners from the plugin's
-``AppConfig.ready()``; registering the same function again replaces the earlier registration.
+Listeners run in ``priority`` order (lower first), each in its own savepoint. A listener that raises
+is logged and skipped and its database writes are rolled back, so a plugin bug never breaks the
+request (or the transaction) that sent the hook. Listeners run inside the request: keep them quick.
+Register listeners from the plugin's ``AppConfig.ready()``; registering the same function again
+replaces the earlier registration.
 
 Hooks the core sends (docs/04-deploy/plugins.md keeps the list):
 - ``member.visited`` (user, request): a member signed in, or a signed-in member loaded a page
@@ -13,6 +15,8 @@ Hooks the core sends (docs/04-deploy/plugins.md keeps the list):
 """
 
 import logging
+
+from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +41,8 @@ def on(name, *, priority=DEFAULT_PRIORITY):
 def emit(name, **payload):
     for _priority, key, func in tuple(_listeners.get(name, ())):
         try:
-            func(**payload)
+            with transaction.atomic():
+                func(**payload)
         except Exception:
             logger.exception("Plugin hook %s failed in %s", name, key)
 
@@ -45,7 +50,8 @@ def emit(name, **payload):
 def replace(name, value, **context):
     for _priority, key, func in tuple(_listeners.get(name, ())):
         try:
-            value = func(value, **context)
+            with transaction.atomic():
+                value = func(value, **context)
         except Exception:
             logger.exception("Plugin hook %s failed in %s; the value is kept", name, key)
     return value

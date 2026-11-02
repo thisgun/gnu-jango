@@ -20,6 +20,10 @@ from django.core.exceptions import ImproperlyConfigured
 # A slug is part of the plugin's URLs: /plugins/<slug>/ and /api/v1/plugins/<slug>/.
 SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,39}$")
 
+# The version of this contract (Plugin, hooks, mounts). A change that breaks existing plugins raises
+# it; a plugin declares the version it was written for and the core refuses any other.
+PLUGIN_API_VERSION = 1
+
 
 @dataclass(frozen=True)
 class Job:
@@ -50,6 +54,7 @@ class Plugin:
     api_urls: str = ""  # URLconf module mounted at /api/v1/plugins/<slug>/
     admin_links: tuple[AdminLink, ...] = ()
     jobs: tuple[Job, ...] = ()
+    api_version: int = 0  # must be declared: the PLUGIN_API_VERSION the plugin was written for
 
 
 def _manifest(name):
@@ -66,6 +71,11 @@ def _manifest(name):
     if not SLUG_PATTERN.match(plugin.slug):
         raise ImproperlyConfigured(
             f"{module_name}: the slug {plugin.slug!r} must be 2-40 lowercase letters, digits or _."
+        )
+    if plugin.api_version != PLUGIN_API_VERSION:
+        raise ImproperlyConfigured(
+            f"{module_name} declares api_version={plugin.api_version}; this core supports "
+            f"api_version={PLUGIN_API_VERSION}."
         )
     return plugin
 
