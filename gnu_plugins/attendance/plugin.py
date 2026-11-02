@@ -1,6 +1,6 @@
 """What the core mounts for 출석체크. Read while the settings load: no model imports here."""
 
-from gnu_jango.plugins import AdminLink, Job, Plugin, Setting
+from gnu_jango.plugins import AdminLink, Job, Plugin, Setting, Slot
 
 PLUGIN = Plugin(
     slug="attendance",
@@ -26,4 +26,5 @@ PLUGIN = Plugin(
         Setting("ATTENDANCE_MONTHLY_BONUS", "개근 보너스", 300, "한 달 매일 출석한 회원에게 다음 달에 한 번"),
         Setting("ATTENDANCE_AUTO_CHECK_IN", "방문하면 자동 출석", False, "로그인한 회원이 사이트를 열면 출석 처리"),
     ),
+    slots=(Slot("home.sidebar", "gnu_plugins.attendance.widgets.home_widget"),),
 )

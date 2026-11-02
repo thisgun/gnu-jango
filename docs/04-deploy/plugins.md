@@ -143,8 +143,35 @@ python manage.py attendance_monthly_bonus --apply                  # 최근 3개
 python manage.py attendance_monthly_bonus --month 2026-10 --apply  # 한 달만
 ```
 
+## 테마 슬롯
+
+플러그인은 테마의 정해진 자리(슬롯)에 위젯을 넣을 수 있습니다. 테마는 위젯을 **HTML이 아닌 데이터**로 받아 하나의 공통 모양으로 그리므로, 플러그인을 추가해도 테마를 다시 빌드할 필요가 없습니다.
+
+```python
+# plugin.py
+slots=(Slot("home.sidebar", "gnu_plugins.attendance.widgets.home_widget"),),
+
+# widgets.py: request를 받아 dict(또는 보여 줄 것이 없으면 None)를 돌려줌
+def home_widget(request):
+    return {
+        "title": "출석체크",
+        "body": "오늘 출석하면 10포인트를 드려요.",
+        "stats": [{"label": "연속 출석", "value": "3일"}],
+        "actions": [{"label": "출석하기", "method": "POST", "url": "/api/v1/plugins/attendance/check-in", "primary": True}],
+    }
+```
+
+- `GET /api/v1/plugins/slots?name=home.sidebar`가 켜진 플러그인들의 위젯을 모아 돌려줍니다(회원마다 다르므로 캐시하지 않음). 꺼진 플러그인과, 예외를 낸 provider의 위젯은 빠집니다.
+- 위젯 필드는 `title`, `body`, `stats`, `actions`만 남고 모두 글자로 바뀝니다. `actions`는 `GET`(링크)과 `POST`(API 호출 버튼)만, 그리고 `/`로 시작하는 사이트 안 경로만 허용합니다. 테마는 `POST`를 `/api/v1/`로 시작하는 주소일 때만 실행하고, 성공하면 위젯을 다시 불러옵니다.
+- 슬롯 이름은 `home.sidebar`처럼 점으로 나눈 소문자입니다. `slots`는 코어가 쓰므로 플러그인 slug로 쓸 수 없습니다.
+
+| 슬롯 | 위치 |
+|---|---|
+| `home.sidebar` | 기본 테마(`nextjs_default`) 커뮤니티 홈의 오른쪽 위젯 영역, 로그인 상자 바로 아래 |
+
+새 슬롯 자리를 테마에 만들 때만 `<PluginSlot name="..." />`를 넣고 테마를 한 번 다시 빌드합니다.
+
 ## 앞으로
 
-- 테마 슬롯: `<PluginSlot name="home.sidebar" />` 자리에 플러그인 위젯을 그리는 API (테마 재빌드 한 번 필요)
 - Python entry points 자동 발견(pip로 설치한 플러그인)
 - 주문·결제·글쓰기 hook
