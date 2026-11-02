@@ -9,6 +9,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from gnu_jango.shop.models import ShopOrder
+from gnu_jango.shop.order_hooks import order_status_changed
 from gnu_jango.shop.order_statuses import (
     INACTIVE_LINE_STATUSES,
     STATUS_CANCELLED,
@@ -233,6 +234,7 @@ def move_order_status(order, target, *, actor="", send_sms=True):
                 locked.od_mod_history, order_history_line(ESCROW_DELIVERY_NOTICE, actor)
             )
         locked.save(update_fields=fields)
+        order_status_changed(locked, previous, target, source="admin")
         save_order_item_status(
             locked.items.exclude(ct_status__in=CANCELLED_STATUSES),
             target,
