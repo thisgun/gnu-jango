@@ -19,6 +19,7 @@ class ScheduledJob:
     apply_args: tuple[str, ...]
     dry_run_args: tuple[str, ...]
     interval_seconds: int = 300
+    plugin: str = ""  # the slug of the plugin that owns the job; skipped while it is switched off
 
     def args(self, dry_run: bool) -> tuple[str, ...]:
         return self.dry_run_args if dry_run else self.apply_args
@@ -89,7 +90,8 @@ def build_scheduled_jobs(get):
     # Plugins (G5_PLUGINS) schedule their own management commands.
     for plugin in load_plugins(get("G5_PLUGINS", ()) or ()):
         jobs.extend(
-            ScheduledJob(job.command, job.apply_args, job.dry_run_args, job.interval_seconds) for job in plugin.jobs
+            ScheduledJob(job.command, job.apply_args, job.dry_run_args, job.interval_seconds, plugin=plugin.slug)
+            for job in plugin.jobs
         )
 
     names = [job.name for job in jobs]
