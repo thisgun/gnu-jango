@@ -132,10 +132,10 @@ INSTALLED_APPS = [
 
 # Plugins: Django apps that add features without editing the core (gnu_jango/plugins,
 # docs/04-deploy/plugins.md), e.g. G5_PLUGINS=gnu_plugins.attendance. The test suite (pytest sets
-# PYTEST_VERSION) always adds the example plugin, whatever .env says, so the plugin seams stay covered.
+# PYTEST_VERSION) always adds the bundled plugins, whatever .env says, so the plugin seams stay covered.
 G5_PLUGINS = csv_config(de_config("G5_PLUGINS", default=""))
-if os.environ.get("PYTEST_VERSION") and "gnu_plugins.attendance" not in G5_PLUGINS:
-    G5_PLUGINS.append("gnu_plugins.attendance")
+if os.environ.get("PYTEST_VERSION"):
+    G5_PLUGINS += [name for name in ("gnu_plugins.attendance", "gnu_plugins.order_notify") if name not in G5_PLUGINS]
 INSTALLED_APPS += G5_PLUGINS
 
 

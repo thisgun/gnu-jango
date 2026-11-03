@@ -43,7 +43,7 @@ def fake_plugin_package(monkeypatch, name, plugin):
 def test_the_example_plugin_is_installed_for_the_suite():
     assert "gnu_plugins.attendance" in settings.G5_PLUGINS
     assert apps.is_installed("gnu_plugins.attendance")
-    assert [plugin.slug for plugin in installed_plugins()] == ["attendance"]
+    assert [plugin.slug for plugin in installed_plugins()] == ["attendance", "order_notify"]
 
 
 def test_a_listed_package_without_plugin_py_is_refused():
@@ -208,7 +208,7 @@ def test_the_sidebar_adds_a_plugins_group_after_the_core_groups():
 
     assert groups[: len(settings.G5_ADMIN_NAVIGATION)] == list(settings.G5_ADMIN_NAVIGATION)
     links = {str(item["link"]): item for item in groups[-1]["items"]}
-    assert list(links) == ["/admin/plugins/", "/admin/attendance/attendance/"]
+    assert list(links) == ["/admin/plugins/", "/admin/attendance/attendance/", "/admin/order_notify/ordernotice/"]
     item = links["/admin/attendance/attendance/"]
     assert item["permission"](request) is True
 
