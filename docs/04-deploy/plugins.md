@@ -29,6 +29,7 @@ python manage.py check          # 플러그인 선언 확인 (잘못되면 여�
 
 - 완전히 없애려면 `G5_PLUGINS`에서 지우고 다시 배포합니다. 테이블과 포인트 기록은 남습니다(지우려면 먼저 `python manage.py migrate attendance zero`).
 - Vercel은 실행 중에 패키지를 설치할 수 없으므로, 플러그인 코드는 저장소에 두거나 `requirements.txt`에 넣어 배포합니다.
+- GitHub CD(`.github/workflows/cd.yml`)가 마이그레이션하는 사이트(Vercel 데모·매뉴얼)는 Vercel 환경 변수 `G5_PLUGINS`와 같은 값을 GitHub Actions 변수 `PRODUCTION_G5_PLUGINS`(매뉴얼은 `HANDBOOK_G5_PLUGINS`)에도 넣으세요. 빠지면 CD의 migrate가 플러그인 테이블을 만들지 않아, 플러그인 화면이 500을 냅니다. **변수를 먼저 넣고 migrate한 뒤** Vercel의 `G5_PLUGINS`를 바꿉니다.
 - 플러그인은 코어와 같은 권한으로 실행되는 Python 코드입니다. 신뢰하는 코드만 설치하세요.
 - 테스트(pytest)는 `.env`의 `G5_PLUGINS`와 상관없이 저장소의 플러그인(`gnu_plugins.*`)을 모두 더해서 돕니다. 코어의 연결 지점이 테스트에서 늘 검증되게 하기 위해서입니다.
 
