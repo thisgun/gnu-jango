@@ -12,6 +12,8 @@ replaces the earlier registration.
 Hooks the core sends (docs/04-deploy/plugins.md keeps the list):
 - ``member.visited`` (user, request): a member signed in, or a signed-in member loaded a page
   (/api/v1/auth/me). It can come many times a day, so listeners must be idempotent.
+- ``shop.order.placed`` / ``shop.order.status_changed`` / ``shop.order.paid``: see
+  gnu_jango.shop.order_hooks. They are sent after the change commits.
 """
 
 import logging

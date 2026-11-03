@@ -104,6 +104,11 @@ def double_on_weekends(point, user, streak, day, **kwargs):
 | 이름 | 종류 | 인자 | 언제 |
 |---|---|---|---|
 | `member.visited` | 이벤트 | `user`, `request` | 비밀번호·소셜 로그인, 그리고 로그인한 회원이 페이지를 열 때(`/api/v1/auth/me`). 하루에 여러 번 오므로 리스너는 중복을 스스로 막아야 합니다. |
+| `shop.order.placed` | 이벤트 | `order` | 주문이 만들어졌을 때(체크아웃, 정기구독 결제 주문) |
+| `shop.order.status_changed` | 이벤트 | `order`, `old_status`, `new_status`, `source` | 주문 상태가 바뀔 때. `source`는 `payment`(PG·가상계좌 결제 확정), `admin`(주문→입금→준비→배송→완료 한 단계), `cancel`(취소·반품: 고객, 관리자, 만료 작업, 결제 실패, 반품) |
+| `shop.order.paid` | 이벤트 | `order`, `source` | 주문이 입금 상태가 됐을 때. 같은 변경의 `status_changed` 바로 뒤에 옵니다 |
+
+주문 hook은 **변경이 커밋된 뒤**에 보냅니다. 결제나 취소가 롤백되면 아무것도 보내지 않고, 같은 결제 확정이 다시 와도(웹훅 재전송) 상태가 바뀌지 않았으면 보내지 않습니다. 리스너에서 받은 `order`는 커밋된 값이지만, 다른 요청이 그 사이에 바꿨을 수 있으니 필요하면 `refresh_from_db()` 하세요.
 
 ### 예제 플러그인이 보내는 hook
 
@@ -111,8 +116,6 @@ def double_on_weekends(point, user, streak, day, **kwargs):
 |---|---|---|
 | `attendance.point` | 값 바꾸기 | `point`, `user`, `streak`, `day` |
 | `attendance.checked_in` | 이벤트 | `attendance` |
-
-주문·결제 hook(`shop.order.paid` 등)은 아직 없습니다. 결제 확정 경로가 여러 곳이라, 한 곳에서 보내도록 정리한 뒤 추가할 예정입니다.
 
 ## 출석체크 예제
 
@@ -174,4 +177,4 @@ def home_widget(request):
 ## 앞으로
 
 - Python entry points 자동 발견(pip로 설치한 플러그인)
-- 주문·결제·글쓰기 hook
+- 글쓰기·댓글·회원가입 hook

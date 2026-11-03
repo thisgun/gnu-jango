@@ -55,6 +55,7 @@ from gnu_jango.shop.models import (
 from gnu_jango.shop.cash_receipts import customer_payload as cash_receipt_payload, schedule_close_settlement
 from gnu_jango.shop.coupon_dates import coupon_end_date
 from gnu_jango.shop.inventory import StockAdjustmentError, cancel_order_with_stock_restore, reserve_product_stock
+from gnu_jango.shop.order_hooks import order_placed, order_status_changed
 from gnu_jango.shop.delivery import delivery_inquiry
 from gnu_jango.shop.delivery_tracking import tracking_payload
 from gnu_jango.shop.images import upload_product_images
@@ -1088,6 +1089,7 @@ def create_order_from_lines(user, lines, data, *, order_id=None, force_status=No
                 "dt_time": timezone.now(),
             },
         )
+    order_placed(order)
     return order
 
 
@@ -1684,10 +1686,15 @@ def cancel_order_and_refund_benefits(order, reason, *, refund_price=0, history="
         locked = ShopOrder.objects.select_for_update().filter(pk=order.pk).first() or order
         if str(locked.od_status or "") in CANCELLED_STATUSES:
             return locked, 0
+        previous_status = str(locked.od_status or "")
         restore_order_coupons_and_points(locked)
         # once this commits: cancel the order's cash receipt (Toss) or flag it for a manual cancel
         schedule_close_settlement(locked)
-        return cancel_order_with_stock_restore(locked, reason, refund_price=refund_price, history=history, status=status)
+        cancelled, restored = cancel_order_with_stock_restore(
+            locked, reason, refund_price=refund_price, history=history, status=status
+        )
+        order_status_changed(cancelled, previous_status, status, source="cancel")
+        return cancelled, restored
 
 
 def cancel_shop_order_locally(order_id, reason):
