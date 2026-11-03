@@ -12,8 +12,12 @@ replaces the earlier registration.
 Hooks the core sends (docs/04-deploy/plugins.md keeps the list):
 - ``member.visited`` (user, request): a member signed in, or a signed-in member loaded a page
   (/api/v1/auth/me). It can come many times a day, so listeners must be idempotent.
+- ``member.joined`` (user, request): a member signed up; see gnu_jango.users.member_hooks.
+- ``bbs.post.created`` / ``bbs.comment.created``: a post or comment was written through the board
+  API; see gnu_jango.bbs.board_hooks.
 - ``shop.order.placed`` / ``shop.order.status_changed`` / ``shop.order.paid``: see
-  gnu_jango.shop.order_hooks. They are sent after the change commits.
+  gnu_jango.shop.order_hooks.
+All but member.visited are sent after the change commits.
 """
 
 import logging

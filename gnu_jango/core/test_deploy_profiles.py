@@ -404,6 +404,7 @@ class ScheduledJobsRunnerTests(TestCase):
                 # The bundled plugins' jobs: the suite runs with gnu_plugins.* installed.
                 "attendance_monthly_bonus",
                 "order_notify_retry",
+                "level_up_sweep",
             ],
         )
         for name, args in runner.calls:
