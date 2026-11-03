@@ -7,6 +7,7 @@ cf_docs_group names that group in /api/v1/settings; ensure_handbook_samples buil
 import io
 import json
 import re
+import time
 
 from django.core.management import CommandError, call_command
 from django.test import TestCase
@@ -453,3 +454,24 @@ class HandbookSamplesTests(TestCase):
     def test_refresh_and_update_unedited_cannot_be_combined(self):
         with self.assertRaises(CommandError):
             call_command("ensure_handbook_samples", "--refresh", "--update-unedited", stdout=io.StringIO())
+
+
+def test_a_signature_counts_only_at_the_very_end_and_as_a_full_digest():
+    signed = samples.sign("<p>text</p>")
+
+    assert samples.is_unedited(signed)
+    assert samples.is_unedited(signed + "\n\n  ")
+    assert samples._unsigned(signed) == "<p>text</p>"
+    assert not samples.is_unedited(signed.replace("<p>text", "<p>texts"))
+    assert not samples.is_unedited(signed + "\n<p>added below</p>")
+    assert not samples.is_unedited("<p>text</p>\n<!-- hb-sample:abc -->")
+
+
+def test_a_body_with_a_long_run_of_spaces_is_read_quickly():
+    content = "<p>x</p><!-- hb-sample:" + " " * 200_000 + "x"
+    started = time.perf_counter()
+
+    assert not samples.is_unedited(content)
+    assert samples._unsigned(content) == content
+
+    assert time.perf_counter() - started < 1

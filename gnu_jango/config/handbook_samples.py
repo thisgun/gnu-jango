@@ -10,7 +10,6 @@ refuses to reuse a table name that already belongs to something else.
 """
 
 import hashlib
-import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as datetime_timezone
 
@@ -169,15 +168,31 @@ def _chapter_body(title):
 # A sample chapter ends with a signature of its own text. A chapter whose text still matches it was
 # not edited by anyone, so --update-unedited may replace it with newer sample text; an edit (even a
 # reformat by the editor) breaks the match and the chapter is kept.
-_SIGNATURE = re.compile(r"\s*<!-- hb-sample:([0-9a-f]{16}) -->\s*$")
+# Parsed with string methods rather than a regex, so a body ending in a long run of spaces stays cheap.
+_SIGN_OPEN = "<!-- hb-sample:"
+_SIGN_CLOSE = " -->"
+_DIGEST_CHARS = frozenset("0123456789abcdef")
+_DIGEST_LENGTH = 16
+
+
+def _split_signature(content):
+    """``(text, digest)`` of signed content; ``(text, None)`` when it carries no signature."""
+    text = (content or "").rstrip()
+    start = text.rfind(_SIGN_OPEN)
+    if start == -1 or not text.endswith(_SIGN_CLOSE):
+        return text, None
+    digest = text[start + len(_SIGN_OPEN) : -len(_SIGN_CLOSE)]
+    if len(digest) != _DIGEST_LENGTH or not _DIGEST_CHARS.issuperset(digest):
+        return text, None
+    return text[:start].rstrip(), digest
 
 
 def _digest(text):
-    return hashlib.sha256(text.rstrip().encode("utf-8")).hexdigest()[:16]
+    return hashlib.sha256(text.rstrip().encode("utf-8")).hexdigest()[:_DIGEST_LENGTH]
 
 
 def _unsigned(content):
-    return _SIGNATURE.sub("", content or "").rstrip()
+    return _split_signature(content)[0]
 
 
 def sign(content):
@@ -188,8 +203,8 @@ def sign(content):
 
 def is_unedited(content):
     """True when ``content`` carries a signature that still matches its text."""
-    match = _SIGNATURE.search(content or "")
-    return bool(match) and match.group(1) == _digest(_unsigned(content))
+    text, digest = _split_signature(content)
+    return digest is not None and digest == _digest(text)
 
 
 def _link_block(link_html, marker):
@@ -218,7 +233,7 @@ def _update_unedited(post, report):
         if unchanged.update(wr_content=sign(body), wr_last=timezone.now()):
             report["updated"] += 1
             return
-    elif not _SIGNATURE.search(content) and _without_links(content) == body.rstrip():
+    elif _split_signature(content)[1] is None and _without_links(content) == body.rstrip():
         # Made before chapters were signed and still the current sample text: sign it, change nothing.
         if unchanged.update(wr_content=sign(content)):
             report["signed"] += 1
