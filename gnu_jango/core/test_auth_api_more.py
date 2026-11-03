@@ -378,6 +378,25 @@ class RegisterInputTests(AuthTestBase):
         self.assertNotEqual(Profile.objects.get(user=user).user_point, 99999)
         self.assertFalse(response.json()["data"]["is_super_admin"])
 
+    def test_a_new_member_starts_at_the_site_s_sign_up_level(self):
+        self.set_config("cf_register_level", "3")
+
+        response = self.register()
+
+        self.assertEqual(response.status_code, 201, response.content[:200])
+        user = self.user_model.objects.get(username="reg_member")
+        self.assertEqual(Profile.objects.get(user=user).user_level, 3)
+
+    def test_a_sign_up_level_out_of_range_falls_back_to_2(self):
+        for value in ("10", "0", "abc"):
+            with self.subTest(value=value):
+                self.set_config("cf_register_level", value)
+                self.user_model.objects.filter(username="reg_member").delete()
+
+                self.assertEqual(self.register().status_code, 201)
+                user = self.user_model.objects.get(username="reg_member")
+                self.assertEqual(Profile.objects.get(user=user).user_level, 2)
+
     def test_ids_of_the_wrong_length_or_alphabet_are_refused(self):
         for bad in ("ab", "a" * 21, "has space", "hy-phen", "dot.id", "한글아이디", "１２３４", "a@b", "x';--"):
             cache.clear()  # registration is limited to five a minute
