@@ -24,6 +24,9 @@ from django.core.exceptions import ImproperlyConfigured
 # names that hold its state ("plugin.<slug>.enabled"), whose column takes 50 characters.
 SLUG_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,29}$")
 SETTING_NAME_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]{1,59}$")
+SLOT_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$")
+# /api/v1/plugins/slots is the core's own endpoint.
+RESERVED_SLUGS = {"slots"}
 CONFIG_NAME_LENGTH = 50
 SETTING_TYPES = (bool, int, str)
 
@@ -63,6 +66,18 @@ class Setting:
 
 
 @dataclass(frozen=True)
+class Slot:
+    """A widget the plugin puts in a theme slot (e.g. "home.sidebar").
+
+    ``provider`` is the dotted path of a function(request) that returns the widget as a dict - title,
+    body, stats [{label, value}], actions [{label, method GET/POST, url (a site path), primary}] - or
+    None to show nothing (gnu_jango.plugins.slots)."""
+
+    name: str
+    provider: str
+
+
+@dataclass(frozen=True)
 class Plugin:
     slug: str
     title: str
@@ -72,6 +87,7 @@ class Plugin:
     admin_links: tuple[AdminLink, ...] = ()
     jobs: tuple[Job, ...] = ()
     settings: tuple[Setting, ...] = ()
+    slots: tuple[Slot, ...] = ()
     api_version: int = 0  # must be declared: the PLUGIN_API_VERSION the plugin was written for
 
     def setting(self, name):
@@ -109,12 +125,17 @@ def _manifest(name):
         raise ImproperlyConfigured(
             f"{module_name}: the slug {plugin.slug!r} must be 2-30 lowercase letters, digits or _."
         )
+    if plugin.slug in RESERVED_SLUGS:
+        raise ImproperlyConfigured(f"{module_name}: the slug {plugin.slug!r} is reserved by the core.")
     if plugin.api_version != PLUGIN_API_VERSION:
         raise ImproperlyConfigured(
             f"{module_name} declares api_version={plugin.api_version}; this core supports "
             f"api_version={PLUGIN_API_VERSION}."
         )
     _check_settings(module_name, plugin)
+    for slot in plugin.slots:
+        if not SLOT_NAME_PATTERN.match(slot.name):
+            raise ImproperlyConfigured(f"{module_name}: the slot name {slot.name!r} must look like home.sidebar.")
     return plugin
 
 
