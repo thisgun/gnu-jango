@@ -68,6 +68,7 @@ urlpatterns = [
     path("impersonation/stop/", impersonation.stop_impersonation, name="impersonation-stop"),
     path("impersonation/logout/", impersonation.logout_impersonation, name="impersonation-logout"),
     path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
+    path("plugins/", include("gnu_jango.plugins.urls")),
     path("", include("gnu_jango.editor.urls")),
     path("", include("gnu_jango.core.urls")),
 ]

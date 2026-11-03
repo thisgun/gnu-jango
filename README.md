@@ -35,6 +35,7 @@ GNU Jango는 그누보드5·영카트의 게시판, 회원, 쇼핑몰 기능을 
 ```text
 example/                 Django 설정, URL, WSGI 진입점
 gnu_jango/               Django 앱, 관리자 화면, 템플릿, 테마 산출물
+gnu_plugins/             G5_PLUGINS로 켜는 플러그인 (예제: attendance 출석체크)
 nextjs/                  Next.js 프런트엔드 소스와 빌드 도구
 deploy/env/              Vercel, VPS, 분리형 배포 환경변수 예시
 docs/04-deploy/          배포 및 테마 운영 안내
@@ -385,6 +386,10 @@ celery -A example beat -l INFO
 재시도·타임아웃·실패 작업 재처리·이미지 처리 중 표시·Vercel 외부 작업자 구성은 [백그라운드 작업 운영 가이드](docs/04-deploy/background-jobs.md)를 참고하세요. 새 모드로 전환한 뒤에는 기존 cron 예약을 끄세요. 기존 `python manage.py run_scheduled_jobs`는 수동 점검과 이전 배포 구성을 위한 명령으로 유지합니다.
 
 기존 Vercel·Supabase 사이트에 작업자만 추가하려면 [외부 작업자 배포 안내](docs/04-deploy/external-background-workers.md)를 따르세요. 독립 파일 `docker-compose.background.yml`은 별도 Linux 서버에서 Redis·일반 작업자·이미지 작업자·Beat를 실행하며, 기존 웹·DB를 새로 만들거나 시작 시 마이그레이션을 자동 적용하지 않습니다.
+
+## 플러그인
+
+코어를 고치지 않고 기능을 더하려면 Django 앱 형태의 플러그인을 만들고 `G5_PLUGINS`에 적습니다(예: `G5_PLUGINS=gnu_plugins.attendance` 후 `python manage.py migrate`). 플러그인이 `plugin.py`에 선언한 API·화면 URL, 관리자 사이드바 메뉴, 예약 작업은 코어가 자동으로 연결하고, 그누보드5의 `run_event`/`run_replace`처럼 `hooks.on`·`hooks.emit`·`hooks.replace`로 코어와 다른 플러그인의 동작에 끼어들 수 있습니다. 예제 출석체크 플러그인과 작성 방법, hook 목록은 [플러그인 안내](docs/04-deploy/plugins.md)를 참고하세요.
 
 ## 개발 점검
 

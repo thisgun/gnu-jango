@@ -31,6 +31,7 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from gnu_jango.config.models import Config
+from gnu_jango.plugins import hooks
 from gnu_jango.shop.signup_coupon import issue_signup_coupon
 from gnu_jango.shop.sms.notifications import queue_member_join_sms
 from gnu_jango.users import point_ledger
@@ -1061,6 +1062,12 @@ def award_login_points(user):
     )
 
 
+def member_visited(user, request):
+    """A member signed in or loaded a page while signed in: the daily login points, then plugins."""
+    award_login_points(user)
+    hooks.emit("member.visited", user=user, request=request)
+
+
 def reissue_auth(response, user, request):
     """Give the current client a fresh token pair (and cookies) after the old ones were revoked."""
     payload = _auth_payload(user, request)
@@ -1232,7 +1239,7 @@ def login_view(request):
     if certify_error:
         return certify_error
 
-    award_login_points(user)
+    member_visited(user, request)
     merge_guest_cart(request, user)
     payload = _auth_payload(user, request, auto_login=auto_login)
     response = api_response(data=payload, status=status.HTTP_200_OK)
@@ -1434,7 +1441,7 @@ def me_view(request):
     if user.is_active:
         # Gnuboard5 grants the daily login points on the first visit of the day, also for members
         # who stay signed in; the site calls this on every page load and the ledger keeps it to once.
-        award_login_points(user)
+        member_visited(user, request)
     member = {**member_payload(user, request), **_own_contact_payload(user)}
     return api_response(data={"member": member, "is_super_admin": bool(user.is_superuser)})
 
@@ -1678,7 +1685,7 @@ def social_exchange_view(request):
     if certify_error:
         return certify_error
 
-    award_login_points(user)
+    member_visited(user, request)
     auth_payload = _auth_payload(user, request, auto_login=False)
     response = api_response(data=auth_payload, status=status.HTTP_200_OK)
     _set_auth_cookies(response, request, auth_payload["token"], auth_payload["refresh_token"], False)
