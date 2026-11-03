@@ -7,6 +7,7 @@ from .handbook_audit_content import AUDIT_GUIDES
 from .handbook_commerce_content import COMMERCE_GUIDES
 from .handbook_search_content import SEARCH_GUIDES
 from .handbook_notification_content import NOTIFICATION_GUIDES
+from .handbook_plugin_content import PLUGIN_GUIDES
 
 
 # The marker lets ensure_handbook_samples refresh old demo text without replacing
@@ -164,6 +165,7 @@ GUIDES = {
                 "{{example/}}: Django 프로젝트의 설정, URL, 실행 진입점이 있습니다.",
                 "{{gnu_jango/bbs/}}와 {{gnu_jango/users/}}: 게시판과 회원 기능을 담당합니다.",
                 "{{gnu_jango/shop/}}: 상품, 장바구니, 주문과 결제 설정 같은 쇼핑몰 기능이 있습니다.",
+                "{{gnu_plugins/}}: 코어를 고치지 않고 기능을 더하는 플러그인이 있습니다. 예제는 출석체크({{gnu_plugins/attendance/}})입니다.",
                 "{{gnu_jango/api/}}: Next.js 화면이 사용하는 REST API를 담당합니다.",
                 "{{gnu_jango/templates/}}: Django 관리자 화면, 서버 페이지, 테마 산출물이 있습니다.",
                 "{{nextjs/src/app/}}: URL에 대응하는 Next.js 페이지와 화면 구성 요소가 있습니다.",
@@ -927,6 +929,7 @@ GUIDES.update(SEARCH_GUIDES)
 GUIDES.update(NOTIFICATION_GUIDES)
 GUIDES.update(AUDIT_GUIDES)
 GUIDES.update(COMMERCE_GUIDES)
+GUIDES.update(PLUGIN_GUIDES)
 
 
 def _inline_text(value):

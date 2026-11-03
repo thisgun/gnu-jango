@@ -17,6 +17,7 @@ from gnu_jango.config import handbook_samples as samples
 from gnu_jango.config.handbook_audit_content import AUDIT_LINK_MARKER, AUDIT_LINK_TITLES
 from gnu_jango.config.handbook_commerce_content import COMMERCE_LINK_MARKER, COMMERCE_LINK_TITLES
 from gnu_jango.config.handbook_content import GUIDES
+from gnu_jango.config.handbook_plugin_content import PLUGIN_LINK_MARKER, PLUGIN_LINK_TITLES
 from gnu_jango.config.models import Config
 
 API = "/api/v1"
@@ -210,6 +211,68 @@ class HandbookSamplesTests(TestCase):
         self.assertEqual(response.status_code, 200)
         results = response.json()["data"]["results"]
         self.assertTrue(any("정기구독" in item.get("title", "") for item in results), results)
+
+    def test_the_plugin_book_has_operator_and_developer_parts(self):
+        samples.ensure_samples()
+
+        book = Board.objects.get(bo_table="hb_plugins")
+        titles = [post["wr_subject"] for post in self.chapters("hb_plugins")]
+
+        self.assertEqual(book.bo_subject, "확장 기능 · 플러그인과 출석체크")
+        self.assertEqual(book.bo_category_list.split("|"), ["먼저 읽기", "운영자용", "개발자용"])
+        self.assertEqual(len(titles), 6)
+        for title in titles:
+            with self.subTest(title=title):
+                self.assertIn(title, GUIDES)
+                body = Post.objects.get(board=book, wr_subject=title).wr_content
+                self.assertGreaterEqual(len(re.findall(r"<h2[ >]", body)), 2)
+
+    def test_plugin_chapters_match_the_example_plugin(self):
+        from gnu_plugins.attendance.plugin import PLUGIN
+
+        body = samples.chapter_body("출석체크 플러그인 운영하기")
+
+        for setting in PLUGIN.settings:
+            with self.subTest(setting=setting.name):
+                self.assertIn(setting.name, body)
+                self.assertIn(setting.label, body)
+        self.assertIn("2~30자", samples.chapter_body("플러그인 만들기"))
+
+    def test_a_deployed_manual_gets_the_plugin_book_without_touching_edited_chapters(self):
+        samples.ensure_samples()
+        Post.objects.filter(board__bo_table="hb_plugins").delete()
+        Board.objects.filter(bo_table="hb_plugins").delete()
+        edited = Post.objects.get(wr_subject="환경 변수")
+        edited.wr_content = "<p>admin-sentinel-602</p>"
+        edited.save(update_fields=("wr_content",))
+
+        result = samples.ensure_samples()
+
+        self.assertEqual(result["chapters_created"], 6)
+        self.assertEqual(result["chapters_updated"], 0)
+        edited.refresh_from_db()
+        self.assertIn("admin-sentinel-602", edited.wr_content)
+        self.assertIn('href="/bbs/hb_plugins"', edited.wr_content)
+
+    def test_related_dev_chapters_link_to_the_plugin_book_once(self):
+        samples.ensure_samples()
+        samples.ensure_samples()
+
+        for title in PLUGIN_LINK_TITLES:
+            with self.subTest(title=title):
+                target = Post.objects.get(wr_subject=title)
+                self.assertIn('href="/bbs/hb_plugins"', target.wr_content)
+                self.assertEqual(target.wr_content.count(PLUGIN_LINK_MARKER), 1)
+
+    def test_plugin_chapters_are_searchable_after_reindex(self):
+        samples.ensure_samples()
+        call_command("rebuild_search_index", stdout=io.StringIO())
+
+        response = APIClient().get(f"{API}/search/unified", {"q": "출석체크", "type": "document", "limit": 10})
+
+        self.assertEqual(response.status_code, 200)
+        results = response.json()["data"]["results"]
+        self.assertTrue(any("출석체크" in item.get("title", "") for item in results), results)
 
     def test_running_it_again_adds_nothing(self):
         samples.ensure_samples()

@@ -37,6 +37,14 @@ from .handbook_commerce_content import (
     COMMERCE_LINK_TITLES,
 )
 from .handbook_content import LEGACY_SAMPLE_MARKER, chapter_body
+from .handbook_plugin_content import (
+    PLUGIN_BOOK_PARTS,
+    PLUGIN_BOOK_TABLE,
+    PLUGIN_BOOK_TITLE,
+    PLUGIN_LINK_HTML,
+    PLUGIN_LINK_MARKER,
+    PLUGIN_LINK_TITLES,
+)
 
 GROUP_ID = "manual"
 GROUP_SUBJECT = "매뉴얼"
@@ -137,12 +145,18 @@ BOOKS = (
         COMMERCE_BOOK_TITLE,
         COMMERCE_BOOK_PARTS,
     ),
+    Book(
+        PLUGIN_BOOK_TABLE,
+        PLUGIN_BOOK_TITLE,
+        PLUGIN_BOOK_PARTS,
+    ),
 )
 
 # (chapter titles, link html, marker): "see also" links appended once to existing chapters.
 LINK_BLOCKS = (
     (AUDIT_LINK_TITLES, AUDIT_LINK_HTML, AUDIT_LINK_MARKER),
     (COMMERCE_LINK_TITLES, COMMERCE_LINK_HTML, COMMERCE_LINK_MARKER),
+    (PLUGIN_LINK_TITLES, PLUGIN_LINK_HTML, PLUGIN_LINK_MARKER),
 )
 
 
@@ -261,7 +275,7 @@ def _chapters(board, book, created_at, *, refresh=False):
 
 
 def _add_links():
-    """Point key existing chapters at the newer books (audit, commerce) without replacing their content."""
+    """Point key existing chapters at the newer books (audit, commerce, plugins) without replacing their content."""
     added = 0
     for titles, link_html, marker in LINK_BLOCKS:
         posts = Post.objects.filter(board__bo_table__in=_book_table_names(), wr_subject__in=titles)
