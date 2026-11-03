@@ -220,7 +220,7 @@ class HandbookSamplesTests(TestCase):
 
         self.assertEqual(book.bo_subject, "확장 기능 · 플러그인과 출석체크")
         self.assertEqual(book.bo_category_list.split("|"), ["먼저 읽기", "운영자용", "개발자용"])
-        self.assertEqual(len(titles), 6)
+        self.assertEqual(len(titles), 7)
         for title in titles:
             with self.subTest(title=title):
                 self.assertIn(title, GUIDES)
@@ -238,6 +238,22 @@ class HandbookSamplesTests(TestCase):
                 self.assertIn(setting.label, body)
         self.assertIn("2~30자", samples.chapter_body("플러그인 만들기"))
 
+    def test_the_order_notify_chapter_matches_the_plugin(self):
+        from gnu_plugins.order_notify.channels import CHANNEL_ENV
+        from gnu_plugins.order_notify.plugin import PLUGIN
+
+        body = samples.chapter_body("주문 알림 플러그인 운영하기")
+
+        for setting in PLUGIN.settings:
+            with self.subTest(setting=setting.name):
+                self.assertIn(setting.name, body)
+                self.assertIn(setting.label, body)
+        for name in (name for names in CHANNEL_ENV.values() for name in names):
+            with self.subTest(env=name):
+                self.assertIn(name, body)
+        for job in PLUGIN.jobs:
+            self.assertIn(job.command, body)
+
     def test_a_deployed_manual_gets_the_plugin_book_without_touching_edited_chapters(self):
         samples.ensure_samples()
         Post.objects.filter(board__bo_table="hb_plugins").delete()
@@ -248,7 +264,7 @@ class HandbookSamplesTests(TestCase):
 
         result = samples.ensure_samples()
 
-        self.assertEqual(result["chapters_created"], 6)
+        self.assertEqual(result["chapters_created"], 7)
         self.assertEqual(result["chapters_updated"], 0)
         edited.refresh_from_db()
         self.assertIn("admin-sentinel-602", edited.wr_content)

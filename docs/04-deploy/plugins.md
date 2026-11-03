@@ -2,7 +2,7 @@
 
 코어(`gnu_jango/`)를 고치지 않고 기능을 더하는 방법입니다. 플러그인은 보통의 Django 앱이고, `G5_PLUGINS`에 적은 것만 켜집니다. 코어는 플러그인이 선언한 URL·관리자 메뉴·예약 작업을 자동으로 연결하고, 정해진 지점에서 hook을 보냅니다.
 
-예제는 `gnu_plugins/attendance/`(출석체크)입니다. 새 플러그인을 만들 때 이 폴더를 복사해 시작하세요. 운영자용 설명은 매뉴얼 사이트의 「확장 기능 · 플러그인과 출석체크」 책(`hb_plugins`)에 있습니다.
+예제는 `gnu_plugins/attendance/`(출석체크)입니다. 새 플러그인을 만들 때 이 폴더를 복사해 시작하세요. hook만 쓰는 예는 `gnu_plugins/order_notify/`(주문 알림)입니다. 운영자용 설명은 매뉴얼 사이트의 「확장 기능 · 플러그인과 출석체크」 책(`hb_plugins`)에 있습니다.
 
 ## 설치와 켜고 끄기
 
@@ -30,7 +30,7 @@ python manage.py check          # 플러그인 선언 확인 (잘못되면 여�
 - 완전히 없애려면 `G5_PLUGINS`에서 지우고 다시 배포합니다. 테이블과 포인트 기록은 남습니다(지우려면 먼저 `python manage.py migrate attendance zero`).
 - Vercel은 실행 중에 패키지를 설치할 수 없으므로, 플러그인 코드는 저장소에 두거나 `requirements.txt`에 넣어 배포합니다.
 - 플러그인은 코어와 같은 권한으로 실행되는 Python 코드입니다. 신뢰하는 코드만 설치하세요.
-- 테스트(pytest)는 `.env`의 `G5_PLUGINS`와 상관없이 예제 플러그인을 더해서 돕니다. 코어의 연결 지점이 테스트에서 늘 검증되게 하기 위해서입니다.
+- 테스트(pytest)는 `.env`의 `G5_PLUGINS`와 상관없이 저장소의 플러그인(`gnu_plugins.*`)을 모두 더해서 돕니다. 코어의 연결 지점이 테스트에서 늘 검증되게 하기 위해서입니다.
 
 ## 플러그인 구조
 
@@ -145,6 +145,38 @@ python manage.py attendance_monthly_bonus                          # 최근 3개
 python manage.py attendance_monthly_bonus --apply                  # 최근 3개월 지급 (예약 작업이 하는 일)
 python manage.py attendance_monthly_bonus --month 2026-10 --apply  # 한 달만
 ```
+
+## 주문 알림
+
+`gnu_plugins/order_notify/`는 `shop.order.*` hook을 받아 새 주문, 결제 완료, 취소·반품을 디스코드·슬랙·텔레그램으로 보냅니다. 코어를 고치지 않고 hook만으로 만든 두 번째 플러그인입니다.
+
+```dotenv
+G5_PLUGINS=gnu_plugins.attendance,gnu_plugins.order_notify
+# 받을 곳: 비밀값이라 환경 변수에만 둡니다(관리자 화면·Config에 저장하지 않음). 하나 이상
+ORDER_NOTIFY_DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+ORDER_NOTIFY_SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+ORDER_NOTIFY_TELEGRAM_BOT_TOKEN=123456:ABC...
+ORDER_NOTIFY_TELEGRAM_CHAT_ID=-100...
+```
+
+```bash
+python manage.py migrate
+python manage.py order_notify_test            # 채널마다 테스트 알림 (DB에 남기지 않음)
+python manage.py order_notify_retry --apply   # 실패한 알림 다시 보내기 (5분마다 도는 예약 작업)
+```
+
+| 항목 | 내용 |
+|---|---|
+| 보내는 때 | 주문이 커밋된 뒤 같은 요청 안에서 바로. 채널당 타임아웃 3초 |
+| 주소 확인 | 디스코드 `https://discord.com/api/webhooks/`, 슬랙 `https://hooks.slack.com/services/`, 텔레그램 토큰·채팅방 형식이 아니면 무시. 리다이렉트를 따라가지 않음 |
+| 재시도 | 타임아웃·429·5xx는 `pending`으로 남아 `order_notify_retry`가 24시간 안에 최대 5번(한 번에 50건, 오래된 것부터). 그 밖의 4xx는 바로 `failed` |
+| 멈춘 채널 | 일시 오류가 난 채널은 5분 동안 요청 안에서 보내지 않고 예약 작업에 맡김(채널이 죽어도 주문 요청은 한 번만 3초를 기다림) |
+| 중복 | (주문번호, 알림 종류와 상태, 채널)마다 한 번. 보내기 전에 `sending`으로 선점해, 요청·예약 작업·관리자 재발송이 겹쳐도 한 번만 보냄. 10분 넘게 `sending`인 것은 예약 작업이 풀어 줌 |
+| 다시 같은 알림 | 같은 주문이 같은 상태로 다시 바뀌어도(입금→주문→입금) 두 번째 알림은 보내지 않음 |
+| 개인정보 | 주문자 이름은 기본으로 가림(`홍*동`). 이름·상품명은 한 줄로 만들고 마크다운·링크 문자를 뺌. 주소·연락처·이메일은 보내지 않음 |
+| 관리자 | 사이드바 **플러그인 › 주문 알림 기록**, 액션 「선택한 알림 다시 보내기」(실패·대기 건만, 한 번에 20건). 기록 삭제는 슈퍼유저만 |
+
+설정(`/admin/plugins/`): `ORDER_NOTIFY_PLACED`(True), `ORDER_NOTIFY_PAID`(True), `ORDER_NOTIFY_CANCELLED`(True), `ORDER_NOTIFY_OTHER_STATUS`(False, 준비·배송·완료), `ORDER_NOTIFY_FULL_NAME`(False).
 
 ## 테마 슬롯
 

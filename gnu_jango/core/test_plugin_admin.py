@@ -62,6 +62,7 @@ def test_the_sidebar_hides_a_switched_off_plugin_but_keeps_the_manager(rf):
     request = rf.get("/admin/")
     request.user = AdminFactory()
     state.set_enabled("attendance", False)
+    state.set_enabled("order_notify", False)
 
     items = sidebar_navigation(request)[-1]["items"]
 
