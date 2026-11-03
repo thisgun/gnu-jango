@@ -40,8 +40,15 @@ def on(name, *, priority=DEFAULT_PRIORITY):
     return register
 
 
+def _active(name):
+    """The listeners of ``name``, without those of plugins switched off in the admin."""
+    from . import state
+
+    return [entry for entry in tuple(_listeners.get(name, ())) if state.module_enabled(entry[2].__module__)]
+
+
 def emit(name, **payload):
-    for _priority, key, func in tuple(_listeners.get(name, ())):
+    for _priority, key, func in _active(name):
         try:
             with transaction.atomic():
                 func(**payload)
@@ -50,7 +57,7 @@ def emit(name, **payload):
 
 
 def replace(name, value, **context):
-    for _priority, key, func in tuple(_listeners.get(name, ())):
+    for _priority, key, func in _active(name):
         try:
             with transaction.atomic():
                 value = func(value, **context)

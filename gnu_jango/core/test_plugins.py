@@ -207,8 +207,9 @@ def test_the_sidebar_adds_a_plugins_group_after_the_core_groups():
     groups = sidebar_navigation(request)
 
     assert groups[: len(settings.G5_ADMIN_NAVIGATION)] == list(settings.G5_ADMIN_NAVIGATION)
-    item = groups[-1]["items"][0]
-    assert str(item["link"]) == "/admin/attendance/attendance/"
+    links = {str(item["link"]): item for item in groups[-1]["items"]}
+    assert list(links) == ["/admin/plugins/", "/admin/attendance/attendance/"]
+    item = links["/admin/attendance/attendance/"]
     assert item["permission"](request) is True
 
     request.user = MemberFactory(is_staff=True)

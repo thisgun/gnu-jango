@@ -4,10 +4,12 @@
 
 예제는 `gnu_plugins/attendance/`(출석체크)입니다. 새 플러그인을 만들 때 이 폴더를 복사해 시작하세요.
 
-## 켜고 끄기
+## 설치와 켜고 끄기
+
+설치는 배포로, 켜고 끄기와 설정은 관리자 화면에서 합니다.
 
 ```dotenv
-# .env 또는 배포 환경 변수 (쉼표로 여러 개)
+# 설치: .env 또는 배포 환경 변수 (쉼표로 여러 개)
 G5_PLUGINS=gnu_plugins.attendance
 ```
 
@@ -16,7 +18,16 @@ python manage.py migrate        # 플러그인 테이블 만들기
 python manage.py check          # 플러그인 선언 확인 (잘못되면 여기서 멈춥니다)
 ```
 
-- 끌 때는 `G5_PLUGINS`에서 지우고 다시 배포합니다. 테이블과 포인트 기록은 남습니다(지우려면 끄기 전에 `python manage.py migrate attendance zero`).
+설치한 플러그인은 켜진 상태로 시작합니다. 관리자 사이드바 **플러그인 › 플러그인 관리**(`/admin/plugins/`, 슈퍼유저만)에서 재배포 없이 끄고 켤 수 있습니다. 끈 플러그인은
+
+- URL·API가 404를 돌려주고,
+- hook 리스너가 실행되지 않으며,
+- 예약 작업이 실행되지 않고 `skipped`로 기록되며(실패로 세지 않음),
+- 사이드바 플러그인 메뉴에서 링크가 빠집니다. 관리자 **모든 애플리케이션** 목록의 모델 화면은 남아 있어 기록은 계속 볼 수 있습니다.
+
+상태는 `Config` 테이블(`plugin.<slug>.enabled`)에 저장되어 변경 이력에 남고, 1분 캐시를 거치지만 이 화면에서 바꾸면 바로 반영됩니다.
+
+- 완전히 없애려면 `G5_PLUGINS`에서 지우고 다시 배포합니다. 테이블과 포인트 기록은 남습니다(지우려면 먼저 `python manage.py migrate attendance zero`).
 - Vercel은 실행 중에 패키지를 설치할 수 없으므로, 플러그인 코드는 저장소에 두거나 `requirements.txt`에 넣어 배포합니다.
 - 플러그인은 코어와 같은 권한으로 실행되는 Python 코드입니다. 신뢰하는 코드만 설치하세요.
 - 테스트(pytest)는 `.env`의 `G5_PLUGINS`와 상관없이 예제 플러그인을 더해서 돕니다. 코어의 연결 지점이 테스트에서 늘 검증되게 하기 위해서입니다.
@@ -37,7 +48,7 @@ gnu_plugins/attendance/
 ### plugin.py
 
 ```python
-from gnu_jango.plugins import AdminLink, Job, Plugin
+from gnu_jango.plugins import AdminLink, Job, Plugin, Setting
 
 PLUGIN = Plugin(
     slug="attendance",                       # URL에 쓰임: 소문자·숫자·_ 2~40자, 플러그인끼리 겹치면 안 됨
@@ -49,6 +60,7 @@ PLUGIN = Plugin(
     admin_links=(AdminLink("출석체크 기록", "admin:attendance_attendance_changelist",
                            icon="event_available", permission="attendance.view_attendance"),),
     jobs=(Job("attendance_monthly_bonus", ("--apply", "--json"), ("--json",), 86400),),
+    settings=(Setting("ATTENDANCE_POINT", "출석 포인트", 10, "출석할 때마다 주는 포인트"), ...),
 )
 ```
 
@@ -62,6 +74,7 @@ PLUGIN = Plugin(
 | `api_urls` | `/api/v1/plugins/<slug>/`에 include. URL 이름은 `api_v1:<app_name>:<name>`(예: `api_v1:attendance_api:check-in`). |
 | `admin_links` | 관리자 사이드바 맨 아래 **플러그인** 그룹. `permission`이 있으면 그 권한이 있는 직원에게만 보입니다. |
 | `jobs` | 예약 작업 등록표(`core.scheduled_jobs.SCHEDULED_JOBS`)에 추가. `run_scheduled_jobs`, `/api/internal/cron`, Celery Beat가 함께 실행합니다. 이름이 겹치면 시작할 때 오류. |
+| `settings` | `/admin/plugins/`에 입력 칸을 만듭니다. 형식은 `default`의 형식(bool은 체크박스, int는 숫자, str은 글자)을 따릅니다. 코드에서는 `gnu_jango.plugins.state.setting(slug, NAME)`으로 읽고, 값은 **관리자 저장값 → Django settings → 같은 이름의 환경 변수 → `default`** 순서로 정해집니다. |
 
 플러그인 API는 코어 API 계약(`openapi/schema.json`)에 넣지 않습니다. 뷰에 `@extend_schema(exclude=True)`를 붙이세요.
 
@@ -117,7 +130,7 @@ def double_on_weekends(point, user, streak, day, **kwargs):
 | 자동 출석 | `ATTENDANCE_AUTO_CHECK_IN=True`이면 `member.visited`를 받아 방문 시 자동 출석. 그날 출석 뒤의 방문은 캐시로 DB 조회 없이 넘어감 |
 | 관리자 | 사이드바 **플러그인 › 출석체크 기록** (읽기 전용) |
 
-설정(Django settings 또는 같은 이름의 환경 변수):
+설정(`/admin/plugins/`에서 바꾸거나, Django settings 또는 같은 이름의 환경 변수로 기본값을 정함):
 
 | 이름 | 기본값 |
 |---|---|
@@ -133,8 +146,35 @@ python manage.py attendance_monthly_bonus --apply                  # 최근 3개
 python manage.py attendance_monthly_bonus --month 2026-10 --apply  # 한 달만
 ```
 
+## 테마 슬롯
+
+플러그인은 테마의 정해진 자리(슬롯)에 위젯을 넣을 수 있습니다. 테마는 위젯을 **HTML이 아닌 데이터**로 받아 하나의 공통 모양으로 그리므로, 플러그인을 추가해도 테마를 다시 빌드할 필요가 없습니다.
+
+```python
+# plugin.py
+slots=(Slot("home.sidebar", "gnu_plugins.attendance.widgets.home_widget"),),
+
+# widgets.py: request를 받아 dict(또는 보여 줄 것이 없으면 None)를 돌려줌
+def home_widget(request):
+    return {
+        "title": "출석체크",
+        "body": "오늘 출석하면 10포인트를 드려요.",
+        "stats": [{"label": "연속 출석", "value": "3일"}],
+        "actions": [{"label": "출석하기", "method": "POST", "url": "/api/v1/plugins/attendance/check-in", "primary": True}],
+    }
+```
+
+- `GET /api/v1/plugins/slots?name=home.sidebar`가 켜진 플러그인들의 위젯을 모아 돌려줍니다(회원마다 다르므로 캐시하지 않음). 꺼진 플러그인과, 예외를 낸 provider의 위젯은 빠집니다.
+- 위젯 필드는 `title`, `body`, `stats`, `actions`만 남고 모두 글자로 바뀝니다. `actions`는 `GET`(링크)과 `POST`(API 호출 버튼)만, 그리고 `/`로 시작하는 사이트 안 경로만 허용합니다. 테마는 `POST`를 `/api/v1/`로 시작하는 주소일 때만 실행하고, 성공하면 위젯을 다시 불러옵니다.
+- 슬롯 이름은 `home.sidebar`처럼 점으로 나눈 소문자입니다. `slots`는 코어가 쓰므로 플러그인 slug로 쓸 수 없습니다.
+
+| 슬롯 | 위치 |
+|---|---|
+| `home.sidebar` | 기본 테마(`nextjs_default`) 커뮤니티 홈의 오른쪽 위젯 영역, 로그인 상자 바로 아래 |
+
+새 슬롯 자리를 테마에 만들 때만 `<PluginSlot name="..." />`를 넣고 테마를 한 번 다시 빌드합니다.
+
 ## 앞으로
 
-- 테마 슬롯: `<PluginSlot name="home.sidebar" />` 자리에 플러그인 위젯을 그리는 API (테마 재빌드 한 번 필요)
-- 관리자 플러그인 화면(켜고 끄기), Python entry points 자동 발견
+- Python entry points 자동 발견(pip로 설치한 플러그인)
 - 글쓰기·댓글·회원가입 hook

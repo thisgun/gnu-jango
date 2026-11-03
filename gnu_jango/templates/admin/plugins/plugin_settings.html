@@ -1,0 +1,82 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block title %}{% translate "플러그인 관리" %} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'admin_next/css/plugin_settings.css' %}">
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate "Home" %}</a>
+  &rsaquo; {% translate "플러그인 관리" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<main class="g5-plugins">
+  <section class="g5-plugins-hero">
+    <p class="g5-plugins-eyebrow">PLUGINS</p>
+    <h1>{% translate "플러그인 관리" %}</h1>
+    <p>{% translate "설치는 G5_PLUGINS 환경 변수와 배포로 합니다. 설치된 플러그인을 켜고 끄거나 설정을 바꾸는 일은 여기서 바로 반영됩니다." %}</p>
+  </section>
+
+  {% for row in rows %}
+  <article class="g5-plugin{% if not row.enabled %} is-off{% endif %}" aria-labelledby="plugin-{{ row.plugin.slug }}">
+    <header class="g5-plugin-head">
+      <div>
+        <h2 id="plugin-{{ row.plugin.slug }}">{{ row.plugin.title }}</h2>
+        <p class="g5-plugin-meta"><code>{{ row.plugin.slug }}</code> · v{{ row.plugin.version }}</p>
+      </div>
+      <span class="g5-plugin-status">{% if row.enabled %}{% translate "켜짐" %}{% else %}{% translate "꺼짐" %}{% endif %}</span>
+      <form method="post" class="g5-plugin-switch">
+        {% csrf_token %}
+        <input type="hidden" name="slug" value="{{ row.plugin.slug }}">
+        {% if row.enabled %}
+        <button type="submit" name="action" value="disable" class="button">{% translate "끄기" %}</button>
+        {% else %}
+        <button type="submit" name="action" value="enable" class="button default">{% translate "켜기" %}</button>
+        {% endif %}
+      </form>
+    </header>
+
+    {% if row.settings %}
+    <form method="post" class="g5-plugin-settings">
+      {% csrf_token %}
+      <input type="hidden" name="slug" value="{{ row.plugin.slug }}">
+      {% for item in row.settings %}
+      <div class="g5-plugin-field g5-plugin-field-{{ item.kind }}">
+        {% if item.kind == "bool" %}
+        <label class="g5-plugin-check">
+          <input type="checkbox" name="{{ item.setting.name }}" {% if item.value %}checked{% endif %}>
+          <span>{{ item.setting.label }}</span>
+        </label>
+        {% else %}
+        <label for="{{ row.plugin.slug }}-{{ item.setting.name }}">{{ item.setting.label }}</label>
+        <input id="{{ row.plugin.slug }}-{{ item.setting.name }}" name="{{ item.setting.name }}"
+               {% if item.kind == "int" %}type="number" step="1" inputmode="numeric"{% else %}type="text"{% endif %}
+               value="{{ item.value }}">
+        {% endif %}
+        <p class="g5-plugin-help">
+          <code>{{ item.setting.name }}</code>
+          {% if item.saved %}{% translate "관리자 저장값" %}{% else %}{% translate "기본값" %} {{ item.setting.default }}{% endif %}
+          {% if item.setting.help %}· {{ item.setting.help }}{% endif %}
+        </p>
+      </div>
+      {% endfor %}
+      <div class="g5-plugin-actions">
+        <button type="submit" name="action" value="save" class="button default">{% translate "설정 저장" %}</button>
+      </div>
+    </form>
+    {% endif %}
+  </article>
+  {% empty %}
+  <section class="g5-plugin g5-plugins-empty">
+    <h2>{% translate "설치된 플러그인이 없습니다" %}</h2>
+    <p>{% translate "예: G5_PLUGINS=gnu_plugins.attendance 를 설정하고 배포한 뒤 python manage.py migrate 를 실행하세요." %}</p>
+  </section>
+  {% endfor %}
+</main>
+{% endblock %}
