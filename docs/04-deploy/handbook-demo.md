@@ -134,6 +134,24 @@ python manage.py ensure_handbook_samples
 python manage.py rebuild_search_index
 ```
 
+## 플러그인과 출석체크 안내
+
+`ensure_handbook_samples`는 **「확장 기능 · 플러그인과 출석체크」** 책(`hb_plugins`)과 6개 장을 추가합니다.
+샘플 원본은 `gnu_jango/config/handbook_plugin_content.py`이고, 개발자용 참고 문서 `docs/04-deploy/plugins.md`와 내용을 맞춥니다.
+
+- **먼저 읽기**: 플러그인이 할 수 있는 일, 설치(`G5_PLUGINS`·배포·migrate)와 켜고 끄기(관리자)의 차이.
+- **운영자용**: 설치, `/admin/plugins/`에서 켜고 끄기·설정, 끈 플러그인의 동작, 완전히 없애기. 출석체크의 화면·포인트 규칙·설정·기록·개근 보너스 작업.
+- **개발자용**: 예제 복사로 시작하기, `plugin.py` 선언, 설정값 읽기, hook(코어·주문·출석체크), 테마 슬롯 위젯.
+
+기존 책의 「폴더 구조」「슬롯 끼우기」「환경 변수」 장 끝에는 이 책으로 가는 ‘함께 보기’ 링크를 한 번만 덧붙입니다.
+매뉴얼 사이트 자체에는 플러그인을 설치하지 않아도 됩니다(설명만 담은 책입니다). 이미 배포한 핸드북 DB에 반영하려면 그 DB에서
+다음을 실행합니다(`--refresh`는 붙이지 않습니다).
+
+```bash
+python manage.py ensure_handbook_samples
+python manage.py rebuild_search_index
+```
+
 ## 주의
 
 - 두 프로젝트가 같은 `main` 을 보므로 push 한 번에 **둘 다** 배포됩니다. 한쪽만 배포하려면 프로젝트의 Ignored Build Step 을 쓰세요.

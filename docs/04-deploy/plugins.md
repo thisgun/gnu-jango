@@ -2,7 +2,7 @@
 
 코어(`gnu_jango/`)를 고치지 않고 기능을 더하는 방법입니다. 플러그인은 보통의 Django 앱이고, `G5_PLUGINS`에 적은 것만 켜집니다. 코어는 플러그인이 선언한 URL·관리자 메뉴·예약 작업을 자동으로 연결하고, 정해진 지점에서 hook을 보냅니다.
 
-예제는 `gnu_plugins/attendance/`(출석체크)입니다. 새 플러그인을 만들 때 이 폴더를 복사해 시작하세요.
+예제는 `gnu_plugins/attendance/`(출석체크)입니다. 새 플러그인을 만들 때 이 폴더를 복사해 시작하세요. 운영자용 설명은 매뉴얼 사이트의 「확장 기능 · 플러그인과 출석체크」 책(`hb_plugins`)에 있습니다.
 
 ## 설치와 켜고 끄기
 
@@ -51,7 +51,7 @@ gnu_plugins/attendance/
 from gnu_jango.plugins import AdminLink, Job, Plugin, Setting
 
 PLUGIN = Plugin(
-    slug="attendance",                       # URL에 쓰임: 소문자·숫자·_ 2~40자, 플러그인끼리 겹치면 안 됨
+    slug="attendance",                       # URL에 쓰임: 영문 소문자로 시작, 소문자·숫자·_ 2~30자, 플러그인끼리 겹치면 안 됨
     title="출석체크",
     version="1.0.0",                         # 플러그인 자신의 버전 (표시용)
     api_version=1,                           # 반드시 적음: 이 플러그인이 맞춰 만든 플러그인 규격 버전
