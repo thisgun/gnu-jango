@@ -17,7 +17,7 @@ from gnu_jango.testing.factories import AdminFactory, CommentFactory, MemberFact
 from gnu_jango.users.models import Profile
 
 from . import services
-from .models import LevelChange, LevelRule
+from .models import LevelChange, LevelRule, LevelUpHold
 
 pytestmark = pytest.mark.django_db
 
@@ -391,3 +391,46 @@ def test_the_admin_edits_rules_and_lists_changes(client):
     change = LevelChange.objects.get()
     assert client.get(f"/admin/level_up/levelchange/{change.pk}/change/").status_code == 200
     assert client.post(f"/admin/level_up/levelchange/{change.pk}/change/", {}).status_code == 403
+
+
+def test_a_member_on_the_hold_list_is_never_raised(rules, client):
+    member = MemberFactory()
+    give(member, posts=1)
+    client.force_login(AdminFactory())
+
+    response = client.post("/admin/level_up/leveluphold/add/", {"user": member.pk, "reason": "광고 의심"})
+    services.check(member)
+    services.sweep(apply=True)
+
+    assert response.status_code == 302, response.content[:300]
+    assert level_of(member) == 2
+    assert client.get("/admin/level_up/leveluphold/").status_code == 200
+
+    LevelUpHold.objects.filter(user=member).delete()
+    services.check(member)
+    assert level_of(member) == 3
+
+
+def test_a_site_that_signs_members_up_at_level_1_still_raises_them(rules):
+    from gnu_jango.config.models import Config
+
+    Config.objects.update_or_create(name="cf_register_level", defaults={"value": "1"})
+    member = MemberFactory(level=1)
+    give(member, posts=1)
+
+    services.check(member)
+
+    assert level_of(member) == 3
+
+
+def test_a_member_lowered_below_the_sign_up_level_is_left_alone(rules):
+    from gnu_jango.config.models import Config
+
+    Config.objects.update_or_create(name="cf_register_level", defaults={"value": "3"})
+    LevelRule.objects.create(level=5, min_posts=1)
+    member = MemberFactory(level=2)  # signed up at 3, then lowered
+    give(member, posts=1)
+
+    services.sweep(apply=True)
+
+    assert level_of(member) == 2

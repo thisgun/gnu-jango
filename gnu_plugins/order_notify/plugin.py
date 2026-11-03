@@ -20,7 +20,8 @@ PLUGIN = Plugin(
             permission="order_notify.view_ordernotice",
         ),
     ),
-    # Every 5 minutes: sends again the messages a channel refused or could not take in time.
+    # Every 5 minutes under Celery Beat (an HTTP cron such as Vercel's runs it as often as the cron fires):
+    # sends again the messages a channel refused or could not take in time, and deletes old ones.
     jobs=(Job("order_notify_retry", ("--apply", "--json"), ("--json",), 300),),
     settings=(
         Setting("ORDER_NOTIFY_PLACED", "새 주문 알림", True, "주문이 들어오면 알립니다"),

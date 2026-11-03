@@ -1,7 +1,7 @@
 from django.contrib import admin
 from unfold.admin import ModelAdmin
 
-from .models import LevelChange, LevelRule
+from .models import LevelChange, LevelRule, LevelUpHold
 
 
 @admin.register(LevelRule)
@@ -44,3 +44,14 @@ class LevelChangeAdmin(ModelAdmin):
     def has_delete_permission(self, request, obj=None):
         # The row is also what keeps an admin's later demotion from being undone (services._candidates).
         return request.user.is_superuser
+
+
+@admin.register(LevelUpHold)
+class LevelUpHoldAdmin(ModelAdmin):
+    """Members the plugin never raises; deleting the row lets the rules apply again."""
+
+    list_display = ("user", "reason", "created_at")
+    list_select_related = ("user",)
+    search_fields = ("user__username", "reason")
+    raw_id_fields = ("user",)
+    fields = ("user", "reason")

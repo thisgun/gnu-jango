@@ -1,8 +1,10 @@
 """Checking a member against the level rules and giving the new level.
 
 A member is checked when they are an active, e-mail-certified, non-staff member who has not left, at
-level 2 or above. Two kinds of member are left alone: one an admin set to level 1 (a penalty), and one
-whose level is now below a level this plugin gave them (an admin lowered it on purpose). The member
+or above the sign-up level (cf_register_level). Three kinds of member are left alone: one an admin set
+below the sign-up level (a penalty), one
+whose level is now below a level this plugin gave them (an admin lowered it on purpose), and one on
+the admin's hold list (LevelUpHold). The member
 gets the highest active rule above their level whose conditions they all meet; levels are never
 lowered. Points are the current balance; posts and comments count what the member wrote.
 """
@@ -19,11 +21,14 @@ from gnu_jango.bbs.models import Comment, Post
 from gnu_jango.notifications.outbox import event_on_commit
 from gnu_jango.plugins import hooks
 from gnu_jango.users.models import Profile
+from gnu_jango.users.point_ledger import config_points
 
 from . import conf
-from .models import ATTENDANCE_APP, MAX_LEVEL, MIN_LEVEL, LevelChange, LevelRule
+from .models import ATTENDANCE_APP, MAX_LEVEL, MIN_LEVEL, LevelChange, LevelRule, LevelUpHold
 
 SWEEP_CHUNK = 500
+# cf_register_level outside 1-9 means the Gnuboard5 default (gnu_jango.api.v1_auth.register_level).
+DEFAULT_SIGN_UP_LEVEL = 2
 # One sweep raises at most this many members (each sends a notification and a hook); the next run
 # goes on where this one stopped.
 MAX_PROMOTIONS_PER_RUN = 2000
@@ -94,17 +99,24 @@ def activities(members, *, today, need):
     }
 
 
+def sign_up_level():
+    """The level new members start at; members below it were lowered by an admin."""
+    level = config_points("cf_register_level")
+    return level if 1 <= level <= MAX_LEVEL else DEFAULT_SIGN_UP_LEVEL
+
+
 def _candidates():
     """Profiles of the members the rules apply to."""
     lowered_by_admin = LevelChange.objects.filter(user_id=OuterRef("user_id"), new_level__gt=OuterRef("user_level"))
+    held = LevelUpHold.objects.filter(user_id=OuterRef("user_id"))
     return Profile.objects.filter(
         user__is_active=True,
         user__is_staff=False,
         user__is_superuser=False,
         leave_date__isnull=True,
         email_certify__isnull=False,
-        user_level__gte=MIN_LEVEL,
-    ).exclude(Exists(lowered_by_admin))
+        user_level__gte=sign_up_level(),
+    ).exclude(Exists(lowered_by_admin)).exclude(Exists(held))
 
 
 def target_rule(level, activity, rules):

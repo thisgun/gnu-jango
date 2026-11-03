@@ -18,6 +18,9 @@ PLUGIN = Plugin(
         AdminLink(
             "등업 기록", "admin:level_up_levelchange_changelist", icon="trending_up", permission="level_up.view_levelchange"
         ),
+        AdminLink(
+            "등업 제외 회원", "admin:level_up_leveluphold_changelist", icon="block", permission="level_up.view_leveluphold"
+        ),
     ),
     # Daily: catches members whose points or posts changed without a hook (the admin, another plugin).
     jobs=(Job("level_up_sweep", ("--apply", "--json"), ("--json",), 86400),),
