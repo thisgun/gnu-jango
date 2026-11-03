@@ -93,12 +93,27 @@ hit@3 80% 미만이면 실패합니다.
 ### 이미 배포한 샘플 글 고치기
 
 `ensure_handbook_samples`를 다시 실행하면 빠진 책·장만 추가합니다. 기존 장의 본문, 책 이름·순서·접근 권한, 선택한
-매뉴얼 그룹(`cf_docs_group`)은 그대로 둡니다. 샘플 문구의 오류(예: 설치 명령의 Python 버전)를 이미 배포한 DB에도
-반영하려면 `--refresh`를 붙입니다. 샘플 장 제목을 가진 글의 본문을 현재 샘플 내용으로 다시 쓰므로, 그런 장을 직접
-고쳐 썼다면 그 내용은 덮어써집니다. 제목이 샘플과 다른 장은 건드리지 않습니다.
+매뉴얼 그룹(`cf_docs_group`)은 그대로 둡니다.
+
+샘플 문구를 고친 뒤(새 hook 설명, 오류 수정) 이미 배포한 DB에 반영할 때는 **`--update-unedited`** 를 씁니다.
+
+- 샘플 장은 본문 끝에 자기 내용의 서명(`<!-- hb-sample:… -->`, 화면에는 보이지 않음)을 달고 만들어집니다.
+- `--update-unedited`는 서명이 본문과 그대로 맞는 장, 즉 **아무도 고치지 않은 장만** 현재 샘플 내용으로 바꿉니다.
+  관리자가 한 글자라도 고친 장(편집기가 서식만 바꾼 경우 포함)은 그대로 두고 결과의 `chapters_kept`에 제목을 적습니다.
+- 서명이 생기기 전에 만든 장은 본문이 현재 샘플과 똑같을 때만 서명을 붙입니다(`chapters_signed`, 내용 변경 없음).
+  그보다 옛 문구인 장은 고친 장으로 보고 남기므로, 필요하면 관리자에서 직접 고치세요.
+- 실행 뒤 `rebuild_search_index`로 검색 색인을 다시 만듭니다.
 
 ```bash
-python manage.py ensure_handbook_samples --refresh
+python manage.py ensure_handbook_samples --update-unedited
+python manage.py rebuild_search_index
+```
+
+`--refresh`는 샘플 장 제목을 가진 글의 본문을 **모두** 현재 샘플 내용으로 다시 씁니다. 직접 고쳐 쓴 장도 덮어쓰므로
+배포한 매뉴얼에는 쓰지 마세요. 제목이 샘플과 다른 장은 두 옵션 모두 건드리지 않습니다.
+
+```bash
+python manage.py ensure_handbook_samples --refresh   # 편집 내용까지 덮어씀
 ```
 
 ## 통합 검색과 검색 운영 가이드
