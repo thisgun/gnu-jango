@@ -5,9 +5,10 @@ cf_docs_group names that group in /api/v1/settings; ensure_handbook_samples buil
 """
 
 import io
+import json
 import re
 
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import TestCase
 from rest_framework.test import APIClient
 
@@ -17,7 +18,7 @@ from gnu_jango.config import handbook_samples as samples
 from gnu_jango.config.handbook_audit_content import AUDIT_LINK_MARKER, AUDIT_LINK_TITLES
 from gnu_jango.config.handbook_commerce_content import COMMERCE_LINK_MARKER, COMMERCE_LINK_TITLES
 from gnu_jango.config.handbook_content import GUIDES
-from gnu_jango.config.handbook_plugin_content import PLUGIN_LINK_MARKER, PLUGIN_LINK_TITLES
+from gnu_jango.config.handbook_plugin_content import PLUGIN_LINK_HTML, PLUGIN_LINK_MARKER, PLUGIN_LINK_TITLES
 from gnu_jango.config.models import Config
 
 API = "/api/v1"
@@ -393,5 +394,62 @@ class HandbookSamplesTests(TestCase):
         call_command("ensure_handbook_samples", "--refresh", stdout=io.StringIO())
         stale.refresh_from_db()
         own.refresh_from_db()
-        self.assertEqual(stale.wr_content, samples.chapter_body(stale.wr_subject))
+        self.assertEqual(stale.wr_content, samples.sign(samples.chapter_body(stale.wr_subject)))
         self.assertEqual(own.wr_content, "<p>admin-sentinel-301</p>")
+
+    def test_new_chapters_are_signed_and_stay_unedited_after_the_see_also_links(self):
+        samples.ensure_samples()
+
+        for post in Post.objects.filter(board__bo_table__in=[book.table for book in samples.BOOKS]):
+            with self.subTest(title=post.wr_subject):
+                self.assertTrue(samples.is_unedited(post.wr_content))
+        linked = Post.objects.get(wr_subject=PLUGIN_LINK_TITLES[0])
+        self.assertIn(PLUGIN_LINK_MARKER, linked.wr_content)
+
+    def test_update_unedited_rewrites_only_chapters_nobody_touched(self):
+        samples.ensure_samples()
+        untouched = Post.objects.get(wr_subject="플러그인 만들기")
+        edited = Post.objects.get(wr_subject="출석체크 플러그인 운영하기")
+        linked = Post.objects.get(wr_subject=PLUGIN_LINK_TITLES[0])
+        # Deployed with older sample text; one chapter later edited by an administrator.
+        Post.objects.filter(pk=untouched.pk).update(wr_content=samples.sign("<p>old sample text</p>"))
+        Post.objects.filter(pk=edited.pk).update(wr_content=edited.wr_content.replace("</p>", " 운영자 메모</p>", 1))
+        Post.objects.filter(pk=linked.pk).update(
+            wr_content=samples.sign("<p>old linked text</p>" + samples._link_block(PLUGIN_LINK_HTML, PLUGIN_LINK_MARKER))
+        )
+
+        out = io.StringIO()
+        call_command("ensure_handbook_samples", "--update-unedited", stdout=out)
+        result = json.loads(out.getvalue())
+
+        untouched.refresh_from_db()
+        edited.refresh_from_db()
+        linked.refresh_from_db()
+        self.assertEqual(result["chapters_updated"], 2)
+        self.assertEqual(result["chapters_kept"], ["출석체크 플러그인 운영하기"])
+        self.assertEqual(untouched.wr_content, samples.sign(samples.chapter_body("플러그인 만들기")))
+        self.assertIn("운영자 메모", edited.wr_content)
+        self.assertNotIn("old linked text", linked.wr_content)
+        self.assertEqual(linked.wr_content.count(PLUGIN_LINK_MARKER), 1)
+        self.assertTrue(samples.is_unedited(linked.wr_content))
+
+    def test_update_unedited_signs_unsigned_chapters_that_match_the_current_text(self):
+        samples.ensure_samples()
+        current = Post.objects.get(wr_subject="플러그인 만들기")
+        older = Post.objects.get(wr_subject="테마 슬롯에 위젯 넣기")
+        # Made before signatures existed: one still matches the sample text, one is older text.
+        Post.objects.filter(pk=current.pk).update(wr_content=samples.chapter_body("플러그인 만들기"))
+        Post.objects.filter(pk=older.pk).update(wr_content="<p>older unsigned text</p>")
+
+        result = samples.ensure_samples(update_unedited=True)
+
+        current.refresh_from_db()
+        older.refresh_from_db()
+        self.assertEqual(result["chapters_signed"], 1)
+        self.assertIn("테마 슬롯에 위젯 넣기", result["chapters_kept"])
+        self.assertTrue(samples.is_unedited(current.wr_content))
+        self.assertEqual(older.wr_content, "<p>older unsigned text</p>")
+
+    def test_refresh_and_update_unedited_cannot_be_combined(self):
+        with self.assertRaises(CommandError):
+            call_command("ensure_handbook_samples", "--refresh", "--update-unedited", stdout=io.StringIO())
