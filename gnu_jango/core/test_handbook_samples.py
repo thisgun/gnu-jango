@@ -220,7 +220,7 @@ class HandbookSamplesTests(TestCase):
 
         self.assertEqual(book.bo_subject, "확장 기능 · 플러그인과 출석체크")
         self.assertEqual(book.bo_category_list.split("|"), ["먼저 읽기", "운영자용", "개발자용"])
-        self.assertEqual(len(titles), 7)
+        self.assertEqual(len(titles), 8)
         for title in titles:
             with self.subTest(title=title):
                 self.assertIn(title, GUIDES)
@@ -254,6 +254,24 @@ class HandbookSamplesTests(TestCase):
         for job in PLUGIN.jobs:
             self.assertIn(job.command, body)
 
+    def test_the_level_up_chapter_matches_the_plugin(self):
+        from gnu_plugins.level_up.models import LevelRule
+        from gnu_plugins.level_up.plugin import PLUGIN
+
+        body = samples.chapter_body("자동 등업 플러그인 운영하기")
+
+        for setting in PLUGIN.settings:
+            with self.subTest(setting=setting.name):
+                self.assertIn(setting.name, body)
+                self.assertIn(setting.label, body)
+        for name in ("min_points", "min_posts", "min_comments", "min_days", "min_attendance", "level"):
+            with self.subTest(field=name):
+                self.assertIn(str(LevelRule._meta.get_field(name).verbose_name), body)
+        self.assertIn(PLUGIN.jobs[0].command, body)
+        hook_chapter = samples.chapter_body("hook으로 코어 동작에 끼어들기")
+        for hook in ("member.joined", "bbs.post.created", "bbs.comment.created", "level_up.promoted"):
+            self.assertIn(hook, hook_chapter)
+
     def test_a_deployed_manual_gets_the_plugin_book_without_touching_edited_chapters(self):
         samples.ensure_samples()
         Post.objects.filter(board__bo_table="hb_plugins").delete()
@@ -264,7 +282,7 @@ class HandbookSamplesTests(TestCase):
 
         result = samples.ensure_samples()
 
-        self.assertEqual(result["chapters_created"], 7)
+        self.assertEqual(result["chapters_created"], 8)
         self.assertEqual(result["chapters_updated"], 0)
         edited.refresh_from_db()
         self.assertIn("admin-sentinel-602", edited.wr_content)

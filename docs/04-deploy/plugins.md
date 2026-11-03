@@ -104,18 +104,22 @@ def double_on_weekends(point, user, streak, day, **kwargs):
 | 이름 | 종류 | 인자 | 언제 |
 |---|---|---|---|
 | `member.visited` | 이벤트 | `user`, `request` | 비밀번호·소셜 로그인, 그리고 로그인한 회원이 페이지를 열 때(`/api/v1/auth/me`). 하루에 여러 번 오므로 리스너는 중복을 스스로 막아야 합니다. |
+| `member.joined` | 이벤트 | `user`, `request` | 회원가입(비밀번호·소셜)이 커밋된 뒤. 메일 인증을 기다리는 회원도 보냅니다 |
+| `bbs.post.created` | 이벤트 | `post`, `user`, `request` | 게시판 API로 글·답글을 쓴 뒤(커밋 후). 비회원 글이면 `user`는 `None` |
+| `bbs.comment.created` | 이벤트 | `comment`, `user`, `request` | 게시판 API로 댓글·답댓글을 쓴 뒤(커밋 후) |
 | `shop.order.placed` | 이벤트 | `order` | 주문이 만들어졌을 때(체크아웃, 정기구독 결제 주문) |
 | `shop.order.status_changed` | 이벤트 | `order`, `old_status`, `new_status`, `source` | 주문 상태가 바뀔 때. `source`는 `payment`(PG·가상계좌 결제 확정), `admin`(주문→입금→준비→배송→완료 한 단계), `cancel`(취소·반품: 고객, 관리자, 만료 작업, 결제 실패, 반품) |
 | `shop.order.paid` | 이벤트 | `order`, `source` | 주문이 입금 상태가 됐을 때. 같은 변경의 `status_changed` 바로 뒤에 옵니다 |
 
-주문 hook은 **변경이 커밋된 뒤**에 보냅니다. 결제나 취소가 롤백되면 아무것도 보내지 않고, 같은 결제 확정이 다시 와도(웹훅 재전송) 상태가 바뀌지 않았으면 보내지 않습니다. 리스너에서 받은 `order`는 커밋된 값이지만, 다른 요청이 그 사이에 바꿨을 수 있으니 필요하면 `refresh_from_db()` 하세요.
+`member.visited`를 뺀 코어 hook은 **변경이 커밋된 뒤**에 보냅니다(관리자 화면이나 다른 코드로 만든 글·회원에는 오지 않으니, 놓치면 안 되는 일은 예약 작업으로 한 번 더 확인하세요). 주문은 결제나 취소가 롤백되면 아무것도 보내지 않고, 같은 결제 확정이 다시 와도(웹훅 재전송) 상태가 바뀌지 않았으면 보내지 않습니다. 리스너에서 받은 `order`는 커밋된 값이지만, 다른 요청이 그 사이에 바꿨을 수 있으니 필요하면 `refresh_from_db()` 하세요.
 
-### 예제 플러그인이 보내는 hook
+### 저장소의 플러그인이 보내는 hook
 
 | 이름 | 종류 | 인자 |
 |---|---|---|
 | `attendance.point` | 값 바꾸기 | `point`, `user`, `streak`, `day` |
 | `attendance.checked_in` | 이벤트 | `attendance` |
+| `level_up.promoted` | 이벤트 | `user`, `old_level`, `new_level` (커밋 후) |
 
 ## 출석체크 예제
 
@@ -178,6 +182,29 @@ python manage.py order_notify_retry --apply   # 실패한 알림 다시 보내�
 
 설정(`/admin/plugins/`): `ORDER_NOTIFY_PLACED`(True), `ORDER_NOTIFY_PAID`(True), `ORDER_NOTIFY_CANCELLED`(True), `ORDER_NOTIFY_OTHER_STATUS`(False, 준비·배송·완료), `ORDER_NOTIFY_FULL_NAME`(False).
 
+## 자동 등업
+
+`gnu_plugins/level_up/`은 관리자가 정한 조건을 채운 회원의 레벨(`Profile.user_level`)을 올립니다. 출석체크의 `attendance.checked_in`과 코어의 글·댓글·가입 hook을 받아 쓰는, 플러그인끼리 hook으로 이어지는 예입니다.
+
+| 항목 | 내용 |
+|---|---|
+| 규칙 | 관리자 **플러그인 › 등업 규칙**(`LevelRule`): 올려 줄 레벨(2~9, 레벨마다 하나)과 보유 포인트·글 수·댓글 수·가입 후 일수·출석 일수. 0이면 그 조건은 쓰지 않음. 모두 채워야 함 |
+| 출석 일수 | 출석체크 플러그인이 설치되어 있어야 저장 가능 |
+| 바로 확인 | `bbs.post.created`, `bbs.comment.created`, `member.joined`, `attendance.checked_in`, 그날 첫 `member.visited` (`LEVEL_UP_ON_ACTIVITY`) |
+| 예약 작업 | 매일 `level_up_sweep`가 가장 높은 규칙보다 낮은 회원 전체를 500명씩 확인 |
+| 올리는 레벨 | 채운 규칙 중 가장 높은 레벨로 한 번에. 내리지 않음. 그 사이 레벨이 바뀌었으면(조건부 UPDATE) 건너뜀 |
+| 제외 | 직원·슈퍼유저, 비활성(차단), 탈퇴, 메일 미인증, 레벨 1인 회원, 그리고 이 플러그인이 올려 준 레벨보다 지금 레벨이 낮은 회원(관리자가 일부러 내림) |
+| 규칙 편집 | 슈퍼유저만(직원은 보기만). 레벨 2~9는 DB 제약으로도 강제 |
+| 비용 | 규칙이 쓰는 조건만 셈. 그날 첫 방문 확인은 공유 캐시(`CACHE_URL`)가 있어야 회원당 하루 한 번, 없으면 프로세스마다 한 번 |
+| 한 번에 | `level_up_sweep`는 한 번에 최대 2,000명(`--limit`)을 올리고, 남으면 다음 실행에서 이어감 |
+| 알림 | `LEVEL_UP_NOTIFY`이면 코어 알림함에 「축하합니다! 회원 레벨이 N(으)로 올랐습니다.」 |
+| 기록 | **플러그인 › 등업 기록**(`LevelChange`, 읽기 전용, 삭제는 슈퍼유저만): 이전·새 레벨과 그때 활동 |
+
+```bash
+python manage.py level_up_sweep            # 올라갈 회원 수만 세기
+python manage.py level_up_sweep --apply    # 올리기 (예약 작업이 하는 일)
+```
+
 ## 테마 슬롯
 
 플러그인은 테마의 정해진 자리(슬롯)에 위젯을 넣을 수 있습니다. 테마는 위젯을 **HTML이 아닌 데이터**로 받아 하나의 공통 모양으로 그리므로, 플러그인을 추가해도 테마를 다시 빌드할 필요가 없습니다.
@@ -209,4 +236,4 @@ def home_widget(request):
 ## 앞으로
 
 - Python entry points 자동 발견(pip로 설치한 플러그인)
-- 글쓰기·댓글·회원가입 hook
+- 글·댓글 내용을 바꾸는(값 바꾸기) hook, 삭제 hook
