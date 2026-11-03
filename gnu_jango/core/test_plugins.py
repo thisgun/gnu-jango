@@ -214,6 +214,7 @@ def test_the_sidebar_adds_a_plugins_group_after_the_core_groups():
         "/admin/order_notify/ordernotice/",
         "/admin/level_up/levelrule/",
         "/admin/level_up/levelchange/",
+        "/admin/level_up/leveluphold/",
     ]
     item = links["/admin/attendance/attendance/"]
     assert item["permission"](request) is True

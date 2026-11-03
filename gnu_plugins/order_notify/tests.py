@@ -225,6 +225,28 @@ def test_the_retry_job_sends_at_most_one_batch_oldest_first(order, sent, monkeyp
     assert [payload["content"] for _url, payload in sent] == ["b", "c"]
 
 
+def test_the_retry_job_deletes_old_sent_and_failed_notices_only(order):
+    now = timezone.now()
+    for key, status, age in (
+        ("old-sent", OrderNotice.SENT, services.KEEP_FOR + timedelta(days=1)),
+        ("old-failed", OrderNotice.FAILED, services.KEEP_FOR + timedelta(days=1)),
+        ("recent-sent", OrderNotice.SENT, services.KEEP_FOR - timedelta(days=1)),
+        ("old-sending", OrderNotice.SENDING, services.KEEP_FOR + timedelta(days=1)),
+    ):
+        notice = OrderNotice.objects.create(
+            od_id=order.pk, event="status", key=key, channel="discord", text=key, status=status
+        )
+        OrderNotice.objects.filter(pk=notice.pk).update(created_at=now - age)
+
+    dry = services.retry(apply=False, now=now)
+    assert (dry["purged"], OrderNotice.objects.count()) == (2, 4)  # a dry run only counts
+
+    report = services.retry(apply=True, now=now)
+
+    assert report["purged"] == 2
+    assert set(OrderNotice.objects.values_list("key", flat=True)) == {"recent-sent", "old-sending"}
+
+
 @override_settings(**DISCORD_ONLY)
 def test_the_retry_job_leaves_fresh_notices_to_the_request_that_wrote_them(order):
     OrderNotice.objects.create(od_id=order.pk, event="placed", key="placed", channel="discord", text="x")
@@ -248,7 +270,7 @@ def test_a_revoked_webhook_is_not_retried_and_the_error_has_no_secret(
 
 
 @override_settings(**DISCORD_ONLY)
-def test_a_notice_is_given_up_after_the_last_attempt_or_after_a_day(order, monkeypatch):
+def test_a_notice_is_given_up_after_the_last_attempt_or_after_the_retry_window(order, monkeypatch):
     def unavailable(request):
         raise urllib_error.HTTPError(request.full_url, 503, "Unavailable", {}, None)
 
@@ -260,7 +282,7 @@ def test_a_notice_is_given_up_after_the_last_attempt_or_after_a_day(order, monke
     old = OrderNotice.objects.create(od_id=order.pk, event="paid", key="paid", channel="discord", text="x")
     now = timezone.now()
     OrderNotice.objects.filter(pk=last_try.pk).update(created_at=now - timedelta(minutes=5))
-    OrderNotice.objects.filter(pk=old.pk).update(created_at=now - timedelta(days=2))
+    OrderNotice.objects.filter(pk=old.pk).update(created_at=now - services.RETRY_WITHIN - timedelta(hours=1))
 
     report = services.retry(apply=True, now=now)
 

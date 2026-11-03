@@ -8,7 +8,8 @@ from gnu_plugins.order_notify import services
 class Command(BaseCommand):
     help = (
         "주문 알림: send again the messages a channel refused or did not take in time "
-        f"(up to {services.MAX_ATTEMPTS} tries within {services.RETRY_WITHIN.total_seconds() / 3600:.0f} hours)."
+        f"(up to {services.MAX_ATTEMPTS} tries within {services.RETRY_WITHIN.days} days), and delete "
+        f"sent and failed notices older than {services.KEEP_FOR.days} days."
     )
 
     def add_arguments(self, parser):
@@ -21,6 +22,7 @@ class Command(BaseCommand):
             self.stdout.write(json.dumps(report))
             return
         self.stdout.write(
-            f"due {report['due']}, expired {report['expired']}, sent {report['sent']}, failed {report['failed']}"
+            f"due {report['due']}, expired {report['expired']}, sent {report['sent']}, failed {report['failed']}, "
+            f"purged {report['purged']}"
             + (" (dry run)" if report["dry_run"] else "")
         )

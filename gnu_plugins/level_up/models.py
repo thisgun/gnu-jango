@@ -61,3 +61,21 @@ class LevelChange(models.Model):
 
     def __str__(self):
         return f"{self.user} {self.old_level}→{self.new_level}"
+
+
+class LevelUpHold(models.Model):
+    """A member the plugin must leave alone, whatever they reach (an admin's choice)."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="level_up_hold", verbose_name="회원"
+    )
+    reason = models.CharField("사유", max_length=255, blank=True, default="")
+    created_at = models.DateTimeField("등록 시각", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "등업 제외 회원"
+        verbose_name_plural = "등업 제외 회원"
+        ordering = ("-created_at", "-id")
+
+    def __str__(self):
+        return str(self.user)

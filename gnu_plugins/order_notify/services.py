@@ -2,7 +2,9 @@
 
 notify() writes one OrderNotice per configured channel and sends them right after they are saved;
 a message a channel refuses or does not take in time stays pending and the order_notify_retry job
-sends it again, up to MAX_ATTEMPTS times within RETRY_WITHIN. A message is written once per order,
+sends it again, up to MAX_ATTEMPTS times within RETRY_WITHIN. RETRY_WITHIN is days, not hours,
+because a site whose scheduler runs once a day (the Vercel cron) still gets a few tries. The job
+also deletes sent and failed notices older than KEEP_FOR, so the log does not grow forever. A message is written once per order,
 event and channel (the unique key), so a repeated hook never posts twice.
 
 The first send runs inside the customer's (or the PG's) request. After a channel fails with an error
@@ -27,11 +29,13 @@ from .models import OrderNotice
 logger = logging.getLogger(__name__)
 
 MAX_ATTEMPTS = 5
-RETRY_WITHIN = timedelta(hours=24)
+RETRY_WITHIN = timedelta(days=3)
 # The request that wrote a notice sends it itself; the retry job leaves fresh ones to it.
 RETRY_AFTER = timedelta(minutes=1)
 RETRY_BATCH = 50
 LEASE = timedelta(minutes=10)
+KEEP_FOR = timedelta(days=90)
+PURGE_BATCH = 5000
 DOWN_SECONDS = 300
 KEY_LENGTH = 120
 
@@ -126,8 +130,22 @@ def send_pending(ids, *, skip_down=False):
     return report
 
 
+def _purgeable(now):
+    """Sent and failed notices older than KEEP_FOR; pending and sending ones are never deleted."""
+    return OrderNotice.objects.filter(
+        status__in=(OrderNotice.SENT, OrderNotice.FAILED), created_at__lt=now - KEEP_FOR
+    )
+
+
+def purge(*, now=None):
+    """Delete up to PURGE_BATCH old notices (the next run takes the rest); how many were deleted."""
+    ids = list(_purgeable(now or timezone.now()).order_by("pk").values_list("pk", flat=True)[:PURGE_BATCH])
+    return OrderNotice.objects.filter(pk__in=ids).delete()[0] if ids else 0
+
+
 def retry(*, apply, now=None):
-    """Send again up to RETRY_BATCH pending notices of the last RETRY_WITHIN; older ones are given up."""
+    """Send again up to RETRY_BATCH pending notices of the last RETRY_WITHIN; older ones are given up.
+    Also deletes old sent and failed notices (purge)."""
     now = now or timezone.now()
     pending = OrderNotice.objects.filter(status=OrderNotice.PENDING)
     stale = OrderNotice.objects.filter(status=OrderNotice.SENDING, claimed_at__lt=now - LEASE)
@@ -137,6 +155,7 @@ def retry(*, apply, now=None):
         "due": due.count(),
         "expired": expired.count(),
         "released": stale.count(),
+        "purged": min(_purgeable(now).count(), PURGE_BATCH),
         SENT: 0,
         FAILED: 0,
         SKIPPED: 0,
@@ -144,7 +163,10 @@ def retry(*, apply, now=None):
     }
     if not apply:
         return report
+    # Purge first: it is cheap, and must not depend on the sends below finishing (a serverless cron
+    # can be cut off while it waits on a slow channel).
+    report["purged"] = purge(now=now)
     stale.update(status=OrderNotice.PENDING, claimed_at=None)
-    expired.update(status=OrderNotice.FAILED, last_error="24시간 안에 보내지 못했습니다.")
+    expired.update(status=OrderNotice.FAILED, last_error=f"{RETRY_WITHIN.days}일 안에 보내지 못했습니다.")
     batch = list(due.order_by("created_at", "pk").values_list("pk", flat=True)[:RETRY_BATCH])
     return {**report, **send_pending(batch)}
