@@ -79,6 +79,12 @@ PLUGIN = Plugin(
 
 플러그인 API는 코어 API 계약(`openapi/schema.json`)에 넣지 않습니다. 뷰에 `@extend_schema(exclude=True)`를 붙이세요.
 
+Vercel은 Django를 ASGI로 실행합니다. URL을 고르는 단계와 `async def` 뷰·미들웨어는 이벤트 루프에서 돌기 때문에, 그 안에서 DB나
+`CACHE_URL=db://` 캐시를 쓰면 `SynchronousOnlyOperation`(500)이 납니다. DB가 필요한 일은 동기 뷰 안에서 하거나 `sync_to_async`로
+감싸세요. 켜고 끄기 확인도 같은 이유로 URL을 고를 때가 아니라 뷰가 실행될 때 합니다(`gnu_jango/plugins/routing.py`). 일반 테스트
+클라이언트는 WSGI로 요청하므로, Vercel에서 쓸 API는 `django.test.AsyncClient`로도 테스트하세요
+(`async_to_sync(AsyncClient().get)(url)`, 예: `gnu_jango/core/test_plugin_admin.py`).
+
 ## Hook
 
 그누보드5의 `run_event`/`run_replace`와 같은 역할입니다.
