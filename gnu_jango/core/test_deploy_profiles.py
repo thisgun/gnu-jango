@@ -401,8 +401,10 @@ class ScheduledJobsRunnerTests(TestCase):
                 "check_search_health",
                 "save_order_points",
                 "send_shop_alerts",
-                # The example plugin's job: the suite runs with gnu_plugins.attendance installed.
+                # The bundled plugins' jobs: the suite runs with gnu_plugins.* installed.
                 "attendance_monthly_bonus",
+                "order_notify_retry",
+                "level_up_sweep",
             ],
         )
         for name, args in runner.calls:

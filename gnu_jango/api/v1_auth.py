@@ -34,7 +34,7 @@ from gnu_jango.config.models import Config
 from gnu_jango.plugins import hooks
 from gnu_jango.shop.signup_coupon import issue_signup_coupon
 from gnu_jango.shop.sms.notifications import queue_member_join_sms
-from gnu_jango.users import point_ledger
+from gnu_jango.users import member_hooks, point_ledger
 from gnu_jango.users.models import Profile
 
 from .response import api_error, api_response
@@ -123,6 +123,10 @@ from .auth_cert import (  # noqa: F401 - urls, tests and commands import these f
 
 User = get_user_model()
 MEMBER_ID_RE = re.compile(r"^[A-Za-z0-9_]{3,20}$")
+# cf_register_level: 10 is the site admin, never given at sign-up; a bad value falls back to the Gnuboard5 default.
+MIN_REGISTER_LEVEL = 1
+MAX_REGISTER_LEVEL = 9
+DEFAULT_REGISTER_LEVEL = 2
 SOCIAL_STATE_SESSION_PREFIX = "g5_social_oauth_"
 SOCIAL_TICKET_PREFIX = "social_ticket_"
 SOCIAL_IDENTITY_PREFIX = "social_id_"
@@ -1062,6 +1066,12 @@ def award_login_points(user):
     )
 
 
+def register_level():
+    """The level a new member starts at: the admin's 회원가입시 권한 (cf_register_level), 1-9."""
+    level = point_ledger.config_points("cf_register_level")
+    return level if MIN_REGISTER_LEVEL <= level <= MAX_REGISTER_LEVEL else DEFAULT_REGISTER_LEVEL
+
+
 def member_visited(user, request):
     """A member signed in or loaded a page while signed in: the daily login points, then plugins."""
     award_login_points(user)
@@ -1379,8 +1389,8 @@ def register_view(request):
             profile = _profile_for_user(user)
             profile.nickname = mb_nick
             profile.realname = mb_name
-            if not profile.user_level:
-                profile.user_level = 2
+            # register_form_update.php: mb_level = $config['cf_register_level']
+            profile.user_level = register_level()
             profile.open_profile = open_profile
             profile.open_profile_date = timezone.now()  # register_form_update.php: mb_open_date = today
             profile.mailing = mailing
@@ -1403,6 +1413,7 @@ def register_view(request):
             )
             issue_signup_coupon(user)
             queue_member_join_sms(user)
+            member_hooks.member_joined(user, request)
         _consume_captcha(request)
     except IntegrityError:
         return api_error(
