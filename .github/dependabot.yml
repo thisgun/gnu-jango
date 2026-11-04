@@ -12,6 +12,12 @@ updates:
       # redis is also the Celery broker client; move to a new major only after checking Celery/kombu support
       - dependency-name: "redis"
         update-types: ["version-update:semver-major"]
+    groups:
+      # One weekly PR for minor/patch bumps: main must be up to date to merge and every merge redeploys,
+      # so separate PRs mean one CI run and one deploy each. Major bumps still come one per PR.
+      pip-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: npm
     directory: /nextjs
@@ -27,6 +33,11 @@ updates:
         patterns: ["@tiptap/*"]
       eslint:
         patterns: ["eslint", "eslint-*", "@eslint/*", "typescript-eslint", "@typescript-eslint/*"]
+      # Everything else that is minor/patch, in one PR (see pip-minor-patch). A dependency joins the first
+      # group it matches, so tiptap and eslint keep their own PRs.
+      npm-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: github-actions
     directory: /
@@ -46,3 +57,8 @@ updates:
       day: monday
       time: "09:45"
       timezone: Asia/Seoul
+    ignore:
+      # CI, Vercel and mypy (pyproject.toml) all run Python 3.12: move the image to a new Python together
+      # with them, not alone. Patch updates of the 3.12 image still come.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
