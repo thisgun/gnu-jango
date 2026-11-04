@@ -1,7 +1,8 @@
 """Switching installed plugins on and off, and editing their settings, in the admin (/admin/plugins/)."""
 
 import pytest
-from django.test import override_settings
+from asgiref.sync import async_to_sync
+from django.test import AsyncClient, override_settings
 
 from gnu_jango.core import scheduled_jobs
 from gnu_jango.plugins import state
@@ -37,6 +38,21 @@ def test_a_switched_off_plugin_s_urls_answer_404(member_client):
 
 
 @override_settings(ATTENDANCE_AUTO_CHECK_IN=True)
+def test_plugin_urls_resolve_under_asgi():
+    # Under ASGI (Vercel) Django resolves URLs in the event loop, where the database and a db://
+    # cache may not be touched; the on/off switch must be read only once the view runs.
+    client = AsyncClient()
+
+    assert async_to_sync(client.post)(CHECK_IN_URL).status_code == 401
+    assert async_to_sync(client.get)("/api/v1/plugins/no-such-plugin/x").status_code == 404
+
+
+def test_a_switched_off_plugin_s_urls_answer_404_under_asgi():
+    state.set_enabled("attendance", False)
+
+    assert async_to_sync(AsyncClient().post)(CHECK_IN_URL).status_code == 404
+
+
 def test_a_switched_off_plugin_s_listeners_do_not_run(member_client, member):
     state.set_enabled("attendance", False)
 
