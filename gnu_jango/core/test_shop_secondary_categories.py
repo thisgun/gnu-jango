@@ -11,7 +11,6 @@ from pathlib import Path
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
-from rest_framework.test import APIClient
 
 from gnu_jango.api.v1_shop import (
     annotate_product_coupon_badge,

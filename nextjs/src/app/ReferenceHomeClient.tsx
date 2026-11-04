@@ -5,6 +5,7 @@ import { type CSSProperties, useEffect, useState } from "react";
 import { ArrowRight, ChevronRight, Search, UserRound } from "lucide-react";
 import { G5Link as Link } from "@/components/ui/g5-link";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { PluginSlot } from "@/components/plugins/PluginSlot";
 import { GalleryThumbnail } from "@/app/boards/[bo_table]/GalleryThumbnail";
 import { ApiError } from "@/lib/api";
 import { boardListHref, boardPostHref } from "@/lib/board-url";
@@ -339,6 +340,7 @@ export function ReferenceHomeClient({ initialData }: { initialData: ReferenceHom
       </div>
       <aside className="solune-sidebar" aria-label="커뮤니티 위젯">
         <LoginWidget />
+        <PluginSlot name="home.sidebar" />
         <CommentsWidget comments={home.comments} rewriteMode={home.rewriteMode} />
         <PopularWidget keywords={home.popularKeywords} />
         {home.poll ? <PollWidget initialPoll={home.poll} /> : null}

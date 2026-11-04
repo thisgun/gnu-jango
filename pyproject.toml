@@ -37,6 +37,14 @@ exclude = [
 select = ["E4", "E7", "E9", "F"]
 ignore = ["E501"]
 
+[tool.ruff.lint.per-file-ignores]
+# The admin _common modules are import hubs: the admin modules take everything with `import *`.
+"gnu_jango/core/admin/_common.py" = ["F401"]
+"gnu_jango/shop/admin/_common.py" = ["F401"]
+"gnu_jango/core/admin/*.py" = ["F405"]
+"gnu_jango/shop/admin/*.py" = ["F405"]
+"example/settings/*.py" = ["F403", "F405"]
+
 [tool.mypy]
 python_version = "3.12"
 plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
@@ -61,7 +69,7 @@ django_settings_module = "example.settings"
 # new tests may be plain functions using the fixtures in conftest.py and the factories in
 # gnu_jango/testing/factories.py.
 DJANGO_SETTINGS_MODULE = "example.settings"
-testpaths = ["gnu_jango"]
+testpaths = ["gnu_jango", "gnu_plugins"]
 python_files = ["tests.py", "test_*.py"]
 addopts = "-p no:cacheprovider --strict-markers"
 

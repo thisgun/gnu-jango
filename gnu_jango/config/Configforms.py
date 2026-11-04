@@ -435,9 +435,7 @@ class ConfigsForm(forms.Form):
             if name not in rows.keys():
                 if "_modeltranslation_" not in name:
                     continue
-                name, code = name.rsplit("_modeltranslation_", 1)
-            else:
-                code = None
+                name, _code = name.rsplit("_modeltranslation_", 1)
 
             # Only persist known settings (defense against mass-assignment of
             # arbitrary config names into the DB).

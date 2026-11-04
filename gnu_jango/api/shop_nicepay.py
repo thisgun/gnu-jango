@@ -40,7 +40,7 @@ from gnu_jango.shop.sms.notifications import queue_order_placed_sms
 from gnu_jango.utils.lib import get_client_ip
 
 from .response import api_error
-from .shop_common import CANCELLED_STATUSES, ORDER_STATUS_PAID, ORDERED_STATUSES, PAID_STATUSES, safe_int
+from .shop_common import CANCELLED_STATUSES, ORDERED_STATUSES, PAID_STATUSES, safe_int
 from .shop_payments import (
     PaymentCancelError,
     confirm_order_payment,

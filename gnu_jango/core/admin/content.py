@@ -353,11 +353,14 @@ class Site_menu_admin(ModelAdmin):
             extra_context = {}
 
         site_menu_form = SiteMenuForms(request.POST or None)
-        if "csrfmiddlewaretoken" in request.POST and site_menu_form.is_valid():
-            site_menu_form.save()
-            # Configs.clear_cache()
-            # info(request, _("Settings were successfully updated."))
-            return self.changelist_redirect()
+        if "csrfmiddlewaretoken" in request.POST:
+            # The changelist opens with view permission alone; saving replaces every menu row.
+            if not self.has_change_permission(request):
+                raise PermissionDenied
+            if site_menu_form.is_valid():
+                site_menu_form.save()
+                return self.changelist_redirect()
+            self.message_user(request, SiteMenuForms.NUMBER_ERROR, messages.ERROR)
 
         # extra_context["sitemenu_form"] = site_menu_form
         extra_context["title"] = "{} {}".format(

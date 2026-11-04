@@ -22,6 +22,7 @@ from gnu_jango.api import v1_auth
 from gnu_jango.config import theme_admin
 from gnu_jango.config import sample_data_admin
 from gnu_jango.core.audit import audit_log_view
+from gnu_jango.plugins import admin_views as plugin_admin
 from gnu_jango.shop import admin_settings
 from gnu_jango.users import impersonation
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
@@ -55,6 +56,11 @@ urlpatterns = [
         admin.site.admin_view(theme_admin.theme_preview),
         name="admin-theme-preview",
     ),
+    path(
+        "admin/plugins/",
+        admin.site.admin_view(plugin_admin.plugin_settings),
+        name="admin-plugins",
+    ),
     path("admin/", admin.site.urls),
     path("api/schema/", SpectacularAPIView.as_view(), name="api-schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="api-schema"), name="api-docs"),
@@ -68,6 +74,7 @@ urlpatterns = [
     path("impersonation/stop/", impersonation.stop_impersonation, name="impersonation-stop"),
     path("impersonation/logout/", impersonation.logout_impersonation, name="impersonation-logout"),
     path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
+    path("plugins/", include("gnu_jango.plugins.urls")),
     path("", include("gnu_jango.editor.urls")),
     path("", include("gnu_jango.core.urls")),
 ]

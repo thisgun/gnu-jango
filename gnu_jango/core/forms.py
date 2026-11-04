@@ -1,7 +1,9 @@
 
 from django import forms
+from django.db import transaction
 from django.db.models.functions import Substr, Length
 from django.db.models import Max
+from django.utils.translation import gettext_lazy as _
 
 from .models import Site_menu
 from gnu_jango.utils.lib import chng_frm_base
@@ -23,14 +25,35 @@ class SiteMenuForms(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+    # The numeric columns of a menu row, and whether they must not be negative.
+    NUMBER_FIELDS = (("me_type_pk[]", False), ("me_order[]", False), ("me_use[]", True), ("me_mobile_use[]", True))
+    NUMBER_ERROR = _("메뉴의 대상참조·출력순서·사용 값은 숫자여야 합니다.")
+
     def is_valid(self):
+        # The editor posts parallel lists (code[], me_name[], ...) that save() reads itself, so the
+        # declared fields never validate; check instead that every row save() keeps can be stored.
+        return not self._has_bad_number()
 
-        form_validated = super().is_valid()
-
-        return True
-
+    def _has_bad_number(self):
+        codes = self.data.getlist("code[]")
+        names = self.data.getlist("me_name[]")
+        links = self.data.getlist("me_link[]")
+        for i, code in enumerate(codes):
+            if not (code and len(names) > i and names[i] and len(links) > i and links[i]):
+                continue
+            for key, must_be_positive in self.NUMBER_FIELDS:
+                values = self.data.getlist(key)
+                if len(values) <= i:
+                    continue
+                try:
+                    number = int(values[i])
+                except ValueError:
+                    return True
+                if must_be_positive and number < 0:
+                    return True
         return False
 
+    @transaction.atomic
     def save(self):
 
         Site_menu.objects.all().delete()

@@ -47,7 +47,7 @@ python manage.py send_shop_alerts --json          # 보낼 건수만 센다 (dry
 python manage.py send_shop_alerts --apply --json  # 보낸다
 ```
 
-`run_scheduled_jobs`와 Celery Beat 일정(`SCHEDULED_JOBS`, 600초 간격)에 들어 있다. Vercel 크론(`vercel.json`)은 하루 한 번(18:00 UTC = 03:00 KST)만 `/api/internal/cron`을 부르므로, 그대로 두면 장바구니 알림 메일은 매번 발송 시간(08~21시) 밖이라 나가지 않는다. Vercel에서 쓰려면 Supabase pg_cron 같은 외부 스케줄러가 낮 시간에도 같은 주소를 `Authorization: Bearer <CRON_SECRET>`으로 부르게 한다. 켜진 종류만 처리하고, 꺼진 종류는 결과에 `null`로 나온다. 한 번에 가격 알림 200건, SMS 25건, 장바구니 메일 100건까지 보낸다(`--limit`으로 줄일 수 있다).
+`run_scheduled_jobs`와 Celery Beat 일정(`SCHEDULED_JOBS`, 600초 간격)에 들어 있다. Vercel 크론(`vercel.json`)은 하루 한 번(01:00 UTC = 10:00 KST) `/api/internal/cron`을 부르므로, Vercel에서는 장바구니 알림 메일도 하루 한 번 그 시각에 나간다. 크론 시각을 발송 시간(08~21시) 밖으로 옮기면 메일이 전혀 나가지 않으니 `core/test_shop_alerts.py`가 이를 막는다. 더 자주 보내려면 Supabase pg_cron 같은 외부 스케줄러가 낮 시간에도 같은 주소를 `Authorization: Bearer <CRON_SECRET>`으로 부르게 한다. 켜진 종류만 처리하고, 꺼진 종류는 결과에 `null`로 나온다. 한 번에 가격 알림 200건, SMS 25건, 장바구니 메일 100건까지 보낸다(`--limit`으로 줄일 수 있다).
 
 ## API
 

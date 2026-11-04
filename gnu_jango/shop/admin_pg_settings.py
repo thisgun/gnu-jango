@@ -24,7 +24,6 @@ from .pg_settings import (
     NICEPAY_KEY_ROWS,
     PG_SERVICE_CHOICES,
     PG_SERVICE_FIELD,
-    PG_SERVICE_NICEPAY,
     TOSS_KEY_ROWS,
     UNSUPPORTED_PG_SERVICES,
     admin_keys,
@@ -35,7 +34,6 @@ from .pg_settings import (
     card_test_enabled,
     env_keys_set,
     env_nicepay_keys,
-    env_nicepay_keys_set,
     env_payment_provider,
     escrow_enabled,
     key_family,
@@ -43,7 +41,6 @@ from .pg_settings import (
     key_prefix_error,
     mask_key,
     nicepay_admin_keys_enabled,
-    nicepay_seal_context,
     nicepay_unreadable_key_rows,
     nicepay_value_error,
     seal_key,
@@ -351,7 +348,6 @@ def pg_status(toss, provider, rows, nicepay=None):
     card_test = card_test_enabled(rows)
     source_labels = {"env": "서버 환경 변수", "admin": "관리자 설정", "none": "미등록"}
     active = nicepay if provider == "nicepay" else toss
-    active_name = "NICEPAY" if provider == "nicepay" else "토스페이먼츠"
     key_status = active.get("key_status", "missing")
     enabled = bool(active.get("enabled"))
     effective_mode = {"test": "테스트결제", "live": "실결제"}.get(key_status, "결제 불가")

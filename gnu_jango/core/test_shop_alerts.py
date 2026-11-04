@@ -1,6 +1,7 @@
 """The scheduled shop alerts: 가격 인하 알림, automatic 재입고 SMS and 장바구니 알림 메일."""
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -12,7 +13,7 @@ from rest_framework.test import APIClient
 from gnu_jango.api.shop_common import auth_cart_config_name
 from gnu_jango.config.models import Config
 from gnu_jango.core.models import Notification
-from gnu_jango.shop.cart_reminders import COUPON_SUBJECT, send_due_cart_reminders
+from gnu_jango.shop.cart_reminders import COUPON_SUBJECT, SENDING_HOURS, send_due_cart_reminders
 from gnu_jango.shop.models import (
     ShopCartReminder,
     ShopCoupon,
@@ -308,6 +309,15 @@ def test_no_reminder_at_night(db, reminders_on):
     with patch("gnu_jango.shop.cart_reminders.cart_now", return_value=NIGHT):
         assert send_due_cart_reminders()["reason"] == "night"
     assert not mail.outbox and not ShopCartReminder.objects.exists()
+
+
+def test_the_vercel_cron_runs_while_reminders_may_be_sent():
+    # Vercel calls every scheduled job once a day; a night-time schedule would never send a reminder.
+    vercel = json.loads((Path(__file__).resolve().parents[2] / "vercel.json").read_text(encoding="utf-8"))
+    for cron in vercel["crons"]:
+        minute, hour, *_ = cron["schedule"].split()
+        utc_run = datetime(2026, 1, 1, int(hour), int(minute), tzinfo=UTC)
+        assert utc_run.astimezone(timezone.get_current_timezone()).hour in SENDING_HOURS, cron
 
 
 def test_no_reminder_to_an_address_that_was_never_certified(db, reminders_on):

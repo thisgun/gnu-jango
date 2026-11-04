@@ -1,13 +1,11 @@
 from functools import partial
-from importlib import import_module
 import logging
 from warnings import warn
 from weakref import WeakKeyDictionary
 
 from django.conf import settings
 from django.core.files.storage import storages
-from django.utils.functional import Promise, cached_property, LazyObject
-from django.utils.module_loading import module_has_submodule
+from django.utils.functional import LazyObject
 from django.dispatch import receiver
 
 
