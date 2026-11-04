@@ -66,6 +66,9 @@ SENTRY_DSN = de_config("SENTRY_DSN", default="")
 SENTRY_TRACES_SAMPLE_RATE = de_config("SENTRY_TRACES_SAMPLE_RATE", default=0.0, cast=float)
 SENTRY_PROFILES_SAMPLE_RATE = de_config("SENTRY_PROFILES_SAMPLE_RATE", default=0.0, cast=float)
 SENTRY_SEND_DEFAULT_PII = bool_config("SENTRY_SEND_DEFAULT_PII", default=False)
+# Off by default: frame locals in error reports can hold secrets (webhook URLs, tokens) that Django's
+# sensitive_variables hides from its own reports but Sentry does not.
+SENTRY_INCLUDE_LOCAL_VARIABLES = bool_config("SENTRY_INCLUDE_LOCAL_VARIABLES", default=False)
 
 if SENTRY_DSN:
     import sentry_sdk
@@ -78,6 +81,7 @@ if SENTRY_DSN:
         traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
         profiles_sample_rate=SENTRY_PROFILES_SAMPLE_RATE,
         send_default_pii=SENTRY_SEND_DEFAULT_PII,
+        include_local_variables=SENTRY_INCLUDE_LOCAL_VARIABLES,
     )
 
 # ALLOWED_HOSTS = ['*', 'pythonanywhere.com', '.herokuapp.com']
@@ -132,10 +136,11 @@ INSTALLED_APPS = [
 
 # Plugins: Django apps that add features without editing the core (gnu_jango/plugins,
 # docs/04-deploy/plugins.md), e.g. G5_PLUGINS=gnu_plugins.attendance. The test suite (pytest sets
-# PYTEST_VERSION) always adds the example plugin, whatever .env says, so the plugin seams stay covered.
+# PYTEST_VERSION) always adds the bundled plugins, whatever .env says, so the plugin seams stay covered.
 G5_PLUGINS = csv_config(de_config("G5_PLUGINS", default=""))
-if os.environ.get("PYTEST_VERSION") and "gnu_plugins.attendance" not in G5_PLUGINS:
-    G5_PLUGINS.append("gnu_plugins.attendance")
+BUNDLED_PLUGINS = ("gnu_plugins.attendance", "gnu_plugins.order_notify", "gnu_plugins.level_up")
+if os.environ.get("PYTEST_VERSION"):
+    G5_PLUGINS += [name for name in BUNDLED_PLUGINS if name not in G5_PLUGINS]
 INSTALLED_APPS += G5_PLUGINS
 
 

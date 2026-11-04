@@ -4,10 +4,7 @@ Plugin endpoints are not part of the core API contract (openapi/schema.json), so
 use @extend_schema(exclude=True).
 """
 
-from django.urls import include, path
-
 from . import installed_plugins
+from .routing import mount
 
-urlpatterns = [
-    path(f"{plugin.slug}/", include(plugin.api_urls)) for plugin in installed_plugins() if plugin.api_urls
-]
+urlpatterns = [mount(plugin, plugin.api_urls) for plugin in installed_plugins() if plugin.api_urls]

@@ -28,6 +28,7 @@ from rest_framework.permissions import AllowAny
 from .caching import shared_response_etag
 from .authentication import SessionJWTAuthentication as JWTAuthentication
 
+from gnu_jango.bbs import board_hooks
 from gnu_jango.bbs.delete_posts import Delete_all_posts
 from gnu_jango.bbs.models import Board, Comment, Post, Post_file, Post_good, Post_scrap, validate_upload_file_content
 from gnu_jango.core.image_privacy import strip_image_metadata
@@ -1327,6 +1328,7 @@ def board_posts_view(request, bo_table):
         else:
             point_ledger.insert_point(user, board.bo_write_point, f"{board.bo_subject} {point_id} 글쓰기", board.bo_table, point_id, "쓰기")
         _update_board_counts(board)
+        board_hooks.post_created(post, request)
         if not user and board.bo_use_captcha:
             _consume_captcha(request)
 
@@ -1834,6 +1836,7 @@ def _create_comment_with_points(board, post, user, parent, reply_marker, content
         f"{board.bo_subject} {point_ledger.post_point_id(post)}-{comment.pk} 댓글쓰기",
         board.bo_table, comment.pk, "댓글",
     )
+    board_hooks.comment_created(comment, request)
     return comment
 
 
