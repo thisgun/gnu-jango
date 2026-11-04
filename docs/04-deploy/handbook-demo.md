@@ -93,12 +93,30 @@ hit@3 80% 미만이면 실패합니다.
 ### 이미 배포한 샘플 글 고치기
 
 `ensure_handbook_samples`를 다시 실행하면 빠진 책·장만 추가합니다. 기존 장의 본문, 책 이름·순서·접근 권한, 선택한
-매뉴얼 그룹(`cf_docs_group`)은 그대로 둡니다. 샘플 문구의 오류(예: 설치 명령의 Python 버전)를 이미 배포한 DB에도
-반영하려면 `--refresh`를 붙입니다. 샘플 장 제목을 가진 글의 본문을 현재 샘플 내용으로 다시 쓰므로, 그런 장을 직접
-고쳐 썼다면 그 내용은 덮어써집니다. 제목이 샘플과 다른 장은 건드리지 않습니다.
+매뉴얼 그룹(`cf_docs_group`)은 그대로 둡니다.
+
+샘플 문구를 고친 뒤(새 hook 설명, 오류 수정) 이미 배포한 DB에 반영할 때는 **`--update-unedited`** 를 씁니다.
+
+- 샘플 장은 본문 끝에 자기 내용의 서명(`<!-- hb-sample:… -->`, 화면에는 보이지 않음)을 달고 만들어집니다.
+- `--update-unedited`는 서명이 본문과 그대로 맞는 장, 즉 **아무도 고치지 않은 장만** 현재 샘플 내용으로 바꿉니다.
+  관리자가 한 글자라도 고친 장(편집기가 서식만 바꾼 경우 포함)은 그대로 두고 결과의 `chapters_kept`에 제목을 적습니다.
+- 서명이 생기기 전에 만든 장은 본문이 현재 샘플과 똑같을 때만 서명을 붙입니다(`chapters_signed`, 내용 변경 없음).
+  그보다 옛 문구인 장은 고친 장으로 보고 남깁니다.
+- 남은 장이 실제로는 옛 샘플 문구일 뿐이면(배포 DB 본문과 현재 샘플을 비교해 확인), 그 장만
+  `--refresh-chapter "장 제목"`으로 다시 씁니다. 여러 장은 옵션을 반복합니다. 그 장의 편집 내용은 덮어쓰고 서명을 새로 붙입니다.
+- 실행 뒤 `rebuild_search_index`로 검색 색인을 다시 만듭니다.
 
 ```bash
-python manage.py ensure_handbook_samples --refresh
+python manage.py ensure_handbook_samples --update-unedited
+python manage.py ensure_handbook_samples --refresh-chapter "폴더 구조" --refresh-chapter "글 써 보기"
+python manage.py rebuild_search_index
+```
+
+`--refresh`는 샘플 장 제목을 가진 글의 본문을 **모두** 현재 샘플 내용으로 다시 씁니다. 직접 고쳐 쓴 장도 덮어쓰므로
+배포한 매뉴얼에는 쓰지 마세요. 제목이 샘플과 다른 장은 두 옵션 모두 건드리지 않습니다.
+
+```bash
+python manage.py ensure_handbook_samples --refresh   # 편집 내용까지 덮어씀
 ```
 
 ## 통합 검색과 검색 운영 가이드
@@ -128,6 +146,25 @@ python manage.py rebuild_search_index
 기존 책의 「장바구니와 주문 흐름」「배송과 주문 상태 관리」「결제 설정과 테스트」「회원가입과 로그인」 장 끝에는 이 책으로 가는
 ‘함께 보기’ 링크를 한 번만 덧붙이고 본문은 그대로 둡니다. 이미 배포한 핸드북 DB에 반영하려면 그 DB에서 다음을 실행합니다
 (`--refresh`는 붙이지 않습니다).
+
+```bash
+python manage.py ensure_handbook_samples
+python manage.py rebuild_search_index
+```
+
+## 플러그인과 출석체크 안내
+
+`ensure_handbook_samples`는 **「확장 기능 · 플러그인과 출석체크」** 책(`hb_plugins`)과 8개 장을 추가합니다.
+샘플 원본은 `gnu_jango/config/handbook_plugin_content.py`이고, 개발자용 참고 문서 `docs/04-deploy/plugins.md`와 내용을 맞춥니다.
+
+- **먼저 읽기**: 플러그인이 할 수 있는 일, 설치(`G5_PLUGINS`·배포·migrate)와 켜고 끄기(관리자)의 차이.
+- **운영자용**: 설치, `/admin/plugins/`에서 켜고 끄기·설정, 끈 플러그인의 동작, 완전히 없애기. 출석체크의 화면·포인트 규칙·설정·기록·개근 보너스 작업.
+- **운영자용(번들 플러그인)**: 주문 알림(Discord·Slack·Telegram 웹훅, 재시도와 기록 정리), 자동 등업(규칙, 등업 제외 회원).
+- **개발자용**: 예제 복사로 시작하기, `plugin.py` 선언, 설정값 읽기, hook(코어·주문·출석체크), 테마 슬롯 위젯.
+
+기존 책의 「폴더 구조」「슬롯 끼우기」「환경 변수」 장 끝에는 이 책으로 가는 ‘함께 보기’ 링크를 한 번만 덧붙입니다.
+매뉴얼 사이트 자체에는 플러그인을 설치하지 않아도 됩니다(설명만 담은 책입니다). 이미 배포한 핸드북 DB에 반영하려면 그 DB에서
+다음을 실행합니다(`--refresh`는 붙이지 않습니다).
 
 ```bash
 python manage.py ensure_handbook_samples

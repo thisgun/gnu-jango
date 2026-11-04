@@ -99,6 +99,8 @@ jobs:
         if: vars.RUN_DB_MIGRATIONS == 'true'
         env:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          # The plugins the demo runs (its Vercel G5_PLUGINS): their tables are migrated only if listed here.
+          G5_PLUGINS: ${{ vars.PRODUCTION_G5_PLUGINS }}
           DJANGO_SETTINGS_MODULE: example.settings.development
           ENVIRONMENT: Development
         run: |
@@ -114,6 +116,7 @@ jobs:
         if: vars.RUN_DB_MIGRATIONS == 'true'
         env:
           DATABASE_URL: ${{ secrets.HANDBOOK_DATABASE_URL }}
+          G5_PLUGINS: ${{ vars.HANDBOOK_G5_PLUGINS }}
           DJANGO_SETTINGS_MODULE: example.settings.development
           ENVIRONMENT: Development
         run: |
