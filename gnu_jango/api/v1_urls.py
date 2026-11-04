@@ -2,6 +2,7 @@ from django.urls import include, path
 
 from gnu_jango.core import thumbnails
 from gnu_jango.notifications.api import ticket_view
+from gnu_jango.plugins.slots import slots_view as plugin_slots_view
 from gnu_jango.shop import price_feed
 
 from . import (
@@ -43,6 +44,7 @@ urlpatterns = [
     path("auth/login", v1_auth.login_view, name="auth-login"),
     path("auth/register", v1_auth.register_view, name="auth-register"),
     path("auth/me", v1_auth.me_view, name="auth-me"),
+    path("plugins/slots", plugin_slots_view, name="plugin-slots"),
     path("plugins/", include("gnu_jango.plugins.api_urls")),
     path("auth/refresh", v1_auth.refresh_view, name="auth-refresh"),
     path("auth/logout", v1_auth.logout_view, name="auth-logout"),
