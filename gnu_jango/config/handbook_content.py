@@ -906,7 +906,7 @@ GUIDES = {
         "sections": [
             {"heading": "현재 내용의 기준", "paragraphs": [
                 "핸드북은 현재 저장소의 Django 설정, Next.js 테마, 배포 안내를 기준으로 작성됩니다. 화면의 버튼 이름이나 환경 변수는 새 버전에서 바뀔 수 있으므로 날짜가 오래된 안내는 실제 설정 화면과 함께 확인하세요.",
-                "운영 사이트의 매뉴얼 글은 데이터베이스에 저장되고, 샘플 콘텐츠의 원본은 {{gnu_jango/config/handbook_content.py}}에 있습니다."
+                "운영 사이트의 매뉴얼 글은 데이터베이스에 저장되고, 샘플 콘텐츠의 원본은 {{gnu_jango/config/}} 폴더의 {{handbook_content.py}}와 책별 파일({{handbook_search_content.py}}, {{handbook_audit_content.py}}, {{handbook_commerce_content.py}}, {{handbook_plugin_content.py}})에 있습니다."
             ]},
             {"heading": "새 설명을 추가할 때", "steps": [
                 "어떤 사용자와 어떤 작업을 위한 설명인지 첫 문단에 씁니다.",
@@ -917,9 +917,11 @@ GUIDES = {
                 "화면이나 환경 변수가 바뀐 경우 변경된 날짜와 영향을 받는 책·장을 함께 기록합니다."
             ]},
             {"heading": "샘플 콘텐츠를 갱신하는 법", "paragraphs": [
-                "개발 데이터베이스에서 {{python manage.py ensure_handbook_samples}}를 실행하면 샘플 책이 준비됩니다. 이 명령은 기존에 직접 작성한 본문은 건드리지 않고, 예전의 공통 안내 문구가 남아 있는 샘플 본문만 새 설명으로 갱신합니다.",
-                "저장소의 변경 내역은 Git에서 확인할 수 있습니다. 예를 들어 {{git log --oneline -- gnu_jango/config/handbook_content.py}}는 샘플 매뉴얼 내용과 생성 규칙의 변경 기록을 보여 줍니다."
-            ], "code": "python manage.py ensure_handbook_samples\ngit log --oneline -- gnu_jango/config/handbook_content.py"}
+                "{{python manage.py ensure_handbook_samples}}는 빠진 책과 장만 추가합니다. 이미 있는 장의 본문, 책 이름·순서·접근 권한은 건드리지 않습니다.",
+                "새 버전에서 샘플 문구가 바뀌었다면 {{--update-unedited}}를 붙여 실행합니다. 샘플 장 끝에는 화면에 보이지 않는 서명이 있어서, 아무도 고치지 않은 장만 새 문구로 바뀝니다. 관리자가 고친 장은 그대로 두고 결과의 {{chapters_kept}}에 제목만 남깁니다.",
+                "{{chapters_kept}}에 남은 장이 실제로는 예전 샘플 문구일 뿐이라면 {{--refresh-chapter \"장 제목\"}}으로 그 장만 다시 씁니다. 모든 샘플 장을 덮어쓰는 {{--refresh}}는 운영 중인 매뉴얼에 쓰지 않습니다.",
+                "본문이 바뀐 뒤에는 {{rebuild_search_index}}로 검색에 반영합니다. 무엇이 바뀌었는지는 {{git log --oneline -- gnu_jango/config/}}로 확인할 수 있습니다."
+            ], "code": "python manage.py ensure_handbook_samples --update-unedited\npython manage.py rebuild_search_index\ngit log --oneline -- gnu_jango/config/"}
         ]
     }
 }
