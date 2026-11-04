@@ -138,7 +138,7 @@
     "@tiptap/extension-table-header": "^3.32.2",
     "@tiptap/extension-table-row": "^3.32.2",
     "@tiptap/extension-text-align": "^3.32.2",
-    "@tiptap/extension-text-style": "^3.31.4",
+    "@tiptap/extension-text-style": "^3.32.2",
     "@tiptap/extension-underline": "^3.32.2",
     "@tiptap/pm": "^3.32.2",
     "@tiptap/react": "^3.32.2",
