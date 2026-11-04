@@ -43,7 +43,7 @@ def fake_plugin_package(monkeypatch, name, plugin):
 def test_the_example_plugin_is_installed_for_the_suite():
     assert "gnu_plugins.attendance" in settings.G5_PLUGINS
     assert apps.is_installed("gnu_plugins.attendance")
-    assert [plugin.slug for plugin in installed_plugins()] == ["attendance"]
+    assert [plugin.slug for plugin in installed_plugins()] == ["attendance", "order_notify", "level_up"]
 
 
 def test_a_listed_package_without_plugin_py_is_refused():
@@ -207,8 +207,16 @@ def test_the_sidebar_adds_a_plugins_group_after_the_core_groups():
     groups = sidebar_navigation(request)
 
     assert groups[: len(settings.G5_ADMIN_NAVIGATION)] == list(settings.G5_ADMIN_NAVIGATION)
-    item = groups[-1]["items"][0]
-    assert str(item["link"]) == "/admin/attendance/attendance/"
+    links = {str(item["link"]): item for item in groups[-1]["items"]}
+    assert list(links) == [
+        "/admin/plugins/",
+        "/admin/attendance/attendance/",
+        "/admin/order_notify/ordernotice/",
+        "/admin/level_up/levelrule/",
+        "/admin/level_up/levelchange/",
+        "/admin/level_up/leveluphold/",
+    ]
+    item = links["/admin/attendance/attendance/"]
     assert item["permission"](request) is True
 
     request.user = MemberFactory(is_staff=True)

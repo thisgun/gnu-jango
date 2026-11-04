@@ -12,6 +12,12 @@ replaces the earlier registration.
 Hooks the core sends (docs/04-deploy/plugins.md keeps the list):
 - ``member.visited`` (user, request): a member signed in, or a signed-in member loaded a page
   (/api/v1/auth/me). It can come many times a day, so listeners must be idempotent.
+- ``member.joined`` (user, request): a member signed up; see gnu_jango.users.member_hooks.
+- ``bbs.post.created`` / ``bbs.comment.created``: a post or comment was written through the board
+  API; see gnu_jango.bbs.board_hooks.
+- ``shop.order.placed`` / ``shop.order.status_changed`` / ``shop.order.paid``: see
+  gnu_jango.shop.order_hooks.
+All but member.visited are sent after the change commits.
 """
 
 import logging
@@ -38,8 +44,15 @@ def on(name, *, priority=DEFAULT_PRIORITY):
     return register
 
 
+def _active(name):
+    """The listeners of ``name``, without those of plugins switched off in the admin."""
+    from . import state
+
+    return [entry for entry in tuple(_listeners.get(name, ())) if state.module_enabled(entry[2].__module__)]
+
+
 def emit(name, **payload):
-    for _priority, key, func in tuple(_listeners.get(name, ())):
+    for _priority, key, func in _active(name):
         try:
             with transaction.atomic():
                 func(**payload)
@@ -48,7 +61,7 @@ def emit(name, **payload):
 
 
 def replace(name, value, **context):
-    for _priority, key, func in tuple(_listeners.get(name, ())):
+    for _priority, key, func in _active(name):
         try:
             with transaction.atomic():
                 value = func(value, **context)

@@ -9,6 +9,7 @@ It only ever touches the group, boards and posts it created (group "manual", tab
 refuses to reuse a table name that already belongs to something else.
 """
 
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as datetime_timezone
 
@@ -37,6 +38,14 @@ from .handbook_commerce_content import (
     COMMERCE_LINK_TITLES,
 )
 from .handbook_content import LEGACY_SAMPLE_MARKER, chapter_body
+from .handbook_plugin_content import (
+    PLUGIN_BOOK_PARTS,
+    PLUGIN_BOOK_TABLE,
+    PLUGIN_BOOK_TITLE,
+    PLUGIN_LINK_HTML,
+    PLUGIN_LINK_MARKER,
+    PLUGIN_LINK_TITLES,
+)
 
 GROUP_ID = "manual"
 GROUP_SUBJECT = "매뉴얼"
@@ -137,17 +146,103 @@ BOOKS = (
         COMMERCE_BOOK_TITLE,
         COMMERCE_BOOK_PARTS,
     ),
+    Book(
+        PLUGIN_BOOK_TABLE,
+        PLUGIN_BOOK_TITLE,
+        PLUGIN_BOOK_PARTS,
+    ),
 )
 
 # (chapter titles, link html, marker): "see also" links appended once to existing chapters.
 LINK_BLOCKS = (
     (AUDIT_LINK_TITLES, AUDIT_LINK_HTML, AUDIT_LINK_MARKER),
     (COMMERCE_LINK_TITLES, COMMERCE_LINK_HTML, COMMERCE_LINK_MARKER),
+    (PLUGIN_LINK_TITLES, PLUGIN_LINK_HTML, PLUGIN_LINK_MARKER),
 )
 
 
 def _chapter_body(title):
     return chapter_body(title)
+
+
+# A sample chapter ends with a signature of its own text. A chapter whose text still matches it was
+# not edited by anyone, so --update-unedited may replace it with newer sample text; an edit (even a
+# reformat by the editor) breaks the match and the chapter is kept.
+# Parsed with string methods rather than a regex, so a body ending in a long run of spaces stays cheap.
+_SIGN_OPEN = "<!-- hb-sample:"
+_SIGN_CLOSE = " -->"
+_DIGEST_CHARS = frozenset("0123456789abcdef")
+_DIGEST_LENGTH = 16
+
+
+def _split_signature(content):
+    """``(text, digest)`` of signed content; ``(text, None)`` when it carries no signature."""
+    text = (content or "").rstrip()
+    start = text.rfind(_SIGN_OPEN)
+    if start == -1 or not text.endswith(_SIGN_CLOSE):
+        return text, None
+    digest = text[start + len(_SIGN_OPEN) : -len(_SIGN_CLOSE)]
+    if len(digest) != _DIGEST_LENGTH or not _DIGEST_CHARS.issuperset(digest):
+        return text, None
+    return text[:start].rstrip(), digest
+
+
+def _digest(text):
+    return hashlib.sha256(text.rstrip().encode("utf-8")).hexdigest()[:_DIGEST_LENGTH]
+
+
+def _unsigned(content):
+    return _split_signature(content)[0]
+
+
+def sign(content):
+    """``content`` with a signature of its (unsigned) text at the end."""
+    text = _unsigned(content)
+    return f"{text}\n<!-- hb-sample:{_digest(text)} -->"
+
+
+def is_unedited(content):
+    """True when ``content`` carries a signature that still matches its text."""
+    text, digest = _split_signature(content)
+    return digest is not None and digest == _digest(text)
+
+
+def _link_block(link_html, marker):
+    return "\n" + link_html + "\n" + marker
+
+
+def _without_links(content):
+    """The chapter text without the see-also blocks _add_links appends (and without the signature)."""
+    text = _unsigned(content)
+    for _titles, link_html, marker in LINK_BLOCKS:
+        text = text.replace(_link_block(link_html, marker), "")
+    return text.rstrip()
+
+
+def _update_unedited(post, report):
+    """Bring an untouched sample chapter up to the current sample text; leave an edited one alone."""
+    body = _chapter_body(post.wr_subject)
+    content = post.wr_content or ""
+    # Each write applies only if the text is still what was read: an admin saving the chapter
+    # meanwhile wins, and the chapter is reported as kept.
+    unchanged = Post.objects.filter(pk=post.pk, wr_content=post.wr_content)
+    if is_unedited(content):
+        if _without_links(content) == body.rstrip():
+            return
+        # The see-also blocks are added back (and the chapter signed again) by _add_links.
+        if unchanged.update(wr_content=sign(body), wr_last=timezone.now()):
+            report["updated"] += 1
+            return
+    elif _split_signature(content)[1] is None and _without_links(content) == body.rstrip():
+        # Made before chapters were signed and still the current sample text: sign it, change nothing.
+        if unchanged.update(wr_content=sign(content)):
+            report["signed"] += 1
+            return
+    report["kept"].append(post.wr_subject)
+
+
+def _sample_titles():
+    return {title for book in BOOKS for _part, titles in book.parts for title in titles}
 
 
 def _book_table_names():
@@ -212,24 +307,27 @@ def _board(group, order, book):
     return board
 
 
-def _chapters(board, book, created_at, *, refresh=False):
+def _chapters(board, book, created_at, report, *, refresh=False, refresh_titles=frozenset(), update_unedited=False):
     existing_posts = list(Post.objects.filter(board=board))
     chapters = [(part, title) for part, titles in book.parts for title in titles]
     sample_titles = {title for _part, title in chapters}
     existing_titles = {post.wr_subject for post in existing_posts}
     missing = [(part, title) for part, title in chapters if title not in existing_titles]
-    updated = 0
     for post in existing_posts:
         # By default refresh only the old repeated placeholder and keep administrator-authored text.
         # --refresh rewrites every chapter that carries a sample title (an operator's explicit choice,
         # e.g. to fix a factual error in already deployed sample text); other chapters stay untouched.
+        # refresh_titles does the same for the named chapters only.
         stale = LEGACY_SAMPLE_MARKER in (post.wr_content or "")
-        if stale or (refresh and post.wr_subject in sample_titles):
-            body = _chapter_body(post.wr_subject)
+        rewrite = refresh or post.wr_subject in refresh_titles
+        if stale or (rewrite and post.wr_subject in sample_titles):
+            body = sign(_chapter_body(post.wr_subject))
             if post.wr_content != body:
                 post.wr_content = body
                 post.save(update_fields=("wr_content",))
-                updated += 1
+                report["updated"] += 1
+        elif update_unedited and post.wr_subject in sample_titles:
+            _update_unedited(post, report)
 
     # A new post gets the smallest wr_num so that the newest comes first on a board list. A book is
     # read from its first chapter, so the chapters are written last to first.
@@ -249,7 +347,7 @@ def _chapters(board, book, created_at, *, refresh=False):
             wr_num=wr_num,
             wr_parent=0,
             wr_subject=title,
-            wr_content=_chapter_body(title),
+            wr_content=sign(_chapter_body(title)),
             wr_option="html1",
             ca_name=part,
             wr_name="매뉴얼 편집자",
@@ -257,11 +355,11 @@ def _chapters(board, book, created_at, *, refresh=False):
             wr_last=stamp,
         )
         Post.objects.filter(pk=post.pk).update(wr_parent=post.pk)
-    return len(missing), updated
+    report["created"] += len(missing)
 
 
 def _add_links():
-    """Point key existing chapters at the newer books (audit, commerce) without replacing their content."""
+    """Point key existing chapters at the newer books (audit, commerce, plugins) without replacing their content."""
     added = 0
     for titles, link_html, marker in LINK_BLOCKS:
         posts = Post.objects.filter(board__bo_table__in=_book_table_names(), wr_subject__in=titles)
@@ -269,7 +367,9 @@ def _add_links():
             content = post.wr_content or ""
             if marker in content:
                 continue
-            post.wr_content = content.rstrip() + "\n" + link_html + "\n" + marker
+            linked = _unsigned(content) + _link_block(link_html, marker)
+            # An untouched chapter stays recognisable as one after the block is added.
+            post.wr_content = sign(linked) if is_unedited(content) else linked
             post.save(update_fields=("wr_content",))
             added += 1
     return added
@@ -283,11 +383,17 @@ def _clear_config_cache():
 
 @transaction.atomic
 @suppress_notification_events()
-def ensure_samples(*, stable_dates=False, refresh=False):
+def ensure_samples(*, stable_dates=False, refresh=False, refresh_titles=(), update_unedited=False):
     """Create the sample manual (or complete it) and point the theme at it. Safe to run again.
 
     A rerun keeps board settings and the chosen docs group; refresh=True also rewrites the bodies of
-    chapters that carry a sample title."""
+    chapters that carry a sample title, and refresh_titles rewrites only the sample chapters it names.
+    update_unedited=True rewrites only the sample chapters nobody edited (their signature still
+    matches) and lists the others in chapters_kept."""
+    refresh_titles = frozenset(refresh_titles)
+    unknown = refresh_titles - _sample_titles()
+    if unknown:
+        raise HandbookSampleError(f"Not a sample chapter title: {', '.join(sorted(unknown))}")
     group = _group()
     _check_tables_are_free(group)
     now = (
@@ -295,13 +401,18 @@ def ensure_samples(*, stable_dates=False, refresh=False):
         if stable_dates
         else timezone.now()
     )
-    created = 0
-    updated = 0
+    report = {"created": 0, "updated": 0, "signed": 0, "kept": []}
     for order, book in enumerate(BOOKS, start=1):
         board = _board(group, order, book)
-        created_count, updated_count = _chapters(board, book, now, refresh=refresh)
-        created += created_count
-        updated += updated_count
+        _chapters(
+            board,
+            book,
+            now,
+            report,
+            refresh=refresh,
+            refresh_titles=refresh_titles,
+            update_unedited=update_unedited,
+        )
     links_added = _add_links()
     docs_group, _created = Config.objects.get_or_create(name=DOCS_GROUP_KEY, defaults={"value": GROUP_ID})
     if not (docs_group.value or "").strip():
@@ -312,8 +423,10 @@ def ensure_samples(*, stable_dates=False, refresh=False):
     return {
         "group": GROUP_ID,
         "books": len(BOOKS),
-        "chapters_created": created,
-        "chapters_updated": updated,
+        "chapters_created": report["created"],
+        "chapters_updated": report["updated"],
+        "chapters_signed": report["signed"],
+        "chapters_kept": report["kept"],
         "links_added": links_added,
     }
 

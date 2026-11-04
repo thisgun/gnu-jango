@@ -91,7 +91,7 @@ SEARCH_GUIDES = {
             ], "note": "운영 환경의 적용 순서는 {{migrate → rebuild_search_index → 새 웹 버전 배포/Reload}}입니다. 재색인은 웹페이지 요청 안에서 실행하지 않습니다."},
             {"heading": "매뉴얼 내용도 함께 추가할 때", "paragraphs": [
                 "이 가이드의 원본은 저장소의 {{gnu_jango/config/handbook_search_content.py}}입니다. 새 코드에서 아래 순서로 실행하면 새 매뉴얼 책을 만들고 그 내용까지 색인할 수 있습니다.",
-                "기본 {{ensure_handbook_samples}}는 기존에 편집한 매뉴얼 본문을 보존하면서 빠진 책·장을 추가합니다. {{--refresh}}는 같은 샘플 제목의 본문을 덮어쓰는 선택이므로 새 책만 추가할 때는 붙이지 않습니다."
+                "기본 {{ensure_handbook_samples}}는 기존에 편집한 매뉴얼 본문을 보존하면서 빠진 책·장을 추가합니다. 이미 넣은 장의 문구까지 새 버전에 맞추려면 {{--update-unedited}}를 붙입니다. 같은 샘플 제목의 본문을 모두 덮어쓰는 {{--refresh}}는 붙이지 않습니다."
             ], "code": "python manage.py migrate\npython manage.py ensure_handbook_samples\npython manage.py rebuild_search_index"}
         ]
     },
