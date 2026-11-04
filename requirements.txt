@@ -30,7 +30,7 @@ django-taggit==6.1.0
 bleach[css]==6.4.0
 cmarkgfm==2025.10.22
 pillow==13.0.0
-sorl-thumbnail==13.2.0
+sorl-thumbnail==13.4.0
 
 # Requests / sessions
 django_user_agents==0.4.0
@@ -81,4 +81,4 @@ django-seed==0.3.1
 
 # S3-compatible media storage (not needed with MEDIA_STORAGE=local)
 django-storages[s3]==1.14.6
-boto3==1.43.118
+boto3==1.43.123
