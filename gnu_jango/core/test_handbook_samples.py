@@ -451,6 +451,30 @@ class HandbookSamplesTests(TestCase):
         self.assertTrue(samples.is_unedited(current.wr_content))
         self.assertEqual(older.wr_content, "<p>older unsigned text</p>")
 
+    def test_refresh_chapter_rewrites_only_the_named_chapter(self):
+        samples.ensure_samples()
+        named = Post.objects.get(board__bo_table="hb_start", wr_subject="글 써 보기")
+        other = Post.objects.get(board__bo_table="hb_start", wr_subject="첫 화면 열기")
+        Post.objects.filter(pk__in=(named.pk, other.pk)).update(wr_content="<p>older sample text</p>")
+
+        call_command("ensure_handbook_samples", "--refresh-chapter", "글 써 보기", stdout=io.StringIO())
+
+        named.refresh_from_db()
+        other.refresh_from_db()
+        self.assertEqual(named.wr_content, samples.sign(samples.chapter_body("글 써 보기")))
+        self.assertTrue(samples.is_unedited(named.wr_content))
+        self.assertEqual(other.wr_content, "<p>older sample text</p>")
+
+    def test_refresh_chapter_rejects_a_title_that_is_not_a_sample_chapter(self):
+        with self.assertRaises(CommandError):
+            call_command("ensure_handbook_samples", "--refresh-chapter", "없는 장", stdout=io.StringIO())
+
+    def test_refresh_and_refresh_chapter_cannot_be_combined(self):
+        with self.assertRaises(CommandError):
+            call_command(
+                "ensure_handbook_samples", "--refresh", "--refresh-chapter", "글 써 보기", stdout=io.StringIO()
+            )
+
     def test_refresh_and_update_unedited_cannot_be_combined(self):
         with self.assertRaises(CommandError):
             call_command("ensure_handbook_samples", "--refresh", "--update-unedited", stdout=io.StringIO())

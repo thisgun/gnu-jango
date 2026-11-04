@@ -241,6 +241,10 @@ def _update_unedited(post, report):
     report["kept"].append(post.wr_subject)
 
 
+def _sample_titles():
+    return {title for book in BOOKS for _part, titles in book.parts for title in titles}
+
+
 def _book_table_names():
     return [book.table for book in BOOKS]
 
@@ -303,7 +307,7 @@ def _board(group, order, book):
     return board
 
 
-def _chapters(board, book, created_at, report, *, refresh=False, update_unedited=False):
+def _chapters(board, book, created_at, report, *, refresh=False, refresh_titles=frozenset(), update_unedited=False):
     existing_posts = list(Post.objects.filter(board=board))
     chapters = [(part, title) for part, titles in book.parts for title in titles]
     sample_titles = {title for _part, title in chapters}
@@ -313,8 +317,10 @@ def _chapters(board, book, created_at, report, *, refresh=False, update_unedited
         # By default refresh only the old repeated placeholder and keep administrator-authored text.
         # --refresh rewrites every chapter that carries a sample title (an operator's explicit choice,
         # e.g. to fix a factual error in already deployed sample text); other chapters stay untouched.
+        # refresh_titles does the same for the named chapters only.
         stale = LEGACY_SAMPLE_MARKER in (post.wr_content or "")
-        if stale or (refresh and post.wr_subject in sample_titles):
+        rewrite = refresh or post.wr_subject in refresh_titles
+        if stale or (rewrite and post.wr_subject in sample_titles):
             body = sign(_chapter_body(post.wr_subject))
             if post.wr_content != body:
                 post.wr_content = body
@@ -377,12 +383,17 @@ def _clear_config_cache():
 
 @transaction.atomic
 @suppress_notification_events()
-def ensure_samples(*, stable_dates=False, refresh=False, update_unedited=False):
+def ensure_samples(*, stable_dates=False, refresh=False, refresh_titles=(), update_unedited=False):
     """Create the sample manual (or complete it) and point the theme at it. Safe to run again.
 
     A rerun keeps board settings and the chosen docs group; refresh=True also rewrites the bodies of
-    chapters that carry a sample title. update_unedited=True rewrites only the sample chapters nobody
-    edited (their signature still matches) and lists the others in chapters_kept."""
+    chapters that carry a sample title, and refresh_titles rewrites only the sample chapters it names.
+    update_unedited=True rewrites only the sample chapters nobody edited (their signature still
+    matches) and lists the others in chapters_kept."""
+    refresh_titles = frozenset(refresh_titles)
+    unknown = refresh_titles - _sample_titles()
+    if unknown:
+        raise HandbookSampleError(f"Not a sample chapter title: {', '.join(sorted(unknown))}")
     group = _group()
     _check_tables_are_free(group)
     now = (
@@ -393,7 +404,15 @@ def ensure_samples(*, stable_dates=False, refresh=False, update_unedited=False):
     report = {"created": 0, "updated": 0, "signed": 0, "kept": []}
     for order, book in enumerate(BOOKS, start=1):
         board = _board(group, order, book)
-        _chapters(board, book, now, report, refresh=refresh, update_unedited=update_unedited)
+        _chapters(
+            board,
+            book,
+            now,
+            report,
+            refresh=refresh,
+            refresh_titles=refresh_titles,
+            update_unedited=update_unedited,
+        )
     links_added = _add_links()
     docs_group, _created = Config.objects.get_or_create(name=DOCS_GROUP_KEY, defaults={"value": GROUP_ID})
     if not (docs_group.value or "").strip():
