@@ -417,14 +417,17 @@ PLUGIN_GUIDES = {
                     "설정값은 {{gnu_jango.plugins.state.setting(\"attendance\", \"ATTENDANCE_POINT\")}}처럼 읽습니다. 관리자 저장값 → Django settings → 환경 변수 → 기본값 순서로 정해지고 1분 동안 캐시됩니다. 관리자 화면에서 저장하면 캐시가 바로 비워집니다.",
                     "플러그인 API는 코어 API 계약({{openapi/schema.json}})에 넣지 않습니다. 뷰에 {{@extend_schema(exclude=True)}}를 붙입니다.",
                     "응답은 코어와 같은 {{api_response}}·{{api_error}} 형식을 쓰고, 로그인이 필요한 API에는 권한 검사와 요청 횟수 제한을 붙입니다. 출석체크의 {{api.py}}가 예입니다.",
+                    "Vercel은 Django를 ASGI로 실행합니다. 이때 URL을 고르는 단계와 비동기({{async def}}) 뷰·미들웨어는 이벤트 루프에서 돌아서, DB나 {{CACHE_URL=db://}} 캐시를 쓰면 {{SynchronousOnlyOperation}} 오류(500)가 납니다. DB가 필요한 일은 일반(동기) 뷰 안에서 하거나, 비동기 코드에서는 {{sync_to_async}}로 감쌉니다. 플러그인을 켰는지 확인하는 일도 코어가 뷰를 실행할 때 합니다.",
                 ],
             },
             {
                 "heading": "테스트",
                 "paragraphs": [
-                    "pytest는 {{gnu_plugins}} 폴더의 테스트도 함께 찾습니다. 출석체크 예제는 {{.env}}와 상관없이 늘 함께 설치되어 "
-                    "테스트되므로, 코어의 플러그인 연결 지점이 깨지면 바로 알 수 있습니다.",
+                    "pytest는 {{gnu_plugins}} 폴더의 테스트도 함께 찾습니다. 저장소에 든 플러그인(출석체크·주문 알림·자동 등업)은 "
+                    "{{.env}}와 상관없이 늘 함께 설치되어 테스트되므로, 코어의 플러그인 연결 지점이 깨지면 바로 알 수 있습니다.",
                     "새 플러그인은 테스트할 때도 {{G5_PLUGINS}}에 넣어야 설치됩니다.",
+                    "일반 테스트 클라이언트는 WSGI로 요청하므로 ASGI에서만 나는 오류를 잡지 못합니다. Vercel에서 쓸 API는 "
+                    "{{async_to_sync(AsyncClient().get)(주소)}}처럼 {{django.test.AsyncClient}}로도 한 번 요청해 봅니다.",
                 ],
                 "code": "G5_PLUGINS=gnu_plugins.<새 이름> python -m pytest gnu_plugins/<새 이름>",
             },
