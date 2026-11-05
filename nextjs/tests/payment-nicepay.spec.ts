@@ -9,7 +9,9 @@ import { api } from "../src/lib/api";
 import {
   createNicepayConfirmPayload,
   createNicepayFields,
+  installNicepayMessageBridge,
   nicepayLowerSizeYN,
+  nicepayMessageObject,
   requestNicepayPayment,
   shouldUseNicepayMobile,
 } from "../src/lib/payment.nicepay";
@@ -415,6 +417,41 @@ test.describe("Nicepay payment helpers", () => {
     expect(createNicepayFields(paymentRequest("card"), nicepay(), { viewportHeight: 760 }).NpLowerSizeYN).toBe("Y");
     expect(createNicepayFields(paymentRequest("card"), nicepay(), { viewportHeight: 1000 }).NpLowerSizeYN).toBe("N");
     expect(createNicepayFields(paymentRequest("card"), nicepay()).NpLowerSizeYN).toBe("N");
+  });
+
+  test("parses NICEPAY's JSON string messages so its script never needs eval", () => {
+    const nicepayOrigin = "https://dc1-web.nicepay.co.kr";
+    expect(nicepayMessageObject(nicepayOrigin, '{"code":"11","height":"642"}')).toEqual({ code: "11", height: "642" });
+    expect(nicepayMessageObject("https://web.nicepay.co.kr", '{"code":"0"}')).toEqual({ code: "0" });
+    expect(nicepayMessageObject("https://evil.example", '{"code":"11"}')).toBeNull();
+    expect(nicepayMessageObject("https://nicepay.co.kr.evil.example", '{"code":"11"}')).toBeNull();
+    expect(nicepayMessageObject("http://dc1-web.nicepay.co.kr", '{"code":"11"}')).toBeNull();
+    expect(nicepayMessageObject(nicepayOrigin, "not json")).toBeNull();
+    expect(nicepayMessageObject(nicepayOrigin, '"text"')).toBeNull();
+    expect(nicepayMessageObject(nicepayOrigin, '{"height":"642"}')).toBeNull();
+    expect(nicepayMessageObject(nicepayOrigin, { code: "11" })).toBeNull();
+  });
+
+  test("hands NICEPAY's listener a parsed object instead of the string", () => {
+    const target = new EventTarget();
+    const uninstall = installNicepayMessageBridge(target);
+    const received: unknown[] = [];
+    target.addEventListener("message", (event) => received.push((event as MessageEvent).data));
+    const send = (data: unknown, origin = "https://dc1-web.nicepay.co.kr") =>
+      target.dispatchEvent(new MessageEvent("message", { data, origin }));
+
+    send('{"code":"11","height":"642"}');
+    send("plain text");
+    send('{"code":"11"}', "https://evil.example");
+    uninstall();
+    send('{"code":"12"}');
+
+    expect(received).toEqual([
+      { code: "11", height: "642" },
+      "plain text",
+      '{"code":"11"}',
+      '{"code":"12"}',
+    ]);
   });
 
   test("prefers explicit Nicepay module type before device detection", () => {

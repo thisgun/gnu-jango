@@ -190,6 +190,39 @@ export function nicepayLowerSizeYN(viewportHeight: number): "Y" | "N" {
   return viewportHeight > 0 && viewportHeight < NICEPAY_STANDARD_WINDOW_HEIGHT ? "Y" : "N";
 }
 
+// nicepay-pgweb.js reads a window message that arrives as a string with eval("(" + data + ")"). The
+// production CSP has no 'unsafe-eval', so the browser refuses it: the layer never takes its real size
+// (the window looks cut off) and the authentication result is never read. NICEPAY sends JSON strings,
+// so a capture listener hands the script the parsed object instead and it takes its no-eval path.
+const NICEPAY_MESSAGE_ORIGIN = /^https:\/\/([a-z0-9-]+\.)*nicepay\.co\.kr$/;
+
+export function nicepayMessageObject(origin: string, data: unknown): Record<string, unknown> | null {
+  if (typeof data !== "string" || !NICEPAY_MESSAGE_ORIGIN.test(origin)) return null;
+  try {
+    const parsed: unknown = JSON.parse(data);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && "code" in parsed) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Not JSON: leave the event untouched.
+  }
+  return null;
+}
+
+export function installNicepayMessageBridge(target: EventTarget): () => void {
+  const bridge = (event: Event) => {
+    const message = event as MessageEvent;
+    const parsed = nicepayMessageObject(message.origin, message.data);
+    if (!parsed) return;
+    event.stopImmediatePropagation();
+    target.dispatchEvent(
+      new MessageEvent("message", { data: parsed, origin: message.origin, source: message.source })
+    );
+  };
+  target.addEventListener("message", bridge, { capture: true });
+  return () => target.removeEventListener("message", bridge, { capture: true });
+}
+
 export function createNicepayFields(
   req: PaymentRequest,
   nicepay: NicepayExtra,
@@ -313,6 +346,7 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
     const hostWindow = window as NicepayWindow;
     const bodySnapshot = new Set<Element>(Array.from(document.body.children));
     const allowedOrigins = paymentMessageOrigins(nicepay.return_url);
+    const removeMessageBridge = installNicepayMessageBridge(window);
     let resultCompleted = false;
     let settled = false;
     // eslint-disable-next-line prefer-const
@@ -327,6 +361,7 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
     function cleanup() {
       if (resultTimer) window.clearTimeout(resultTimer);
       window.removeEventListener("message", onNicepayMessage);
+      removeMessageBridge();
       Array.from(document.body.children).forEach((element) => {
         if (!bodySnapshot.has(element)) element.remove();
       });
