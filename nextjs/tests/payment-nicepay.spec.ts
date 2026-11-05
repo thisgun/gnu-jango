@@ -9,6 +9,7 @@ import { api } from "../src/lib/api";
 import {
   createNicepayConfirmPayload,
   createNicepayFields,
+  nicepayLowerSizeYN,
   requestNicepayPayment,
   shouldUseNicepayMobile,
 } from "../src/lib/payment.nicepay";
@@ -402,6 +403,18 @@ test.describe("Nicepay payment helpers", () => {
         ...expected,
       });
     });
+  });
+
+  test("asks for the low-resolution window when the browser is shorter than the standard one", () => {
+    expect(nicepayLowerSizeYN(640)).toBe("Y");
+    expect(nicepayLowerSizeYN(859)).toBe("Y");
+    expect(nicepayLowerSizeYN(860)).toBe("N");
+    expect(nicepayLowerSizeYN(1080)).toBe("N");
+    expect(nicepayLowerSizeYN(0)).toBe("N");
+
+    expect(createNicepayFields(paymentRequest("card"), nicepay(), { viewportHeight: 760 }).NpLowerSizeYN).toBe("Y");
+    expect(createNicepayFields(paymentRequest("card"), nicepay(), { viewportHeight: 1000 }).NpLowerSizeYN).toBe("N");
+    expect(createNicepayFields(paymentRequest("card"), nicepay()).NpLowerSizeYN).toBe("N");
   });
 
   test("prefers explicit Nicepay module type before device detection", () => {
