@@ -438,4 +438,52 @@
     <changefreq>weekly</changefreq>
     <priority>0.5</priority>
   </url>
+  <url>
+    <loc>http://localhost:3000/bbs/hb_plugins/81</loc>
+    <lastmod>2026-10-01T11:53:00.000Z</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>http://localhost:3000/bbs/hb_plugins/80</loc>
+    <lastmod>2026-10-01T11:54:00.000Z</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>http://localhost:3000/bbs/hb_plugins/79</loc>
+    <lastmod>2026-10-01T11:55:00.000Z</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>http://localhost:3000/bbs/hb_plugins/78</loc>
+    <lastmod>2026-10-01T11:56:00.000Z</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>http://localhost:3000/bbs/hb_plugins/77</loc>
+    <lastmod>2026-10-01T11:57:00.000Z</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>http://localhost:3000/bbs/hb_plugins/76</loc>
+    <lastmod>2026-10-01T11:58:00.000Z</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>http://localhost:3000/bbs/hb_plugins/75</loc>
+    <lastmod>2026-10-01T11:59:00.000Z</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>http://localhost:3000/bbs/hb_plugins/74</loc>
+    <lastmod>2026-10-01T12:00:00.000Z</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
 </urlset>
