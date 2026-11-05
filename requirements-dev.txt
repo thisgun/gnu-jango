@@ -10,8 +10,8 @@ pytest-cov==7.1.0
 factory-boy==3.3.3
 
 # Browser automation and isolated environment test runner.
-selenium==4.51.0
-tox==4.67.4
+selenium==4.52.0
+tox==4.67.5
 
 black
 coverage[toml]
