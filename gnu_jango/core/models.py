@@ -275,7 +275,6 @@ class Notification(models.Model):
     nt_title = models.CharField(max_length=255, default="", blank=True)
     nt_body = models.TextField(default="", blank=True)
     nt_data = models.JSONField(null=True, blank=True)
-    dday_id = models.CharField(max_length=64, default="", blank=True)
     nt_sent_at = models.DateTimeField(default=timezone.now)
     nt_read_at = models.DateTimeField(null=True, blank=True)
     event_key = models.CharField(max_length=128, unique=True, null=True, blank=True, editable=False)
