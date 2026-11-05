@@ -181,7 +181,20 @@ function collectNicepayFields(form: HTMLFormElement) {
   return fields;
 }
 
-export function createNicepayFields(req: PaymentRequest, nicepay: NicepayExtra) {
+// The standard PC window is about 825px tall. In a shorter browser nicepay-pgweb.js pins its layer to
+// the viewport, so the terms agreement and the pay button sit below the fold behind a 4px scrollbar.
+// NpLowerSizeYN=Y (the script's "저해상도 결제창" option) asks for the 630px window instead.
+const NICEPAY_STANDARD_WINDOW_HEIGHT = 860;
+
+export function nicepayLowerSizeYN(viewportHeight: number): "Y" | "N" {
+  return viewportHeight > 0 && viewportHeight < NICEPAY_STANDARD_WINDOW_HEIGHT ? "Y" : "N";
+}
+
+export function createNicepayFields(
+  req: PaymentRequest,
+  nicepay: NicepayExtra,
+  options: { viewportHeight?: number } = {}
+) {
   const payMethodMap: Record<PaymentMethod, string> = {
     card: "CARD",
     vbank: "VBANK",
@@ -208,6 +221,7 @@ export function createNicepayFields(req: PaymentRequest, nicepay: NicepayExtra) 
     ReturnURL: nicepay.return_url || `${req.success_url}?pg=nicepay`,
     VbankExpDate: req.method === "vbank" ? nicepay.vbank_exp_date || "" : "",
     NpLang: "KO",
+    NpLowerSizeYN: nicepayLowerSizeYN(options.viewportHeight ?? 0),
     GoodsCl: "1",
     TransType: nicepay.trans_type || "0",
     // The official form encoding is EUC-KR; the value inside CharSet also tells NICEPAY how
@@ -294,7 +308,7 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
     }
 
     const isMobile = shouldUseNicepayMobile(nicepay);
-    const fields = createNicepayFields(req, nicepay);
+    const fields = createNicepayFields(req, nicepay, { viewportHeight: window.innerHeight });
     const form = createNicepayForm(fields, nicepay.return_url);
     const hostWindow = window as NicepayWindow;
     const bodySnapshot = new Set<Element>(Array.from(document.body.children));
