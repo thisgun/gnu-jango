@@ -127,6 +127,18 @@ test('a board without secret posts offers no secret checkbox and a failed upload
   expect((await total()) - before).toBe(1);
 });
 
+test('the write form of an existing board does not keep the board-not-found error', async ({ page }) => {
+  test.skip(!loginId || !loginPassword || !noSecretBoard, 'Set E2E_LOGIN_ID, E2E_LOGIN_PASSWORD and E2E_NO_SECRET_BOARD.');
+  // The static export renders before the route slug is known; that first pass must not leave
+  // "게시판을 찾을 수 없습니다." on the form once the board has loaded.
+  await loginByApi(page.context().request);
+  await page.goto(`/bbs/${encodeURIComponent(noSecretBoard)}/write`);
+  await expect(page.locator('#wr_subject')).toBeVisible({ timeout: 25000 });
+  await expect(page.locator('input[type=file][aria-label="첨부파일 선택"]')).toHaveCount(1);
+  await page.waitForTimeout(1500);
+  await expect(page.getByText('게시판을 찾을 수 없습니다.')).toHaveCount(0);
+});
+
 test('a paid download asks first and charges the points once', async ({ page }) => {
   test.skip(!loginId || !loginPassword || !pointBoard || !pointPost, 'Set E2E_LOGIN_ID, E2E_LOGIN_PASSWORD, E2E_POINT_BOARD and E2E_POINT_POST.');
   const request = page.context().request;

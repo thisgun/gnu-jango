@@ -100,4 +100,9 @@
 <changefreq>hourly</changefreq>
 <priority>0.7</priority>
 </url>
+<url>
+<loc>http://localhost:3000/bbs/hb_plugins</loc>
+<changefreq>hourly</changefreq>
+<priority>0.7</priority>
+</url>
 </urlset>

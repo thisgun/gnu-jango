@@ -158,6 +158,10 @@ export default function WritePage({ boTable: fallbackBoTable }: WritePageProps) 
   // Resolve params and load board info
   useEffect(() => {
     savedPostRef.current = null; // a different form context never reuses an earlier saved post
+    // The static export first renders with no route slug, so a "board not found" from that pass
+    // must not outlive the slug resolving after hydration.
+    setError("");
+    setLoading(true);
     (async () => {
       if (!routeBoTable) {
         setError("게시판을 찾을 수 없습니다.");
