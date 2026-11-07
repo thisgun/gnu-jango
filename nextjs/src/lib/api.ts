@@ -463,6 +463,8 @@ export interface ShopProduct {
   related_items?: ShopProduct[];
   /** 임베딩이 가까운 판매 중 상품(최대 4개, 관련 상품 제외) — G5_AI_SIMILAR_PRODUCTS 가 꺼져 있으면 []. */
   similar_items?: ShopProduct[];
+  /** 최근 365일 결제된 주문에서 서로 다른 구매자 3명 이상이 이 상품과 함께 산 재고 있는 판매 중 상품(최대 4개, 관련 · 비슷한 상품 제외). */
+  bought_together_items?: ShopProduct[];
   /** 승인된 후기를 AI(G5_AI_CHAT_MODEL)가 미리 요약한 글 — G5_AI_REVIEW_SUMMARIES 가 꺼져 있거나 요약이 없으면 null. */
   ai_review_summary?: ShopAiReviewSummary | null;
   /** 정기구독 주기 · 할인 — 쇼핑몰이 정기구독을 껐거나 이 상품이 받지 않으면 null(상세에만 온다). */

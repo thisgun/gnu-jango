@@ -1,82 +1,17 @@
 {
   "version": 2,
-  "generation": 54,
+  "generation": 55,
   "keepBuilds": 2,
   "files": [
     {
-      "path": "_next/static/chunks/00-eb8i8q953j.js",
-      "sha256": "702efa1c1cda1caea98a83f63ad925bbd730488024350a4d00f3d3b76b3bee72",
-      "retiredAt": 53
-    },
-    {
-      "path": "_next/static/chunks/0p0olns474vt6.js",
-      "sha256": "d29ad4b88336cfff5e621ef5638444784315db041a26e389bdd6231e42195bf7",
-      "retiredAt": 53
-    },
-    {
-      "path": "_next/static/chunks/0p9l0n0fcxmvh.js",
-      "sha256": "b09774bce6ee184a7b8f28c46b7434a6b31169481744a4099536630980a4c4b0",
-      "retiredAt": 53
-    },
-    {
-      "path": "_next/static/chunks/0x-ffstq0md9n.js",
-      "sha256": "edfee25269483817c2c8c76881a1cded4f74ea6347fe0623d4a44953f6032df8",
-      "retiredAt": 53
-    },
-    {
-      "path": "_next/static/chunks/1qf2jt7w1r650.js",
-      "sha256": "0498029633bd5a19a904bea22b19ed2bb1cb698ca2962cffb39b4dab3b52470d",
-      "retiredAt": 53
-    },
-    {
-      "path": "_next/static/chunks/1tfpilppkfkez.js",
-      "sha256": "140a96816ed425ae0d6893aa5f70c33597289969b498bb248dc3935b3e855f5c",
-      "retiredAt": 53
-    },
-    {
-      "path": "_next/static/chunks/2enn45ty313-i.js",
-      "sha256": "280f93f47e644f85bbd184f1751aba9d43027ebca644e98080fd04bff4f1ab84",
-      "retiredAt": 53
-    },
-    {
       "path": "_next/static/chunks/2f3w0pc3hbk1e.js",
-      "sha256": "dd5a509d0c15199ee4856042eb4f5ab19cc55e0bef3a7cd33e46a91db1ea951f",
+      "sha256": "7dbe2a01b1e3956d982d7d4245ace069c641456ee801694d112611bf2f832310",
       "retiredAt": 54
     },
     {
-      "path": "_next/static/chunks/2lfac3r8gqezs.js",
-      "sha256": "cd4a67bc6751b533acd2dcc638ee4bce2e7f8cb1b5c1591f45940175d5aff8ca",
-      "retiredAt": 53
-    },
-    {
-      "path": "_next/static/chunks/2vz_3bflk4y3u.js",
-      "sha256": "c48792a1f25be8aff5780935757a69096314e1e430c607a8b42bd7e029fd06c9",
-      "retiredAt": 53
-    },
-    {
-      "path": "_next/static/chunks/34t19ng7pjd3w.js",
-      "sha256": "65ca6203c118a34380ce61769a7ba2433fd0f83edd78e9a11fe52cf462de5ad9",
-      "retiredAt": 53
-    },
-    {
-      "path": "_next/static/chunks/3st8tf3ynt5ac.css",
-      "sha256": "60b407ff6f4384e8e946a2a3588275f7aec09e2684155e79ca3a711900da593c",
-      "retiredAt": 53
-    },
-    {
-      "path": "_next/static/chunks/3tc8_6v90i9b_.js",
-      "sha256": "e25e5ecc58aaeb3ea3b49259d619d10ad6ef8590a8220eb13700fd87d258051b",
-      "retiredAt": 53
-    },
-    {
-      "path": "_next/static/chunks/40gw8gm2qrk--.js",
-      "sha256": "997844b5cca8d591adc1950afb14d49447b9813022ba16495d16cd8a73f85baa",
-      "retiredAt": 53
-    },
-    {
-      "path": "_next/static/chunks/44-lvwa_37ynm.js",
-      "sha256": "df53e680e568ccb5d315ff1d2ea54b583927fc7450e179e4329828d2278fdb08",
-      "retiredAt": 53
+      "path": "_next/static/chunks/2qw62_jm2mory.js",
+      "sha256": "a3d809bd33a5797ff122229f18bf4ab03fe23abb8bbe92b320d200cad03be74d",
+      "retiredAt": 55
     }
   ]
 }

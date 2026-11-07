@@ -8124,6 +8124,12 @@
                             "$ref": "#/components/schemas/ShopProduct"
                         }
                     },
+                    "bought_together_items": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/ShopProduct"
+                        }
+                    },
                     "ai_review_summary": {
                         "allOf": [
                             {
@@ -8143,6 +8149,7 @@
                 },
                 "required": [
                     "ai_review_summary",
+                    "bought_together_items",
                     "ca_id",
                     "ca_id2",
                     "ca_id3",
