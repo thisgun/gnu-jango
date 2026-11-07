@@ -42,7 +42,7 @@
           <td><a href="{% url 'admin:shop_shopproduct_change' row.it_id %}">{{ row.name }}</a><br><small>{{ row.it_id }}</small></td>
           <td>{% if row.stock is None %}미설정{% else %}{{ row.stock|floatformat:"0g" }}{% endif %}</td>
           <td>{% if row.window_units %}{{ row.daily|floatformat:1 }}{% else %}-{% endif %}</td>
-          <td>{% if row.window_units %}{{ row.recent_units|floatformat:"0g" }}개 ({{ row.trend_label }}){% else %}-{% endif %}</td>
+          <td>{% if row.window_units %}{{ row.recent_units|floatformat:"0g" }}개{% if row.trend_label %} ({{ row.trend_label }}){% endif %}{% else %}-{% endif %}</td>
           <td>{% if row.days_left is not None %}{{ row.days_left|floatformat:1 }}일{% else %}-{% endif %}</td>
           <td>{% if row.reorder_point is not None %}{{ row.reorder_point|floatformat:0 }}{% else %}-{% endif %}</td>
           <td>{% if row.suggested %}<strong>{{ row.suggested|floatformat:"0g" }}</strong>{% else %}-{% endif %}</td>
@@ -55,6 +55,6 @@
     </table>
   </div>
   {% include "admin/shop/tools/_pager.html" %}
-  <p class="g5-admin-empty">일평균 판매는 최근 {{ settings.window }}일(어제까지)의 하루 평균 판매 수량입니다. 발주점은 일평균 x {{ settings.lead_days }}일에 안전재고({{ z_service }} x 일별 판매량 표준편차 x 루트 {{ settings.lead_days }})를 더한 값이고, 제안 수량은 {{ settings.lead_days }}일 입고 대기와 {{ settings.cover_days }}일 판매분을 채우도록 계산합니다. 취소·반품·품절 처리된 주문 항목은 상품판매순위처럼 판매에 넣지 않습니다. 재고는 옵션이 있는 상품이면 사용 중인 선택옵션 재고의 합, 없으면 상품 재고입니다. 재고가 없거나 품절로 표시된 상품은 판매가 없어도 품절이며, 판매 기간 중 마지막으로 팔린 날까지의 평균으로 수요를 계산합니다(품절된 날은 수요 없음으로 보지 않습니다). 재고가 처음 입력값({{ untracked_stock }})이면 재고 미설정으로 보고 계산하지 않습니다. 최근 {{ recent_days }}일 판매량이 평균의 {{ trend_up }}배 이상이면 증가, {{ trend_down }}배 이하면 감소입니다.</p>
+  <p class="g5-admin-empty">일평균 판매는 최근 {{ settings.window }}일(어제까지)의 하루 평균 판매 수량입니다. 발주점은 일평균 x {{ settings.lead_days }}일에 안전재고({{ z_service }} x 일별 판매량 표준편차 x 루트 {{ settings.lead_days }})를 더한 값이고, 제안 수량은 {{ settings.lead_days }}일 입고 대기와 {{ settings.cover_days }}일 판매분을 채우도록 계산합니다. 취소·반품·품절 처리된 주문 항목은 상품판매순위처럼 판매에 넣지 않습니다. 재고는 옵션이 있는 상품이면 사용 중인 선택옵션 재고의 합, 없으면 상품 재고입니다. 재고가 없거나 품절로 표시된 상품은 판매가 없어도 품절이며, 판매 기간 시작부터 마지막으로 팔린 날까지(최소 {{ min_demand_days }}일)의 평균으로 수요를 계산합니다(품절된 날은 수요 없음으로 보지 않습니다). 품절로 표시한 상품은 판매를 멈춘 것으로 보고 발주를 제안하지 않습니다. 재고(또는 사용 중인 선택옵션 하나라도)가 처음 입력값({{ untracked_stock }})이면 제한 없이 주문받을 수 있으므로 재고 미설정으로 보고 계산하지 않습니다. 최근 {{ recent_days }}일 판매량이 평균의 {{ trend_up }}배 이상이면 증가, {{ trend_down }}배 이하면 감소입니다.</p>
 </section>
 {% endblock %}

@@ -199,9 +199,20 @@ def test_demand_ignores_the_days_a_sold_out_product_could_not_sell():
     assert forecast(5, [4] * 14 + [0] * 14).daily == 2
 
 
-def test_the_sold_out_flag_beats_the_stock_quantity():
-    result = forecast(500, [2] * 28, flagged_sold_out=True)
-    assert result.status == "품절" and result.days_left == 0 and result.suggested == 42
+def test_a_slow_seller_without_stock_is_not_inflated_by_a_short_demand_span():
+    oldest_day = forecast(0, [1] + [0] * 27)
+    assert oldest_day.daily == pytest.approx(1 / 14) and oldest_day.suggested == 3
+    assert forecast(0, [0, 10] + [0] * 26).daily == pytest.approx(10 / 14)
+    assert forecast(0, [4] * 14 + [0] * 14).daily == 4.0
+    assert forecast(0, [0] * 20 + [3] + [0] * 7).daily == pytest.approx(3 / 21)
+
+
+def test_the_sold_out_flag_means_no_reorder_while_empty_stock_keeps_it():
+    flagged = forecast(500, [2] * 28, flagged_sold_out=True)
+    assert flagged.status == "품절" and flagged.days_left is None and flagged.suggested == 0
+    assert flagged.reorder_point is None
+    empty = forecast(0, [2] * 28)
+    assert empty.status == "품절" and empty.days_left == 0 and empty.suggested == 42
 
 
 def test_untracked_default_stock_gets_no_forecast_numbers():
@@ -231,7 +242,9 @@ def test_stock_is_the_sum_of_the_in_use_choice_options():
     )
     assert stock_level(product) == StockLevel(7)
     assert stock_level(product_with("O2", 5, [option("a", UNTRACKED_STOCK), option("b", UNTRACKED_STOCK)])).untracked
-    assert not stock_level(product_with("O3", 5, [option("a", UNTRACKED_STOCK), option("b", 2)])).untracked
+    assert stock_level(product_with("O3", 5, [option("a", UNTRACKED_STOCK), option("b", 0)])).untracked
+    assert stock_level(product_with("O7", 5, [option("a", UNTRACKED_STOCK), option("b", 5)])).untracked
+    assert not stock_level(product_with("O8", 5, [option("a", 3), option("b", 2)])).untracked
     assert stock_level(make_product("O4", 12)) == StockLevel(12)
     assert stock_level(make_product("O5", UNTRACKED_STOCK)).untracked
 
@@ -274,3 +287,15 @@ def test_the_admin_page_shows_untracked_stock_and_no_suggestion_for_comfortable_
     client.force_login(staff_with("view_shopproduct"))
     body = client.get(reverse("admin:shop_shopproduct_stock_forecast")).content.decode()
     assert UNTRACKED in body and "미설정" in body and "<strong>" not in body.split("<tbody>")[1].split("</tbody>")[0]
+
+
+@pytest.mark.django_db
+def test_a_sold_out_row_shows_its_units_without_empty_brackets(client):
+    today = timezone.localdate()
+    product = make_product("B1", 0, "빈 괄호 없음")
+    for offset in range(1, 8):
+        sell(product, today - timedelta(days=offset), 4)
+    client.force_login(staff_with("view_shopproduct"))
+    body = client.get(reverse("admin:shop_shopproduct_stock_forecast")).content.decode()
+    rows = body.split("<tbody>")[1].split("</tbody>")[0]
+    assert "28개" in rows and "()" not in rows

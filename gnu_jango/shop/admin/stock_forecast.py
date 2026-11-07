@@ -44,6 +44,7 @@ def stock_forecast_view(model_admin, request):
         page_obj=Paginator(shown, PAGE_SIZE).get_page(request.GET.get("page")),
         page_query=urlencode({**query, **({"status": status} if status else {})}),
         recent_days=stock_forecast.RECENT_DAYS,
+        min_demand_days=stock_forecast.MIN_DEMAND_DAYS,
         untracked_stock=stock_forecast.UNTRACKED_STOCK,
         z_service=stock_forecast.Z_SERVICE,
         trend_up=stock_forecast.TREND_UP,

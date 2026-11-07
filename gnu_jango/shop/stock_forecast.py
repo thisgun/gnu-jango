@@ -15,9 +15,11 @@ out, on the local day of the order (od_datetime).
 The forecast stays at product level, with the stock a buyer can still order: the sum of the
 in-use choice options' stock when the product has options (an order takes stock off the option
 only), else ``it_stock_qty``. A product that is flagged sold out, or has no stock, is 품절 even when
-it sold nothing in the window, and its demand is taken over the days up to its last sale: the
-sales-free days since are the stockout, not a lack of demand. Stock still at the 9999 a new product
-or option starts with was never entered, so it gets no days left or suggestion.
+it sold nothing in the window. Without stock, its demand is taken over the days up to its last sale
+(at least ``MIN_DEMAND_DAYS`` from the window start): the sales-free days since are the stockout,
+not a lack of demand. A flagged product is one the shop stopped selling, so it gets no reorder
+suggestion. Stock still at the 9999 a new product or option starts with was never entered, and one
+such option leaves the product orderable without limit, so it gets no days left or suggestion.
 """
 
 import math
@@ -48,6 +50,7 @@ DEFAULT_COVER_DAYS = 14
 # One-sided 95% service level.
 Z_SERVICE = 1.65
 RECENT_DAYS = 7
+MIN_DEMAND_DAYS = 14
 MAX_PARAM = 10**6
 TREND_UP = 1.3
 TREND_DOWN = 0.7
@@ -163,7 +166,7 @@ def _trend(recent_mean, daily):
 
 def _days_until_last_sale(series):
     last_sale = max((day for day, units in enumerate(series, 1) if units), default=0)
-    return series[:last_sale]
+    return series[:max(last_sale, MIN_DEMAND_DAYS)]
 
 
 def forecast_product(it_id, name, level, series, settings):
@@ -178,7 +181,7 @@ def forecast_product(it_id, name, level, series, settings):
     days_left = sellable / daily if daily else math.inf
     demand = Demand(level, sum(series), days_left, suggested, settings.lead_days)
     status = next(rule.label for rule in STATUS_RULES if rule.applies(demand))
-    has_levels = daily > 0 and status != UNTRACKED
+    has_levels = daily > 0 and status != UNTRACKED and not level.flagged_sold_out
     return ProductForecast(
         it_id, name,
         stock=None if level.untracked else level.quantity,
@@ -227,7 +230,7 @@ def stock_level(product):
         quantity = product.it_stock_qty or 0
         return StockLevel(quantity, flagged, quantity == UNTRACKED_STOCK)
     quantities = [max(_int(record.get("io_stock_qty"), 0), 0) for record in choices]
-    return StockLevel(sum(quantities), flagged, all(q == DEFAULT_OPTION_STOCK for q in quantities))
+    return StockLevel(sum(quantities), flagged, any(q == DEFAULT_OPTION_STOCK for q in quantities))
 
 
 def _int(value, default):
@@ -244,7 +247,7 @@ def forecast_all(today, settings):
     products = ShopProduct.objects.filter(it_use="1").only("it_id", "it_name", "it_stock_qty", "it_soldout", "options")
     forecasts = [
         forecast_product(p.it_id, p.it_name, stock_level(p), series.get(p.it_id, empty), settings)
-        for p in products.iterator(chunk_size=500)
+        for p in products
     ]
     return sorted(forecasts, key=urgency_key)
 
