@@ -14,7 +14,12 @@ from gnu_jango.shop.customer_segments import (
     SEGMENT_GRID,
     SEGMENTS,
     Customer,
-    rank_scores,
+    band_score,
+    m_scores,
+    F_BANDS,
+    F_DEFAULT,
+    R_BANDS,
+    R_DEFAULT,
     score_customers,
     segment_report,
     segment_rows,
@@ -38,26 +43,60 @@ def ranked_people():
     return [customer(i, days=i * 20, orders=11 - i, amount=(11 - i) * 1000) for i in range(1, 11)]
 
 
-def test_equal_values_share_a_score():
-    assert rank_scores([5, 5, 5, 9, 1]) == [2, 2, 2, 5, 1]
+@pytest.mark.parametrize(
+    ("days", "score"), [(0, 5), (30, 5), (31, 4), (60, 4), (61, 3), (90, 3), (91, 2), (180, 2), (181, 1), (729, 1)]
+)
+def test_recency_is_scored_by_fixed_bands(days, score):
+    assert band_score(days, R_BANDS, R_DEFAULT) == score
 
 
-def test_scores_follow_rank_in_either_direction():
-    values = list(range(1, 11))
-    assert rank_scores(values) == [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
-    assert rank_scores(values, higher_is_better=False) == [5, 5, 4, 4, 3, 3, 2, 2, 1, 1]
+@pytest.mark.parametrize(
+    ("orders", "score"), [(1, 1), (2, 2), (3, 3), (4, 4), (5, 4), (6, 5), (40, 5)]
+)
+def test_frequency_is_scored_by_fixed_bands(orders, score):
+    assert band_score(orders, F_BANDS, F_DEFAULT) == score
 
 
-@pytest.mark.parametrize("size", [1, 2, 3, 4])
-def test_fewer_than_five_customers_still_score_between_one_and_five(size):
-    scores = rank_scores(list(range(size)))
-    assert all(1 <= score <= 5 for score in scores)
-    assert scores == sorted(scores) and scores[0] == 1
+def test_amount_scores_follow_rank_and_ties_share_the_higher_band():
+    assert m_scores(list(range(1, 11))) == [1, 1, 2, 2, 3, 3, 4, 4, 5, 5]
+    assert m_scores([5, 5, 5, 9, 1]) == [4, 4, 4, 5, 1]
+    assert m_scores([7, 7, 7]) == [5, 5, 5]
+    assert m_scores([7]) == [5]
+    assert m_scores([]) == []
 
 
-def test_everyone_tied_scores_one_and_nobody_is_an_error():
-    assert rank_scores([7, 7, 7]) == [1, 1, 1]
-    assert rank_scores([]) == []
+def segments_of(*people):
+    return {c.user_id: c.segment for c in score_customers(list(people))}
+
+
+def test_a_lone_customer_who_bought_today_is_a_champion_not_lost():
+    assert segments_of(customer(1, days=0, orders=5, amount=500_000)) == {1: "champions"}
+
+
+def test_a_shop_whose_customers_all_bought_this_week_has_no_lapsed_label():
+    found = segments_of(
+        customer(1, days=5, orders=5, amount=900_000),
+        customer(2, days=2, orders=1, amount=10_000),
+        customer(3, days=1, orders=2, amount=20_000),
+        customer(4, days=0, orders=1, amount=30_000),
+    )
+    assert found[1] == "champions"
+    assert not {"lost", "hibernating", "at_risk", "cant_lose"} & set(found.values())
+
+
+def test_everyone_tied_keeps_their_own_labels_by_the_bands():
+    found = segments_of(*(customer(i, days=100, orders=1, amount=5_000) for i in range(1, 4)))
+    assert set(found.values()) == {"hibernating"}
+
+
+@pytest.mark.parametrize("orders", range(1, 12))
+def test_someone_who_bought_today_is_never_hibernating_or_lost(orders):
+    assert segments_of(customer(1, days=0, orders=orders, amount=1))[1] not in {"hibernating", "lost", "at_risk", "cant_lose"}
+
+
+def test_one_order_yesterday_is_new_and_six_orders_this_month_is_a_champion():
+    assert segments_of(customer(1, days=1, orders=1, amount=1))[1] == "new"
+    assert segments_of(customer(1, days=20, orders=6, amount=1))[1] == "champions"
 
 
 def test_every_recency_and_frequency_cell_has_a_segment_and_every_segment_is_reachable():
@@ -79,7 +118,7 @@ def test_segment_table_lists_every_segment_with_counts_averages_and_median_recen
     members = [c for c in report.customers if c.segment == "champions"]
     assert champions.count == len(members) and champions.share == len(members) / 10
     assert champions.avg_amount == round(sum(c.amount for c in members) / len(members))
-    assert report.lapsed_count == sum(1 for c in people if c.recency_days >= 90)
+    assert report.lapsed_count == sum(1 for c in people if c.recency_days > 90)
 
 
 def test_an_empty_window_gives_an_empty_report_not_an_error():
@@ -97,10 +136,12 @@ def place(user, days_ago, amount=10_000, status="입금", refund=0):
     )
 
 
-def member(name, mailing=False):
+def member(name, mailing=False, certified=True):
     user = get_user_model().objects.create_user(name, f"{name}@example.test", "pw")
     user.profile.nickname = f"닉-{name}"
     user.profile.mailing = mailing
+    if not certified:
+        user.profile.email_certify = None
     user.profile.save()
     return user
 
@@ -114,13 +155,16 @@ def shop(db, monkeypatch):
     place(bob, 100, amount=20_000, refund=5_000)
     place(bob, 120, status="취소", amount=999_000)
     place(carol, 400, amount=70_000)
+    dave = member("dave", mailing=True, certified=False)
+    for status in ("주문", "취소", "반품", "품절", "cancelled", "canceled", "return", "returned"):
+        place(dave, 3, status=status)
     place(None, 1, amount=88_000)
 
 
 def test_report_counts_members_with_the_shops_rules(shop):
     report = segment_report(365)
     people = {c.username: c for c in report.customers}
-    assert set(people) == {"alice", "bob"}
+    assert set(people) == {"alice", "bob"}, "unpaid, cancelled and returned orders do not count"
     assert people["alice"].orders == 3 and people["alice"].amount == 150_000 and people["alice"].recency_days == 2
     assert people["bob"].orders == 1 and people["bob"].amount == 15_000 and people["bob"].recency_days == 100
     assert report.lapsed_count == 1
@@ -176,5 +220,21 @@ def test_the_export_lists_the_filtered_customers_mails_only_the_consenting_and_i
     by_name = {row[0]: row for row in rows[1:]}
     assert set(by_name) == {"alice", "bob"}
     assert by_name["alice"][2] == "alice@example.test" and by_name["bob"][2] in (None, "")
+    assert isinstance(by_name["alice"][3], datetime)
     assert by_name["alice"][4] == 3 and by_name["alice"][5] == 150_000
     assert "customer segments (RFM): 2 rows" in LogEntry.objects.get().object_repr
+
+
+def test_a_member_who_agreed_to_mail_at_an_uncertified_address_is_not_exported(client, db, monkeypatch):
+    monkeypatch.setattr("gnu_jango.shop.customer_segments.timezone.localdate", lambda *args: TODAY)
+    place(member("erin", mailing=True, certified=False), 2)
+    client.force_login(staff_with("view_shoporder", "export_shoporder"))
+    rows = list(load_workbook(io.BytesIO(client.get(reverse(URL_NAME), {"export": "xlsx"}).content)).active.iter_rows(values_only=True))
+    assert rows[1][0] == "erin" and rows[1][2] in (None, "")
+
+
+def test_the_export_filename_names_the_segment(client, shop):
+    client.force_login(staff_with("view_shoporder", "export_shoporder"))
+    segment = {c.username: c.segment for c in segment_report(365).customers}["alice"]
+    name = client.get(reverse(URL_NAME), {"export": "xlsx", "segment": segment})["Content-Disposition"]
+    assert f"-365d-{segment}.xlsx" in name

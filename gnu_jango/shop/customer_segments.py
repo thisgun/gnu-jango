@@ -1,17 +1,18 @@
 """고객 세그먼트 (RFM): which members are the shop's best, new, slipping and lost customers.
 
-Counting follows the 매출현황 report (sales_report): an order belongs to the local day of od_datetime,
-its amount is od_receipt_price - od_refund_price, and an order in a cancelled/returned/sold-out
-status does not count. Only members count; a guest order has no customer to follow. Nothing here
-calls a model.
+An order counts when it is paid (api.shop_common.PAID_STATUSES: 입금 through 완료, English
+spellings included), so an unpaid 주문 and a cancelled or returned order do not. The order belongs to
+the local day of od_datetime and its amount is od_receipt_price - od_refund_price, as in the
+매출현황 report. Only members count; a guest order has no customer to follow. Nothing here calls a
+model.
 
-R is the days since the last counted order, F the counted orders and M the net paid amount in the
-window. Each is scored 1-5 by rank among the customers in the window: a customer scores
-1 + floor(5 * (customers strictly worse) / customers), so equal values share a score and a score
-always lands in 1-5. When every value ties, the score is 1 for all: nobody stands out.
+R is the days since the last counted order and F the counted orders in the window. Both are scored
+1-5 by fixed bands (R_BANDS, F_BANDS), so a customer's segment never depends on who else bought: a
+customer who ordered today is never lapsed. M, the net paid amount, is a relative 1-5 score for
+display only; ties share the higher band. The segment comes from R and F alone.
 """
 
-from collections import Counter
+from bisect import bisect_right
 from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from statistics import median
@@ -20,15 +21,21 @@ from django.contrib.auth import get_user_model
 from django.db.models import Count, F, IntegerField, Max, Sum
 from django.utils import timezone
 
+from gnu_jango.api.shop_common import PAID_STATUSES
+from gnu_jango.shop.cart_reminders import mailable_users
 from gnu_jango.utils.date_ranges import local_days
 
 from .models import ShopOrder
-from .order_statuses import INACTIVE_LINE_STATUSES
 
 WINDOW_CHOICES = (180, 365, 730)
 DEFAULT_WINDOW = 365
 LAPSED_DAYS = 90
 SCORE_LEVELS = 5
+# (largest value of the band, score); a value past the last band gets the default score.
+R_BANDS = ((30, 5), (60, 4), (90, 3), (180, 2))
+R_DEFAULT = 1
+F_BANDS = ((1, 1), (2, 2), (3, 3), (5, 4))
+F_DEFAULT = 5
 
 
 @dataclass(frozen=True)
@@ -39,15 +46,15 @@ class Segment:
 
 
 SEGMENTS = (
-    Segment("champions", "챔피언", "최근에 자주, 많이 산 고객"),
+    Segment("champions", "챔피언", "최근에 자주 산 고객"),
     Segment("loyal", "충성 고객", "꾸준히 사는 고객"),
     Segment("potential", "잠재 충성", "최근에 샀고 더 살 여지가 있는 고객"),
-    Segment("new", "신규 고객", "최근에 처음 산 고객"),
+    Segment("new", "신규 고객", "최근 한 번 산 고객"),
     Segment("attention", "관심 필요", "구매 간격이 벌어지기 시작한 고객"),
     Segment("at_risk", "이탈 위험", "자주 샀지만 한동안 사지 않은 고객"),
-    Segment("cant_lose", "놓치면 안 될 고객", "많이 샀지만 오래 사지 않은 고객"),
+    Segment("cant_lose", "놓치면 안 될 고객", "자주 샀지만 오래 사지 않은 고객"),
     Segment("hibernating", "휴면", "구매가 적고 오래된 고객"),
-    Segment("lost", "이탈", "가장 오래전에 한 번 산 고객"),
+    Segment("lost", "이탈", "오래전에 한 번 산 고객"),
 )
 SEGMENT_BY_KEY = {segment.key: segment for segment in SEGMENTS}
 
@@ -55,7 +62,7 @@ SEGMENT_BY_KEY = {segment.key: segment for segment in SEGMENTS}
 _GRID_ROWS = (
     ("new", "potential", "loyal", "champions", "champions"),
     ("new", "potential", "loyal", "champions", "champions"),
-    ("potential", "attention", "attention", "loyal", "loyal"),
+    ("attention", "attention", "attention", "loyal", "loyal"),
     ("hibernating", "hibernating", "at_risk", "at_risk", "cant_lose"),
     ("lost", "hibernating", "at_risk", "cant_lose", "cant_lose"),
 )
@@ -109,17 +116,15 @@ class SegmentReport:
     at_risk_count: int
 
 
-def rank_scores(values, *, higher_is_better=True):
-    """Each value's 1-5 score by rank among ``values``; equal values share a score."""
+def band_score(value, bands, default):
+    return next((score for limit, score in bands if value <= limit), default)
+
+
+def m_scores(values):
+    """Each value's 1-5 score by rank among ``values``; equal values share the higher band."""
+    ordered = sorted(values)
     total = len(values)
-    counts = Counter(values)
-    smaller = {}
-    seen = 0
-    for value in sorted(counts):
-        smaller[value] = seen
-        seen += counts[value]
-    worse = smaller if higher_is_better else {value: total - smaller[value] - counts[value] for value in counts}
-    return [1 + SCORE_LEVELS * worse[value] // total for value in values]
+    return [-(-SCORE_LEVELS * bisect_right(ordered, value) // total) for value in values]
 
 
 def segment_for(r_score, f_score):
@@ -128,13 +133,13 @@ def segment_for(r_score, f_score):
 
 def score_customers(customers):
     """``customers`` with their R/F/M scores and segment filled in, in the same order."""
-    r_scores = rank_scores([customer.recency_days for customer in customers], higher_is_better=False)
-    f_scores = rank_scores([customer.orders for customer in customers])
-    m_scores = rank_scores([customer.amount for customer in customers])
-    return [
-        replace(customer, r_score=r, f_score=f, m_score=m, segment=segment_for(r, f))
-        for customer, r, f, m in zip(customers, r_scores, f_scores, m_scores)
-    ]
+    amounts = m_scores([customer.amount for customer in customers])
+    scored = []
+    for customer, m in zip(customers, amounts):
+        r = band_score(customer.recency_days, R_BANDS, R_DEFAULT)
+        f = band_score(customer.orders, F_BANDS, F_DEFAULT)
+        scored.append(replace(customer, r_score=r, f_score=f, m_score=m, segment=segment_for(r, f)))
+    return scored
 
 
 def segment_rows(customers):
@@ -168,7 +173,7 @@ def summarize(customers, window_days, start, end):
         customers=scored,
         rows=segment_rows(scored),
         median_amount=round(median(c.amount for c in scored)) if scored else 0,
-        lapsed_count=sum(1 for c in scored if c.recency_days >= LAPSED_DAYS),
+        lapsed_count=sum(1 for c in scored if c.recency_days > LAPSED_DAYS),
         at_risk_count=sum(1 for c in scored if c.segment == "at_risk"),
     )
 
@@ -176,8 +181,7 @@ def summarize(customers, window_days, start, end):
 def window_customers(start, end, today):
     """Members with a counted order on the local days ``start``..``end``, unscored."""
     totals = (
-        ShopOrder.objects.filter(local_days("od_datetime", start, end), user__isnull=False)
-        .exclude(od_status__in=INACTIVE_LINE_STATUSES)
+        ShopOrder.objects.filter(local_days("od_datetime", start, end), user__isnull=False, od_status__in=PAID_STATUSES)
         .values("user_id")
         .annotate(
             orders=Count("pk"),
@@ -192,6 +196,7 @@ def window_customers(start, end, today):
         .select_related("profile")
         .in_bulk()
     )
+    mailable = set(mailable_users().filter(pk__in=users).values_list("pk", flat=True))
     customers = []
     for row in sorted(totals, key=lambda item: item["user_id"]):
         user = users.get(row["user_id"])
@@ -205,7 +210,7 @@ def window_customers(start, end, today):
                 username=user.get_username(),
                 nickname=profile.nickname if profile else "",
                 email=user.email or "",
-                accepts_mail=bool(profile and profile.mailing and profile.leave_date is None and user.is_active),
+                accepts_mail=user.pk in mailable,
                 last_order=last,
                 recency_days=max((today - last).days, 0),
                 orders=row["orders"],

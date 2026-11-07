@@ -33,7 +33,7 @@ def _export_row(customer):
         customer.username,
         customer.nickname,
         customer.email if customer.accepts_mail else "",
-        customer.last_order.isoformat(),
+        customer.last_order,
         customer.orders,
         customer.amount,
         customer.r_score,
@@ -43,13 +43,16 @@ def _export_row(customer):
     )
 
 
-def _export(model_admin, request, customers, window):
+def _export(model_admin, request, customers, window, segment):
     if not model_admin.has_export_permission(request):
         raise PermissionDenied
     rows = [_export_row(customer) for customer in customers]
     try:
         response = xlsx_download(
-            f"customer-segments-{timezone.localdate():%Y%m%d}-{window}d.xlsx", [EXPORT_HEADER], rows, text_columns=(0,)
+            f"customer-segments-{timezone.localdate():%Y%m%d}-{window}d{f'-{segment}' if segment else ''}.xlsx",
+            [EXPORT_HEADER],
+            rows,
+            text_columns=(0,),
         )
     except SpreadsheetError as exc:
         messages.error(request, str(exc))
@@ -68,7 +71,7 @@ def customer_segments_view(model_admin, request):
     customers = [c for c in report.customers if not segment or c.segment == segment]
     customers.sort(key=lambda c: (-c.amount, c.recency_days, c.user_id))
     if request.GET.get("export") == "xlsx":
-        return _export(model_admin, request, customers, window)
+        return _export(model_admin, request, customers, window, segment)
 
     filters = {"window": window, **({"segment": segment} if segment else {})}
     page = Paginator(customers, PAGE_SIZE).get_page(request.GET.get("page"))
@@ -76,8 +79,8 @@ def customer_segments_view(model_admin, request):
         model_admin,
         request,
         title="고객 세그먼트 (RFM)",
-        subtitle=f"{report.start:%Y-%m-%d} ~ {report.end:%Y-%m-%d}에 주문한 회원을 최근 구매(R)·구매 횟수(F)·결제 금액(M) "
-                 "순위로 나눕니다. 비회원과 취소·반품 주문은 제외하며 AI 없이 계산합니다.",
+        subtitle=f"{report.start:%Y-%m-%d} ~ {report.end:%Y-%m-%d}에 결제한 회원을 최근 구매(R)·구매 횟수(F)로 나누고 "
+                 "결제 금액(M)은 참고로 보여줍니다. 비회원과 결제 전·취소·반품 주문은 제외하며 AI 없이 계산합니다.",
         parent_url=reverse("admin:shop_shoporder_changelist"),
         parent_label="주문",
         tool_links=[{"url": reverse("admin:shop_shoporder_sales"), "label": "매출현황"}],

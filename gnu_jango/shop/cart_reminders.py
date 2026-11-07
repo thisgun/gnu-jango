@@ -63,21 +63,22 @@ def _cart_lines(value, keep_term, now):
     return [row for row in kept if not row.get("ct_direct")]
 
 
+def mailable_users():
+    """Members advertising mail may go to: active, not left, agreed to information mail at a
+    certified, non-empty address."""
+    return get_user_model().objects.filter(
+        is_active=True,
+        profile__mailing=True,
+        profile__email_certify__isnull=False,
+        profile__leave_date__isnull=True,
+    ).exclude(email="")
+
+
 def _reachable_member_ids(now_dt):
-    """Members a reminder may go to: active, not left, agreed to information mail at a certified
-    address, and not reminded in the last REMIND_AT_MOST_EVERY. One query for all of them."""
+    """Members a reminder may go to: mailable and not reminded in the last REMIND_AT_MOST_EVERY.
+    One query for all of them."""
     reminded = ShopCartReminder.objects.filter(created_at__gte=now_dt - REMIND_AT_MOST_EVERY).values("user_id")
-    return set(
-        get_user_model().objects.filter(
-            is_active=True,
-            profile__mailing=True,
-            profile__email_certify__isnull=False,
-            profile__leave_date__isnull=True,
-        )
-        .exclude(email="")
-        .exclude(pk__in=reminded)
-        .values_list("pk", flat=True)
-    )
+    return set(mailable_users().exclude(pk__in=reminded).values_list("pk", flat=True))
 
 
 def _waiting_carts(options, now, member_ids):
