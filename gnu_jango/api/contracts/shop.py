@@ -162,8 +162,8 @@ class ShopProductDetailSerializer(ShopProductSerializer):
     # up to 4 on-sale products nearest by embedding, never one of related_items;
     # [] unless G5_AI_SIMILAR_PRODUCTS is on and this product has an embedding
     similar_items = ShopProductSerializer(many=True)
-    # up to 4 on-sale products sharing 2+ counted orders with this one in the last 365 days,
-    # never one of related_items or similar_items
+    # up to 4 on-sale, in-stock products 2+ different customers bought with this one in paid orders
+    # in the last 365 days, never one of related_items or similar_items
     bought_together_items = ShopProductSerializer(many=True)
     # null unless G5_AI_REVIEW_SUMMARIES is on and summarize_reviews wrote a summary that is not hidden
     ai_review_summary = ShopAiReviewSummarySerializer(allow_null=True)

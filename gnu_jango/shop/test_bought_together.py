@@ -1,4 +1,5 @@
 from datetime import timedelta
+from itertools import count
 from unittest import mock
 
 import pytest
@@ -10,13 +11,23 @@ from gnu_jango.api.shop_common import on_sale_products
 from gnu_jango.api.v1_shop import product_cards
 from gnu_jango.shop.bought_together import bought_together, ranked_partner_ids
 from gnu_jango.shop.models import ShopProductRelation
-from gnu_jango.testing.factories import ShopOrderFactory, ShopOrderItemFactory, ShopProductFactory
+from gnu_jango.testing.factories import (
+    MemberFactory,
+    ShopOrderFactory,
+    ShopOrderItemFactory,
+    ShopProductFactory,
+)
 
 pytestmark = pytest.mark.django_db
+guests = count(1)
 
 
-def order(*products, days_ago=1, line_statuses=None):
-    placed = ShopOrderFactory(od_status="입금", od_datetime=timezone.now() - timedelta(days=days_ago))
+def order(*products, buyer=None, days_ago=1, line_statuses=None, od_status="입금", **contact):
+    if buyer is None and not contact:
+        contact = {"od_email": f"guest{next(guests)}@example.test"}
+    placed = ShopOrderFactory(
+        user=buyer, od_status=od_status, od_datetime=timezone.now() - timedelta(days=days_ago), **contact
+    )
     for product in products:
         status = (line_statuses or {}).get(product, "입금")
         ShopOrderItemFactory(order=placed, product=product, ct_status=status)
@@ -38,7 +49,7 @@ def shelf():
     return {name: ShopProductFactory(it_id=name) for name in ("P", "A", "B", "C", "D", "E")}
 
 
-def test_partners_rank_by_shared_orders_and_need_two(shelf):
+def test_partners_rank_by_shared_buyers_and_need_two(shelf):
     p, a, b, c = shelf["P"], shelf["A"], shelf["B"], shelf["C"]
     order(p, a, b, days_ago=5)
     order(p, a, b, days_ago=4)
@@ -55,17 +66,63 @@ def test_ties_go_to_the_latest_shared_order_then_the_id(shelf):
     assert partners(p) == ["C", "B", "D"]
 
 
-def test_cancelled_lines_and_old_orders_are_not_counted(shelf):
-    p, a, b, c = shelf["P"], shelf["A"], shelf["B"], shelf["C"]
-    order(p, a, b, c)
-    order(p, a, line_statuses={p: "취소"})
-    order(p, b, line_statuses={b: "반품"})
-    order(p, c, line_statuses={c: "cancel"})
-    order(p, a, b, c, days_ago=400)
+def test_one_member_buying_a_pair_twice_shows_nothing(shelf):
+    p, a = shelf["P"], shelf["A"]
+    member = MemberFactory()
+    order(p, a, buyer=member)
+    order(p, a, buyer=member)
     assert partners(p) == []
 
 
-def test_a_partner_counts_once_per_order_even_on_several_lines_or_without_a_product_row(shelf):
+def test_two_members_show_the_pair(shelf):
+    p, a = shelf["P"], shelf["A"]
+    order(p, a, buyer=MemberFactory())
+    order(p, a, buyer=MemberFactory())
+    assert partners(p) == ["A"]
+
+
+def test_a_guest_and_a_member_show_the_pair(shelf):
+    p, a = shelf["P"], shelf["A"]
+    order(p, a, buyer=MemberFactory())
+    order(p, a, od_email="guest@example.test")
+    assert partners(p) == ["A"]
+
+
+def test_one_guest_is_one_buyer_by_email_or_else_phone(shelf):
+    p, a, b = shelf["P"], shelf["A"], shelf["B"]
+    order(p, a, od_email="Guest@Example.test", od_hp="010-1111-2222")
+    order(p, a, od_email=" guest@example.test ", od_hp="010-3333-4444")
+    order(p, b, od_email="", od_hp="010-5555-6666")
+    order(p, b, od_email="", od_hp="010 5555 6666")
+    assert partners(p) == []
+
+
+def test_a_guest_without_email_or_phone_is_not_a_buyer(shelf):
+    p, a = shelf["P"], shelf["A"]
+    order(p, a, buyer=MemberFactory())
+    order(p, a, od_email="", od_hp="")
+    order(p, a, od_email="", od_hp="")
+    assert partners(p) == []
+
+
+def test_only_paid_orders_and_sold_lines_count(shelf):
+    p, a, b, c = shelf["P"], shelf["A"], shelf["B"], shelf["C"]
+    order(p, a, b, c)
+    order(p, a, od_status="주문")
+    order(p, a, od_status="취소")
+    order(p, a, line_statuses={p: "취소"})
+    order(p, b, line_statuses={b: "반품"})
+    order(p, b, line_statuses={b: "returned"})
+    order(p, c, line_statuses={c: "canceled"})
+    order(p, c, line_statuses={c: "return"})
+    order(p, a, b, c, days_ago=400)
+    assert partners(p) == []
+    order(p, a, b, c, od_status="완료")
+    cache.clear()
+    assert partners(p) == ["A", "B", "C"]
+
+
+def test_a_partner_counts_once_per_buyer_even_on_several_lines_or_without_a_product_row(shelf):
     p, a = shelf["P"], shelf["A"]
     order(p, a, a)
     gone = order(p)
@@ -98,6 +155,30 @@ def test_hidden_products_the_product_and_exclusions_never_show(shelf):
     shelf["B"].save(update_fields=["it_use"])
     assert partners(p, exclude=["A"]) == ["C", "D", "E"]
     assert partners(p, limit=2) == ["A", "C"]
+
+
+def test_sold_out_partners_never_show_and_come_back_with_stock(shelf):
+    p, a, b, c = shelf["P"], shelf["A"], shelf["B"], shelf["C"]
+    order(p, a, b, c)
+    order(p, a, b, c)
+    a.it_soldout = "1"
+    a.save(update_fields=["it_soldout"])
+    b.it_stock_qty = 0
+    b.save(update_fields=["it_stock_qty"])
+    assert partners(p) == ["C"]
+    a.it_soldout = ""
+    a.save(update_fields=["it_soldout"])
+    assert partners(p) == ["A", "C"]
+
+
+def test_many_hidden_top_partners_do_not_starve_the_list(shelf):
+    p, e = shelf["P"], shelf["E"]
+    hidden = [ShopProductFactory(it_id=f"H{n:02}", it_use="0") for n in range(40)]
+    for days_ago in (3, 4, 5):
+        order(p, *hidden, days_ago=days_ago)
+    order(p, e)
+    order(p, e)
+    assert partners(p) == ["E"]
 
 
 def test_ranking_runs_two_queries_whatever_the_order_count(shelf, django_assert_num_queries):
