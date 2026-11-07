@@ -1,3 +1,4 @@
+import unicodedata
 from datetime import timedelta
 from itertools import count
 
@@ -159,16 +160,108 @@ def test_similar_reviews_respect_the_window_and_cap(monkeypatch):
 
 
 @pytest.mark.django_db
-def test_review_without_a_counted_order_line_is_flagged_and_a_purchase_clears_it():
+def test_only_a_received_order_line_counts_as_a_purchase():
     item = product()
-    buyer, stranger, cancelled = member("buyer"), member("stranger"), member("cancelled")
-    for user in (buyer, stranger, cancelled):
+    statuses = {"buyer": "완료", "canceled": "canceled", "returned": "returned", "취소": "취소", "unpaid": "주문", "shipping": "배송"}
+    for name, status in statuses.items():
+        user = member(name)
         review(item, user)
-    for user, status in ((buyer, "완료"), (cancelled, "취소")):
         placed = order(user, "10.0.0.1")
         ShopOrderItem.objects.create(order=placed, product=item, ct_id=f"c{user.pk}", it_id=item.it_id, it_name="x", ct_status=status)
+    review(item, member("stranger"))
     names = sorted(found.title.split(":")[0] for found in findings("no_purchase_review"))
-    assert names == ["cancelled", "stranger"]
+    assert names == sorted(set(statuses) - {"buyer"} | {"stranger"})
+
+
+@pytest.mark.django_db
+def test_the_review_gate_and_the_report_share_one_received_predicate():
+    from gnu_jango.api.shop_reviews import _has_received_product
+
+    item = product()
+    user = member("gate")
+    placed = order(user, "10.0.0.2")
+    line = ShopOrderItem.objects.create(order=placed, product=item, ct_id="g1", it_id=item.it_id, it_name="x", ct_status="완료")
+    assert _has_received_product(user, item)
+    ShopOrderItem.objects.filter(pk=line.pk).update(ct_status="반품")
+    assert not _has_received_product(user, item)
+
+
+@pytest.mark.django_db
+def test_hidden_reviews_are_left_out_of_every_review_rule():
+    item = product()
+    for n in range(6):
+        review(item, member(f"hb{n}"), hours_ago=1 + n, content=LONG)
+    ShopReview.objects.update(is_confirm="0")
+    assert not findings("review_burst") and not findings("similar_review") and not findings("no_purchase_review")
+
+
+@pytest.mark.django_db
+def test_a_steadily_busy_new_product_is_not_a_burst():
+    item = product()
+    for day in range(6):
+        for n in range(6):
+            review(item, member(f"s{day}-{n}"), hours_ago=2 + day * 24 + n)
+    assert not findings("review_burst")
+
+
+@pytest.mark.django_db
+def test_a_decomposed_copy_of_a_review_is_still_similar():
+    item = product()
+    review(item, member("nfc"), content=LONG)
+    review(item, member("nfd"), content=unicodedata.normalize("NFD", LONG))
+    [found] = findings("similar_review")
+    assert "100%" in found.evidence[0]
+
+
+@pytest.mark.django_db
+def test_a_busy_shared_ip_does_not_starve_the_members_of_another_ip():
+    busy = member("busy")
+    for _ in range(25):
+        order(busy, "100.0.0.1", hours_ago=1)
+    for n in range(3):
+        order(member(f"nat{n}"), "100.0.0.1", hours_ago=1)
+    for n in range(3):
+        order(member(f"old{n}"), "100.0.0.2", hours_ago=24 * 5, coupon=1000 if n == 0 else 0)
+    by_ip = {found.title.split(":")[0]: found for found in findings("shared_ip")}
+    quiet = by_ip["IP 100.0.0.2"]
+    assert quiet.severity == "high"
+    assert all(name in quiet.evidence[1] for name in ("old0", "old1", "old2"))
+    assert "쿠폰 사용 주문 1건" in quiet.evidence[2]
+    assert "nat0" in by_ip["IP 100.0.0.1"].evidence[1]
+
+
+@pytest.mark.django_db
+def test_capped_rules_say_how_many_they_found_and_how_many_they_show(monkeypatch):
+    monkeypatch.setattr(abuse_signals, "NO_PURCHASE_DISPLAY_CAP", 2)
+    monkeypatch.setattr(abuse_signals, "SHARED_IP_CAP", 1)
+    item = product()
+    for n in range(4):
+        review(item, member(f"np{n}"), content=LONG)
+    for ip in ("1.1.1.1", "2.2.2.2"):
+        for n in range(3):
+            order(member(f"{ip}-{n}"), ip)
+    report = abuse_signals.build_report(30, now=NOW)
+    results = {result.rule.code: result for result in report["results"]}
+    assert (len(results["no_purchase_review"].findings), results["no_purchase_review"].total) == (2, 4)
+    assert (len(results["shared_ip"].findings), results["shared_ip"].total) == (1, 2)
+    assert report["is_trimmed"]
+    monkeypatch.setattr(abuse_signals, "SIMILARITY_REVIEW_CAP", 2)
+    review_rows = abuse_signals.build_report(30, now=NOW)["results"][1]
+    assert "최신 2건만 검사" in review_rows.note
+
+
+@pytest.mark.django_db
+def test_without_the_review_permission_review_content_stays_out_of_the_page(client):
+    item = product(name="가려질 상품")
+    for n in range(6):
+        review(item, member(f"rp{n}"), hours_ago=1 + n, content=LONG)
+    for n in range(3):
+        order(member(f"ip{n}"), "12.12.12.12")
+    client.force_login(staff_with("view_shoporder"))
+    html = client.get(reverse("admin:shop_shoporder_abuse_signals")).content.decode()
+    assert html.count("후기 보기 권한이 필요합니다") == 3
+    assert "가려질 상품" not in html and "rp0" not in html and "12.12.12.12" in html
+    assert abuse_signals.build_report(30, can_view_reviews=False)["total"] == 1
 
 
 @pytest.mark.django_db
@@ -262,7 +355,7 @@ def test_the_page_renders_every_rule_with_rows_and_working_links(client):
     response = client.get(reverse("admin:shop_shoporder_abuse_signals"), {"days": "90"})
     html = response.content.decode()
     assert response.status_code == 200
-    for text in ("후기 몰림", "유사 후기", "구매 이력 없는 후기", "동일 IP 다중 계정", "몰린 상품", "IP 7.7.7.7", "최근 90일"):
+    for text in ("후기 몰림", "유사 후기", "배송 완료 이력 없는 후기", "동일 IP 다중 계정", "몰린 상품", "IP 7.7.7.7", "최근 90일"):
         assert text in html
     report = abuse_signals.build_report(90)
     assert report["counts"]["high"] >= 2 and report["total"] == sum(report["counts"].values())

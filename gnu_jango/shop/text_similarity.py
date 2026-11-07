@@ -8,6 +8,7 @@ compared exactly.
 
 import math
 import re
+import unicodedata
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
@@ -16,8 +17,9 @@ _DROPPED = re.compile(r"[\W_]+")
 
 
 def normalise(text):
-    """Lower-cased text without spaces and punctuation, so spacing tricks do not hide a copy."""
-    return _DROPPED.sub("", (text or "").lower())
+    """NFKC-folded, lower-cased text without spaces and punctuation, so spacing and Unicode-form
+    tricks (decomposed Hangul, full-width letters) do not hide a copy."""
+    return _DROPPED.sub("", unicodedata.normalize("NFKC", text or "").lower())
 
 
 def shingles(text, size=SHINGLE_SIZE):

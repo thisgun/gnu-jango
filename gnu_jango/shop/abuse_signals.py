@@ -14,13 +14,13 @@ from dataclasses import dataclass
 from datetime import timedelta
 from urllib.parse import urlencode
 
-from django.db.models import Count, Q
+from django.db.models import Count, Exists, Min, OuterRef, Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import strip_tags
 
-from .models import ShopCouponLog, ShopOrder, ShopOrderItem, ShopReview
-from .order_statuses import INACTIVE_LINE_STATUSES
+from .models import ShopCouponLog, ShopOrder, ShopReview
+from .review_gate import received_lines
 from .shipping import current_shipping_policy
 from .signup_coupon import SIGNUP_COUPON_SUBJECT
 from .text_similarity import clusters, similar_pairs
@@ -32,13 +32,16 @@ SEVERITY_ORDER = {"high": 0, "medium": 1, "info": 2}
 SEVERITY_LABELS = {"high": "주의", "medium": "확인", "info": "참고"}
 
 # 후기 몰림. Five 5-star reviews from three people inside 24 hours is rare for a small shop, and
-# the burst must beat the product's own earlier pace by 10x: a product that already gets a review
-# every other day is not "bursting" at five a day.
+# the burst must beat the product's own pace by 10x: a product that already gets a review every
+# other day, or that sells steadily from its first day, is not "bursting" at five a day. The pace
+# is every other visible review of the product since BURST_BASELINE_DAYS before the window, spread
+# over the days the product has had reviews (at least BURST_MIN_PACE_DAYS).
 BURST_MIN_REVIEWS = 5
 BURST_MIN_AUTHORS = 3
 BURST_SPAN = timedelta(hours=24)
 BURST_BASELINE_DAYS = 90
 BURST_RATE_FACTOR = 10
+BURST_MIN_PACE_DAYS = 7
 BURST_ROW_CAP = 20_000
 
 # 유사 후기. Only the newest SIMILARITY_REVIEW_CAP reviews of the window are compared.
@@ -47,11 +50,11 @@ SIMILARITY_MIN_LENGTH = 20
 SIMILARITY_REVIEW_CAP = 2_000
 
 NO_PURCHASE_REVIEW_CAP = 2_000
+NO_PURCHASE_DISPLAY_CAP = 200
 IN_CHUNK = 500
 
 SHARED_IP_MIN_MEMBERS = 3
 SHARED_IP_CAP = 30
-SHARED_IP_ORDER_CAP = 2_000
 
 LINK_ID_CAP = 100
 SAMPLE_CAP = 5
@@ -87,17 +90,32 @@ class Finding:
 
 
 @dataclass(frozen=True)
+class Found:
+    findings: tuple
+    total: int
+    note: str = ""
+
+
+@dataclass(frozen=True)
 class Rule:
     code: str
     title: str
     summary: str
     check: object
+    reads_reviews: bool = False
 
 
 @dataclass(frozen=True)
 class RuleResult:
     rule: Rule
     findings: tuple
+    total: int = 0
+    note: str = ""
+    restricted: bool = False
+
+    @property
+    def hidden_count(self):
+        return max(self.total - len(self.findings), 0)
 
 
 def window_days(value):
@@ -128,9 +146,26 @@ def _chunks(values, size=IN_CHUNK):
         yield values[start : start + size]
 
 
+def _listed(items, cap):
+    items = list(items)
+    text = ", ".join(items[:cap])
+    return f"{text} 외 {len(items) - cap}" if len(items) > cap else text
+
+
+def _visible_reviews():
+    return ShopReview.objects.filter(is_confirm="1")
+
+
+def _capped_note(shown, found, what):
+    return f"기간 안의 {what} {found:,}건 중 최신 {shown:,}건만 검사했습니다" if found > shown else ""
+
+
 def _review_links(ids, label="후기 보기"):
-    ids = sorted(ids)[:LINK_ID_CAP]
-    return (Link(label, reverse("admin:shop_shopreview_changelist") + "?" + urlencode({"id__in": ",".join(map(str, ids))})),)
+    ids = sorted(ids)
+    if len(ids) > LINK_ID_CAP:
+        label = f"{label} (전체 {len(ids)}건 중 {LINK_ID_CAP}건)"
+    query = urlencode({"id__in": ",".join(map(str, ids[:LINK_ID_CAP]))})
+    return (Link(label, reverse("admin:shop_shopreview_changelist") + "?" + query),)
 
 
 def _review_change_links(ids):
@@ -161,12 +196,38 @@ def _burst_in(rows):
     return best
 
 
+def _burst_pace(bursts, baseline_start, now):
+    """Per product: (reviews outside the burst's own 24h, days they are spread over)."""
+    totals = {}
+    inside = {}
+    ids = list(bursts)
+    for chunk in _chunks(ids, 200):
+        rows = (
+            _visible_reviews()
+            .filter(product_id__in=chunk, is_time__gte=baseline_start, is_time__lte=now)
+            .values("product_id")
+            .annotate(total=Count("pk"), first=Min("is_time"))
+        )
+        totals.update({row["product_id"]: (row["total"], row["first"]) for row in rows})
+        spans = Q()
+        for product_id in chunk:
+            start = bursts[product_id][2][0]["is_time"]
+            spans |= Q(product_id=product_id, is_time__gte=start, is_time__lte=start + BURST_SPAN)
+        inside.update(_visible_reviews().filter(spans).values_list("product_id").annotate(n=Count("pk")))
+    pace = {}
+    for product_id, (total, first) in totals.items():
+        others = total - inside.get(product_id, 0)
+        active_days = (now - first).total_seconds() / 86400
+        pace[product_id] = (others, max(BURST_MIN_PACE_DAYS, active_days - BURST_SPAN.days))
+    return pace
+
+
 def check_review_bursts(window):
+    five_star = _visible_reviews().filter(is_time__gte=window.since, is_time__lte=window.now, is_score=5, product__isnull=False)
     rows = list(
-        ShopReview.objects.filter(is_time__gte=window.since, is_time__lte=window.now, is_score=5, product__isnull=False)
-        .order_by("-is_time")
-        .values("pk", "product_id", "product__it_name", "user_id", "mb_id", "is_name", "is_time")[:BURST_ROW_CAP]
+        five_star.order_by("-is_time").values("pk", "product_id", "product__it_name", "user_id", "mb_id", "is_name", "is_time")[:BURST_ROW_CAP]
     )
+    note = _capped_note(len(rows), five_star.count(), "5점 후기") if len(rows) == BURST_ROW_CAP else ""
     by_product = defaultdict(list)
     for row in reversed(rows):
         by_product[row["product_id"]].append(row)
@@ -176,16 +237,12 @@ def check_review_bursts(window):
         if burst:
             bursts[product_id] = burst
     if not bursts:
-        return []
-    baseline_start = window.since - timedelta(days=BURST_BASELINE_DAYS)
-    earlier = dict(
-        ShopReview.objects.filter(product_id__in=list(bursts), is_time__gte=baseline_start, is_time__lt=window.since)
-        .values_list("product_id")
-        .annotate(total=Count("pk"))
-    )
+        return Found((), 0, note)
+    pace = _burst_pace(bursts, window.since - timedelta(days=BURST_BASELINE_DAYS), window.now)
     findings = []
     for product_id, (count, authors, burst_rows) in bursts.items():
-        daily = earlier.get(product_id, 0) / BURST_BASELINE_DAYS
+        others, days = pace[product_id]
+        daily = others / days
         if count < BURST_RATE_FACTOR * daily:
             continue
         ids = [row["pk"] for row in burst_rows]
@@ -197,13 +254,14 @@ def check_review_bursts(window):
                 title=f"{name}: 24시간에 5점 후기 {count}건",
                 evidence=(
                     f"작성자 {authors}명, {_stamp(burst_rows[0]['is_time'])} ~ {_stamp(burst_rows[-1]['is_time'])}",
-                    f"이전 {BURST_BASELINE_DAYS}일 하루 평균 {daily:.2f}건 ({earlier.get(product_id, 0)}건)",
-                    "작성자: " + ", ".join(sorted({_label(row) for row in burst_rows})[:SAMPLE_CAP * 2]),
+                    f"그 밖의 후기 하루 평균 {daily:.2f}건 ({others}건 / {days:.0f}일)",
+                    "작성자: " + _listed(sorted({_label(row) for row in burst_rows}), SAMPLE_CAP * 2),
                 ),
                 links=_review_links(ids),
             )
         )
-    return sorted(findings, key=lambda finding: finding.title)
+    findings.sort(key=lambda finding: finding.title)
+    return Found(tuple(findings), len(findings), note)
 
 
 def _plain_text(review):
@@ -211,12 +269,13 @@ def _plain_text(review):
 
 
 def check_similar_reviews(window):
+    in_window = _visible_reviews().filter(is_time__gte=window.since, is_time__lte=window.now).exclude(is_content="")
     reviews = list(
-        ShopReview.objects.filter(is_time__gte=window.since, is_time__lte=window.now)
-        .exclude(is_content="")
-        .order_by("-is_time", "-pk")
-        .values("pk", "product__it_name", "user_id", "mb_id", "is_name", "is_content", "is_time")[:SIMILARITY_REVIEW_CAP]
+        in_window.order_by("-is_time", "-pk").values("pk", "product__it_name", "user_id", "mb_id", "is_name", "is_content", "is_time")[
+            :SIMILARITY_REVIEW_CAP
+        ]
     )
+    note = _capped_note(len(reviews), in_window.count(), "후기") if len(reviews) == SIMILARITY_REVIEW_CAP else ""
     texts = [_plain_text(review) for review in reviews]
     authors = [_author(review) for review in reviews]
     result = similar_pairs(
@@ -244,106 +303,86 @@ def check_similar_reviews(window):
                 evidence=(
                     f"문자 3-gram 유사도 {min(similarities):.0%} ~ {max(similarities):.0%}",
                     f"본문: {snippet}",
-                    "작성자: " + ", ".join(sorted({_label(review) for review in members})[:SAMPLE_CAP * 2]),
+                    "작성자: " + _listed(sorted({_label(review) for review in members}), SAMPLE_CAP * 2),
                 ),
                 links=_review_links([review["pk"] for review in members]),
             )
         )
-    return findings
+    return Found(tuple(findings), len(findings), note)
 
 
 def check_reviews_without_purchase(window):
-    reviews = list(
-        ShopReview.objects.filter(is_time__gte=window.since, is_time__lte=window.now, user__isnull=False, product__isnull=False)
+    in_window = (
+        _visible_reviews()
+        .filter(is_time__gte=window.since, is_time__lte=window.now, user__isnull=False, product__isnull=False)
         .exclude(user__is_superuser=True)
-        .order_by("-is_time", "-pk")
-        .values("pk", "product_id", "product__it_name", "user_id", "mb_id", "is_name")[:NO_PURCHASE_REVIEW_CAP]
     )
+    reviews = list(in_window.order_by("-is_time", "-pk").values("pk", "product_id", "product__it_name", "user_id", "mb_id", "is_name")[:NO_PURCHASE_REVIEW_CAP])
     if not reviews:
-        return []
-    bought = set()
+        return Found((), 0)
+    note = _capped_note(len(reviews), in_window.count(), "후기") if len(reviews) == NO_PURCHASE_REVIEW_CAP else ""
+    received = set()
     products = {review["product_id"] for review in reviews}
     for user_chunk in _chunks({review["user_id"] for review in reviews}):
         for product_chunk in _chunks(products):
-            bought.update(
-                ShopOrderItem.objects.filter(order__user_id__in=user_chunk, it_id__in=product_chunk)
-                .exclude(ct_status__in=INACTIVE_LINE_STATUSES)
+            received.update(
+                received_lines()
+                .filter(order__user_id__in=user_chunk, it_id__in=product_chunk)
                 .values_list("order__user_id", "it_id")
                 .distinct()
             )
     required = int(current_shipping_policy().de_item_use_write or 0) == 1
     per_member = defaultdict(list)
     for review in reviews:
-        if (review["user_id"], review["product_id"]) not in bought:
+        if (review["user_id"], review["product_id"]) not in received:
             per_member[review["user_id"]].append(review)
-    note = (
-        "후기 작성 조건 켜짐: 우회 또는 이후 주문 취소"
-        if required
-        else "후기 작성 조건 꺼짐 (허용된 후기)"
-    )
+    advice = "후기 작성 조건 켜짐: 우회 또는 이후 주문 취소" if required else "후기 작성 조건 꺼짐 (허용된 후기)"
     findings = []
-    for member_reviews in per_member.values():
+    for member_reviews in sorted(per_member.values(), key=lambda mine: (-len(mine), _label(mine[0]))):
         names = sorted({review["product__it_name"] or review["product_id"] for review in member_reviews})
         findings.append(
             Finding(
                 rule="no_purchase_review",
                 severity="medium" if required else "info",
-                title=f"{_label(member_reviews[0])}: 구매 이력 없는 후기 {len(member_reviews)}건",
-                evidence=(f"상품: {', '.join(names[:SAMPLE_CAP])}", note),
+                title=f"{_label(member_reviews[0])}: 배송 완료 이력 없는 후기 {len(member_reviews)}건",
+                evidence=(f"상품: {_listed(names, SAMPLE_CAP)}", advice),
                 links=_review_links([review["pk"] for review in member_reviews]),
             )
         )
-    return sorted(findings, key=lambda finding: (SEVERITY_ORDER[finding.severity], finding.title))
+    return Found(tuple(findings[:NO_PURCHASE_DISPLAY_CAP]), len(findings), note)
 
 
-def _coupon_orders(order_ids, member_ids):
-    """Which of ``order_ids`` used a coupon, and how many of ``member_ids`` used the signup coupon."""
-    used = {
-        od_id
-        for od_id in ShopOrder.objects.filter(od_id__in=order_ids).filter(Q(od_coupon__gt=0) | Q(od_send_coupon__gt=0)).values_list("od_id", flat=True)
-    }
-    logs = ShopCouponLog.objects.filter(Q(order_id__in=order_ids) | Q(od_id__in=order_ids))
-    used.update(od_id for od_id in logs.values_list("od_id", flat=True) if od_id)
-    used.update(od_id for od_id in logs.exclude(order__isnull=True).values_list("order_id", flat=True))
-    signup_users = set(
-        logs.filter(coupon__cp_subject=SIGNUP_COUPON_SUBJECT, user_id__in=member_ids).values_list("user_id", flat=True)
-    )
-    return used, signup_users
+def _coupon_orders(orders):
+    logged = ShopCouponLog.objects.filter(Q(order_id=OuterRef("pk")) | Q(od_id=OuterRef("od_id")))
+    return orders.filter(Q(od_coupon__gt=0) | Q(od_send_coupon__gt=0) | Q(Exists(logged)))
 
 
 def check_shared_ip_accounts(window):
     base = ShopOrder.objects.filter(od_datetime__gte=window.since, od_datetime__lte=window.now, od_ip__isnull=False, user__isnull=False)
-    shared = list(
-        base.values("od_ip")
-        .annotate(members=Count("user", distinct=True), orders=Count("od_id"))
-        .filter(members__gte=SHARED_IP_MIN_MEMBERS)
-        .order_by("-members", "-orders", "od_ip")[:SHARED_IP_CAP]
-    )
-    if not shared:
-        return []
-    ips = [row["od_ip"] for row in shared]
-    rows = list(
-        base.filter(od_ip__in=ips)
-        .order_by("-od_datetime")
-        .values("od_id", "od_ip", "user_id", "user__username")[: SHARED_IP_ORDER_CAP]
-    )
-    by_ip = defaultdict(list)
-    for row in rows:
-        by_ip[row["od_ip"]].append(row)
-    used, signup_users = _coupon_orders([row["od_id"] for row in rows], {row["user_id"] for row in rows})
+    grouped = base.values("od_ip").annotate(members=Count("user", distinct=True), orders=Count("od_id")).filter(members__gte=SHARED_IP_MIN_MEMBERS)
+    total = grouped.count()
+    if not total:
+        return Found((), 0)
+    shared = list(grouped.order_by("-members", "-orders", "od_ip")[:SHARED_IP_CAP])
+    in_scope = base.filter(od_ip__in=[entry["od_ip"] for entry in shared])
+    coupon_counts = dict(_coupon_orders(in_scope).values_list("od_ip").annotate(n=Count("od_id")))
+    signup_users = ShopCouponLog.objects.filter(coupon__cp_subject=SIGNUP_COUPON_SUBJECT, user__isnull=False).values("user_id")
+    signup_counts = dict(in_scope.filter(user_id__in=signup_users).values_list("od_ip").annotate(n=Count("user", distinct=True)))
     findings = []
     for entry in shared:
         ip = entry["od_ip"]
-        ip_rows = by_ip[ip]
-        coupon_orders = [row["od_id"] for row in ip_rows if row["od_id"] in used]
-        signup = {row["user_id"] for row in ip_rows} & signup_users
-        flagged = bool(coupon_orders or signup)
+        coupon_count = coupon_counts.get(ip, 0)
+        signup_count = signup_counts.get(ip, 0)
+        ip_orders = in_scope.filter(od_ip=ip)
+        names = ip_orders.order_by("user__username").values_list("user__username", flat=True).distinct()[: SAMPLE_CAP * 2 + 1]
+        sample = (_coupon_orders(ip_orders) if coupon_count else ip_orders).order_by("-od_datetime").values_list("od_id", flat=True)[:SAMPLE_CAP]
+        flagged = bool(coupon_count or signup_count)
         evidence = [
             f"주문 {entry['orders']}건, 서로 다른 회원 {entry['members']}명",
-            "회원: " + ", ".join(sorted({row["user__username"] for row in ip_rows})[: SAMPLE_CAP * 2]),
+            "회원: " + _listed(names, SAMPLE_CAP * 2) + (f" (전체 {entry['members']}명)" if entry["members"] > SAMPLE_CAP * 2 else ""),
         ]
         if flagged:
-            evidence.append(f"쿠폰 사용 주문 {len(coupon_orders)}건, 신규 회원 쿠폰 사용 회원 {len(signup)}명")
+            evidence.append(f"쿠폰 사용 주문 {coupon_count}건, 신규 회원 쿠폰 사용 회원 {signup_count}명")
         findings.append(
             Finding(
                 rule="shared_ip",
@@ -352,11 +391,11 @@ def check_shared_ip_accounts(window):
                 evidence=tuple(evidence),
                 links=(
                     Link("이 IP의 주문 목록", reverse("admin:shop_shoporder_changelist") + "?" + urlencode({"od_ip": ip})),
-                    *_order_change_links(coupon_orders or [row["od_id"] for row in ip_rows]),
+                    *_order_change_links(list(sample)),
                 ),
             )
         )
-    return findings
+    return Found(tuple(findings), total)
 
 
 RULES = (
@@ -364,35 +403,46 @@ RULES = (
         "review_burst",
         "후기 몰림",
         f"한 상품에 24시간 안에 5점 후기가 {BURST_MIN_REVIEWS}건 이상, 작성자 {BURST_MIN_AUTHORS}명 이상이고 "
-        f"이전 {BURST_BASELINE_DAYS}일 하루 평균의 {BURST_RATE_FACTOR}배 이상일 때",
+        f"그 상품의 평소 하루 평균(이전 {BURST_BASELINE_DAYS}일과 같은 기간의 나머지 날)의 {BURST_RATE_FACTOR}배 이상일 때. "
+        "숨긴 후기는 제외합니다",
         check_review_bursts,
+        reads_reviews=True,
     ),
     Rule(
         "similar_review",
         "유사 후기",
         f"다른 작성자의 후기 본문이 문자 3-gram 유사도 {SIMILARITY_THRESHOLD:.0%} 이상(공백·기호 제외 {SIMILARITY_MIN_LENGTH}자 이상)일 때. "
-        f"기간 안의 최신 후기 {SIMILARITY_REVIEW_CAP:,}건까지 비교합니다",
+        f"기간 안의 최신 후기 {SIMILARITY_REVIEW_CAP:,}건까지 비교하며 숨긴 후기는 제외합니다",
         check_similar_reviews,
+        reads_reviews=True,
     ),
     Rule(
         "no_purchase_review",
-        "구매 이력 없는 후기",
-        "회원이 그 상품의 유효한 주문 상품 줄(취소·반품·품절 제외)이 없는데 후기를 쓴 경우. 슈퍼관리자는 제외합니다",
+        "배송 완료 이력 없는 후기",
+        "회원이 그 상품을 배송 완료(완료)로 받은 주문 줄이 없는데 후기를 쓴 경우. 쇼핑몰의 후기 작성 조건과 같은 기준이며 "
+        "취소·반품·품절, 아직 배송 전인 주문은 구매로 보지 않습니다. 슈퍼관리자와 숨긴 후기는 제외합니다",
         check_reviews_without_purchase,
+        reads_reviews=True,
     ),
     Rule(
         "shared_ip",
         "동일 IP 다중 계정",
         f"한 주문 IP를 {SHARED_IP_MIN_MEMBERS}명 이상의 회원이 쓴 경우. 쿠폰이나 신규 회원 쿠폰을 쓴 주문이 있으면 주의로 올립니다. "
-        "공용 회선(학교, 사무실)은 정상일 수 있습니다",
+        "공용 회선(학교, 사무실, 통신사 공용 IP)은 정상일 수 있습니다. IPv6는 주소 그대로 비교합니다",
         check_shared_ip_accounts,
     ),
 )
 
 
-def build_report(days=DEFAULT_WINDOW_DAYS, now=None):
+def build_report(days=DEFAULT_WINDOW_DAYS, now=None, can_view_reviews=True):
     window = Window(days=window_days(days), now=now or timezone.now())
-    results = [RuleResult(rule, tuple(rule.check(window))) for rule in RULES]
+    results = []
+    for rule in RULES:
+        if rule.reads_reviews and not can_view_reviews:
+            results.append(RuleResult(rule, (), restricted=True))
+            continue
+        found = rule.check(window)
+        results.append(RuleResult(rule, found.findings, found.total, found.note))
     counts = Counter(finding.severity for result in results for finding in result.findings)
     return {
         "window": window,
@@ -400,4 +450,5 @@ def build_report(days=DEFAULT_WINDOW_DAYS, now=None):
         "results": results,
         "counts": {key: counts.get(key, 0) for key in SEVERITY_ORDER},
         "total": sum(counts.values()),
+        "is_trimmed": any(result.hidden_count or result.note for result in results),
     }

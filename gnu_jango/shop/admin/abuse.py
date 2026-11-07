@@ -8,7 +8,9 @@ from gnu_jango.shop.admin.bulk import tool_context
 
 
 def abuse_signals_view(model_admin, request):
-    report = abuse_signals.build_report(request.GET.get("days"))
+    can_view_reviews = request.user.has_perm("shop.view_shopreview")
+    report = abuse_signals.build_report(request.GET.get("days"), can_view_reviews=can_view_reviews)
+    review_links = [{"url": reverse("admin:shop_shopreview_changelist"), "label": "상품 후기"}] if can_view_reviews else []
     context = tool_context(
         model_admin,
         request,
@@ -18,7 +20,7 @@ def abuse_signals_view(model_admin, request):
         parent_url=reverse("admin:shop_shoporder_changelist"),
         parent_label="주문",
         tool_links=[
-            {"url": reverse("admin:shop_shopreview_changelist"), "label": "상품 후기"},
+            *review_links,
             {"url": reverse("admin:shop_shoporder_sales_anomalies"), "label": "매출 이상 징후"},
         ],
         report=report,

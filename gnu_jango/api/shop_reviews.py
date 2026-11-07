@@ -13,13 +13,13 @@ from rest_framework.permissions import AllowAny
 from .authentication import SessionJWTAuthentication as JWTAuthentication
 
 from gnu_jango.shop.models import (
-    ShopOrderItem,
     ShopProduct,
     ShopQA,
     ShopReview,
 )
 
 from gnu_jango.shop.product_counters import recount_product_reviews
+from gnu_jango.shop.review_gate import received_lines
 from gnu_jango.shop.shipping import current_shipping_policy
 
 from .response import api_error, api_response
@@ -149,7 +149,7 @@ def _has_received_product(user, product):
     product is 완료 (delivered) may review it; the super administrator is exempt."""
     if user.is_superuser:
         return True
-    return ShopOrderItem.objects.filter(order__user=user, it_id=product.it_id, ct_status="완료").exists()
+    return received_lines().filter(order__user=user, it_id=product.it_id).exists()
 
 
 def reviews_response(request):
