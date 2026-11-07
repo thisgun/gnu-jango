@@ -1,0 +1,52 @@
+{% extends "admin/shop/tools/_layout.html" %}
+
+{% block hero_form %}
+<form class="g5-admin-report-filter g5-admin-report-filter-compact" method="get" action="{{ report_path }}">
+  <label><span>기간</span>
+    <select class="select" name="days">
+      {% for choice in window_choices %}<option value="{{ choice }}"{% if choice == report.days %} selected{% endif %}>최근 {{ choice }}일</option>{% endfor %}
+    </select>
+  </label>
+  <div class="g5-admin-report-filter-actions">
+    <button class="button btn" type="submit">조회</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block tool_body %}
+<section class="g5-admin-report-metrics" aria-label="심각도별 건수">
+  <article class="card g5-admin-report-metric"><span>주의</span><strong>{{ report.counts.high }}</strong><em>먼저 확인</em></article>
+  <article class="card g5-admin-report-metric"><span>확인</span><strong>{{ report.counts.medium }}</strong><em>살펴볼 만한 기록</em></article>
+  <article class="card g5-admin-report-metric"><span>참고</span><strong>{{ report.counts.info }}</strong><em>쇼핑몰 설정상 허용된 기록</em></article>
+  <article class="card g5-admin-report-metric"><span>점검 기간</span><strong>{{ report.days }}일</strong><em>{{ report.window.since|date:"Y-m-d H:i" }} 이후</em></article>
+</section>
+
+{% for result in report.results %}
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide" aria-labelledby="rule-{{ result.rule.code }}">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{{ result.findings|length }}건</p>
+      <h2 id="rule-{{ result.rule.code }}">{{ result.rule.title }}</h2>
+      <p class="g5-admin-empty">{{ result.rule.summary }}</p>
+    </div>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="table g5-admin-mini-table">
+      <thead><tr><th scope="col">구분</th><th scope="col">내용</th><th scope="col">근거</th><th scope="col">확인하기</th></tr></thead>
+      <tbody>
+        {% for finding in result.findings %}
+        <tr>
+          <td><span class="g5-admin-badge g5-admin-badge-{% if finding.severity == 'high' %}danger{% elif finding.severity == 'medium' %}warning{% else %}info{% endif %}">{{ finding.severity_label }}</span></td>
+          <td><strong>{{ finding.title }}</strong></td>
+          <td>{% for line in finding.evidence %}{{ line }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+          <td>{% for link in finding.links %}<a href="{{ link.url }}">{{ link.label }}</a>{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4" class="g5-admin-empty">이 기간에는 걸린 기록이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endfor %}
+{% endblock %}

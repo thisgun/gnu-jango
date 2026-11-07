@@ -370,6 +370,12 @@ UNFOLD = {
                         "permission": lambda request: request.user.has_perm("shop.view_shoporder"),
                     },
                     {
+                        "title": "이상 활동 점검",
+                        "icon": "gpp_maybe",
+                        "link": reverse_lazy("admin:shop_shoporder_abuse_signals"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shoporder"),
+                    },
+                    {
                         "title": "송장 일괄등록",
                         "icon": "local_shipping",
                         "link": reverse_lazy("admin:shop_shoporder_delivery_upload"),

@@ -438,7 +438,7 @@ def product_tool_urls(model_admin):
 
 
 def order_tool_urls(model_admin):
-    from gnu_jango.shop.admin import reports
+    from gnu_jango.shop.admin import abuse, reports
 
     return [
         path("delivery-upload/", _bind(model_admin, delivery_upload_view), name="shop_shoporder_delivery_upload"),
@@ -448,6 +448,11 @@ def order_tool_urls(model_admin):
             "sales-anomalies/",
             _bind(model_admin, reports.sales_anomalies_view, guard=model_admin.order_report_view),
             name="shop_shoporder_sales_anomalies",
+        ),
+        path(
+            "abuse-signals/",
+            _bind(model_admin, abuse.abuse_signals_view, guard=model_admin.order_report_view),
+            name="shop_shoporder_abuse_signals",
         ),
     ]
 
