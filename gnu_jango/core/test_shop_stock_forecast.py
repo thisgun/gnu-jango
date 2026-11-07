@@ -12,12 +12,16 @@ from gnu_jango.shop.models import ShopOrder, ShopOrderItem, ShopProduct
 from gnu_jango.shop.stock_forecast import (
     NO_SALES,
     STATUS_RULES,
+    UNTRACKED,
+    UNTRACKED_STOCK,
     Settings,
+    StockLevel,
     forecast_all,
     forecast_product,
     parse_settings,
     sales_series,
     status_counts,
+    stock_level,
     urgency_key,
 )
 
@@ -27,8 +31,8 @@ _ids = count(1)
 NOISY = [2, 6] * 14
 
 
-def forecast(stock, series, settings=SETTINGS):
-    return forecast_product("A1", "상품", stock, series, settings)
+def forecast(stock, series, settings=SETTINGS, **level):
+    return forecast_product("A1", "상품", StockLevel(stock, **level), series, settings)
 
 
 def test_a_product_without_sales_has_no_days_left_and_no_order():
@@ -82,17 +86,21 @@ def test_lead_and_cover_days_change_the_suggestion():
 
 
 def test_each_status_rule_is_reachable_and_ordered_by_urgency():
-    labels = [rule.label for rule in STATUS_RULES]
-    assert labels == ["품절", "품절 임박", "발주 필요", "여유"]
-    rows = [forecast(stock, NOISY) for stock in (500, 30, 20, 0)] + [forecast(5, [0] * 28)]
-    assert [row.status for row in sorted(rows, key=urgency_key)] == [*labels, NO_SALES]
-    assert status_counts(rows) == {"품절": 1, "품절 임박": 1, "발주 필요": 1, "여유": 1, NO_SALES: 1}
+    labels = ["품절", "품절 임박", "발주 필요", "여유", NO_SALES, UNTRACKED]
+    assert {rule.label for rule in STATUS_RULES} == set(labels)
+    rows = [forecast(stock, NOISY) for stock in (500, 30, 20, 0)]
+    rows += [forecast(5, [0] * 28), forecast(UNTRACKED_STOCK, NOISY, untracked=True)]
+    assert [row.status for row in sorted(rows, key=urgency_key)] == labels
+    assert status_counts(rows) == dict.fromkeys(labels, 1)
 
 
 def test_parse_settings_clamps_and_falls_back():
     assert parse_settings({}) == Settings(28, 7, 14)
     assert parse_settings({"window": "56", "lead": "999", "cover": "0"}) == Settings(56, 60, 1)
     assert parse_settings({"window": "30", "lead": "x", "cover": ""}) == Settings(28, 7, 14)
+    assert parse_settings({"window": "100"}).window == 28
+    assert parse_settings({"window": "20"}).window == 28
+    assert parse_settings({"window": "14"}).window == 14
 
 
 def _sample_stdev(series):
@@ -172,3 +180,97 @@ def test_the_admin_page_needs_the_product_view_permission(client):
     url = reverse("admin:shop_shopproduct_stock_forecast")
     client.force_login(staff_with("view_shoporder"))
     assert client.get(url).status_code == 403
+
+
+def test_a_comfortable_product_shows_no_suggestion():
+    result = forecast(500, NOISY)
+    assert result.status == "여유" and result.suggested == 0
+
+
+def test_a_product_that_is_out_of_stock_is_sold_out_even_without_sales():
+    result = forecast(0, [0] * 28)
+    assert result.status == "품절" and result.suggested == 0 and result.daily == 0
+
+
+def test_demand_ignores_the_days_a_sold_out_product_could_not_sell():
+    stocked_out = forecast(0, [4] * 14 + [0] * 14)
+    assert stocked_out.daily == 4 and stocked_out.suggested == forecast(0, [4] * 28).suggested
+    assert stocked_out.trend == ""
+    assert forecast(5, [4] * 14 + [0] * 14).daily == 2
+
+
+def test_the_sold_out_flag_beats_the_stock_quantity():
+    result = forecast(500, [2] * 28, flagged_sold_out=True)
+    assert result.status == "품절" and result.days_left == 0 and result.suggested == 42
+
+
+def test_untracked_default_stock_gets_no_forecast_numbers():
+    result = forecast(UNTRACKED_STOCK, [4] * 28, untracked=True)
+    assert result.status == UNTRACKED and result.stock is None
+    assert result.days_left is None and result.reorder_point is None and result.suggested == 0
+    assert result.daily == 4
+
+
+def product_with(it_id, stock, options, soldout=""):
+    product = make_product(it_id, stock)
+    product.options = options
+    product.it_soldout = soldout
+    product.save()
+    return product
+
+
+def option(io_id, stock, io_type=0, use=1):
+    return {"io_id": io_id, "io_type": io_type, "io_use": use, "io_stock_qty": stock}
+
+
+@pytest.mark.django_db
+def test_stock_is_the_sum_of_the_in_use_choice_options():
+    product = product_with(
+        "O1", UNTRACKED_STOCK,
+        [option("red", 3), option("blue", 4), option("gone", 50, use=0), option("gift", 9, io_type=1)],
+    )
+    assert stock_level(product) == StockLevel(7)
+    assert stock_level(product_with("O2", 5, [option("a", UNTRACKED_STOCK), option("b", UNTRACKED_STOCK)])).untracked
+    assert not stock_level(product_with("O3", 5, [option("a", UNTRACKED_STOCK), option("b", 2)])).untracked
+    assert stock_level(make_product("O4", 12)) == StockLevel(12)
+    assert stock_level(make_product("O5", UNTRACKED_STOCK)).untracked
+
+
+@pytest.mark.django_db
+def test_an_option_product_with_every_option_at_zero_is_sold_out():
+    product = product_with("O6", UNTRACKED_STOCK, [option("red", 0), option("blue", 0)])
+    for offset in range(1, 29):
+        sell(product, TODAY - timedelta(days=offset), 5)
+    row = next(r for r in forecast_all(TODAY, SETTINGS) if r.it_id == "O6")
+    assert row.status == "품절" and row.stock == 0 and row.days_left == 0 and row.suggested > 0
+
+
+@pytest.mark.django_db
+def test_a_long_sold_out_product_and_a_flagged_one_are_listed_as_sold_out():
+    make_product("L1", 0, "오래 품절")
+    flagged = make_product("L2", 500, "수동 품절")
+    flagged.it_soldout = "1"
+    flagged.save()
+    result = {row.it_id: row.status for row in forecast_all(TODAY, SETTINGS)}
+    assert result == {"L1": "품절", "L2": "품절"}
+
+
+@pytest.mark.django_db
+def test_sales_count_the_way_the_sales_ranking_does():
+    product = make_product("R1", 10)
+    for status in ("returned", "return", "canceled", "취소", "반품"):
+        sell(product, TODAY - timedelta(days=1), 5, status=status)
+    sell(product, TODAY - timedelta(days=1), 2)
+    assert sum(sales_series(TODAY, 28)["R1"]) == 2
+
+
+@pytest.mark.django_db
+def test_the_admin_page_shows_untracked_stock_and_no_suggestion_for_comfortable_rows(client):
+    today = timezone.localdate()
+    free = make_product("W1", 5000, "넉넉한 상품")
+    make_product("W2", UNTRACKED_STOCK, "재고 미입력")
+    for offset in range(1, 15):
+        sell(free, today - timedelta(days=offset), 2)
+    client.force_login(staff_with("view_shopproduct"))
+    body = client.get(reverse("admin:shop_shopproduct_stock_forecast")).content.decode()
+    assert UNTRACKED in body and "미설정" in body and "<strong>" not in body.split("<tbody>")[1].split("</tbody>")[0]

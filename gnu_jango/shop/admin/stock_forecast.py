@@ -44,5 +44,11 @@ def stock_forecast_view(model_admin, request):
         page_obj=Paginator(shown, PAGE_SIZE).get_page(request.GET.get("page")),
         page_query=urlencode({**query, **({"status": status} if status else {})}),
         recent_days=stock_forecast.RECENT_DAYS,
+        untracked_stock=stock_forecast.UNTRACKED_STOCK,
+        z_service=stock_forecast.Z_SERVICE,
+        trend_up=stock_forecast.TREND_UP,
+        trend_down=stock_forecast.TREND_DOWN,
+        lead_range=stock_forecast.LEAD_DAYS_RANGE,
+        cover_range=stock_forecast.COVER_DAYS_RANGE,
     )
     return TemplateResponse(request, "admin/shop/tools/stock_forecast.html", context)

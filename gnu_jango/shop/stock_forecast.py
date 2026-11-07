@@ -9,10 +9,15 @@ With lead time ``L`` and cover days ``C``:
     days left     = stock / d
     suggested     = max(0, ceil(d * (L + C) + safety - stock))
 
-Sales are counted like the other sales reports: a line counts unless its status is in
-order_statuses.INACTIVE_LINE_STATUSES, on the local day of the order (od_datetime). The forecast
-stays at product level: a cart line names its option only as free text (ct_option), which does not
-map reliably onto the option stock records.
+Sales are counted like 상품판매순위: a line counts unless admin._common.sold_line_q() leaves it
+out, on the local day of the order (od_datetime).
+
+The forecast stays at product level, with the stock a buyer can still order: the sum of the
+in-use choice options' stock when the product has options (an order takes stock off the option
+only), else ``it_stock_qty``. A product that is flagged sold out, or has no stock, is 품절 even when
+it sold nothing in the window, and its demand is taken over the days up to its last sale: the
+sales-free days since are the stockout, not a lack of demand. Stock still at the 9999 a new product
+or option starts with was never entered, so it gets no days left or suggestion.
 """
 
 import math
@@ -27,8 +32,12 @@ from django.db.models.functions import TruncDate
 
 from gnu_jango.utils.date_ranges import local_days
 
+from .admin._common import sold_line_q
 from .models import ShopOrderItem, ShopProduct
-from .order_statuses import INACTIVE_LINE_STATUSES
+from .product_options import DEFAULT_OPTION_STOCK
+from .stock_bulk import option_rows
+
+UNTRACKED_STOCK = ShopProduct._meta.get_field("it_stock_qty").default
 
 WINDOWS = (14, 28, 56)
 DEFAULT_WINDOW = 28
@@ -39,10 +48,12 @@ DEFAULT_COVER_DAYS = 14
 # One-sided 95% service level.
 Z_SERVICE = 1.65
 RECENT_DAYS = 7
+MAX_PARAM = 10**6
 TREND_UP = 1.3
 TREND_DOWN = 0.7
 
 NO_SALES = "판매 없음"
+UNTRACKED = "재고 미설정"
 TREND_LABELS = {"up": "증가", "down": "감소", "flat": "비슷"}
 
 
@@ -54,13 +65,27 @@ class Settings:
 
 
 @dataclass(frozen=True)
+class StockLevel:
+    """What a buyer can still order: ``quantity`` in stock, ``flagged_sold_out`` when the shop
+    marked it 품절, ``untracked`` when the quantity is still the default nobody entered."""
+
+    quantity: int
+    flagged_sold_out: bool = False
+    untracked: bool = False
+
+    @property
+    def is_out(self):
+        return self.flagged_sold_out or self.quantity <= 0
+
+
+@dataclass(frozen=True)
 class Demand:
     """The numbers a status rule looks at."""
 
-    stock: int
-    daily: float
+    level: StockLevel
+    window_units: int
     days_left: float
-    reorder_point: float
+    suggested: int
     lead_days: int
 
 
@@ -68,26 +93,29 @@ class Demand:
 class StatusRule:
     label: str
     badge: str
+    rank: int
     applies: Callable[[Demand], bool]
 
 
-# First matching rule wins, so the order is the urgency order.
+# First matching rule wins. ``rank`` is the order the page lists them in: what needs action first.
 STATUS_RULES = (
-    StatusRule("품절", "danger", lambda demand: demand.stock <= 0),
-    StatusRule("품절 임박", "danger", lambda demand: demand.days_left <= demand.lead_days),
-    StatusRule("발주 필요", "warning", lambda demand: demand.stock <= demand.reorder_point),
-    StatusRule("여유", "success", lambda demand: True),
+    StatusRule("품절", "danger", 0, lambda demand: demand.level.is_out),
+    StatusRule(UNTRACKED, "neutral", 5, lambda demand: demand.level.untracked),
+    StatusRule(NO_SALES, "info", 4, lambda demand: demand.window_units <= 0),
+    StatusRule("품절 임박", "danger", 1, lambda demand: demand.days_left <= demand.lead_days),
+    StatusRule("발주 필요", "warning", 2, lambda demand: demand.suggested > 0),
+    StatusRule("여유", "success", 3, lambda demand: True),
 )
-NO_SALES_BADGE = "info"
-STATUS_BADGES = {rule.label: rule.badge for rule in STATUS_RULES} | {NO_SALES: NO_SALES_BADGE}
-STATUS_ORDER = {label: index for index, label in enumerate([*STATUS_BADGES])}
+_BY_RANK = sorted(STATUS_RULES, key=lambda rule: rule.rank)
+STATUS_BADGES = {rule.label: rule.badge for rule in _BY_RANK}
+STATUS_ORDER = {rule.label: rule.rank for rule in STATUS_RULES}
 
 
 @dataclass(frozen=True)
 class ProductForecast:
     it_id: str
     name: str
-    stock: int
+    stock: int | None
     window_units: int
     daily: float
     recent_units: int
@@ -116,7 +144,7 @@ def clamp(value, bounds, default):
 
 def parse_settings(params):
     """``Settings`` from query parameters; anything missing or out of range falls back or is clamped."""
-    window = clamp(params.get("window"), (min(WINDOWS), max(WINDOWS)), DEFAULT_WINDOW)
+    window = clamp(params.get("window"), (0, MAX_PARAM), DEFAULT_WINDOW)
     return Settings(
         window=window if window in WINDOWS else DEFAULT_WINDOW,
         lead_days=clamp(params.get("lead"), LEAD_DAYS_RANGE, DEFAULT_LEAD_DAYS),
@@ -133,23 +161,35 @@ def _trend(recent_mean, daily):
     return "flat"
 
 
-def forecast_product(it_id, name, stock, series, settings):
+def _days_until_last_sale(series):
+    last_sale = max((day for day, units in enumerate(series, 1) if units), default=0)
+    return series[:last_sale]
+
+
+def forecast_product(it_id, name, level, series, settings):
     """Forecast of one product; ``series`` is its units per day, oldest day first."""
-    window_units = sum(series)
-    if window_units <= 0:
-        return ProductForecast(it_id, name, stock, 0, 0.0, 0, None, None, 0, NO_SALES, "")
-    daily = mean(series)
-    sigma = stdev(series) if len(series) > 1 else 0.0
+    used = _days_until_last_sale(series) if level.is_out else series
+    daily = mean(used) if used else 0.0
+    sigma = stdev(used) if len(used) > 1 else 0.0
     safety = Z_SERVICE * sigma * math.sqrt(settings.lead_days)
-    reorder_point = daily * settings.lead_days + safety
-    days_left = max(stock, 0) / daily
-    demand = Demand(stock, daily, days_left, reorder_point, settings.lead_days)
+    sellable = 0 if level.is_out else level.quantity
+    need = daily * (settings.lead_days + settings.cover_days) + safety - sellable
+    suggested = max(0, math.ceil(need)) if daily else 0
+    days_left = sellable / daily if daily else math.inf
+    demand = Demand(level, sum(series), days_left, suggested, settings.lead_days)
     status = next(rule.label for rule in STATUS_RULES if rule.applies(demand))
-    need = daily * (settings.lead_days + settings.cover_days) + safety - stock
-    recent = series[-RECENT_DAYS:]
+    has_levels = daily > 0 and status != UNTRACKED
     return ProductForecast(
-        it_id, name, stock, window_units, daily, sum(recent), days_left, reorder_point,
-        max(0, math.ceil(need)), status, _trend(mean(recent), daily),
+        it_id, name,
+        stock=None if level.untracked else level.quantity,
+        window_units=demand.window_units,
+        daily=daily,
+        recent_units=sum(series[-RECENT_DAYS:]),
+        days_left=days_left if has_levels else None,
+        reorder_point=daily * settings.lead_days + safety if has_levels else None,
+        suggested=suggested if has_levels else 0,
+        status=status,
+        trend=_trend(mean(used[-RECENT_DAYS:]), daily) if daily and not level.is_out else "",
     )
 
 
@@ -164,7 +204,7 @@ def sales_series(today, window):
     first = last - timedelta(days=window - 1)
     rows = (
         ShopOrderItem.objects.filter(local_days("order__od_datetime", first, last))
-        .exclude(ct_status__in=INACTIVE_LINE_STATUSES)
+        .filter(sold_line_q())
         .annotate(day=TruncDate("order__od_datetime"))
         .values("it_id", "day")
         .annotate(units=Sum("ct_qty"))
@@ -177,14 +217,34 @@ def sales_series(today, window):
     return series
 
 
+def stock_level(product):
+    choices = [
+        record for io_type, _io_id, record in option_rows(product)
+        if io_type == 0 and _int(record.get("io_use"), 1) == 1
+    ]
+    flagged = product.it_soldout == "1"
+    if not choices:
+        quantity = product.it_stock_qty or 0
+        return StockLevel(quantity, flagged, quantity == UNTRACKED_STOCK)
+    quantities = [max(_int(record.get("io_stock_qty"), 0), 0) for record in choices]
+    return StockLevel(sum(quantities), flagged, all(q == DEFAULT_OPTION_STOCK for q in quantities))
+
+
+def _int(value, default):
+    try:
+        return int(value if value is not None else default)
+    except (TypeError, ValueError):
+        return default
+
+
 def forecast_all(today, settings):
     """Every product on sale, most urgent first."""
     series = sales_series(today, settings.window)
     empty = [0] * settings.window
-    products = ShopProduct.objects.filter(it_use="1").values_list("it_id", "it_name", "it_stock_qty")
+    products = ShopProduct.objects.filter(it_use="1").only("it_id", "it_name", "it_stock_qty", "it_soldout", "options")
     forecasts = [
-        forecast_product(it_id, name, stock or 0, series.get(it_id, empty), settings)
-        for it_id, name, stock in products
+        forecast_product(p.it_id, p.it_name, stock_level(p), series.get(p.it_id, empty), settings)
+        for p in products.iterator(chunk_size=500)
     ]
     return sorted(forecasts, key=urgency_key)
 
