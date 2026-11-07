@@ -1,9 +1,10 @@
+"""함께 구매한 상품, counted by distinct paid buyers so a product page never reveals one shopper's basket."""
 import logging
 from datetime import timedelta
 
 from django.core.cache import cache
 from django.db.models import Case, CharField, Count, Max, Subquery, Value, When
-from django.db.models.functions import Cast, Concat, Lower, Replace, Trim
+from django.db.models.functions import Cast, Concat, Lower, Replace, Substr, Trim
 from django.db.models.lookups import Exact
 from django.utils import timezone
 
@@ -15,7 +16,8 @@ from gnu_jango.utils.date_ranges import local_days
 logger = logging.getLogger(__name__)
 BOUGHT_TOGETHER_LIMIT = 4
 WINDOW_DAYS = 365
-PRIVACY_MIN_BUYERS = 2
+PRIVACY_MIN_BUYERS = 3
+PHONE_SEPARATORS = ("-", " ", ".", "(", ")", "\t")
 PARTNER_POOL = 60
 PARTNER_CACHE_SECONDS = 60 * 60
 
@@ -32,12 +34,23 @@ def bought_together(product, base, *, exclude=(), limit=BOUGHT_TOGETHER_LIMIT):
 
 def buyer_key():
     email = Lower(Trim("order__od_email"))
-    hp = Replace(Replace(Trim("order__od_hp"), Value("-"), Value("")), Value(" "), Value(""))
+    hp = _phone_key()
     return Case(
         When(order__user_id__isnull=False, then=Concat(Value("m:"), Cast("order__user_id", CharField()))),
         When(~Exact(email, Value("")), then=Concat(Value("e:"), email)),
         When(~Exact(hp, Value("")), then=Concat(Value("h:"), hp)),
         default=Value(None),
+        output_field=CharField(),
+    )
+
+
+def _phone_key():
+    digits = "order__od_hp"
+    for separator in PHONE_SEPARATORS:
+        digits = Replace(digits, Value(separator), Value(""))
+    return Case(
+        When(Exact(Substr(digits, 1, 3), Value("+82")), then=Concat(Value("0"), Substr(digits, 4))),
+        default=digits,
         output_field=CharField(),
     )
 

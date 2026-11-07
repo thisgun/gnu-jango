@@ -34,6 +34,11 @@ def order(*products, buyer=None, days_ago=1, line_statuses=None, od_status="입�
     return placed
 
 
+def orders(*products, times=3, **kwargs):
+    for _ in range(times):
+        order(*products, **kwargs)
+
+
 def partners(product, **kwargs):
     return [item.it_id for item in bought_together(product, product_cards(on_sale_products()), **kwargs)]
 
@@ -49,56 +54,85 @@ def shelf():
     return {name: ShopProductFactory(it_id=name) for name in ("P", "A", "B", "C", "D", "E")}
 
 
-def test_partners_rank_by_shared_buyers_and_need_two(shelf):
+def test_partners_rank_by_shared_buyers_and_need_three(shelf):
     p, a, b, c = shelf["P"], shelf["A"], shelf["B"], shelf["C"]
-    order(p, a, b, days_ago=5)
-    order(p, a, b, days_ago=4)
-    order(p, a, c, days_ago=3)
-    order(a, b, c, days_ago=2)
+    order(p, a, b, c, days_ago=5)
+    order(p, a, b, c, days_ago=4)
+    order(p, a, b, days_ago=3)
+    order(p, a, days_ago=2)
+    order(a, b, c, days_ago=1)
     assert partners(p) == ["A", "B"]
 
 
 def test_ties_go_to_the_latest_shared_order_then_the_id(shelf):
     p, b, c, d = shelf["P"], shelf["B"], shelf["C"], shelf["D"]
+    order(p, b, c, d, days_ago=20)
     order(p, b, c, d, days_ago=10)
     order(p, b, d, days_ago=9)
     order(p, c, days_ago=2)
     assert partners(p) == ["C", "B", "D"]
 
 
-def test_one_member_buying_a_pair_twice_shows_nothing(shelf):
+def test_one_member_buying_a_pair_again_and_again_shows_nothing(shelf):
     p, a = shelf["P"], shelf["A"]
-    member = MemberFactory()
-    order(p, a, buyer=member)
-    order(p, a, buyer=member)
+    orders(p, a, buyer=MemberFactory())
     assert partners(p) == []
 
 
-def test_two_members_show_the_pair(shelf):
+def test_two_buyers_hide_the_pair_and_a_third_shows_it(shelf):
     p, a = shelf["P"], shelf["A"]
     order(p, a, buyer=MemberFactory())
     order(p, a, buyer=MemberFactory())
+    assert partners(p) == []
+    order(p, a, buyer=MemberFactory())
+    cache.clear()
     assert partners(p) == ["A"]
 
 
-def test_a_guest_and_a_member_show_the_pair(shelf):
+def test_members_and_guests_count_together(shelf):
     p, a = shelf["P"], shelf["A"]
     order(p, a, buyer=MemberFactory())
     order(p, a, od_email="guest@example.test")
+    order(p, a, od_email="", od_hp="010-2222-3333")
     assert partners(p) == ["A"]
 
 
-def test_one_guest_is_one_buyer_by_email_or_else_phone(shelf):
-    p, a, b = shelf["P"], shelf["A"], shelf["B"]
+def test_one_guest_email_is_one_buyer_whatever_the_case_or_spaces(shelf):
+    p, a = shelf["P"], shelf["A"]
+    order(p, a, buyer=MemberFactory())
     order(p, a, od_email="Guest@Example.test", od_hp="010-1111-2222")
     order(p, a, od_email=" guest@example.test ", od_hp="010-3333-4444")
-    order(p, b, od_email="", od_hp="010-5555-6666")
-    order(p, b, od_email="", od_hp="010 5555 6666")
     assert partners(p) == []
+
+
+@pytest.mark.parametrize(
+    "typed",
+    [
+        "01012345678",
+        "010 1234 5678",
+        " 010-1234-5678 ",
+        "010.1234.5678",
+        "(010)1234-5678",
+        "+82 10-1234-5678",
+        "+82-10-1234-5678",
+        "+821012345678",
+        "010\t1234\t5678",
+    ],
+)
+def test_one_guest_phone_is_one_buyer_whatever_the_format(shelf, typed):
+    p, a = shelf["P"], shelf["A"]
+    order(p, a, buyer=MemberFactory())
+    order(p, a, od_email="", od_hp="010-1234-5678")
+    order(p, a, od_email="", od_hp=typed)
+    assert partners(p) == []
+    order(p, a, od_email="", od_hp="010-9999-0000")
+    cache.clear()
+    assert partners(p) == ["A"]
 
 
 def test_a_guest_without_email_or_phone_is_not_a_buyer(shelf):
     p, a = shelf["P"], shelf["A"]
+    order(p, a, buyer=MemberFactory())
     order(p, a, buyer=MemberFactory())
     order(p, a, od_email="", od_hp="")
     order(p, a, od_email="", od_hp="")
@@ -107,7 +141,7 @@ def test_a_guest_without_email_or_phone_is_not_a_buyer(shelf):
 
 def test_only_paid_orders_and_sold_lines_count(shelf):
     p, a, b, c = shelf["P"], shelf["A"], shelf["B"], shelf["C"]
-    order(p, a, b, c)
+    orders(p, a, b, c, times=2)
     order(p, a, od_status="주문")
     order(p, a, od_status="취소")
     order(p, a, line_statuses={p: "취소"})
@@ -125,8 +159,10 @@ def test_only_paid_orders_and_sold_lines_count(shelf):
 def test_a_partner_counts_once_per_buyer_even_on_several_lines_or_without_a_product_row(shelf):
     p, a = shelf["P"], shelf["A"]
     order(p, a, a)
-    gone = order(p)
-    ShopOrderItemFactory(order=gone, product=None, it_id="GONE", it_name="삭제된 상품", ct_price=1000)
+    order(p, a)
+    for _ in range(2):
+        gone = order(p)
+        ShopOrderItemFactory(order=gone, product=None, it_id="GONE", it_name="삭제된 상품", ct_price=1000)
     assert partners(p) == []
     order(p, a)
     again = order(p)
@@ -139,8 +175,7 @@ def test_a_partner_counts_once_per_buyer_even_on_several_lines_or_without_a_prod
 def test_the_ranking_is_cached_for_the_hour(shelf):
     p, a = shelf["P"], shelf["A"]
     assert partners(p) == []
-    order(p, a)
-    order(p, a)
+    orders(p, a)
     assert partners(p) == []
     cache.clear()
     assert partners(p) == ["A"]
@@ -149,8 +184,7 @@ def test_the_ranking_is_cached_for_the_hour(shelf):
 def test_hidden_products_the_product_and_exclusions_never_show(shelf):
     p = shelf["P"]
     others = [shelf[name] for name in ("A", "B", "C", "D", "E")]
-    order(p, *others)
-    order(p, *others)
+    orders(p, *others)
     shelf["B"].it_use = "0"
     shelf["B"].save(update_fields=["it_use"])
     assert partners(p, exclude=["A"]) == ["C", "D", "E"]
@@ -159,8 +193,7 @@ def test_hidden_products_the_product_and_exclusions_never_show(shelf):
 
 def test_sold_out_partners_never_show_and_come_back_with_stock(shelf):
     p, a, b, c = shelf["P"], shelf["A"], shelf["B"], shelf["C"]
-    order(p, a, b, c)
-    order(p, a, b, c)
+    orders(p, a, b, c)
     a.it_soldout = "1"
     a.save(update_fields=["it_soldout"])
     b.it_stock_qty = 0
@@ -174,10 +207,9 @@ def test_sold_out_partners_never_show_and_come_back_with_stock(shelf):
 def test_many_hidden_top_partners_do_not_starve_the_list(shelf):
     p, e = shelf["P"], shelf["E"]
     hidden = [ShopProductFactory(it_id=f"H{n:02}", it_use="0") for n in range(40)]
-    for days_ago in (3, 4, 5):
+    for days_ago in (3, 4, 5, 6):
         order(p, *hidden, days_ago=days_ago)
-    order(p, e)
-    order(p, e)
+    orders(p, e)
     assert partners(p) == ["E"]
 
 
@@ -194,8 +226,7 @@ def test_ranking_runs_two_queries_whatever_the_order_count(shelf, django_assert_
 
 def test_a_cache_outage_still_ranks(shelf):
     p, a = shelf["P"], shelf["A"]
-    order(p, a)
-    order(p, a)
+    orders(p, a)
     with mock.patch("gnu_jango.shop.bought_together.cache") as broken:
         broken.get.side_effect = ConnectionError
         broken.set.side_effect = ConnectionError
@@ -206,8 +237,7 @@ def test_product_detail_lists_bought_together_items_without_related_products(she
     p, a, b = shelf["P"], shelf["A"], shelf["B"]
     assert api_partners("P") == []
     cache.clear()
-    order(p, a, b)
-    order(p, a, b)
+    orders(p, a, b)
     ShopProductRelation.objects.create(product=p, related=a, ir_no=1)
     with mock.patch("gnu_jango.api.v1_shop.related_list_enabled", return_value=True):
         assert api_partners("P") == ["B"]
