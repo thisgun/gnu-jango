@@ -440,6 +440,12 @@ UNFOLD = {
                         "link": reverse_lazy("admin:auth_user_changelist"),
                     },
                     {
+                        "title": "고객 세그먼트 (RFM)",
+                        "icon": "diversity_3",
+                        "link": reverse_lazy("admin:shop_shoporder_customer_segments"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shoporder"),
+                    },
+                    {
                         "title": _("Profiles"),
                         "icon": "badge",
                         "link": reverse_lazy("admin:users_profile_changelist"),

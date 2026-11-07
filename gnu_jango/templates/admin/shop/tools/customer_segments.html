@@ -1,0 +1,103 @@
+{% extends "admin/shop/tools/_layout.html" %}
+
+{% block hero_form %}
+<form class="g5-admin-report-filter g5-admin-report-filter-compact" method="get" action="{{ report_path }}">
+  <label><span>집계 기간</span>
+    <select class="input" name="window">
+      {% for days in window_choices %}<option value="{{ days }}"{% if days == window %} selected{% endif %}>최근 {{ days }}일</option>{% endfor %}
+    </select>
+  </label>
+  {% if segment %}<input type="hidden" name="segment" value="{{ segment }}">{% endif %}
+  <div class="g5-admin-report-filter-actions">
+    <button class="button btn" type="submit">조회</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block tool_body %}
+<section class="g5-admin-report-metrics" aria-label="고객 요약">
+  <article class="card g5-admin-report-metric"><span>고객</span><strong>{{ report.customers|length|floatformat:"0g" }}</strong><em>최근 {{ window }}일 주문 회원</em></article>
+  <article class="card g5-admin-report-metric"><span>이탈 위험</span><strong>{{ report.at_risk_count|floatformat:"0g" }}</strong><em>자주 샀지만 한동안 사지 않음</em></article>
+  <article class="card g5-admin-report-metric"><span>{{ lapsed_days }}일 이상 미구매</span><strong>{{ report.lapsed_count|floatformat:"0g" }}</strong><em>마지막 주문이 {{ lapsed_days }}일 전 이상</em></article>
+  <article class="card g5-admin-report-metric"><span>결제 금액 중앙값</span><strong>{{ report.median_amount|floatformat:"0g" }}</strong><em>고객 1명당, 환불 제외</em></article>
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">R 최근 구매 × F 구매 횟수</p>
+      <h2>세그먼트</h2>
+    </div>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="table g5-admin-mini-table">
+      <thead>
+        <tr>
+          <th scope="col">세그먼트</th>
+          <th scope="col">고객</th>
+          <th scope="col">비중</th>
+          <th scope="col">평균 구매 횟수</th>
+          <th scope="col">평균 결제 금액</th>
+          <th scope="col">마지막 주문 후(중앙값)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in segment_rows %}
+        <tr{% if item.row.segment.key == segment %} aria-current="true"{% endif %}>
+          <td><a href="{{ item.url }}"><strong>{{ item.row.segment.label }}</strong></a><div class="g5-admin-empty">{{ item.row.segment.hint }}</div></td>
+          <td>{{ item.row.count|floatformat:"0g" }}</td>
+          <td>{% widthratio item.row.count report.customers|length 100 %}%</td>
+          <td>{{ item.row.avg_orders|floatformat:1 }}</td>
+          <td>{{ item.row.avg_amount|floatformat:"0g" }}</td>
+          <td>{% if item.row.count %}{{ item.row.median_recency }}일{% else %}-{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">{% if segment %}{{ segment_label }} · {% endif %}{{ filtered_count|floatformat:"0g" }}명</p>
+      <h2>고객 목록</h2>
+    </div>
+    <div class="g5-admin-export-actions">
+      {% if segment %}<a class="button btn g5-admin-button-secondary" href="{{ all_url }}">전체 보기</a>{% endif %}
+      {% if can_export %}<a class="button btn g5-admin-button-secondary" href="{{ export_url }}">엑셀(.xlsx) 내려받기</a>{% endif %}
+    </div>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="table g5-admin-mini-table">
+      <thead>
+        <tr>
+          <th scope="col">아이디</th>
+          <th scope="col">닉네임</th>
+          <th scope="col">최근 주문일</th>
+          <th scope="col">F</th>
+          <th scope="col">M</th>
+          <th scope="col">R / F / M 점수</th>
+          <th scope="col">세그먼트</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for customer in page_obj %}
+        <tr>
+          <td>{{ customer.username }}</td>
+          <td>{{ customer.nickname|default:"-" }}</td>
+          <td>{{ customer.last_order|date:"Y-m-d" }} <span class="g5-admin-empty">({{ customer.recency_days }}일 전)</span></td>
+          <td>{{ customer.orders|floatformat:"0g" }}</td>
+          <td>{{ customer.amount|floatformat:"0g" }}</td>
+          <td>{{ customer.r_score }} / {{ customer.f_score }} / {{ customer.m_score }}</td>
+          <td>{{ customer.segment_label }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="g5-admin-empty">이 기간에 주문한 회원이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "admin/shop/tools/_pager.html" %}
+</section>
+{% endblock %}
