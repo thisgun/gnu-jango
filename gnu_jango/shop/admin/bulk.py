@@ -63,6 +63,7 @@ def product_tool_links(request):
     links = [
         ("view_shopproduct", "admin:shop_shopproduct_stock_list", "재고 일괄수정"),
         ("view_shopproduct", "admin:shop_shopproduct_option_stock_list", "옵션 재고"),
+        ("view_shopproduct", "admin:shop_shopproduct_stock_forecast", "재고 소진 예측"),
         ("add_shopproduct", "admin:shop_shopproduct_bulk_upload", "상품 일괄등록"),
         ("view_shopproduct", "admin:shop_shopproduct_stock_adjustments", "재고 이력"),
     ]
@@ -427,11 +428,13 @@ def _bind(model_admin, view, guard=None):
 
 def product_tool_urls(model_admin):
     from gnu_jango.shop.admin import reports
+    from gnu_jango.shop.admin.stock_forecast import stock_forecast_view
 
     return [
         path("bulk-upload/", _bind(model_admin, product_upload_view), name="shop_shopproduct_bulk_upload"),
         path("stock-list/", _bind(model_admin, stock_list_view), name="shop_shopproduct_stock_list"),
         path("option-stock-list/", _bind(model_admin, option_stock_list_view), name="shop_shopproduct_option_stock_list"),
+        path("stock-forecast/", _bind(model_admin, stock_forecast_view), name="shop_shopproduct_stock_forecast"),
         path("price-compare/", _bind(model_admin, reports.price_compare_view), name="shop_shopproduct_price_compare"),
         path("wishlist-report/", _bind(model_admin, reports.wishlist_report_view), name="shop_shopproduct_wishlist_report"),
     ]
