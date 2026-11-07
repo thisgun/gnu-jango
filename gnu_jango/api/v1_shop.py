@@ -83,6 +83,7 @@ from gnu_jango.shop.shipping import (
 )
 from gnu_jango.ai.recommend import similar_products
 from gnu_jango.ai.review_summaries import review_summary_payload
+from gnu_jango.shop.bought_together import bought_together
 from gnu_jango.shop.product_relations import related_product_ids
 from gnu_jango.shop.shop_display import category_list_display, related_list_enabled
 from gnu_jango.shop.subscriptions import product_offer as subscription_offer
@@ -529,6 +530,13 @@ def product_payload(product, request=None, *, detail=False):
         # from the stored embeddings, leaving out the admin's related products.
         similar = similar_products(product, product_cards(on_sale_products()), exclude=related_ids)
         data["similar_items"] = [product_payload(item) for item in similar]
+        # 함께 구매한 상품, leaving out the cards above.
+        bought = bought_together(
+            product,
+            product_cards(on_sale_products()),
+            exclude=[*related_ids, *(item.pk for item in similar)],
+        )
+        data["bought_together_items"] = [product_payload(item) for item in bought]
         # Optional (G5_AI_REVIEW_SUMMARIES): the stored AI summary of the published reviews.
         data["ai_review_summary"] = review_summary_payload(product)
         # 정기구독: the cycles and discount members may subscribe with (null when off or not offered)
