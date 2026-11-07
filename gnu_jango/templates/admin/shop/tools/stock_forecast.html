@@ -1,0 +1,60 @@
+{% extends "admin/shop/tools/_layout.html" %}
+
+{% block hero_form %}
+<form class="g5-admin-report-filter g5-admin-report-filter-compact" method="get" action="{{ report_path }}">
+  <label><span>판매 기간</span>
+    <select class="input" name="window">{% for days in windows %}<option value="{{ days }}"{% if days == settings.window %} selected{% endif %}>{{ days }}일</option>{% endfor %}</select>
+  </label>
+  <label><span>입고 소요일</span><input class="input" type="number" name="lead" min="1" max="60" value="{{ settings.lead_days }}"></label>
+  <label><span>재고 확보일</span><input class="input" type="number" name="cover" min="1" max="90" value="{{ settings.cover_days }}"></label>
+  <label><span>상태</span>
+    <select class="input" name="status"><option value="">전체</option>{% for item in status_counts %}<option value="{{ item.label }}"{% if item.label == status %} selected{% endif %}>{{ item.label }}</option>{% endfor %}</select>
+  </label>
+  <div class="g5-admin-report-filter-actions">
+    <button class="button btn" type="submit">조회</button>
+  </div>
+</form>
+{% endblock %}
+
+{% block tool_body %}
+<section class="g5-admin-report-metrics" aria-label="상태별 상품 수">
+  {% for item in status_counts %}
+  <article class="card g5-admin-report-metric"><span>{{ item.label }}</span><strong>{{ item.count|floatformat:"0g" }}</strong><em><a href="{{ report_path }}?{{ item.query }}">이 상태만 보기</a></em></article>
+  {% endfor %}
+</section>
+
+<section class="g5-admin-panel g5-admin-report-panel g5-admin-report-panel-wide">
+  <div class="g5-admin-panel-header">
+    <div>
+      <p class="g5-admin-eyebrow">급한 순서</p>
+      <h2>발주 제안</h2>
+    </div>
+  </div>
+  <div class="g5-admin-report-table-wrap">
+    <table class="table g5-admin-mini-table">
+      <thead><tr>
+        <th scope="col">상품</th><th scope="col">현재고</th><th scope="col">일평균 판매</th><th scope="col">최근 {{ recent_days }}일</th>
+        <th scope="col">남은 일수</th><th scope="col">발주점</th><th scope="col">제안 수량</th><th scope="col">상태</th>
+      </tr></thead>
+      <tbody>
+        {% for row in page_obj %}
+        <tr>
+          <td><a href="{% url 'admin:shop_shopproduct_change' row.it_id %}">{{ row.name }}</a><br><small>{{ row.it_id }}</small></td>
+          <td>{{ row.stock|floatformat:"0g" }}</td>
+          <td>{% if row.window_units %}{{ row.daily|floatformat:1 }}{% else %}-{% endif %}</td>
+          <td>{% if row.window_units %}{{ row.recent_units|floatformat:"0g" }}개 ({{ row.trend_label }}){% else %}-{% endif %}</td>
+          <td>{% if row.days_left is not None %}{{ row.days_left|floatformat:1 }}일{% else %}-{% endif %}</td>
+          <td>{% if row.reorder_point is not None %}{{ row.reorder_point|floatformat:0 }}{% else %}-{% endif %}</td>
+          <td>{% if row.window_units %}<strong>{{ row.suggested|floatformat:"0g" }}</strong>{% else %}-{% endif %}</td>
+          <td><span class="g5-admin-badge g5-admin-badge-{{ row.badge }}">{{ row.status }}</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="g5-admin-empty">조건에 맞는 상품이 없습니다.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "admin/shop/tools/_pager.html" %}
+  <p class="g5-admin-empty">일평균 판매는 최근 {{ settings.window }}일(어제까지)의 하루 평균 판매 수량입니다. 발주점은 일평균 x {{ settings.lead_days }}일에 안전재고(1.65 x 일별 판매량 표준편차 x 루트 {{ settings.lead_days }})를 더한 값이고, 제안 수량은 {{ settings.lead_days }}일 입고 대기와 {{ settings.cover_days }}일 판매분을 채우도록 계산합니다. 취소·반품·품절 처리된 주문 항목은 판매에 넣지 않으며, 옵션별이 아닌 상품 전체 재고 기준입니다. 최근 {{ recent_days }}일 판매량이 평균의 1.3배 이상이면 증가, 0.7배 이하면 감소입니다.</p>
+</section>
+{% endblock %}
