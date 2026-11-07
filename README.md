@@ -319,7 +319,7 @@ python manage.py sync_gnuboard_assets --apply
 python manage.py audit_gnuboard_assets --fail-on-unserved
 ```
 
-PG·소셜 로그인·본인인증의 운영 키와 callback 설정은 별도 점검 명령으로 확인할 수 있습니다.
+PG·소셜 로그인·본인인증의 운영 키와 callback 설정은 별도 점검 명령으로 확인할 수 있습니다. 사이트가 실제로 고른 결제대행사(`SHOP_PAYMENT_PROVIDER` 또는 관리자 결제대행사), 켜 둔 소셜 로그인, 켜 둔 본인인증만 필수로 보고, 쓰지 않는 항목은 `unused`로 표시해 통과시킵니다.
 
 ```bash
 python manage.py audit_external_integrations --fail-on-missing
