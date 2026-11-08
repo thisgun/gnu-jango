@@ -400,6 +400,12 @@ UNFOLD = {
                         "permission": lambda request: request.user.has_perm("shop.view_shopproduct"),
                     },
                     {
+                        "title": "재고 소진 예측",
+                        "icon": "trending_down",
+                        "link": reverse_lazy("admin:shop_shopproduct_stock_forecast"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopproduct"),
+                    },
+                    {
                         "title": "보관함 현황",
                         "icon": "favorite",
                         "link": reverse_lazy("admin:shop_shopproduct_wishlist_report"),
@@ -444,6 +450,12 @@ UNFOLD = {
                         "title": _("Members"),
                         "icon": "groups",
                         "link": reverse_lazy("admin:auth_user_changelist"),
+                    },
+                    {
+                        "title": "고객 세그먼트 (RFM)",
+                        "icon": "diversity_3",
+                        "link": reverse_lazy("admin:shop_shoporder_customer_segments"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shoporder"),
                     },
                     {
                         "title": _("Profiles"),
