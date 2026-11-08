@@ -16,6 +16,7 @@ CUSTOM_ADMIN_URL_NAMES = (
     "admin:shop_shopproduct_bulk_upload",
     "admin:shop_shopproduct_stock_list",
     "admin:shop_shopproduct_option_stock_list",
+    "admin:shop_shopproduct_stock_forecast",
     "admin:shop_shopproduct_wishlist_report",
     "admin:shop_shopproduct_price_compare",
     "admin:core_notification_mail_tools",

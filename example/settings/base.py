@@ -394,6 +394,12 @@ UNFOLD = {
                         "permission": lambda request: request.user.has_perm("shop.view_shopproduct"),
                     },
                     {
+                        "title": "재고 소진 예측",
+                        "icon": "trending_down",
+                        "link": reverse_lazy("admin:shop_shopproduct_stock_forecast"),
+                        "permission": lambda request: request.user.has_perm("shop.view_shopproduct"),
+                    },
+                    {
                         "title": "보관함 현황",
                         "icon": "favorite",
                         "link": reverse_lazy("admin:shop_shopproduct_wishlist_report"),
