@@ -12,6 +12,7 @@ CUSTOM_ADMIN_URL_NAMES = (
     "admin:shop_shoporder_sales_rank",
     "admin:shop_shoporder_print",
     "admin:shop_shoporder_sales",
+    "admin:shop_shoporder_abuse_signals",
     "admin:shop_shoporder_delivery_upload",
     "admin:shop_shopproduct_bulk_upload",
     "admin:shop_shopproduct_stock_list",
