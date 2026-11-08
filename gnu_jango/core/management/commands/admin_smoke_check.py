@@ -21,6 +21,7 @@ CUSTOM_ADMIN_URL_NAMES = (
     "admin:core_notification_mail_tools",
     "admin:core_visitlog_reports",
     "admin:core_searchkeyword_reports",
+    "admin:shop_shoporder_customer_segments",
 )
 
 
