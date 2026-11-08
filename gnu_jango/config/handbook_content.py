@@ -8,6 +8,7 @@ from .handbook_commerce_content import COMMERCE_GUIDES
 from .handbook_search_content import SEARCH_GUIDES
 from .handbook_notification_content import NOTIFICATION_GUIDES
 from .handbook_plugin_content import PLUGIN_GUIDES
+from .handbook_shop_data_content import SHOP_DATA_GUIDES
 
 
 # The marker lets ensure_handbook_samples refresh old demo text without replacing
@@ -932,6 +933,7 @@ GUIDES.update(NOTIFICATION_GUIDES)
 GUIDES.update(AUDIT_GUIDES)
 GUIDES.update(COMMERCE_GUIDES)
 GUIDES.update(PLUGIN_GUIDES)
+GUIDES.update(SHOP_DATA_GUIDES)
 
 
 def _inline_text(value):
