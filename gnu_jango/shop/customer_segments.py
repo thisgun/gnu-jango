@@ -2,11 +2,10 @@
 
 An order counts when it is paid (api.shop_common.PAID_STATUSES: 입금 through 완료, English
 spellings included) and not fully refunded, so an unpaid 주문, a cancelled or returned order and an
-order whose refund reached its payment do not. The order belongs to the local day of od_datetime
-and its amount is od_receipt_price - od_refund_price, as in the 매출현황 report: a partly refunded
-order counts once and only what the shop kept adds to M. An order paid only with points has no
-receipt and no refund, and counts. Only members count; a guest order has no customer to follow.
-Nothing here calls a model.
+order whose refund reached all it was paid (od_receipt_price + od_receipt_point) do not. The order
+belongs to the local day of od_datetime and its amount is od_receipt_price - od_refund_price, as in
+the 매출현황 report: a partly refunded order counts once and only the cash the shop kept adds to M.
+Only members count; a guest order has no customer to follow. Nothing here calls a model.
 
 R is the days since the last counted order and F the counted orders in the window. Both are scored
 1-5 by fixed bands (R_BANDS, F_BANDS), so a customer's segment never depends on who else bought: a
@@ -185,8 +184,8 @@ def summarize(customers, window_days, start, end):
 
 
 def counted_orders():
-    return Q(user__isnull=False, od_status__in=PAID_STATUSES) & ~Q(
-        od_refund_price__gt=0, od_refund_price__gte=F("od_receipt_price")
+    return Q(user__isnull=False, od_status__in=PAID_STATUSES) & (
+        Q(od_refund_price__lte=0) | Q(od_refund_price__lt=F("od_receipt_price") + F("od_receipt_point"))
     )
 
 
