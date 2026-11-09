@@ -232,6 +232,15 @@ class OptionBuilderAdminTests(AdminBase):
         product.refresh_from_db()
         self.assertEqual((product.options, product.it_option_subject), ([], ""))
 
+    def test_adjusting_option_stock_stored_as_a_decimal_string_starts_from_the_number(self):
+        product = self.product(options=[{"io_id": "A", "io_type": 0, "io_stock_qty": "4.0", "io_use": 1}])
+        url = reverse("admin:shop_shopproduct_stock_adjustments")
+        self.client.post(url, {"it_id": product.it_id, "scope": "option", "option_key": "0:A", "delta": "2", "reason": "입고"})
+        product.refresh_from_db()
+        self.assertEqual(product.options[0]["io_stock_qty"], 6)
+        log = ShopStockAdjustment.objects.get(it_id=product.it_id)
+        self.assertEqual((log.before_qty, log.after_qty), (4, 6))
+
 
 class RelatedProductTests(AdminBase):
     def test_adding_related_products_in_the_admin_lists_both_ways(self):

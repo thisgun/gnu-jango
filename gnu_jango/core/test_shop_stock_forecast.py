@@ -299,3 +299,26 @@ def test_a_sold_out_row_shows_its_units_without_empty_brackets(client):
     body = client.get(reverse("admin:shop_shopproduct_stock_forecast")).content.decode()
     rows = body.split("<tbody>")[1].split("</tbody>")[0]
     assert "28개" in rows and "()" not in rows
+
+
+@pytest.mark.django_db
+def test_option_stock_stored_as_a_decimal_string_counts_as_the_number():
+    assert stock_level(product_with("D1", 0, [option("a", "4.0"), option("b", 3)])) == StockLevel(7)
+    assert stock_level(product_with("D2", 0, [option("a", "4.5"), option("b", 4.5)])) == StockLevel(8)
+    assert stock_level(product_with("D3", 0, [option("a", "재고"), option("b", 2)])) == StockLevel(2)
+
+
+@pytest.mark.django_db
+def test_the_daily_column_does_not_round_a_slow_seller_to_zero(client):
+    today = timezone.localdate()
+    slow = make_product("Z1", 0, "느린 상품")
+    sell(slow, today - timedelta(days=26), 1)
+    fast = make_product("Z2", 0, "빠른 상품")
+    for offset in range(1, 57):
+        sell(fast, today - timedelta(days=offset), 3)
+    client.force_login(staff_with("view_shopproduct"))
+    body = client.get(reverse("admin:shop_shopproduct_stock_forecast"), {"window": "56"}).content.decode()
+    rows = {row.split("<small>")[1].split("</small>")[0]: row for row in body.split("<tbody>")[1].split("<tr>")[1:]}
+    assert "<td>0.03</td>" in rows["Z1"] and "<strong>2</strong>" in rows["Z1"]
+    assert "<td>3.0</td>" in rows["Z2"]
+
