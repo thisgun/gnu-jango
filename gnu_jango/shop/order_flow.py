@@ -12,6 +12,7 @@ from gnu_jango.shop.models import ShopOrder
 from gnu_jango.shop.order_hooks import order_status_changed
 from gnu_jango.shop.order_statuses import (
     INACTIVE_LINE_STATUSES,
+    STATUS_ALIASES,
     STATUS_CANCELLED,
     STATUS_COMPLETED,
     STATUS_ORDERED,
@@ -43,26 +44,6 @@ NEXT_STATUS = {
 }
 CANCELLABLE_STATUSES = {STATUS_ORDERED, STATUS_PAID, STATUS_READY}
 RETURNABLE_STATUSES = {STATUS_SHIPPING, STATUS_COMPLETED}
-
-# Older rows (and the API's own aliases) spell the statuses in English.
-STATUS_ALIASES = {
-    "order": STATUS_ORDERED,
-    "ordered": STATUS_ORDERED,
-    "pending": STATUS_ORDERED,
-    "paid": STATUS_PAID,
-    "payment": STATUS_PAID,
-    "ready": STATUS_READY,
-    "shipping": STATUS_SHIPPING,
-    "delivery": STATUS_SHIPPING,
-    "complete": STATUS_COMPLETED,
-    "completed": STATUS_COMPLETED,
-    "done": STATUS_COMPLETED,
-    "cancel": STATUS_CANCELLED,
-    "cancelled": STATUS_CANCELLED,
-    "canceled": STATUS_CANCELLED,
-    "return": STATUS_RETURNED,
-    "returned": STATUS_RETURNED,
-}
 
 
 @dataclass(frozen=True)

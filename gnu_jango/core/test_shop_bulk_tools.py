@@ -280,6 +280,22 @@ class OptionStockListTests(SuperuserMixin, TestCase):
         self.product.refresh_from_db()
         self.assertEqual(self.product.options[0]["io_stock_qty"], 2)
 
+    def test_option_stock_stored_as_a_decimal_string_lists_and_saves_as_the_number(self):
+        options = self.product.options
+        options[0].update(io_stock_qty="4.0", io_noti_qty="5.0")
+        ShopProduct.objects.filter(pk="O1").update(options=options)
+        rows = self.client.get(reverse(self.url)).context["page_obj"].object_list
+        self.assertEqual([(row["stock"], row["noti"]) for row in rows if row["io_type"] == 0], [(4, 5)])
+        data = {
+            "row_count": "1",
+            "it_id_0": "O1", "io_type_0": "0", "io_key_0": quote("빨강\x1eS", safe=""), "stock_was_0": "4", "stock_0": "9", "noti_0": "5", "use_0": "1",
+        }
+        self.client.post(reverse(self.url), data)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.options[0]["io_stock_qty"], 9)
+        log = ShopStockAdjustment.objects.get()
+        self.assertEqual((log.before_qty, log.after_qty), (4, 9))
+
     def test_unknown_option_is_reported_not_created(self):
         data = {"row_count": "1", "it_id_0": "O1", "io_type_0": "0", "io_key_0": quote("파랑", safe=""), "stock_was_0": "1", "stock_0": "9", "use_0": "1"}
         self.client.post(reverse(self.url), data)

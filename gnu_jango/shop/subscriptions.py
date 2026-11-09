@@ -34,6 +34,7 @@ from django.views.decorators.debug import sensitive_variables
 
 from . import toss_billing
 from .models import ShopAddress, ShopBillingCustomer, ShopOrder, ShopProduct, ShopSubscription, ShopSubscriptionCharge
+from .product_options import stored_int
 from .sealed_values import seal, unseal
 from .shop_options import shop_options
 from .toss_billing import TossBillingError, card_company_name
@@ -179,7 +180,7 @@ def product_unavailable_code(product, io_id, qty):
         option = matched_option(product, io_id)
         if option is None:
             return "option_required"
-        stock = _int(option.get("io_stock_qty"), 0)
+        stock = stored_int(option.get("io_stock_qty"))
     elif io_id:
         return "option_required"
     else:

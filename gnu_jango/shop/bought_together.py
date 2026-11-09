@@ -9,8 +9,8 @@ from django.db.models.lookups import Exact
 from django.utils import timezone
 
 from gnu_jango.api.shop_common import PAID_STATUSES
-from gnu_jango.shop.admin._common import sold_line_q
 from gnu_jango.shop.models import ShopOrderItem
+from gnu_jango.shop.order_statuses import sold_line_q
 from gnu_jango.utils.date_ranges import local_days
 
 logger = logging.getLogger(__name__)

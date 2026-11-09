@@ -18,9 +18,9 @@ from gnu_jango.shop.models import (
     ShopProduct,
     ShopCouponLog,
 )
-from gnu_jango.shop.order_flow import STATUS_ALIASES
 from gnu_jango.shop.order_statuses import (
     INACTIVE_LINE_STATUSES,
+    STATUS_ALIASES,
     STATUS_COMPLETED,
     STATUS_PAID,
     STATUS_READY,
@@ -47,7 +47,6 @@ CANCELLED_STATUSES = INACTIVE_LINE_STATUSES
 
 
 def _spellings(*statuses):
-    """The statuses with the English spellings older rows use for them (order_flow.STATUS_ALIASES)."""
     return frozenset(statuses) | {alias for alias, status in STATUS_ALIASES.items() if status in statuses}
 
 

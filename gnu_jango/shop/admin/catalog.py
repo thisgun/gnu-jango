@@ -37,6 +37,7 @@ from gnu_jango.shop.admin.catalog_tools import (
 )
 from gnu_jango.shop.admin.item_info_form import ItemInfoTextField, clean_item_info, item_info_kind_field
 from gnu_jango.shop.product_copy import copy_product, next_product_id
+from gnu_jango.shop.product_options import stored_int
 from gnu_jango.shop.product_relations import mirror_product_relations
 from gnu_jango.shop.models import ShopProduct, ShopProductRelation, ShopStockAdjustment, ShopSubscription
 from gnu_jango.shop.subscriptions import parse_cycles
@@ -194,10 +195,10 @@ def option_stock_map(options):
             continue
         try:
             option_type = int(option.get("io_type") or 0)
-            stock = int(option.get("io_stock_qty") or 0)
         except (TypeError, ValueError):
             continue
-        if option_type in (0, 1):
+        stock = stored_int(option.get("io_stock_qty") or 0, None)
+        if stock is not None and option_type in (0, 1):
             result.setdefault((option_type, option_id), stock)
     return result
 
@@ -710,10 +711,7 @@ class ShopProductAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAd
                             if matched is None:
                                 error = _("The selected option no longer exists.")
                             else:
-                                try:
-                                    before_qty = int(matched.get("io_stock_qty") or 0)
-                                except (TypeError, ValueError):
-                                    before_qty = -1
+                                before_qty = stored_int(matched.get("io_stock_qty") or 0, -1)
                                 after_qty = before_qty + delta
                                 if before_qty < 0:
                                     error = _("The selected option has invalid stock data; fix the option first.")
@@ -757,10 +755,10 @@ class ShopProductAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAd
                     continue
                 try:
                     option_type = int(option.get("io_type") or 0)
-                    stock = int(option.get("io_stock_qty") or 0)
                 except (TypeError, ValueError):
                     continue
-                if option_type not in (0, 1):
+                stock = stored_int(option.get("io_stock_qty") or 0, None)
+                if stock is None or option_type not in (0, 1):
                     continue
                 option_rows.append(
                     {
