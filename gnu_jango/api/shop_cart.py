@@ -26,6 +26,7 @@ from gnu_jango.shop.models import (
     ShopProduct,
     ShopWishlist,
 )
+from gnu_jango.shop.product_options import stored_int
 from gnu_jango.shop.shipping import (
     DEFAULT_FREE_THRESHOLD,
     DEFAULT_SHIPPING_COST,
@@ -470,7 +471,7 @@ def add_to_cart(request, data):
                     status=drf_status.HTTP_422_UNPROCESSABLE_ENTITY,
                     code="invalid_option",
                 )
-            stock_limit = max(0, safe_int(matched_option.get("io_stock_qty"), 0))
+            stock_limit = max(0, stored_int(matched_option.get("io_stock_qty")))
             option_price = safe_int(matched_option.get("io_price"), 0)
         elif io_type == 0:
             if io_id:
@@ -497,7 +498,7 @@ def add_to_cart(request, data):
                     status=drf_status.HTTP_422_UNPROCESSABLE_ENTITY,
                     code="invalid_option",
                 )
-            stock_limit = max(0, safe_int(matched_option.get("io_stock_qty"), 0))
+            stock_limit = max(0, stored_int(matched_option.get("io_stock_qty")))
             option_price = safe_int(matched_option.get("io_price"), 0)
 
         if (io_type == 1 or base_options) and stock_limit <= 0:
@@ -658,7 +659,7 @@ def cart_item_view(request, ct_id):
                         status=drf_status.HTTP_422_UNPROCESSABLE_ENTITY,
                         code="invalid_option",
                     )
-                stock_limit = max(0, safe_int(option.get("io_stock_qty"), 0))
+                stock_limit = max(0, stored_int(option.get("io_stock_qty")))
             elif has_base_options:
                 option = next(
                     (
@@ -676,7 +677,7 @@ def cart_item_view(request, ct_id):
                         status=drf_status.HTTP_422_UNPROCESSABLE_ENTITY,
                         code="invalid_option",
                     )
-                stock_limit = max(0, safe_int(option.get("io_stock_qty"), 0))
+                stock_limit = max(0, stored_int(option.get("io_stock_qty")))
             else:
                 stock_limit = max(0, safe_int(product.it_stock_qty, 0))
 

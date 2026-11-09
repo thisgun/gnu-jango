@@ -31,6 +31,22 @@ FORBIDDEN_OPTION_PATTERNS = (
     re.compile(r"javascript:", re.IGNORECASE),
 )
 OPTION_ROW_KEYS = ("io_no", "io_id", "io_type", "io_price", "io_stock_qty", "io_noti_qty", "io_use")
+DECIMAL_TEXT = re.compile(r"\s*[+-]?\d+\.\d*\s*")
+
+
+def stored_int(value, default=0):
+    """A number read back from a stored option row, as an int.
+
+    ``normalize_option_rows`` stores ints, but rows imported or edited outside it can hold the
+    number as text with a decimal point ("4.0"). That text reads like the JSON number 4.0 or 4.5
+    would, truncated toward zero; anything that is not a number reads as ``default``."""
+    try:
+        return int(value)
+    except (TypeError, ValueError, OverflowError):
+        pass
+    if isinstance(value, str) and DECIMAL_TEXT.fullmatch(value):
+        return int(value.strip().partition(".")[0])
+    return default
 
 
 def split_option_values(text):
