@@ -1,15 +1,19 @@
 """고객 세그먼트 (RFM): which members are the shop's best, new, slipping and lost customers.
 
 An order counts when it is paid (api.shop_common.PAID_STATUSES: 입금 through 완료, English
-spellings included), so an unpaid 주문 and a cancelled or returned order do not. The order belongs to
-the local day of od_datetime and its amount is od_receipt_price - od_refund_price, as in the
-매출현황 report. Only members count; a guest order has no customer to follow. Nothing here calls a
-model.
+spellings included) and not fully refunded, so an unpaid 주문, a cancelled or returned order and an
+order whose refund reached its payment do not. The order belongs to the local day of od_datetime
+and its amount is od_receipt_price - od_refund_price, as in the 매출현황 report: a partly refunded
+order counts once and only what the shop kept adds to M. An order paid only with points has no
+receipt and no refund, and counts. Only members count; a guest order has no customer to follow.
+Nothing here calls a model.
 
 R is the days since the last counted order and F the counted orders in the window. Both are scored
 1-5 by fixed bands (R_BANDS, F_BANDS), so a customer's segment never depends on who else bought: a
 customer who ordered today is never lapsed. M, the net paid amount, is a relative 1-5 score for
-display only; ties share the higher band. The segment comes from R and F alone.
+display only; ties share the higher band. The segment comes from R and F, except that a returning
+customer (a counted order before the window) has bought at least twice, so their segment is looked
+up with F of at least 2: one recent order makes them 잠재 충성, not 신규.
 """
 
 from bisect import bisect_right
@@ -18,7 +22,7 @@ from datetime import date, timedelta
 from statistics import median
 
 from django.contrib.auth import get_user_model
-from django.db.models import Count, F, IntegerField, Max, Sum
+from django.db.models import Count, F, IntegerField, Max, Q, Sum
 from django.utils import timezone
 
 from gnu_jango.api.shop_common import PAID_STATUSES
@@ -36,6 +40,7 @@ R_BANDS = ((30, 5), (60, 4), (90, 3), (180, 2))
 R_DEFAULT = 1
 F_BANDS = ((1, 1), (2, 2), (3, 3), (5, 4))
 F_DEFAULT = 5
+RETURNING_MIN_F = 2
 
 
 @dataclass(frozen=True)
@@ -49,8 +54,8 @@ SEGMENTS = (
     Segment("champions", "챔피언", "최근에 자주 산 고객"),
     Segment("loyal", "충성 고객", "꾸준히 사는 고객"),
     Segment("potential", "잠재 충성", "최근에 샀고 더 살 여지가 있는 고객"),
-    Segment("new", "신규 고객", "최근 한 번 산 고객"),
-    Segment("attention", "관심 필요", "구매 간격이 벌어지기 시작한 고객"),
+    Segment("new", "신규 고객", "최근 두 달 안에 처음 산 고객"),
+    Segment("attention", "관심 필요", "마지막 구매가 두세 달 전인 고객"),
     Segment("at_risk", "이탈 위험", "자주 샀지만 한동안 사지 않은 고객"),
     Segment("cant_lose", "놓치면 안 될 고객", "자주 샀지만 오래 사지 않은 고객"),
     Segment("hibernating", "휴면", "구매가 적고 오래된 고객"),
@@ -84,6 +89,7 @@ class Customer:
     recency_days: int
     orders: int
     amount: int
+    returning: bool = False
     r_score: int = 0
     f_score: int = 0
     m_score: int = 0
@@ -127,8 +133,8 @@ def m_scores(values):
     return [-(-SCORE_LEVELS * bisect_right(ordered, value) // total) for value in values]
 
 
-def segment_for(r_score, f_score):
-    return SEGMENT_GRID[(r_score, f_score)]
+def segment_for(r_score, f_score, returning=False):
+    return SEGMENT_GRID[(r_score, max(f_score, RETURNING_MIN_F) if returning else f_score)]
 
 
 def score_customers(customers):
@@ -138,7 +144,7 @@ def score_customers(customers):
     for customer, m in zip(customers, amounts):
         r = band_score(customer.recency_days, R_BANDS, R_DEFAULT)
         f = band_score(customer.orders, F_BANDS, F_DEFAULT)
-        scored.append(replace(customer, r_score=r, f_score=f, m_score=m, segment=segment_for(r, f)))
+        scored.append(replace(customer, r_score=r, f_score=f, m_score=m, segment=segment_for(r, f, customer.returning)))
     return scored
 
 
@@ -178,16 +184,25 @@ def summarize(customers, window_days, start, end):
     )
 
 
+def counted_orders():
+    return Q(user__isnull=False, od_status__in=PAID_STATUSES) & ~Q(
+        od_refund_price__gt=0, od_refund_price__gte=F("od_receipt_price")
+    )
+
+
 def window_customers(start, end, today):
     """Members with a counted order on the local days ``start``..``end``, unscored."""
+    in_window = local_days("od_datetime", start, end)
     totals = (
-        ShopOrder.objects.filter(local_days("od_datetime", start, end), user__isnull=False, od_status__in=PAID_STATUSES)
+        ShopOrder.objects.filter(counted_orders(), local_days("od_datetime", end=end))
         .values("user_id")
         .annotate(
-            orders=Count("pk"),
-            amount=Sum(F("od_receipt_price") - F("od_refund_price"), output_field=IntegerField()),
-            last=Max("od_datetime"),
+            orders=Count("pk", filter=in_window),
+            amount=Sum(F("od_receipt_price") - F("od_refund_price"), filter=in_window, output_field=IntegerField()),
+            last=Max("od_datetime", filter=in_window),
+            earlier=Count("pk", filter=local_days("od_datetime", end=start - timedelta(days=1))),
         )
+        .filter(orders__gt=0)
     )
     totals = list(totals)
     users = (
@@ -215,6 +230,7 @@ def window_customers(start, end, today):
                 recency_days=max((today - last).days, 0),
                 orders=row["orders"],
                 amount=row["amount"] or 0,
+                returning=row["earlier"] > 0,
             )
         )
     return customers

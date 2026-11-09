@@ -6,6 +6,8 @@ import pytest
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl import load_workbook
@@ -201,7 +203,7 @@ def test_the_page_renders_rows_and_links_each_segment_to_a_filtered_list(client,
 
 def test_an_empty_shop_still_renders(client, db):
     client.force_login(staff_with("view_shoporder"))
-    assert "이 기간에 주문한 회원이 없습니다" in client.get(reverse(URL_NAME)).content.decode()
+    assert "이 기간에 결제한 회원이 없습니다" in client.get(reverse(URL_NAME)).content.decode()
 
 
 def test_the_export_needs_the_export_permission(client, shop):
@@ -238,3 +240,61 @@ def test_the_export_filename_names_the_segment(client, shop):
     segment = {c.username: c.segment for c in segment_report(365).customers}["alice"]
     name = client.get(reverse(URL_NAME), {"export": "xlsx", "segment": segment})["Content-Disposition"]
     assert f"-365d-{segment}.xlsx" in name
+
+
+def segments_by_name(window=365):
+    return {c.username: c.segment for c in segment_report(window).customers}
+
+
+def test_a_fully_refunded_order_counts_for_nothing_and_a_partly_refunded_one_counts_once(db, monkeypatch):
+    monkeypatch.setattr("gnu_jango.shop.customer_segments.timezone.localdate", lambda *args: TODAY)
+    refunded = member("refunded")
+    for days in (5, 20, 40, 60, 80, 100):
+        place(refunded, days, amount=30_000, refund=30_000)
+    mixed = member("mixed")
+    place(mixed, 5, amount=30_000, refund=30_000)
+    place(mixed, 10, amount=30_000, refund=10_000)
+    place(member("points"), 3, amount=0)
+    people = {c.username: c for c in segment_report(365).customers}
+    assert set(people) == {"mixed", "points"}, "a member whose orders were all refunded is not a customer"
+    assert people["mixed"].orders == 1 and people["mixed"].amount == 20_000 and people["mixed"].recency_days == 10
+
+
+def test_new_means_the_first_paid_order_ever_falls_in_the_window(db, monkeypatch):
+    monkeypatch.setattr("gnu_jango.shop.customer_segments.timezone.localdate", lambda *args: TODAY)
+    returning = member("returning")
+    place(returning, 500)
+    place(returning, 5)
+    first = member("first")
+    place(first, 500, status="취소")
+    place(first, 400, amount=30_000, refund=30_000)
+    place(first, 5)
+    faded = member("faded")
+    place(faded, 500)
+    place(faded, 200)
+    found = segments_by_name()
+    assert found["first"] == "new", "cancelled or refunded orders before the window do not make a customer returning"
+    assert found["returning"] == "potential"
+    assert found["faded"] == "hibernating"
+    assert segments_by_name(730) == {"returning": "potential", "first": "new", "faded": "hibernating"}
+
+
+def test_the_customer_card_and_the_subtitle_both_count_paying_members(client, shop):
+    client.force_login(staff_with("view_shoporder"))
+    page = client.get(reverse(URL_NAME)).content.decode()
+    assert "최근 365일 결제한 회원" in page and "결제한 회원을" in page
+    assert "주문 회원" not in page and "구매 간격" not in page
+
+
+def test_the_report_query_count_does_not_grow_with_customers(db, monkeypatch):
+    monkeypatch.setattr("gnu_jango.shop.customer_segments.timezone.localdate", lambda *args: TODAY)
+    place(member("solo"), 5)
+    with CaptureQueriesContext(connection) as one:
+        segment_report(365)
+    for index in range(5):
+        buyer = member(f"buyer{index}")
+        place(buyer, 400)
+        place(buyer, 3)
+    with CaptureQueriesContext(connection) as many:
+        assert len(segment_report(365).customers) == 6
+    assert len(many) == len(one)
