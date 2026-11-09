@@ -19,6 +19,7 @@ from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 
+from gnu_jango.api.shop_common import safe_int
 from gnu_jango.shop import delivery_import, product_import
 from gnu_jango.shop.models import ShopCategory, ShopOrder, ShopPersonalPay, ShopProduct, ShopReview
 from gnu_jango.shop.product_counters import recount_product_reviews
@@ -327,7 +328,7 @@ def option_stock_list_view(model_admin, request):
                     "type_label": "추가옵션" if option_type else "선택옵션",
                     "stock": stock,
                     "noti": noti,
-                    "use": stored_int(record.get("io_use", 1), 1) != 0,
+                    "use": safe_int(record.get("io_use", 1), 1) != 0,
                     "low": is_low or stock <= 0,
                     "change_url": reverse("admin:shop_shopproduct_change", args=[product.pk]),
                 }

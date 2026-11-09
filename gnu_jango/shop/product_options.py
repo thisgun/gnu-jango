@@ -40,13 +40,12 @@ def stored_int(value, default=0):
     ``normalize_option_rows`` stores ints, but rows imported or edited outside it can hold the
     number as text with a decimal point ("4.0"). That text reads like the JSON number 4.0 or 4.5
     would, truncated toward zero; anything that is not a number reads as ``default``."""
+    if isinstance(value, str) and DECIMAL_TEXT.fullmatch(value):
+        value = value.strip().partition(".")[0]
     try:
         return int(value)
     except (TypeError, ValueError, OverflowError):
-        pass
-    if isinstance(value, str) and DECIMAL_TEXT.fullmatch(value):
-        return int(value.strip().partition(".")[0])
-    return default
+        return default
 
 
 def split_option_values(text):

@@ -322,3 +322,15 @@ def test_the_daily_column_does_not_round_a_slow_seller_to_zero(client):
     assert "<td>0.03</td>" in rows["Z1"] and "<strong>2</strong>" in rows["Z1"]
     assert "<td>3.0</td>" in rows["Z2"]
 
+
+
+@pytest.mark.django_db
+def test_an_option_whose_use_flag_reads_0_0_is_on_sale_in_the_forecast_and_option_list_as_in_the_cart(client, admin_client):
+    product = product_with("U1", UNTRACKED_STOCK, [option("a", 4, use="0.0"), option("b", 3), option("c", 5, io_type="1.0")])
+    product.it_option_subject = "색상"
+    product.save()
+    added = client.post("/api/v1/shop/cart", {"it_id": "U1", "options": [{"io_id": "a", "ct_qty": 1}]}, content_type="application/json")
+    assert added.status_code == 201
+    assert stock_level(product) == StockLevel(7)
+    rows = admin_client.get(reverse("admin:shop_shopproduct_option_stock_list")).context["page_obj"].object_list
+    assert [(row["label"], row["use"]) for row in rows] == [("a", True), ("b", True)]

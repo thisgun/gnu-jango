@@ -222,10 +222,15 @@ def sales_series(today, window):
 
 
 def stock_level(product):
-    choices = [
-        record for io_type, _io_id, record in option_rows(product)
-        if io_type == 0 and stored_int(record.get("io_use"), 1) == 1
-    ]
+    choices = []
+    for io_type, _io_id, record in option_rows(product):
+        use = record.get("io_use")
+        try:
+            in_use = int(use if use is not None else 1) == 1
+        except (TypeError, ValueError):
+            in_use = True
+        if io_type == 0 and in_use:
+            choices.append(record)
     flagged = product.it_soldout == "1"
     if not choices:
         quantity = product.it_stock_qty or 0

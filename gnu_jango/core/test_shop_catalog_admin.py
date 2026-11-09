@@ -131,7 +131,7 @@ class OptionRuleTests(SimpleTestCase):
     def test_stored_numbers_read_back_whole_with_a_decimal_point_and_never_raise(self):
         readings = [(4, 4), ("4", 4), (" 4 ", 4), ("+4", 4), (4.0, 4), ("4.0", 4), (" 4.00 ", 4), ("4.5", 4), (4.5, 4), ("-0.5", 0), ("-2", -2)]
         self.assertEqual([(value, stored_int(value)) for value, _ in readings], readings)
-        for unreadable in (None, "", "재고", "1e3", ".5", "4,0", float("nan"), float("inf"), [4]):
+        for unreadable in (None, "", "재고", "1e3", ".5", "4,0", "1" * 5000 + ".0", float("nan"), float("inf"), [4]):
             self.assertEqual(stored_int(unreadable, -1), -1)
 
 
