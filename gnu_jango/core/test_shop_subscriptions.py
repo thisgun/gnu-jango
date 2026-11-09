@@ -162,8 +162,7 @@ class RegistrationTests(SubscriptionTestBase):
         customer_key = ShopBillingCustomer.objects.get(user=self.member).customer_key
         self.assertEqual(data["customer_key"], customer_key)
         self.assertNotIn(self.member.username, customer_key)
-        self.assertNotIn(str(self.member.pk), customer_key.split("_"))
-        self.assertTrue(22 <= len(customer_key) <= 50)
+        self.assertRegex(customer_key, r"^gj_[A-Za-z0-9_-]{32}$")
         self.assertNotIn(data["registration_token"], sub.auth_token_hash)
         self.assertEqual(sub.billing_key_sealed, "")
 
