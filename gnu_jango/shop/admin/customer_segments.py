@@ -80,7 +80,8 @@ def customer_segments_view(model_admin, request):
         request,
         title="고객 세그먼트 (RFM)",
         subtitle=f"{report.start:%Y-%m-%d} ~ {report.end:%Y-%m-%d}에 결제한 회원을 최근 구매(R)·구매 횟수(F)로 나누고 "
-                 "결제 금액(M)은 참고로 보여줍니다. 비회원과 결제 전·취소·반품 주문은 제외하며 AI 없이 계산합니다.",
+                 "결제 금액(M)은 참고로 보여줍니다. 기간 전에 결제한 적이 있는 회원은 신규가 아니라 두 번 이상 산 고객으로 나눕니다. "
+                 "비회원과 결제 전·취소·반품·전액 환불 주문은 제외하며 AI 없이 계산합니다.",
         parent_url=reverse("admin:shop_shoporder_changelist"),
         parent_label="주문",
         tool_links=[{"url": reverse("admin:shop_shoporder_sales"), "label": "매출현황"}],
