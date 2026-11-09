@@ -46,6 +46,14 @@ from .handbook_plugin_content import (
     PLUGIN_LINK_MARKER,
     PLUGIN_LINK_TITLES,
 )
+from .handbook_shop_data_content import (
+    SHOP_DATA_BOOK_PARTS,
+    SHOP_DATA_BOOK_TABLE,
+    SHOP_DATA_BOOK_TITLE,
+    SHOP_DATA_LINK_HTML,
+    SHOP_DATA_LINK_MARKER,
+    SHOP_DATA_LINK_TITLES,
+)
 
 GROUP_ID = "manual"
 GROUP_SUBJECT = "매뉴얼"
@@ -151,6 +159,11 @@ BOOKS = (
         PLUGIN_BOOK_TITLE,
         PLUGIN_BOOK_PARTS,
     ),
+    Book(
+        SHOP_DATA_BOOK_TABLE,
+        SHOP_DATA_BOOK_TITLE,
+        SHOP_DATA_BOOK_PARTS,
+    ),
 )
 
 # (chapter titles, link html, marker): "see also" links appended once to existing chapters.
@@ -158,6 +171,7 @@ LINK_BLOCKS = (
     (AUDIT_LINK_TITLES, AUDIT_LINK_HTML, AUDIT_LINK_MARKER),
     (COMMERCE_LINK_TITLES, COMMERCE_LINK_HTML, COMMERCE_LINK_MARKER),
     (PLUGIN_LINK_TITLES, PLUGIN_LINK_HTML, PLUGIN_LINK_MARKER),
+    (SHOP_DATA_LINK_TITLES, SHOP_DATA_LINK_HTML, SHOP_DATA_LINK_MARKER),
 )
 
 
