@@ -464,12 +464,11 @@ def order_tool_urls(model_admin):
 
 
 def _set_review_visibility(modeladmin, request, queryset, value, verb):
-    # the rows to change, taken before the update (a changelist filtered on visibility would be
-    # empty afterwards)
-    reviews = list(queryset.select_related(None).exclude(is_confirm=value).only("pk", "is_subject", "product_id"))
+    selected = list(queryset.select_related(None).only("pk", "is_subject", "product_id", "is_confirm"))
+    reviews = [review for review in selected if review.is_confirm != value]
     changed = ShopReview.objects.filter(pk__in=[review.pk for review in reviews]).update(is_confirm=value)
     recount_product_reviews({review.product_id for review in reviews})
-    for review in reviews:
+    for review in reviews if value == "1" else selected:
         modeladmin.log_change(request, review, f"후기 {verb}")
     modeladmin.message_user(request, f"후기 {changed}건을 {verb}했습니다.", messages.SUCCESS)
 
