@@ -11,7 +11,7 @@ factory-boy==3.3.3
 
 # Browser automation and isolated environment test runner.
 selenium==4.52.0
-tox==4.67.5
+tox==4.67.12
 
 black
 coverage[toml]
