@@ -122,22 +122,26 @@ class Command(BaseCommand):
             or adapter_config["has_secret"]
             or (chosen in v1_shop.PAYMENT_ADAPTER_PROVIDERS and chosen != "nicepay")
         )
-        if chosen == "nicepay" and not adapter_routes(adapter_config, "nicepay"):
+        # Checkout always approves NICEPAY natively, even when the adapter lists it.
+        if chosen == "nicepay":
             nicepay = self.audit_native_nicepay(nicepay_config)
         else:
             nicepay = unused_item("nicepay", "NICEPAY server approval")
-        if adapter_in_use:
+        # The callback secret alone opens the endpoint that marks orders paid.
+        if adapter_in_use or has_setting("SHOP_PAYMENT_CALLBACK_SECRET"):
             callback_items = self.audit_payment_callbacks()
+        else:
+            callback_items = {
+                "callback_secret": unused_item("payment_callback_secret", "PG callback shared secret"),
+                "callback_hmac_signature": unused_item("payment_callback_hmac_signature", "PG callback HMAC-SHA256 signature"),
+            }
+        if adapter_in_use:
             adapter = self.audit_payment_adapter(adapter_config)
             operations = [
                 self.audit_payment_operation("settlement_reconciliation", "Provider-authoritative settlement reconciliation", adapter_config),
                 self.audit_payment_operation("tax_cash_receipts", "Tax invoice and cash receipt provider parity", adapter_config),
             ]
         else:
-            callback_items = {
-                "callback_secret": unused_item("payment_callback_secret", "PG callback shared secret"),
-                "callback_hmac_signature": unused_item("payment_callback_hmac_signature", "PG callback HMAC-SHA256 signature"),
-            }
             adapter = unused_item("payment_adapter_delegation", "Provider-verified PG adapter delegation")
             operations = [
                 unused_item("settlement_reconciliation", "Provider-authoritative settlement reconciliation"),
@@ -189,19 +193,23 @@ class Command(BaseCommand):
             toss_missing.append("SHOP_TOSS_CLIENT_KEY")
         if not toss_config["has_secret_key"]:
             toss_missing.append("SHOP_TOSS_SECRET_KEY")
+        # Checkout uses Toss only for a test/test or live/live pair, so present keys can still fail.
+        if not toss_config["enabled"] and not toss_missing:
+            toss_missing = ["SHOP_TOSS_CLIENT_KEY", "SHOP_TOSS_SECRET_KEY"]
         return check_item(
             "toss",
             "Toss Payments server confirmation",
-            "ready" if not toss_missing else "missing",
+            "ready" if toss_config["enabled"] else "missing",
             missing=toss_missing,
             details={
                 "enabled": toss_config["enabled"],
+                "key_status": toss_config["key_status"],
                 "has_client_key": bool(toss_config["client_key"]),
                 "has_secret_key": bool(toss_config["has_secret_key"]),
                 "api_base_url": toss_config["api_base_url"],
                 "is_test_mode": toss_config["is_test_mode"],
             },
-            action="Set Toss client/secret keys from the live or test merchant contract.",
+            action="Set the Toss client and secret keys of one mode (both test_ or both live_) from the merchant contract.",
         )
 
     def audit_native_nicepay(self, nicepay_config):

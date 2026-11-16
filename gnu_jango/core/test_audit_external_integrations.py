@@ -132,9 +132,75 @@ class NativeNicepayTests(TestCase):
         with self.assertRaises(CommandError):
             call_command("audit_external_integrations", fail_on_missing=True, stdout=StringIO())
 
+    @override_settings(SHOP_NICEPAY_TEST_MID="", SHOP_NICEPAY_TEST_MERCHANT_KEY="", **ADAPTER)
+    def test_a_configured_adapter_does_not_stand_in_for_the_nicepay_keys(self):
+        # Checkout never sends NICEPAY through the adapter, so its keys are still required.
+        audit = run_audit()
+
+        payment = audit["payment"]
+        self.assertEqual(payment["nicepay"]["status"], "missing")
+        self.assertEqual(by_name(payment["legacy_pg_parity"])["nicepay"]["status"], "missing")
+        self.assertFalse(audit["summary"]["production_ready"])
+
+    @override_settings(SHOP_PAYMENT_PROVIDER="", SHOP_NICEPAY_TEST_MID="", SHOP_NICEPAY_TEST_MERCHANT_KEY="")
+    def test_nicepay_saved_in_admin_without_keys_is_missing(self):
+        set_config(de_pg_service="nicepay")
+
+        audit = run_audit()
+
+        self.assertEqual(audit["payment"]["chosen_provider"], "nicepay")
+        self.assertEqual(audit["payment"]["nicepay"]["status"], "missing")
+        self.assertFalse(audit["summary"]["production_ready"])
+
+
+@override_settings(**CLEAN)
+class CallbackEndpointTests(TestCase):
+    @override_settings(SHOP_PAYMENT_CALLBACK_SECRET="callback-secret")
+    def test_an_open_callback_endpoint_needs_its_hmac_secret_without_an_adapter(self):
+        # The callback secret alone opens the endpoint that marks orders paid.
+        audit = run_audit()
+
+        payment = audit["payment"]
+        self.assertEqual(payment["callback_secret"]["status"], "ready")
+        self.assertEqual(payment["callback_hmac_signature"]["status"], "missing")
+        self.assertEqual(payment["adapter_delegation"]["status"], "unused")
+        self.assertFalse(audit["summary"]["production_ready"])
+
+    @override_settings(
+        SHOP_PAYMENT_CALLBACK_SECRET="callback-secret",
+        SHOP_PAYMENT_CALLBACK_SIGNATURE_SECRET="signature-secret",
+    )
+    def test_a_signed_callback_endpoint_is_ready(self):
+        audit = run_audit()
+
+        self.assertEqual(audit["payment"]["callback_hmac_signature"]["status"], "ready")
+        self.assertTrue(audit["summary"]["production_ready"], audit["summary"])
+
 
 @override_settings(**CLEAN)
 class AdminChosenPgTests(TestCase):
+    @override_settings(SHOP_TOSS_CLIENT_KEY="test_ck_audit", SHOP_TOSS_SECRET_KEY="test_sk_audit")
+    def test_toss_with_a_matching_key_pair_is_ready(self):
+        set_config(de_pg_service="toss")
+
+        audit = run_audit()
+
+        self.assertEqual(audit["payment"]["active_provider"], "toss")
+        self.assertEqual(audit["payment"]["toss"]["status"], "ready")
+        self.assertTrue(audit["summary"]["production_ready"], audit["summary"])
+
+    @override_settings(SHOP_TOSS_CLIENT_KEY="live_ck_audit", SHOP_TOSS_SECRET_KEY="test_sk_audit")
+    def test_toss_keys_of_different_modes_are_missing(self):
+        # Checkout turns Toss off for a live/test mix, so the audit must not call it ready.
+        set_config(de_pg_service="toss")
+
+        audit = run_audit()
+
+        self.assertEqual(audit["payment"]["active_provider"], "bank")
+        self.assertEqual(audit["payment"]["toss"]["status"], "missing")
+        self.assertEqual(audit["payment"]["toss"]["details"]["key_status"], "mode_mismatch")
+        self.assertFalse(audit["summary"]["production_ready"])
+
     def test_toss_saved_in_admin_without_keys_is_missing(self):
         set_config(de_pg_service="toss")
 
