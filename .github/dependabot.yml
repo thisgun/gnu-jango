@@ -27,6 +27,10 @@ updates:
       time: "09:15"
       timezone: Asia/Seoul
     open-pull-requests-limit: 5
+    ignore:
+      # CI runs Node 22, so the Node types stay on 22: newer @types/node would accept APIs Node 22 lacks
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       # TipTap packages must share one version; bumping a single extension breaks the editor build
       tiptap:
