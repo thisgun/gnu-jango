@@ -10,7 +10,7 @@ import { sanitizeCommerceHtml } from "@/lib/sanitize";
 import type { ShopRelatedDisplay } from "@/lib/shop-display";
 import { productPointLabel } from "@/components/shop/productDetailHelpers";
 import { RecommendationDialog, RestockAlertDialog } from "./ProductDetailDialogs";
-import { ProductImageGallery, RecentlyViewed, RelatedProducts, SimilarProducts } from "./ProductDetailSections";
+import { ProductCardSection, ProductImageGallery, RecentlyViewed, RelatedProducts } from "./ProductDetailSections";
 import { ProductDetailTabs, type ProductDetailTab } from "./ProductDetailTabs";
 import { ProductPurchaseControls, type ProductPurchaseControlsProps } from "./ProductPurchaseControls";
 import { ProductPurchasePanel, type ShippingPaymentDisplay } from "./ProductPurchasePanel";
@@ -138,7 +138,19 @@ export function ProductDetailView({
 
       <RelatedProducts items={product.related_items} productRewriteMode={productRewriteMode} display={relatedDisplay} />
 
-      <SimilarProducts items={product.similar_items} productRewriteMode={productRewriteMode} />
+      <ProductCardSection
+        title="함께 구매한 상품"
+        className="product-bought-together"
+        items={product.bought_together_items}
+        productRewriteMode={productRewriteMode}
+      />
+
+      <ProductCardSection
+        title="비슷한 상품"
+        className="product-similar"
+        items={product.similar_items}
+        productRewriteMode={productRewriteMode}
+      />
 
       <RecentlyViewed currentId={itId || product.it_id} productRewriteMode={productRewriteMode} />
 

@@ -26,6 +26,7 @@ from gnu_jango.shop.product_options import (
     normalize_option_rows,
     option_combinations,
     split_option_values,
+    stored_int,
     supply_subject,
 )
 from gnu_jango.shop.product_relations import mirror_product_relations, related_product_ids
@@ -126,6 +127,12 @@ class OptionRuleTests(SimpleTestCase):
         with self.assertRaises(ValidationError):
             clean_option_subject("색상", rows)
         self.assertEqual(supply_subject(rows), "포장")
+
+    def test_stored_numbers_read_back_whole_with_a_decimal_point_and_never_raise(self):
+        readings = [(4, 4), ("4", 4), (" 4 ", 4), ("+4", 4), (4.0, 4), ("4.0", 4), (" 4.00 ", 4), ("4.5", 4), (4.5, 4), ("-0.5", 0), ("-2", -2)]
+        self.assertEqual([(value, stored_int(value)) for value, _ in readings], readings)
+        for unreadable in (None, "", "재고", "1e3", ".5", "4,0", "1" * 5000 + ".0", float("nan"), float("inf"), [4]):
+            self.assertEqual(stored_int(unreadable, -1), -1)
 
 
 class AdminBase(TestCase):
@@ -231,6 +238,15 @@ class OptionBuilderAdminTests(AdminBase):
         self.assertEqual(response.status_code, 302)
         product.refresh_from_db()
         self.assertEqual((product.options, product.it_option_subject), ([], ""))
+
+    def test_adjusting_option_stock_stored_as_a_decimal_string_starts_from_the_number(self):
+        product = self.product(options=[{"io_id": "A", "io_type": 0, "io_stock_qty": "4.0", "io_use": 1}])
+        url = reverse("admin:shop_shopproduct_stock_adjustments")
+        self.client.post(url, {"it_id": product.it_id, "scope": "option", "option_key": "0:A", "delta": "2", "reason": "입고"})
+        product.refresh_from_db()
+        self.assertEqual(product.options[0]["io_stock_qty"], 6)
+        log = ShopStockAdjustment.objects.get(it_id=product.it_id)
+        self.assertEqual((log.before_qty, log.after_qty), (4, 6))
 
 
 class RelatedProductTests(AdminBase):

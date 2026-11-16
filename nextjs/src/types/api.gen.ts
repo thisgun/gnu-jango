@@ -3400,6 +3400,7 @@ export interface components {
             next_item: components["schemas"]["ShopProduct"] | null;
             related_items: components["schemas"]["ShopProduct"][];
             similar_items: components["schemas"]["ShopProduct"][];
+            bought_together_items: components["schemas"]["ShopProduct"][];
             ai_review_summary: components["schemas"]["ShopAiReviewSummary"] | null;
             subscription: components["schemas"]["ShopSubscriptionOffer"] | null;
         };

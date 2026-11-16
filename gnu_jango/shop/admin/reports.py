@@ -217,7 +217,11 @@ def sales_anomalies_view(model_admin, request):
                  "정해진 규칙으로 비교합니다. 이 결과는 AI 없이 계산합니다.",
         parent_url=reverse("admin:shop_shoporder_changelist"),
         parent_label="주문",
-        tool_links=[{"url": reverse("admin:shop_shoporder_sales"), "label": "매출현황"}],
+        tool_links=[
+            {"url": reverse("admin:shop_shoporder_sales"), "label": "매출현황"},
+            *([{"url": reverse("admin:shop_shopproduct_stock_forecast"), "label": "재고 소진 예측"}]
+              if request.user.has_perm("shop.view_shopproduct") else []),
+        ],
         report=report,
         month_value=report["month"],
         previous_month=previous.strftime("%Y-%m"),

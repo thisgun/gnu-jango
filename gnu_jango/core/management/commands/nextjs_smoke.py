@@ -21,6 +21,7 @@ from gnu_jango.shop.inventory import cancel_order_with_stock_restore
 from gnu_jango.shop.item_info import article_title, parse_item_info_value
 from gnu_jango.shop.order_points import item_status_update, take_back_order_points
 from gnu_jango.shop.models import ShopCoupon, ShopCouponLog, ShopCouponZone, ShopOrder, ShopOrderData, ShopOrderItem, ShopPersonalPay, ShopProduct, ShopQA, ShopReview
+from gnu_jango.shop.product_options import stored_int
 from gnu_jango.shop.product_relations import related_product_ids, replace_product_relations
 from gnu_jango.users.models import Profile, User_Memo, User_Point
 
@@ -205,7 +206,7 @@ class Command(BaseCommand):
             matched = False
             for item in options_list:
                 if str(item.get("io_id")) == str(io_id) and int(item.get("io_type") or 0) == io_type:
-                    previous["previous_stock"] = int(item.get("io_stock_qty") or 0)
+                    previous["previous_stock"] = stored_int(item.get("io_stock_qty"))
                     if stock is not None:
                         item["io_stock_qty"] = self.int_arg(options, "stock", 0)
                     matched = True

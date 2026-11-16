@@ -316,6 +316,10 @@ def _write_xlsx_value(cell, value, illegal_characters):
     if isinstance(value, (int, Decimal)) and not isinstance(value, bool):
         cell.value = value
         return
+    if type(value) is dt.date:
+        cell.value = value
+        cell.number_format = "yyyy-mm-dd"
+        return
     # control characters openpyxl refuses to write (an address pasted from another program)
     cell.value = illegal_characters.sub("", str(value))
     cell.data_type = "s"  # a value starting with "=" stays text, not a formula

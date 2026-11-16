@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from django.db import transaction
 
 from .models import ShopProduct, ShopStockAdjustment
+from .product_options import stored_int
 
 MAX_STOCK = 2_147_483_647
 DEFAULT_REASON = "재고 일괄수정"
@@ -62,13 +63,6 @@ def option_rows(product):
         if option_id and option_type in (0, 1):
             rows.append((option_type, option_id, record))
     return rows
-
-
-def _int_or(value, default):
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
 
 
 def _log(product, scope, before, after, reason, actor, *, io_id="", io_type=None):
@@ -167,13 +161,19 @@ def apply_option_rows(rows, *, actor, reason=DEFAULT_REASON):
                 if not isinstance(record, dict):
                     continue
                 option_id = str(record.get("io_id") or "").strip()
-                option_type = _int_or(record.get("io_type") or 0, -1)
+                try:
+                    option_type = int(record.get("io_type") or 0)
+                except (TypeError, ValueError):
+                    continue
                 if option_id and option_type in (0, 1):
                     index.setdefault((option_type, option_id), position)
             logs = []
             touched = []
             for row in product_rows:
-                option_type = _int_or(row.get("io_type"), -1)
+                try:
+                    option_type = int(row.get("io_type"))
+                except (TypeError, ValueError):
+                    option_type = -1
                 option_id = str(row.get("io_id") or "").strip()
                 label = f"{it_id} {option_label(option_id)}"
                 position = index.get((option_type, option_id))
@@ -189,15 +189,18 @@ def apply_option_rows(rows, *, actor, reason=DEFAULT_REASON):
                     result.error(label, "통보수량은 0 이상의 정수로 입력하세요.")
                     continue
                 record = records[position]
-                before = _int_or(record.get("io_stock_qty") or 0, 0)
+                before = stored_int(record.get("io_stock_qty") or 0, 0)
                 stock_was = parse_quantity(row.get("stock_was"))
                 stock, conflict = _resolve_stock(stock, stock_was, before)
                 if conflict:
                     result.error(label, _conflict_message(stock_was, before))
                     continue
                 use = 1 if row.get("use") else 0
-                current_use = 0 if _int_or(record.get("io_use", 1), 1) == 0 else 1
-                current_noti = _int_or(record.get("io_noti_qty") or 0, 0)
+                try:
+                    current_use = 0 if int(record.get("io_use", 1)) == 0 else 1
+                except (TypeError, ValueError):
+                    current_use = 1
+                current_noti = stored_int(record.get("io_noti_qty") or 0, 0)
                 if stock == before and use == current_use and noti == current_noti:
                     result.unchanged += 1
                     continue

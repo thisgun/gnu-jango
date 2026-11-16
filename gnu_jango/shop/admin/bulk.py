@@ -19,9 +19,11 @@ from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
 
+from gnu_jango.api.shop_common import safe_int
 from gnu_jango.shop import delivery_import, product_import
 from gnu_jango.shop.models import ShopCategory, ShopOrder, ShopPersonalPay, ShopProduct, ShopReview
 from gnu_jango.shop.product_counters import recount_product_reviews
+from gnu_jango.shop.product_options import stored_int
 from gnu_jango.shop.shipping import current_shipping_policy
 from gnu_jango.shop.spreadsheet import MAX_UPLOAD_BYTES, SpreadsheetError, csv_download, xlsx_download
 from gnu_jango.shop.stock_bulk import apply_option_rows, apply_product_rows, option_label, option_rows
@@ -63,6 +65,7 @@ def product_tool_links(request):
     links = [
         ("view_shopproduct", "admin:shop_shopproduct_stock_list", "재고 일괄수정"),
         ("view_shopproduct", "admin:shop_shopproduct_option_stock_list", "옵션 재고"),
+        ("view_shopproduct", "admin:shop_shopproduct_stock_forecast", "재고 소진 예측"),
         ("add_shopproduct", "admin:shop_shopproduct_bulk_upload", "상품 일괄등록"),
         ("view_shopproduct", "admin:shop_shopproduct_stock_adjustments", "재고 이력"),
     ]
@@ -308,8 +311,8 @@ def option_stock_list_view(model_admin, request):
         for option_type, option_id, record in option_rows(product):
             if not product_match and query not in option_id.lower():
                 continue
-            stock = _safe_int(record.get("io_stock_qty"))
-            noti = _safe_int(record.get("io_noti_qty"))
+            stock = stored_int(record.get("io_stock_qty"))
+            noti = stored_int(record.get("io_noti_qty"))
             is_low = (noti > 0 and stock <= noti)
             if low is not None and stock > low:
                 continue
@@ -325,7 +328,7 @@ def option_stock_list_view(model_admin, request):
                     "type_label": "추가옵션" if option_type else "선택옵션",
                     "stock": stock,
                     "noti": noti,
-                    "use": _safe_int(record.get("io_use", 1), 1) != 0,
+                    "use": safe_int(record.get("io_use", 1), 1) != 0,
                     "low": is_low or stock <= 0,
                     "change_url": reverse("admin:shop_shopproduct_change", args=[product.pk]),
                 }
@@ -353,13 +356,6 @@ def option_stock_list_view(model_admin, request):
         scan_limit=f"{OPTION_SCAN_LIMIT:,}",
     )
     return TemplateResponse(request, "admin/shop/tools/option_stock_list.html", context)
-
-
-def _safe_int(value, default=0):
-    try:
-        return int(value if value not in (None, "") else default)
-    except (TypeError, ValueError):
-        return default
 
 
 # ---------------------------------------------------------------------------- 송장 일괄등록
@@ -427,18 +423,20 @@ def _bind(model_admin, view, guard=None):
 
 def product_tool_urls(model_admin):
     from gnu_jango.shop.admin import reports
+    from gnu_jango.shop.admin.stock_forecast import stock_forecast_view
 
     return [
         path("bulk-upload/", _bind(model_admin, product_upload_view), name="shop_shopproduct_bulk_upload"),
         path("stock-list/", _bind(model_admin, stock_list_view), name="shop_shopproduct_stock_list"),
         path("option-stock-list/", _bind(model_admin, option_stock_list_view), name="shop_shopproduct_option_stock_list"),
+        path("stock-forecast/", _bind(model_admin, stock_forecast_view), name="shop_shopproduct_stock_forecast"),
         path("price-compare/", _bind(model_admin, reports.price_compare_view), name="shop_shopproduct_price_compare"),
         path("wishlist-report/", _bind(model_admin, reports.wishlist_report_view), name="shop_shopproduct_wishlist_report"),
     ]
 
 
 def order_tool_urls(model_admin):
-    from gnu_jango.shop.admin import reports
+    from gnu_jango.shop.admin import abuse, reports
 
     return [
         path("delivery-upload/", _bind(model_admin, delivery_upload_view), name="shop_shoporder_delivery_upload"),
@@ -449,6 +447,11 @@ def order_tool_urls(model_admin):
             _bind(model_admin, reports.sales_anomalies_view, guard=model_admin.order_report_view),
             name="shop_shoporder_sales_anomalies",
         ),
+        path(
+            "abuse-signals/",
+            _bind(model_admin, abuse.abuse_signals_view, guard=model_admin.order_report_view),
+            name="shop_shoporder_abuse_signals",
+        ),
     ]
 
 
@@ -456,12 +459,11 @@ def order_tool_urls(model_admin):
 
 
 def _set_review_visibility(modeladmin, request, queryset, value, verb):
-    # the rows to change, taken before the update (a changelist filtered on visibility would be
-    # empty afterwards)
-    reviews = list(queryset.select_related(None).exclude(is_confirm=value).only("pk", "is_subject", "product_id"))
+    selected = list(queryset.select_related(None).only("pk", "is_subject", "product_id", "is_confirm"))
+    reviews = [review for review in selected if review.is_confirm != value]
     changed = ShopReview.objects.filter(pk__in=[review.pk for review in reviews]).update(is_confirm=value)
     recount_product_reviews({review.product_id for review in reviews})
-    for review in reviews:
+    for review in reviews if value == "1" else selected:
         modeladmin.log_change(request, review, f"후기 {verb}")
     modeladmin.message_user(request, f"후기 {changed}건을 {verb}했습니다.", messages.SUCCESS)
 

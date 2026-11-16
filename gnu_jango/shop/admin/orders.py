@@ -21,7 +21,8 @@ from unfold.widgets import UnfoldAdminSelectWidget
 from gnu_jango.api.shop_common import CANCELLED_STATUSES
 from gnu_jango.core.audit import AdminExportAuditMixin, UnfoldHistoryAdmin, history_record_for
 from gnu_jango.shop import delivery_import
-from gnu_jango.shop.admin.bulk import copy_selected_personal_pays, create_personal_pay_for_balance, order_tool_urls
+from gnu_jango.shop.admin.bulk import _bind, copy_selected_personal_pays, create_personal_pay_for_balance, order_tool_urls
+from gnu_jango.shop.admin.customer_segments import customer_segments_view
 from gnu_jango.shop.admin.cash_receipts import order_cash_receipt_page
 from gnu_jango.shop.cash_receipts import admin_risk as cash_receipt_admin_risk
 from gnu_jango.shop.delivery import delivery_company_form_field
@@ -50,7 +51,7 @@ from gnu_jango.shop.order_lines import (
 )
 from gnu_jango.shop.order_line_split import posted_line_quantities
 from gnu_jango.shop.order_points import run_save_order_points_safely, take_back_order_points
-from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES, STATUS_RETURNED
+from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES, STATUS_RETURNED, sold_line_q
 from gnu_jango.utils.date_ranges import local_days
 
 FAILED_REFUND_WARN_DAYS = 30
@@ -1219,6 +1220,11 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
                 "unresolved/",
                 self.order_report_view(self.unresolved_orders_view),
                 name="shop_shoporder_unresolved",
+            ),
+            path(
+                "customer-segments/",
+                _bind(self, customer_segments_view, guard=self.order_report_view),
+                name="shop_shoporder_customer_segments",
             ),
             path(
                 "<path:object_id>/lines/",

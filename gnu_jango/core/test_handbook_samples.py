@@ -20,6 +20,7 @@ from gnu_jango.config.handbook_audit_content import AUDIT_LINK_MARKER, AUDIT_LIN
 from gnu_jango.config.handbook_commerce_content import COMMERCE_LINK_MARKER, COMMERCE_LINK_TITLES
 from gnu_jango.config.handbook_content import GUIDES
 from gnu_jango.config.handbook_plugin_content import PLUGIN_LINK_HTML, PLUGIN_LINK_MARKER, PLUGIN_LINK_TITLES
+from gnu_jango.config.handbook_shop_data_content import SHOP_DATA_LINK_MARKER, SHOP_DATA_LINK_TITLES
 from gnu_jango.config.models import Config
 
 API = "/api/v1"
@@ -309,6 +310,57 @@ class HandbookSamplesTests(TestCase):
         self.assertEqual(response.status_code, 200)
         results = response.json()["data"]["results"]
         self.assertTrue(any("출석체크" in item.get("title", "") for item in results), results)
+
+    def test_the_shop_data_book_covers_segments_forecast_abuse_and_bought_together(self):
+        samples.ensure_samples()
+
+        book = Board.objects.get(bo_table="hb_shopdata")
+        titles = [post["wr_subject"] for post in self.chapters("hb_shopdata")]
+
+        self.assertEqual(book.bo_subject, "쇼핑몰 운영 · 고객 분석·재고 예측·이상 활동")
+        self.assertEqual(book.bo_category_list.split("|"), ["먼저 읽기", "고객", "상품과 재고", "점검", "개발·운영용"])
+        self.assertEqual(len(titles), 6)
+        for title in titles:
+            with self.subTest(title=title):
+                self.assertIn(title, GUIDES)
+                body = Post.objects.get(board=book, wr_subject=title).wr_content
+                self.assertGreaterEqual(len(re.findall(r"<h2[ >]", body)), 2)
+
+    def test_a_deployed_manual_gets_the_shop_data_book_without_touching_edited_chapters(self):
+        samples.ensure_samples()
+        Post.objects.filter(board__bo_table="hb_shopdata").delete()
+        Board.objects.filter(bo_table="hb_shopdata").delete()
+        edited = Post.objects.get(wr_subject="상품과 분류 등록하기")
+        edited.wr_content = "<p>admin-sentinel-703</p>"
+        edited.save(update_fields=("wr_content",))
+
+        result = samples.ensure_samples()
+
+        self.assertEqual(result["chapters_created"], 6)
+        self.assertEqual(result["chapters_updated"], 0)
+        edited.refresh_from_db()
+        self.assertIn("admin-sentinel-703", edited.wr_content)
+        self.assertIn('href="/bbs/hb_shopdata"', edited.wr_content)
+
+    def test_related_shop_chapters_link_to_the_shop_data_book_once(self):
+        samples.ensure_samples()
+        samples.ensure_samples()
+
+        for title in SHOP_DATA_LINK_TITLES:
+            with self.subTest(title=title):
+                target = Post.objects.get(wr_subject=title)
+                self.assertIn('href="/bbs/hb_shopdata"', target.wr_content)
+                self.assertEqual(target.wr_content.count(SHOP_DATA_LINK_MARKER), 1)
+
+    def test_shop_data_chapters_are_searchable_after_reindex(self):
+        samples.ensure_samples()
+        call_command("rebuild_search_index", stdout=io.StringIO())
+
+        response = APIClient().get(f"{API}/search/unified", {"q": "재고 소진", "type": "document", "limit": 10})
+
+        self.assertEqual(response.status_code, 200)
+        results = response.json()["data"]["results"]
+        self.assertTrue(any("재고 소진" in item.get("title", "") for item in results), results)
 
     def test_running_it_again_adds_nothing(self):
         samples.ensure_samples()
