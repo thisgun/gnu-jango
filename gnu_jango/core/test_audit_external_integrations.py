@@ -178,6 +178,30 @@ class CallbackEndpointTests(TestCase):
 
 
 @override_settings(**CLEAN)
+class EnvProviderTests(TestCase):
+    @override_settings(SHOP_PAYMENT_PROVIDER="lg")
+    def test_an_unknown_provider_setting_is_missing(self):
+        # Checkout falls back to bank transfer for a provider it does not know.
+        audit = run_audit()
+
+        payment = audit["payment"]
+        self.assertEqual(payment["active_provider"], "bank")
+        self.assertEqual(payment["provider_setting"]["status"], "missing")
+        self.assertEqual(payment["provider_setting"]["missing"], ["SHOP_PAYMENT_PROVIDER"])
+        self.assertFalse(audit["summary"]["production_ready"])
+
+    @override_settings(SHOP_PAYMENT_PROVIDER="bank")
+    def test_an_explicit_bank_setting_is_ready(self):
+        audit = run_audit()
+
+        self.assertEqual(audit["payment"]["provider_setting"]["status"], "ready")
+        self.assertTrue(audit["summary"]["production_ready"], audit["summary"])
+
+    def test_no_provider_setting_is_unused(self):
+        self.assertEqual(run_audit()["payment"]["provider_setting"]["status"], "unused")
+
+
+@override_settings(**CLEAN)
 class AdminChosenPgTests(TestCase):
     @override_settings(SHOP_TOSS_CLIENT_KEY="test_ck_audit", SHOP_TOSS_SECRET_KEY="test_sk_audit")
     def test_toss_with_a_matching_key_pair_is_ready(self):

@@ -65,12 +65,20 @@ def adapter_routes(adapter_config, provider):
     return bool(adapter_config["enabled"] and provider in set(adapter_config["providers"]))
 
 
+BANK_PROVIDER_VALUES = {"bank", pg_settings.PG_SERVICE_NONE}
+
+
+def known_env_provider(provider):
+    """Checkout runs every other SHOP_PAYMENT_PROVIDER value as bank transfer only."""
+    return provider in BANK_PROVIDER_VALUES | {"toss", pg_settings.PG_SERVICE_NICEPAY} | v1_shop.PAYMENT_ADAPTER_PROVIDERS
+
+
 def chosen_payment_provider(rows, toss_config):
     """The PG the site picked, keyed or not: SHOP_PAYMENT_PROVIDER, else the saved admin
     결제대행사 (de_pg_service), else Toss when Toss keys exist. "" means bank transfer only."""
     env_provider = pg_settings.env_payment_provider()
     if env_provider:
-        return env_provider
+        return "" if env_provider in BANK_PROVIDER_VALUES else env_provider
     if pg_settings.PG_SERVICE_FIELD in rows:
         service = pg_settings.admin_pg_service(rows)
         return "" if service == pg_settings.PG_SERVICE_NONE else service
@@ -153,6 +161,7 @@ class Command(BaseCommand):
                 rows=rows, toss_config=toss_config, nicepay_config=nicepay_config
             ),
             "chosen_provider": chosen or "bank",
+            "provider_setting": self.audit_provider_setting(),
             **callback_items,
             "toss": self.audit_toss(toss_config) if chosen == "toss" else unused_item("toss", "Toss Payments server confirmation"),
             "nicepay": nicepay,
@@ -163,6 +172,20 @@ class Command(BaseCommand):
             ],
             "operations": operations,
         }
+
+    def audit_provider_setting(self):
+        provider = pg_settings.env_payment_provider()
+        if not provider:
+            return unused_item("payment_provider_setting", "SHOP_PAYMENT_PROVIDER value")
+        known = known_env_provider(provider)
+        return check_item(
+            "payment_provider_setting",
+            "SHOP_PAYMENT_PROVIDER value",
+            "ready" if known else "missing",
+            missing=[] if known else ["SHOP_PAYMENT_PROVIDER"],
+            details={"value": provider},
+            action="" if known else "Set SHOP_PAYMENT_PROVIDER to toss, nicepay, bank or a PG adapter provider: checkout runs any other value as bank transfer only.",
+        )
 
     def audit_payment_callbacks(self):
         return {
@@ -555,6 +578,7 @@ class Command(BaseCommand):
         self.stdout.write("Payment:")
         self.stdout.write(f"  chosen provider: {payment['chosen_provider']}")
         self.stdout.write(f"  active provider: {payment['active_provider']}")
+        self.print_item(payment["provider_setting"], indent=2)
         self.print_item(payment["callback_secret"], indent=2)
         self.print_item(payment["callback_hmac_signature"], indent=2)
         self.print_item(payment["toss"], indent=2)
