@@ -22,7 +22,7 @@ django-mathfilters==1.0.0
 django_extensions==4.1
 
 # Content
-django-taggit==6.1.0
+django-taggit==7.0.0
 # bleach[css] brings the CSS sanitizer that gnu_jango/utils/sanitize.py uses.
 # django-html_sanitizer was dropped: nothing imported it and its INSTALLED_APPS
 # entry was commented out, while sanitising already goes through bleach.
