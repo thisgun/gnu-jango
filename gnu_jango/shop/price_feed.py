@@ -27,6 +27,7 @@ from gnu_jango.utils.lib import get_client_ip
 from .models import ShopCategory, ShopProduct
 from .order_points import item_purchase_point
 from .payment_options import config_flag
+from .product_options import stored_int
 from .shipping import SC_METHOD_ON_DELIVERY, base_shipping_cost, current_shipping_policy
 
 ENABLED_CONFIG = "de_price_compare_use"
@@ -131,7 +132,7 @@ def _has_stock(product):
     if choices:
         return any(
             int(option.get("io_use") if option.get("io_use") is not None else 1) == 1
-            and int(option.get("io_stock_qty") or 0) > 0
+            and stored_int(option.get("io_stock_qty")) > 0
             for option in choices
         )
     return int(product.it_stock_qty or 0) > 0

@@ -639,6 +639,18 @@ class OrderCancelTests(OrderDirectCreateMixin, ShopOrderBase):
         self.assertEqual(product.options[0]["io_stock_qty"], 5)
         self.assertEqual(product.it_stock_qty, 0)
 
+    def test_option_stock_stored_as_a_decimal_string_sells_and_restores(self):
+        option = {"io_id": "Red", "io_type": 0, "io_price": 500, "io_stock_qty": "4.0", "io_use": 1}
+        product = self.make_product("MO011", "Optioned", it_price=2000, it_stock_qty=0, options=[option])
+        response = self.client.post(f"{API}/cart", {"it_id": product.it_id, "options": [{"io_id": "Red", "ct_qty": 3}]}, format="json")
+        self.assertEqual(response.status_code, 201, response.content[:300])
+        order = self.place_ok()
+        product.refresh_from_db()
+        self.assertEqual(product.options[0]["io_stock_qty"], 1)
+        self.client.patch(f"{API}/orders/{order.od_id}", {}, format="json")
+        product.refresh_from_db()
+        self.assertEqual(product.options[0]["io_stock_qty"], 4)
+
 
 class GuestOrderLookupTests(ShopOrderBase):
     def lookup(self, **body):

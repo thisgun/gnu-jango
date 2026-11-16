@@ -41,7 +41,7 @@
         <tr>
           <td><a href="{% url 'admin:shop_shopproduct_change' row.it_id %}">{{ row.name }}</a><br><small>{{ row.it_id }}</small></td>
           <td>{% if row.stock is None %}미설정{% else %}{{ row.stock|floatformat:"0g" }}{% endif %}</td>
-          <td>{% if row.window_units %}{{ row.daily|floatformat:1 }}{% else %}-{% endif %}</td>
+          <td>{% if row.window_units %}{% if row.daily < 0.1 %}{{ row.daily|floatformat:2 }}{% else %}{{ row.daily|floatformat:1 }}{% endif %}{% else %}-{% endif %}</td>
           <td>{% if row.window_units %}{{ row.recent_units|floatformat:"0g" }}개{% if row.trend_label %} ({{ row.trend_label }}){% endif %}{% else %}-{% endif %}</td>
           <td>{% if row.days_left is not None %}{{ row.days_left|floatformat:1 }}일{% else %}-{% endif %}</td>
           <td>{% if row.reorder_point is not None %}{{ row.reorder_point|floatformat:0 }}{% else %}-{% endif %}</td>

@@ -4,6 +4,7 @@ from django.utils import timezone
 from .models import ShopOrder, ShopProduct
 from .order_points import save_order_item_status, take_back_order_points
 from .order_statuses import INACTIVE_LINE_STATUSES
+from .product_options import stored_int
 
 
 class StockAdjustmentError(Exception):
@@ -54,7 +55,7 @@ def reserve_product_stock(product_id, quantity, option_id="", io_type=0):
                 code="option_unavailable",
                 details={"it_id": product.it_id, "io_id": option_id},
             )
-        option_stock = int(matched.get("io_stock_qty") or 0)
+        option_stock = stored_int(matched.get("io_stock_qty"))
         if option_stock < quantity:
             raise StockAdjustmentError(
                 "재고수량이 부족합니다.",
@@ -107,7 +108,7 @@ def restore_line_stock(item):
         options = list(product.options or [])
         for option in options:
             if str(option.get("io_id")) == str(item.ct_option) and int(option.get("io_type") or 0) == int(item.io_type or 0):
-                option["io_stock_qty"] = int(option.get("io_stock_qty") or 0) + item.ct_qty
+                option["io_stock_qty"] = stored_int(option.get("io_stock_qty")) + item.ct_qty
                 break
         product.options = options
         update_fields.append("options")

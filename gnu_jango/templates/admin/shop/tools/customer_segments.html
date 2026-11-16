@@ -16,7 +16,7 @@
 
 {% block tool_body %}
 <section class="g5-admin-report-metrics" aria-label="고객 요약">
-  <article class="card g5-admin-report-metric"><span>고객</span><strong>{{ report.customers|length|floatformat:"0g" }}</strong><em>최근 {{ window }}일 주문 회원</em></article>
+  <article class="card g5-admin-report-metric"><span>고객</span><strong>{{ report.customers|length|floatformat:"0g" }}</strong><em>최근 {{ window }}일 결제한 회원</em></article>
   <article class="card g5-admin-report-metric"><span>이탈 위험</span><strong>{{ report.at_risk_count|floatformat:"0g" }}</strong><em>자주 샀지만 한동안 사지 않음</em></article>
   <article class="card g5-admin-report-metric"><span>{{ lapsed_days }}일 넘게 미구매</span><strong>{{ report.lapsed_count|floatformat:"0g" }}</strong><em>마지막 주문이 {{ lapsed_days }}일보다 오래전</em></article>
   <article class="card g5-admin-report-metric"><span>결제 금액 중앙값</span><strong>{{ report.median_amount|floatformat:"0g" }}</strong><em>고객 1명당, 환불 제외</em></article>
@@ -93,7 +93,7 @@
           <td>{{ customer.segment_label }}</td>
         </tr>
         {% empty %}
-        <tr><td colspan="7" class="g5-admin-empty">이 기간에 주문한 회원이 없습니다.</td></tr>
+        <tr><td colspan="7" class="g5-admin-empty">이 기간에 결제한 회원이 없습니다.</td></tr>
         {% endfor %}
       </tbody>
     </table>

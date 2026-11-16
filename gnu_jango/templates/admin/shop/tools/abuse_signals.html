@@ -29,7 +29,7 @@
 {% endblock %}
 
 {% block tool_body %}
-{% if report.is_trimmed %}<p class="g5-admin-empty">일부 규칙은 건수가 많아 일부만 표시하거나 검사했습니다. 각 규칙 설명 아래의 안내를 확인하십시오.</p>{% endif %}
+{% if report.is_trimmed %}<p class="g5-admin-empty">일부 규칙은 건수가 많아 일부만 표시하거나 검사했습니다.{% if report.hidden %} 심각도별 건수는 표에 없는 {{ report.hidden }}건까지 셉니다.{% endif %} 각 규칙 설명 아래의 안내를 확인하십시오.</p>{% endif %}
 <section class="g5-admin-report-metrics" aria-label="심각도별 건수">
   <article class="card g5-admin-report-metric"><span>주의</span><strong>{{ report.counts.high }}</strong><em>먼저 확인</em></article>
   <article class="card g5-admin-report-metric"><span>확인</span><strong>{{ report.counts.medium }}</strong><em>살펴볼 만한 기록</em></article>

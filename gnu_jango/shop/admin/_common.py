@@ -39,6 +39,7 @@ from gnu_jango.shop.models import (
 from gnu_jango.shop.order_statuses import (
     ACTIVE_LINE_STATUSES,
     INACTIVE_LINE_STATUSES,
+    STATUS_ALIASES,
     STATUS_CANCELLED,
     STATUS_RETURNED,
     STATUS_SOLD_OUT,
@@ -275,8 +276,6 @@ def order_line_sales_expression():
 
 
 def _status_spellings(status):
-    from gnu_jango.shop.order_flow import STATUS_ALIASES
-
     return (status, *sorted(alias for alias, canonical in STATUS_ALIASES.items() if canonical == status))
 
 
@@ -286,20 +285,6 @@ SALES_RANK_STATUS_GROUPS = tuple(
     (status, _status_spellings(status))
     for status in (*ACTIVE_LINE_STATUSES, STATUS_CANCELLED, STATUS_RETURNED, STATUS_SOLD_OUT)
 )
-# lines that did not end up sold (youngcart $status_cancel, the same set the order totals leave
-# out): they stay out of the sales quantity and amount
-UNSOLD_LINE_STATUSES = INACTIVE_LINE_STATUSES | frozenset(
-    spelling
-    for status, spellings in SALES_RANK_STATUS_GROUPS
-    if status in INACTIVE_LINE_STATUSES
-    for spelling in spellings
-)
-
-
-def sold_line_q():
-    return ~Q(ct_status__in=UNSOLD_LINE_STATUSES)
-
-
 def sales_rank_status_annotations():
     """``status_<n>``: the quantity of the lines in the n-th SALES_RANK_STATUS_GROUPS status."""
     return {

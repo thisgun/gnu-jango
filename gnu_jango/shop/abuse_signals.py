@@ -10,11 +10,13 @@ signup IP (only ``me_send_ip``, the IP a memo was sent from), so the rule has no
 """
 
 from collections import Counter, defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 from urllib.parse import urlencode
 
-from django.db.models import Count, Exists, Min, OuterRef, Q
+from django.contrib.admin.models import LogEntry
+from django.db.models import Case, Count, Exists, Min, OuterRef, Q, TextField, Value, When
+from django.db.models.functions import Cast
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import strip_tags
@@ -92,8 +94,12 @@ class Finding:
 @dataclass(frozen=True)
 class Found:
     findings: tuple
-    total: int
+    counts: Counter
     note: str = ""
+
+    @classmethod
+    def of(cls, findings, note="", cap=None):
+        return cls(tuple(findings[:cap]), Counter(finding.severity for finding in findings), note)
 
 
 @dataclass(frozen=True)
@@ -109,9 +115,13 @@ class Rule:
 class RuleResult:
     rule: Rule
     findings: tuple
-    total: int = 0
+    counts: Counter = field(default_factory=Counter)
     note: str = ""
     restricted: bool = False
+
+    @property
+    def total(self):
+        return sum(self.counts.values())
 
     @property
     def hidden_count(self):
@@ -154,6 +164,15 @@ def _listed(items, cap):
 
 def _visible_reviews():
     return ShopReview.objects.filter(is_confirm="1")
+
+
+def _pending_q():
+    handled = LogEntry.objects.filter(
+        content_type__app_label=ShopReview._meta.app_label,
+        content_type__model=ShopReview._meta.model_name,
+        object_id=Cast(OuterRef("pk"), TextField()),
+    )
+    return Q(is_confirm="0") & ~Q(Exists(handled))
 
 
 def _capped_note(shown, found, what):
@@ -237,7 +256,7 @@ def check_review_bursts(window):
         if burst:
             bursts[product_id] = burst
     if not bursts:
-        return Found((), 0, note)
+        return Found.of((), note)
     pace = _burst_pace(bursts, window.since - timedelta(days=BURST_BASELINE_DAYS), window.now)
     findings = []
     for product_id, (count, authors, burst_rows) in bursts.items():
@@ -261,7 +280,7 @@ def check_review_bursts(window):
             )
         )
     findings.sort(key=lambda finding: finding.title)
-    return Found(tuple(findings), len(findings), note)
+    return Found.of(findings, note)
 
 
 def _plain_text(review):
@@ -308,18 +327,26 @@ def check_similar_reviews(window):
                 links=_review_links([review["pk"] for review in members]),
             )
         )
-    return Found(tuple(findings), len(findings), note)
+    return Found.of(findings, note)
+
+
+def _waiting_first(member_reviews):
+    return (all(review["is_confirm"] == "1" for review in member_reviews), -len(member_reviews), _label(member_reviews[0]))
 
 
 def check_reviews_without_purchase(window):
     in_window = (
-        _visible_reviews()
+        ShopReview.objects.filter(Q(is_confirm="1") | _pending_q())
         .filter(is_time__gte=window.since, is_time__lte=window.now, user__isnull=False, product__isnull=False)
         .exclude(user__is_superuser=True)
     )
-    reviews = list(in_window.order_by("-is_time", "-pk").values("pk", "product_id", "product__it_name", "user_id", "mb_id", "is_name")[:NO_PURCHASE_REVIEW_CAP])
+    reviews = list(
+        in_window.order_by("-is_time", "-pk").values("pk", "product_id", "product__it_name", "user_id", "mb_id", "is_name", "is_confirm")[
+            :NO_PURCHASE_REVIEW_CAP
+        ]
+    )
     if not reviews:
-        return Found((), 0)
+        return Found.of(())
     note = _capped_note(len(reviews), in_window.count(), "후기") if len(reviews) == NO_PURCHASE_REVIEW_CAP else ""
     received = set()
     products = {review["product_id"] for review in reviews}
@@ -338,44 +365,62 @@ def check_reviews_without_purchase(window):
             per_member[review["user_id"]].append(review)
     advice = "후기 작성 조건 켜짐: 우회 또는 이후 주문 취소" if required else "후기 작성 조건 꺼짐 (허용된 후기)"
     findings = []
-    for member_reviews in sorted(per_member.values(), key=lambda mine: (-len(mine), _label(mine[0]))):
+    for member_reviews in sorted(per_member.values(), key=_waiting_first):
         names = sorted({review["product__it_name"] or review["product_id"] for review in member_reviews})
+        pending = [review["pk"] for review in member_reviews if review["is_confirm"] != "1"]
+        title = f"{_label(member_reviews[0])}: 배송 완료 이력 없는 후기 {len(member_reviews)}건"
+        evidence = [f"상품: {_listed(names, SAMPLE_CAP)}", advice]
+        if pending:
+            title += f" (승인 대기 {len(pending)}건)"
+            evidence.append("승인 대기 후기는 아직 쇼핑몰에 보이지 않습니다. 승인 전에 확인하십시오")
         findings.append(
             Finding(
                 rule="no_purchase_review",
                 severity="medium" if required else "info",
-                title=f"{_label(member_reviews[0])}: 배송 완료 이력 없는 후기 {len(member_reviews)}건",
-                evidence=(f"상품: {_listed(names, SAMPLE_CAP)}", advice),
-                links=_review_links([review["pk"] for review in member_reviews]),
+                title=title,
+                evidence=tuple(evidence),
+                links=_review_links([review["pk"] for review in member_reviews]) + _review_change_links(pending),
             )
         )
-    return Found(tuple(findings[:NO_PURCHASE_DISPLAY_CAP]), len(findings), note)
+    return Found.of(findings, note, cap=NO_PURCHASE_DISPLAY_CAP)
 
 
-def _coupon_orders(orders):
+def _coupon_order_q():
     logged = ShopCouponLog.objects.filter(Q(order_id=OuterRef("pk")) | Q(od_id=OuterRef("od_id")))
-    return orders.filter(Q(od_coupon__gt=0) | Q(od_send_coupon__gt=0) | Q(Exists(logged)))
+    return Q(od_coupon__gt=0) | Q(od_send_coupon__gt=0) | Q(Exists(logged))
 
 
 def check_shared_ip_accounts(window):
     base = ShopOrder.objects.filter(od_datetime__gte=window.since, od_datetime__lte=window.now, od_ip__isnull=False, user__isnull=False)
-    grouped = base.values("od_ip").annotate(members=Count("user", distinct=True), orders=Count("od_id")).filter(members__gte=SHARED_IP_MIN_MEMBERS)
+    signup_users = ShopCouponLog.objects.filter(coupon__cp_subject=SIGNUP_COUPON_SUBJECT, user__isnull=False).values("user_id")
+    flagged_q = Q(coupon_orders__gt=0) | Q(signup_members__gt=0)
+    grouped = (
+        base.values("od_ip")
+        .annotate(
+            members=Count("user", distinct=True),
+            orders=Count("od_id"),
+            coupon_orders=Count("od_id", filter=_coupon_order_q()),
+            signup_members=Count("user", distinct=True, filter=Q(user_id__in=signup_users)),
+        )
+        .filter(members__gte=SHARED_IP_MIN_MEMBERS)
+    )
     total = grouped.count()
     if not total:
-        return Found((), 0)
-    shared = list(grouped.order_by("-members", "-orders", "od_ip")[:SHARED_IP_CAP])
+        return Found.of(())
+    high = grouped.filter(flagged_q).count()
+    shared = list(
+        grouped.annotate(is_flagged=Case(When(flagged_q, then=Value(1)), default=Value(0)))
+        .order_by("-is_flagged", "-members", "-orders", "od_ip")[:SHARED_IP_CAP]
+    )
     in_scope = base.filter(od_ip__in=[entry["od_ip"] for entry in shared])
-    coupon_counts = dict(_coupon_orders(in_scope).values_list("od_ip").annotate(n=Count("od_id")))
-    signup_users = ShopCouponLog.objects.filter(coupon__cp_subject=SIGNUP_COUPON_SUBJECT, user__isnull=False).values("user_id")
-    signup_counts = dict(in_scope.filter(user_id__in=signup_users).values_list("od_ip").annotate(n=Count("user", distinct=True)))
     findings = []
     for entry in shared:
         ip = entry["od_ip"]
-        coupon_count = coupon_counts.get(ip, 0)
-        signup_count = signup_counts.get(ip, 0)
+        coupon_count = entry["coupon_orders"]
+        signup_count = entry["signup_members"]
         ip_orders = in_scope.filter(od_ip=ip)
         names = ip_orders.order_by("user__username").values_list("user__username", flat=True).distinct()[: SAMPLE_CAP * 2 + 1]
-        sample = (_coupon_orders(ip_orders) if coupon_count else ip_orders).order_by("-od_datetime").values_list("od_id", flat=True)[:SAMPLE_CAP]
+        sample = (ip_orders.filter(_coupon_order_q()) if coupon_count else ip_orders).order_by("-od_datetime").values_list("od_id", flat=True)[:SAMPLE_CAP]
         flagged = bool(coupon_count or signup_count)
         evidence = [
             f"주문 {entry['orders']}건, 서로 다른 회원 {entry['members']}명",
@@ -395,7 +440,7 @@ def check_shared_ip_accounts(window):
                 ),
             )
         )
-    return Found(tuple(findings), total)
+    return Found(tuple(findings), Counter(high=high, medium=total - high))
 
 
 RULES = (
@@ -420,14 +465,16 @@ RULES = (
         "no_purchase_review",
         "배송 완료 이력 없는 후기",
         "회원이 그 상품을 배송 완료(완료)로 받은 주문 줄이 없는데 후기를 쓴 경우. 쇼핑몰의 후기 작성 조건과 같은 기준이며 "
-        "취소·반품·품절, 아직 배송 전인 주문은 구매로 보지 않습니다. 슈퍼관리자와 숨긴 후기는 제외합니다",
+        "취소·반품·품절, 아직 배송 전인 주문은 구매로 보지 않습니다. 승인 대기 후기는 포함해 맨 위에 표시하고, "
+        "슈퍼관리자의 후기와 관리 화면에서 숨긴 후기는 제외합니다",
         check_reviews_without_purchase,
         reads_reviews=True,
     ),
     Rule(
         "shared_ip",
         "동일 IP 다중 계정",
-        f"한 주문 IP를 {SHARED_IP_MIN_MEMBERS}명 이상의 회원이 쓴 경우. 쿠폰이나 신규 회원 쿠폰을 쓴 주문이 있으면 주의로 올립니다. "
+        f"한 주문 IP를 {SHARED_IP_MIN_MEMBERS}명 이상의 회원이 쓴 경우. 쿠폰이나 신규 회원 쿠폰을 쓴 주문이 있으면 주의로 올리고, "
+        f"IP가 {SHARED_IP_CAP}개를 넘으면 주의부터 보여 줍니다. "
         "공용 회선(학교, 사무실, 통신사 공용 IP)은 정상일 수 있습니다. IPv6는 주소 그대로 비교합니다",
         check_shared_ip_accounts,
     ),
@@ -442,13 +489,14 @@ def build_report(days=DEFAULT_WINDOW_DAYS, now=None, can_view_reviews=True):
             results.append(RuleResult(rule, (), restricted=True))
             continue
         found = rule.check(window)
-        results.append(RuleResult(rule, found.findings, found.total, found.note))
-    counts = Counter(finding.severity for result in results for finding in result.findings)
+        results.append(RuleResult(rule, found.findings, found.counts, found.note))
+    counts = sum((result.counts for result in results), Counter())
     return {
         "window": window,
         "days": window.days,
         "results": results,
         "counts": {key: counts.get(key, 0) for key in SEVERITY_ORDER},
         "total": sum(counts.values()),
+        "hidden": sum(result.hidden_count for result in results),
         "is_trimmed": any(result.hidden_count or result.note for result in results),
     }

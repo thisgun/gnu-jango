@@ -299,3 +299,38 @@ def test_a_sold_out_row_shows_its_units_without_empty_brackets(client):
     body = client.get(reverse("admin:shop_shopproduct_stock_forecast")).content.decode()
     rows = body.split("<tbody>")[1].split("</tbody>")[0]
     assert "28개" in rows and "()" not in rows
+
+
+@pytest.mark.django_db
+def test_option_stock_stored_as_a_decimal_string_counts_as_the_number():
+    assert stock_level(product_with("D1", 0, [option("a", "4.0"), option("b", 3)])) == StockLevel(7)
+    assert stock_level(product_with("D2", 0, [option("a", "4.5"), option("b", 4.5)])) == StockLevel(8)
+    assert stock_level(product_with("D3", 0, [option("a", "재고"), option("b", 2)])) == StockLevel(2)
+
+
+@pytest.mark.django_db
+def test_the_daily_column_does_not_round_a_slow_seller_to_zero(client):
+    today = timezone.localdate()
+    slow = make_product("Z1", 0, "느린 상품")
+    sell(slow, today - timedelta(days=26), 1)
+    fast = make_product("Z2", 0, "빠른 상품")
+    for offset in range(1, 57):
+        sell(fast, today - timedelta(days=offset), 3)
+    client.force_login(staff_with("view_shopproduct"))
+    body = client.get(reverse("admin:shop_shopproduct_stock_forecast"), {"window": "56"}).content.decode()
+    rows = {row.split("<small>")[1].split("</small>")[0]: row for row in body.split("<tbody>")[1].split("<tr>")[1:]}
+    assert "<td>0.03</td>" in rows["Z1"] and "<strong>2</strong>" in rows["Z1"]
+    assert "<td>3.0</td>" in rows["Z2"]
+
+
+
+@pytest.mark.django_db
+def test_an_option_whose_use_flag_reads_0_0_is_on_sale_in_the_forecast_and_option_list_as_in_the_cart(client, admin_client):
+    product = product_with("U1", UNTRACKED_STOCK, [option("a", 4, use="0.0"), option("b", 3), option("c", 5, io_type="1.0")])
+    product.it_option_subject = "색상"
+    product.save()
+    added = client.post("/api/v1/shop/cart", {"it_id": "U1", "options": [{"io_id": "a", "ct_qty": 1}]}, content_type="application/json")
+    assert added.status_code == 201
+    assert stock_level(product) == StockLevel(7)
+    rows = admin_client.get(reverse("admin:shop_shopproduct_option_stock_list")).context["page_obj"].object_list
+    assert [(row["label"], row["use"]) for row in rows] == [("a", True), ("b", True)]

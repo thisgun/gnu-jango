@@ -186,13 +186,45 @@ def test_the_review_gate_and_the_report_share_one_received_predicate():
     assert not _has_received_product(user, item)
 
 
+def hide_in_admin(client, reviews):
+    client.force_login(get_user_model().objects.create_superuser("hider", "h@example.test", "pw"))
+    url = reverse("admin:shop_shopreview_changelist")
+    client.post(url, {"action": "hide_selected_reviews", "_selected_action": [entry.pk for entry in reviews]})
+
+
 @pytest.mark.django_db
-def test_hidden_reviews_are_left_out_of_every_review_rule():
+def test_hidden_reviews_are_left_out_of_every_review_rule(client):
     item = product()
-    for n in range(6):
-        review(item, member(f"hb{n}"), hours_ago=1 + n, content=LONG)
-    ShopReview.objects.update(is_confirm="0")
+    written = [review(item, member(f"hb{n}"), hours_ago=1 + n, content=LONG) for n in range(6)]
+    hide_in_admin(client, written)
+    assert not ShopReview.objects.filter(is_confirm="1").exists()
     assert not findings("review_burst") and not findings("similar_review") and not findings("no_purchase_review")
+    ShopReview.objects.create(product=item, user=member("legacy"), mb_id="legacy", is_subject="s", is_confirm="", is_time=NOW)
+    assert not findings("no_purchase_review")
+
+
+@pytest.mark.django_db
+def test_a_review_waiting_for_approval_is_checked_and_marked_pending(client, monkeypatch):
+    item = product(name="대기 상품")
+    waiting = member("waiting")
+    review(item, waiting, hours_ago=2)
+    ShopReview.objects.create(product=item, user=waiting, mb_id="waiting", is_subject="s", is_confirm="0", is_time=NOW - timedelta(hours=1))
+    hidden = review(item, member("rejected"), hours_ago=3)
+    declined = member("declined")
+    unpublished = ShopReview.objects.create(
+        product=item, user=declined, mb_id="declined", is_subject="s", is_confirm="0", is_time=NOW - timedelta(hours=1)
+    )
+    assert any(found.title.startswith("declined: ") for found in findings("no_purchase_review"))
+    hide_in_admin(client, [hidden, unpublished])
+    [found] = findings("no_purchase_review")
+    assert found.title.startswith("waiting: ") and "2건" in found.title
+    assert "승인 대기 1건" in found.title
+    busy = member("aaa-first-by-name")
+    for n in range(3):
+        review(item, busy, hours_ago=4 + n)
+    monkeypatch.setattr(abuse_signals, "NO_PURCHASE_DISPLAY_CAP", 1)
+    [shown] = findings("no_purchase_review")
+    assert shown.title.startswith("waiting: ")
 
 
 @pytest.mark.django_db
@@ -248,6 +280,35 @@ def test_capped_rules_say_how_many_they_found_and_how_many_they_show(monkeypatch
     monkeypatch.setattr(abuse_signals, "SIMILARITY_REVIEW_CAP", 2)
     review_rows = abuse_signals.build_report(30, now=NOW)["results"][1]
     assert "최신 2건만 검사" in review_rows.note
+
+
+@pytest.mark.django_db
+def test_coupon_ips_survive_the_shared_ip_cut(monkeypatch):
+    monkeypatch.setattr(abuse_signals, "SHARED_IP_CAP", 1)
+    for n in range(5):
+        order(member(f"crowd{n}"), "20.0.0.1")
+    for n in range(3):
+        order(member(f"cpn{n}"), "20.0.0.2", coupon=1000 if n == 0 else 0)
+    [shown] = findings("shared_ip")
+    assert shown.title.startswith("IP 20.0.0.2") and shown.severity == "high"
+
+
+@pytest.mark.django_db
+def test_severity_tiles_count_findings_the_tables_leave_out(monkeypatch, client):
+    monkeypatch.setattr(abuse_signals, "NO_PURCHASE_DISPLAY_CAP", 2)
+    monkeypatch.setattr(abuse_signals, "SHARED_IP_CAP", 1)
+    item = product()
+    for n in range(4):
+        review(item, member(f"tile{n}"), hours_ago=1 + n * 30)
+    for ip, coupon in (("21.0.0.1", 0), ("21.0.0.2", 500), ("21.0.0.3", 0)):
+        for n in range(3):
+            order(member(f"{ip}-{n}"), ip, coupon=coupon if n == 0 else 0)
+    report = abuse_signals.build_report(30, now=NOW)
+    assert report["counts"] == {"high": 1, "medium": 2, "info": 4}
+    assert report["total"] == 7
+    client.force_login(staff_with("view_shoporder", "view_shopreview"))
+    html = client.get(reverse("admin:shop_shoporder_abuse_signals")).content.decode()
+    assert "표에 없는 4건까지" in html
 
 
 @pytest.mark.django_db

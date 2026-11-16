@@ -9,17 +9,18 @@ With lead time ``L`` and cover days ``C``:
     days left     = stock / d
     suggested     = max(0, ceil(d * (L + C) + safety - stock))
 
-Sales are counted like 상품판매순위: a line counts unless admin._common.sold_line_q() leaves it
+Sales are counted like 상품판매순위: a line counts unless order_statuses.sold_line_q() leaves it
 out, on the local day of the order (od_datetime).
 
 The forecast stays at product level, with the stock a buyer can still order: the sum of the
 in-use choice options' stock when the product has options (an order takes stock off the option
 only), else ``it_stock_qty``. A product that is flagged sold out, or has no stock, is 품절 even when
-it sold nothing in the window. Without stock, its demand is taken over the days up to its last sale
-(at least ``MIN_DEMAND_DAYS`` from the window start): the sales-free days since are the stockout,
-not a lack of demand. A flagged product is one the shop stopped selling, so it gets no reorder
-suggestion. Stock still at the 9999 a new product or option starts with was never entered, and one
-such option leaves the product orderable without limit, so it gets no days left or suggestion.
+it sold nothing in the window. A 품절 product's demand, flagged or without stock, is taken over the
+days up to its last sale (at least ``MIN_DEMAND_DAYS`` from the window start): the sales-free days
+since are the stockout, not a lack of demand. A flagged product is one the shop stopped selling, so
+it gets no reorder suggestion. Stock still at the 9999 a new product or option starts with was never
+entered, and one such option leaves the product orderable without limit, so it gets no days left or
+suggestion.
 """
 
 import math
@@ -34,9 +35,9 @@ from django.db.models.functions import TruncDate
 
 from gnu_jango.utils.date_ranges import local_days
 
-from .admin._common import sold_line_q
 from .models import ShopOrderItem, ShopProduct
-from .product_options import DEFAULT_OPTION_STOCK
+from .order_statuses import sold_line_q
+from .product_options import DEFAULT_OPTION_STOCK, stored_int
 from .stock_bulk import option_rows
 
 UNTRACKED_STOCK = ShopProduct._meta.get_field("it_stock_qty").default
@@ -221,23 +222,21 @@ def sales_series(today, window):
 
 
 def stock_level(product):
-    choices = [
-        record for io_type, _io_id, record in option_rows(product)
-        if io_type == 0 and _int(record.get("io_use"), 1) == 1
-    ]
+    choices = []
+    for io_type, _io_id, record in option_rows(product):
+        use = record.get("io_use")
+        try:
+            in_use = int(use if use is not None else 1) == 1
+        except (TypeError, ValueError):
+            in_use = True
+        if io_type == 0 and in_use:
+            choices.append(record)
     flagged = product.it_soldout == "1"
     if not choices:
         quantity = product.it_stock_qty or 0
         return StockLevel(quantity, flagged, quantity == UNTRACKED_STOCK)
-    quantities = [max(_int(record.get("io_stock_qty"), 0), 0) for record in choices]
+    quantities = [max(stored_int(record.get("io_stock_qty")), 0) for record in choices]
     return StockLevel(sum(quantities), flagged, any(q == DEFAULT_OPTION_STOCK for q in quantities))
-
-
-def _int(value, default):
-    try:
-        return int(value if value is not None else default)
-    except (TypeError, ValueError):
-        return default
 
 
 def forecast_all(today, settings):

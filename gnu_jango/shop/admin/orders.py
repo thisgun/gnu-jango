@@ -51,7 +51,7 @@ from gnu_jango.shop.order_lines import (
 )
 from gnu_jango.shop.order_line_split import posted_line_quantities
 from gnu_jango.shop.order_points import run_save_order_points_safely, take_back_order_points
-from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES, STATUS_RETURNED
+from gnu_jango.shop.order_statuses import INACTIVE_LINE_STATUSES, STATUS_RETURNED, sold_line_q
 from gnu_jango.utils.date_ranges import local_days
 
 FAILED_REFUND_WARN_DAYS = 30
