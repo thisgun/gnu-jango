@@ -197,6 +197,17 @@ class EnvProviderTests(TestCase):
         self.assertEqual(audit["payment"]["provider_setting"]["status"], "ready")
         self.assertTrue(audit["summary"]["production_ready"], audit["summary"])
 
+    @override_settings(SHOP_PAYMENT_PROVIDER=" BANK ")
+    def test_an_env_bank_setting_overrides_a_saved_toss_choice(self):
+        # Checkout ignores the admin 결제대행사 once the environment names a provider.
+        set_config(de_pg_service="toss")
+
+        audit = run_audit()
+
+        self.assertEqual(audit["payment"]["chosen_provider"], "bank")
+        self.assertEqual(audit["payment"]["toss"]["status"], "unused")
+        self.assertTrue(audit["summary"]["production_ready"], audit["summary"])
+
     def test_no_provider_setting_is_unused(self):
         self.assertEqual(run_audit()["payment"]["provider_setting"]["status"], "unused")
 

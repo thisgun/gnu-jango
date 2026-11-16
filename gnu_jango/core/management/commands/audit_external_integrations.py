@@ -184,7 +184,7 @@ class Command(BaseCommand):
             "ready" if known else "missing",
             missing=[] if known else ["SHOP_PAYMENT_PROVIDER"],
             details={"value": provider},
-            action="" if known else "Set SHOP_PAYMENT_PROVIDER to toss, nicepay, bank or a PG adapter provider: checkout runs any other value as bank transfer only.",
+            action="" if known else "Set SHOP_PAYMENT_PROVIDER to toss, nicepay, bank, none or a PG adapter provider: checkout runs any other value as bank transfer only.",
         )
 
     def audit_payment_callbacks(self):
