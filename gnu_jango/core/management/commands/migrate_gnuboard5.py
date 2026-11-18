@@ -15,6 +15,7 @@ from django.core.files.images import get_image_dimensions
 from django.core.files.storage import default_storage
 from django.core.management.base import BaseCommand, CommandError
 from django.db import connection, transaction
+from django.db.models import Q
 from django.db.models.fields import AutoFieldMixin
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
@@ -146,6 +147,9 @@ DEFAULT_TABLE_SUFFIXES = {
     "auth_table": "auth",
 }
 LEGACY_MEMBER_IMAGE_EXTENSIONS = {".gif", ".jpg", ".jpeg", ".png"}
+EMAIL_MAX_LENGTH = 254  # Django's EmailField
+# the algorithm of every hash convert_gnuboard_password_hash writes (gnu_jango.users.hashers)
+GNUBOARD_HASH_PREFIX = "gnu_"
 
 
 def parse_php_config(path):
@@ -257,7 +261,7 @@ def post_reply_marker(row):
     return value
 
 
-QA_HTML_LINE_END_RE = re.compile(r"<br\s*/?>|</p\s*>|</div\s*>", re.IGNORECASE)
+QA_HTML_LINE_END_RE = re.compile(r"<br\s*/?>|</(?:p|div|li|tr|h[1-6])\s*>", re.IGNORECASE)
 
 
 def qa_plain_text(row):
@@ -383,8 +387,8 @@ def stock_key(it_id, io_id="", io_type=0):
 class Command(BaseCommand):
     help = (
         "Inspect or migrate selected Gnuboard5 MySQL tables into Django models. Run --apply against a fresh "
-        "target, and re-run it only before go-live: a rerun applies the source rows again, so links, scraps, "
-        "wishlist items and votes removed in Django come back and edited rows take the source values."
+        "target. --apply stops on a target that holds an earlier import; --allow-rerun applies the same dump "
+        "again, before go-live only. A newer dump always goes to a fresh target."
     )
     # g5_config.cf_admin: the only member Gnuboard treats as super admin (lib/common.lib.php is_admin)
     super_admin_id = ""
@@ -408,7 +412,16 @@ class Command(BaseCommand):
             action="store_true",
             help=(
                 "Write imported rows. Without this option the command only inspects/counts. Use a fresh "
-                "target and re-run only before go-live."
+                "target: --apply stops on a target that holds an earlier import."
+            ),
+        )
+        parser.add_argument(
+            "--allow-rerun",
+            action="store_true",
+            help=(
+                "With --apply, apply the same dump again to a target that holds an earlier import, before "
+                "go-live only. Members get their Gnuboard password, block state and admin flags back, and rows "
+                "removed or edited in Django take the source rows again. A newer dump goes to a fresh target."
             ),
         )
         parser.add_argument(
@@ -471,12 +484,19 @@ class Command(BaseCommand):
                     return
 
                 if self.holds_an_earlier_import():
-                    self.warn(
+                    message = (
                         "This target already holds rows from an earlier migrate_gnuboard5 run. A rerun applies the "
-                        "source rows again: social links, scraps, wishlist items and votes members removed in Django "
-                        "come back, and rows edited in Django take the source values. Run against a fresh target, "
-                        "and re-run only before go-live."
+                        "source rows again: members get their Gnuboard password, block state and admin flags back, "
+                        "social links, scraps, wishlist items and votes removed in Django come back, and rows edited "
+                        "or added in Django take the source rows. Import into a fresh target; a newer dump always "
+                        "goes to a fresh target."
                     )
+                    if not options["allow_rerun"]:
+                        raise CommandError(
+                            message + " Nothing was written. To apply the same dump again before go-live, add "
+                            "--allow-rerun."
+                        )
+                    self.warn(message)
                 with transaction.atomic():
                     imported = self.import_selected(cursor, config, selected, options["limit"] or None)
 
@@ -633,7 +653,6 @@ class Command(BaseCommand):
             imported[label] = importers[label](rows)
             if imported[label]:
                 # before a later importer creates rows of a model this one wrote under source ids
-                # (the 1:1 inquiries after the product questions)
                 self.advance_id_sequences()
         if "member_avatars" in selected:
             table = config["tables"]["member_table"]
@@ -670,19 +689,21 @@ class Command(BaseCommand):
         return imported
 
     def holds_an_earlier_import(self):
-        """Rows only an import writes: the source post, 1:1 inquiry and restock request numbers."""
+        """Rows only an import writes: the source post, question and restock request numbers, and
+        members still on the Gnuboard password hash (Django rehashes one at the member's next login)."""
         return (
             Post.objects.filter(legacy_wr_id__isnull=False).exists()
-            or ShopQA.objects.filter(legacy_qa_id__isnull=False).exists()
+            or ShopQA.objects.filter(Q(legacy_iq_id__isnull=False) | Q(legacy_qa_id__isnull=False)).exists()
             or ShopStockNotification.objects.filter(legacy_ss_id__isnull=False).exists()
+            or get_user_model().objects.filter(password__startswith=GNUBOARD_HASH_PREFIX).exists()
         )
 
     def advance_id_sequences(self):
         """Rows imported under their source id leave PostgreSQL id sequences behind, so the next row
-        Django creates (a 1:1 inquiry after the product questions, a menu added in the admin) would
-        take an id already in use. Each sequence moves up to the largest id and never back: on a live
-        database it may be ahead of every row, and an id handed out before must not be reused. A
-        no-op elsewhere; SQLite and MySQL pick the id after the largest."""
+        Django creates (a menu added in the admin) would take an id already in use. Each sequence
+        moves up to the largest id and never back: on a live database it may be ahead of every row,
+        and an id handed out before must not be reused. A no-op elsewhere; SQLite and MySQL pick the
+        id after the largest."""
         if connection.vendor != "postgresql":
             return
         quote = connection.ops.quote_name
@@ -850,9 +871,7 @@ class Command(BaseCommand):
     def unique_email(self, username, email):
         User = get_user_model()
         username = str(username or "member").strip() or "member"
-        email = str(email or "").strip()
-        if not email or "@" not in email:
-            email = "%s@legacy.local" % username
+        email = self.safe_email(email) or "%s@legacy.local" % username
         if not User.objects.filter(email__iexact=email).exclude(username=username).exists():
             return email
 
@@ -1364,8 +1383,8 @@ class Command(BaseCommand):
                     "co_content": scalar(row, "co_content"),
                     "co_mobile_content": scalar(row, "co_mobile_content"),
                     "co_html": integer(row, "co_html", 1),
-                    "co_skin": scalar(row, "co_skin", "basic") or "basic",
-                    "co_mobile_skin": scalar(row, "co_mobile_skin", "basic") or "basic",
+                    "co_skin": text(row, "co_skin", "basic", max_length=64) or "basic",
+                    "co_mobile_skin": text(row, "co_mobile_skin", "basic", max_length=64) or "basic",
                     "co_seo_title": scalar(row, "co_seo_title"),
                     "co_include_head": scalar(row, "co_include_head"),
                     "co_include_tail": scalar(row, "co_include_tail"),
@@ -1488,7 +1507,7 @@ class Command(BaseCommand):
                     "ca_name": scalar(row, "ca_name"),
                     "ca_parent": ca_id[:-2] if len(ca_id) > 2 else "",
                     "ca_order": integer(row, "ca_order", 0),
-                    "ca_skin": scalar(row, "ca_skin"),
+                    "ca_skin": text(row, "ca_skin", max_length=100),
                     "ca_use": bool_char(row, "ca_use", True),
                     # categoryform.php 출력설정 and 쿠폰적용안함
                     "ca_list_mod": max(0, integer(row, "ca_list_mod", 0)),
@@ -2202,8 +2221,9 @@ class Command(BaseCommand):
         return merged or text(row, prefix)
 
     def safe_email(self, value):
+        """The address, or "" when it is none or longer than an email field holds (a cut one is someone else's)."""
         value = str(value or "").strip()
-        return value if "@" in value else ""
+        return value if "@" in value and len(value) <= EMAIL_MAX_LENGTH else ""
 
     def safe_ip(self, value):
         value = str(value or "").strip()
@@ -2301,7 +2321,7 @@ class Command(BaseCommand):
                 # a subject is text in Gnuboard too (get_text); qa_html covers the body only
                 "iq_subject": text(row, "qa_subject", max_length=255),
                 "iq_question": qa_plain_text(row),
-                "iq_email": self.safe_email(scalar(row, "qa_email"))[:254],
+                "iq_email": self.safe_email(scalar(row, "qa_email")),
                 "iq_hp": text(row, "qa_hp", max_length=50),
                 "iq_time": datetime_value(scalar(row, "qa_datetime")),
             }
@@ -2504,7 +2524,7 @@ class Command(BaseCommand):
             product = ShopProduct.objects.filter(pk=scalar(row, "it_id")).first()
             if not review_id or not product:
                 continue
-            username = scalar(row, "mb_id")
+            username = text(row, "mb_id", max_length=150)
             user = User.objects.filter(username=username).first() if username else None
             ShopReview.objects.update_or_create(
                 pk=review_id,
@@ -2512,8 +2532,8 @@ class Command(BaseCommand):
                     "product": product,
                     "user": user,
                     "mb_id": username,
-                    "mb_nick": scalar(row, "is_name"),
-                    "is_name": scalar(row, "is_name"),
+                    "mb_nick": text(row, "is_name", max_length=150),
+                    "is_name": text(row, "is_name", max_length=150),
                     "is_score": integer(row, "is_score", 5),
                     "is_subject": scalar(row, "is_subject") or scalar(row, "is_content")[:80],
                     "is_content": scalar(row, "is_content"),
@@ -2528,26 +2548,27 @@ class Command(BaseCommand):
         count = 0
         User = get_user_model()
         for row in rows:
-            qa_id = integer(row, "iq_id", 0)
+            iq_id = integer(row, "iq_id", 0)
             product = ShopProduct.objects.filter(pk=scalar(row, "it_id")).first()
-            if not qa_id or not product:
+            if not iq_id or not product:
                 continue
-            username = scalar(row, "mb_id")
+            username = text(row, "mb_id", max_length=150)
             user = User.objects.filter(username=username).first() if username else None
+            # keyed by its own source id, not the pk: the 1:1 inquiries share ShopQA's ids
             ShopQA.objects.update_or_create(
-                pk=qa_id,
+                legacy_iq_id=iq_id,
                 defaults={
                     "product": product,
                     "user": user,
                     "mb_id": username,
-                    "mb_nick": scalar(row, "iq_name"),
-                    "iq_name": scalar(row, "iq_name"),
+                    "mb_nick": text(row, "iq_name", max_length=150),
+                    "iq_name": text(row, "iq_name", max_length=150),
                     "iq_subject": scalar(row, "iq_subject") or scalar(row, "iq_question")[:80],
                     "iq_question": scalar(row, "iq_question"),
                     "iq_answer": scalar(row, "iq_answer"),
                     "iq_secret": integer(row, "iq_secret", 0),
-                    "iq_email": scalar(row, "iq_email"),
-                    "iq_hp": scalar(row, "iq_hp"),
+                    "iq_email": self.safe_email(scalar(row, "iq_email")),
+                    "iq_hp": text(row, "iq_hp", max_length=50),
                     "iq_time": datetime_value(scalar(row, "iq_time")),
                 },
             )

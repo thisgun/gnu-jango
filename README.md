@@ -111,7 +111,9 @@ python manage.py migrate_gnuboard5 --source-root "<그누보드5 설치 경로>"
 
 `<그누보드5 설치 경로>`는 `data/dbconfig.php`가 들어 있는 그누보드 폴더입니다(예: Windows XAMPP는 `C:\xampp\htdocs\gnuboard5`, Linux는 `/var/www/gnuboard5`). 실제 DB에 적용하기 전에 대상 DB를 백업하고, 점검 모드 출력으로 가져올 테이블과 행 수를 확인하세요.
 
-`--apply`는 새로 만든(`migrate`만 한) 대상 DB에 실행하고, 다시 실행은 사이트를 열기 전에만 하세요. 다시 실행하면 원본 행을 한 번 더 적용하므로, 회원이 Django에서 지운 소셜 로그인 연결·스크랩·찜·추천이 되살아나고 Django에서 고친 행은 원본 값으로 돌아갑니다. 대상 DB에 이전 실행에서 가져온 행이 있으면 명령이 시작할 때 이 경고를 출력합니다.
+`--apply`는 새로 만든(`migrate`만 한) 대상 DB에 실행합니다. 리허설 뒤 이전하는 날의 최종 덤프처럼 더 새로운 덤프는 언제나 새 대상 DB에 가져오고, 리허설한 DB에 덮어 가져오지 마세요. 대상 DB에 이전 실행에서 가져온 행이 있으면 `--apply`는 아무것도 쓰지 않고 멈춥니다. 사이트를 열기 전에 같은 덤프를 한 번 더 적용할 때만 `--allow-rerun`을 붙이세요. 다시 적용하면 원본 행을 한 번 더 쓰므로 회원의 비밀번호·차단 상태·관리자 권한이 그누보드 값으로 돌아가고, 회원이 Django에서 지운 소셜 로그인 연결·스크랩·찜·추천이 되살아나며, Django에서 고치거나 추가한 행은 원본 행으로 덮일 수 있습니다.
+
+원본 사이트의 열이 Django 필드보다 길게 바뀌어 있으면 PostgreSQL이 그 값을 거부하고 `--apply` 전체가 되돌려집니다. 적용 전에 `python scripts/check_migrate_gnuboard5_lengths.py --source-root "<그누보드5 설치 경로>"`로 넘칠 수 있는 필드를 확인하세요(MySQL은 읽기만 합니다).
 
 ## Next.js 프런트엔드 실행
 

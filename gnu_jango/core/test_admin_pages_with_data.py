@@ -11,6 +11,7 @@ from django.test import Client, SimpleTestCase, TestCase
 from django.utils import timezone
 
 from gnu_jango.bbs.models import Board, Comment, Group, Post
+from gnu_jango.core.models import FAQItem, FAQMaster
 from gnu_jango.shop.models import ShopProduct, ShopQA, ShopReview, ShopStockAdjustment, ShopStockNotification
 from gnu_jango.utils.admin_display import compact_text
 
@@ -130,6 +131,16 @@ class AdminPagesWithDataTests(TestCase):
         ShopStockNotification.objects.create(it_id="ACT001", ss_hp="01012345678")
         html = self.assert_page_ok("/admin/shop/shopstocknotification/")
         self.assertIn('x-model="action"', html)
+
+    def test_faq_pages_render_an_editor_html_subject_longer_than_255_characters(self):
+        master = FAQMaster.objects.create(fm_subject="배송")
+        item = FAQItem.objects.create(master=master, fa_subject="<p>" + "오래 걸리나요 " * 40 + "</p>")
+        for path in (
+            "/admin/core/faqitem/",
+            f"/admin/core/faqitem/{item.pk}/change/",
+            f"/admin/core/faqmaster/{master.pk}/change/",
+        ):
+            self.assertIn("오래 걸리나요", self.assert_page_ok(path))
 
     def test_board_activity_report_renders_recent_comments(self):
         html = self.assert_page_ok("/admin/bbs/post/activity/")

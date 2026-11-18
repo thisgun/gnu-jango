@@ -15,7 +15,6 @@ from django.db import connection
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from gnu_jango.api.community_common import _general_qa_product
 from gnu_jango.api.v1_auth import _social_identity_owner
 from gnu_jango.bbs.models import Post, Post_good, Post_scrap
 from gnu_jango.config.models import Config
