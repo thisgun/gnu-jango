@@ -1,0 +1,48 @@
+name: Handbook sync
+
+# Run by hand after a merge changes the handbook sample text (gnu_jango/config/handbook_*_content.py).
+# It rewrites only the sample chapters nobody edited, keeps edited ones (listed as chapters_kept), and
+# rebuilds the search index. It is not part of CD because ensure_handbook_samples also recreates sample
+# chapters and books that are missing, which would bring back ones an operator deleted on purpose.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: handbook-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      DATABASE_URL: ${{ secrets.HANDBOOK_DATABASE_URL }}
+      G5_PLUGINS: ${{ vars.HANDBOOK_G5_PLUGINS }}
+      DJANGO_SETTINGS_MODULE: example.settings.development
+      ENVIRONMENT: Development
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Check the handbook database secret
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::HANDBOOK_DATABASE_URL is not set"
+            exit 1
+          fi
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Refuse to run with unapplied migrations
+        run: python manage.py migrate --check
+      - name: Update the unedited sample chapters
+        run: python manage.py ensure_handbook_samples --update-unedited
+      - name: Rebuild the search index
+        run: python manage.py rebuild_search_index
