@@ -1,6 +1,7 @@
 import hashlib
 import ipaddress
 import re
+from collections import Counter
 from datetime import datetime, time
 from pathlib import Path
 
@@ -44,6 +45,8 @@ from gnu_jango.shop.models import (
     generate_order_uid,
 )
 from gnu_jango.shop.item_info import parse_item_info_value
+from gnu_jango.shop.order_flow import canonical_status
+from gnu_jango.shop.order_statuses import STATUS_ORDERED, STATUS_PAID, STATUS_READY
 from gnu_jango.users.hashers import convert_gnuboard_password_hash
 from gnu_jango.users.models import Profile, User_Memo, User_Point
 
@@ -208,8 +211,12 @@ def text(row, key, default="", max_length=None):
 
 
 def integer(row, key, default=0):
+    """The column as an int; ``default`` only when it is missing, NULL or blank (a 0 stays 0)."""
+    value = row.get(key)
+    if value is None or str(value).strip() == "":
+        return default
     try:
-        return int(row.get(key, default) or default)
+        return int(value)
     except (TypeError, ValueError):
         return default
 
@@ -225,7 +232,7 @@ def post_reply_marker(row):
 
 
 def bool_char(row, key, default=True):
-    value = str(row.get(key, "")).strip()
+    value = str(scalar(row, key, "")).strip()
     if value == "":
         return default
     return value not in ("0", "N", "n", "false", "False")
@@ -306,6 +313,31 @@ def count_table(cursor, table):
 def table_exists(cursor, table):
     cursor.execute("SHOW TABLES LIKE %s", (table,))
     return bool(cursor.fetchone())
+
+
+# youngcart get_it_stock_qty / get_option_stock_qty subtract the lines still waiting in these
+# from the stock on the fly; it takes a line off the stock itself only later (ct_stock_use 1).
+STOCK_PENDING_STATUSES = frozenset({STATUS_ORDERED, STATUS_PAID, STATUS_READY})
+
+
+def cart_stock_taken(row):
+    """A youngcart cart row whose quantity already came off it_stock_qty / io_stock_qty. A row of
+    quantity 0 (imported as 1) holds nothing a cancel could put back."""
+    return integer(row, "ct_stock_use", 0) == 1 and integer(row, "ct_qty", 0) > 0
+
+
+def cart_stock_pending(row):
+    """A youngcart cart row that youngcart's available stock still subtracts."""
+    return (
+        integer(row, "ct_stock_use", 0) == 0
+        and integer(row, "ct_qty", 0) > 0
+        and canonical_status(text(row, "ct_status")) in STOCK_PENDING_STATUSES
+    )
+
+
+def stock_key(it_id, io_id="", io_type=0):
+    """The stock a line draws on: the option (it_id, io_id, io_type), or the product for io_id ""."""
+    return (str(it_id).strip(), io_id, io_type if io_id else 0)
 
 
 class Command(BaseCommand):
@@ -467,7 +499,20 @@ class Command(BaseCommand):
             self.stdout.write(f"  {label}: {count_text}")
 
     def import_selected(self, cursor, config, selected, limit):
+        # A pending line is stock_adjusted only because the product import takes it off the stock, so
+        # the lines never come in without the stock they are taken from (an older import would oversell).
+        missing_stock_tables = {"shop_item", "shop_item_option"} - selected
+        if "shop_cart" in selected and missing_stock_tables:
+            raise CommandError(
+                "--only shop_cart also needs "
+                + ", ".join(sorted(missing_stock_tables))
+                + " in the same run: order lines YoungCart holds stock for are marked stock_adjusted, which "
+                "is only right when the product stock they come from is imported with them."
+            )
         imported = {}
+        pending_stock = (
+            self.source_pending_stock(cursor, config, limit) if selected & {"shop_item", "shop_item_option"} else Counter()
+        )
         importers = {
             "member": self.import_members,
             "point": self.import_points,
@@ -483,12 +528,12 @@ class Command(BaseCommand):
             "poll_etc": self.import_poll_comments,
             "shop_category": self.import_shop_categories,
             "shop_banner": self.import_shop_banners,
-            "shop_item": self.import_shop_products,
+            "shop_item": lambda rows: self.import_shop_products(rows, pending_stock),
             "shop_event": self.import_shop_events,
             "shop_event_item": self.import_shop_event_items,
             "shop_default": self.import_shop_default,
             "shop_sendcost": self.import_shop_sendcosts,
-            "shop_item_option": self.import_shop_item_options,
+            "shop_item_option": lambda rows: self.import_shop_item_options(rows, pending_stock),
             "shop_item_relation": self.import_shop_item_relations,
             "shop_order": self.import_shop_orders,
             "shop_order_data": self.import_shop_order_data,
@@ -545,6 +590,25 @@ class Command(BaseCommand):
             else:
                 imported["shop_product_categories"] = 0
         return imported
+
+    def source_pending_stock(self, cursor, config, limit=None):
+        """Per stock_key, the quantity of the pending youngcart lines the cart import brings in.
+
+        The product and option import subtract it from the source stock, and the cart import marks
+        those lines stock_adjusted, so a Django cancel puts it back. Both read only the source, so
+        a re-run lands on the same stock instead of subtracting again."""
+        cart_table = config["tables"].get("g5_shop_cart_table", "")
+        order_table = config["tables"].get("g5_shop_order_table", "")
+        if not (cart_table and order_table and table_exists(cursor, cart_table) and table_exists(cursor, order_table)):
+            return Counter()
+        # the cart import skips a row whose order is gone, so no imported line would hold its stock
+        orders = {text(row, "od_id") for row in fetch_rows(cursor, order_table, limit=limit)}
+        pending = Counter()
+        for row in fetch_rows(cursor, cart_table, limit=limit):
+            if text(row, "od_id") in orders and cart_stock_pending(row):
+                key = stock_key(text(row, "it_id"), text(row, "io_id"), integer(row, "io_type", 0))
+                pending[key] += integer(row, "ct_qty", 0)
+        return pending
 
     @staticmethod
     def public_config_tables(config):
@@ -839,7 +903,11 @@ class Command(BaseCommand):
                     "me_send_datetime": datetime_value(scalar(row, "me_send_datetime")),
                     "me_read_datetime": optional_datetime_value(scalar(row, "me_read_datetime")),
                     "me_memo": scalar(row, "me_memo"),
-                    "me_send_id": integer(row, "me_send_id", send_user.pk if send_user else 0),
+                    # Django's received memo names its sender's user id here; gnuboard leaves it 0
+                    # and only fills it on the sent copy (the id of the received one)
+                    "me_send_id": (
+                        integer(row, "me_send_id", 0) if memo_type == "send" else (send_user.pk if send_user else 0)
+                    ),
                     "me_type": memo_type,
                     "me_send_ip": scalar(row, "me_send_ip")[:100],
                 },
@@ -1098,7 +1166,8 @@ class Command(BaseCommand):
         post.legacy_wr_id = legacy_id or None
         post.wr_num = integer(row, "wr_num", 0)
         post.wr_reply = post_reply_marker(row)
-        post.wr_parent = integer(row, "wr_parent", legacy_id)
+        # a post is its own wr_parent; 0 is not a post id to link to
+        post.wr_parent = integer(row, "wr_parent", 0) or legacy_id
         post.ca_name = scalar(row, "ca_name")[:255]
         post.wr_comment = integer(row, "wr_comment", 0)
         post.wr_option = self.write_option(row)
@@ -1333,7 +1402,8 @@ class Command(BaseCommand):
             count += 1
         return count
 
-    def import_shop_products(self, rows):
+    def import_shop_products(self, rows, pending_stock=None):
+        pending_stock = pending_stock or Counter()
         count = 0
         for row in rows:
             it_id = str(scalar(row, "it_id")).strip()
@@ -1359,7 +1429,7 @@ class Command(BaseCommand):
                     **self.shop_product_metrics(row),
                     "it_point": integer(row, "it_point", 0),
                     "it_point_type": integer(row, "it_point_type", 0),
-                    "it_stock_qty": integer(row, "it_stock_qty", 9999),
+                    "it_stock_qty": integer(row, "it_stock_qty", 9999) - pending_stock[stock_key(it_id)],
                     "it_buy_min_qty": integer(row, "it_buy_min_qty", 1),
                     "it_buy_max_qty": integer(row, "it_buy_max_qty", 0),
                     "it_tel_inq": scalar(row, "it_tel_inq"),
@@ -1536,7 +1606,8 @@ class Command(BaseCommand):
                 "de_tax_flag_use": integer(row, "de_tax_flag_use", 0),
                 "de_settle_min_point": integer(row, "de_settle_min_point", 0),
                 "de_settle_max_point": integer(row, "de_settle_max_point", 0),
-                "de_settle_point_unit": integer(row, "de_settle_point_unit", 1),
+                # a point unit of 0 cannot round anything (the admin form starts at 1)
+                "de_settle_point_unit": integer(row, "de_settle_point_unit", 0) or 1,
             },
         )
         return 1
@@ -1627,19 +1698,22 @@ class Command(BaseCommand):
         alt = scalar(row, "it_name")
         return [{"url": image, "alt": alt} for image in self.product_image_paths(row)]
 
-    def import_shop_item_options(self, rows):
+    def import_shop_item_options(self, rows, pending_stock=None):
+        pending_stock = pending_stock or Counter()
         grouped = {}
         for row in rows:
             it_id = str(scalar(row, "it_id")).strip()
             if not it_id:
                 continue
+            io_id = text(row, "io_id")
+            io_type = integer(row, "io_type", 0)
             grouped.setdefault(it_id, []).append(
                 {
                     "io_no": integer(row, "io_no", 0),
-                    "io_id": scalar(row, "io_id"),
-                    "io_type": integer(row, "io_type", 0),
+                    "io_id": io_id,
+                    "io_type": io_type,
                     "io_price": integer(row, "io_price", 0),
-                    "io_stock_qty": integer(row, "io_stock_qty", 0),
+                    "io_stock_qty": integer(row, "io_stock_qty", 0) - pending_stock[stock_key(it_id, io_id, io_type)],
                     "io_noti_qty": integer(row, "io_noti_qty", 0),
                     "io_use": integer(row, "io_use", 1),
                 }
@@ -1765,12 +1839,16 @@ class Command(BaseCommand):
             order_item.ct_price = integer(row, "ct_price", 0)
             order_item.ct_qty = max(integer(row, "ct_qty", 1), 1)
             order_item.ct_point = integer(row, "ct_point", 0)
-            order_item.ct_option = text(row, "ct_option", max_length=255) or text(row, "io_id", max_length=255)
+            # Django keeps the option id here (inventory, cart, subscriptions match on it), not
+            # youngcart's display label; the label is rebuilt from io_id and it_option_subject
+            order_item.ct_option = text(row, "io_id", max_length=255)
             order_item.ct_status = text(row, "ct_status", "order", max_length=50) or "order"
             order_item.io_type = integer(row, "io_type", 0)
             order_item.io_price = integer(row, "io_price", 0)
             order_item.ct_notax = integer(row, "ct_notax", 0)
             order_item.ct_send_cost = integer(row, "ct_send_cost", 0)
+            # source_pending_stock subtracted the pending lines from the imported stock already
+            order_item.stock_adjusted = cart_stock_taken(row) or cart_stock_pending(row)
             self.apply_cart_point_state(order_item, row)
             order_item.image_url = product.image_url if product else ""
             order_item.save()
