@@ -2,6 +2,7 @@
 shows (social logins, 1:1 inquiries, wishlists, scraps, votes, popups, menus) keeps working, and
 nothing grants more admin access than the source did."""
 
+import re
 import tempfile
 from contextlib import nullcontext
 from io import StringIO
@@ -430,6 +431,29 @@ class Gnuboard5OverLongValueTests(TestCase):
         self.assertEqual(ShopQA.objects.get(product_id="OLD").iq_email, "")
         self.assertEqual(ShopPersonalPay.objects.get().pp_email, "")
         self.assertEqual(get_user_model().objects.get(username="longmail").email, "longmail@legacy.local")
+
+    def test_a_shared_address_on_a_long_domain_keeps_its_domain(self):
+        # the second member with an address gets local+username@domain; only the local part may shrink
+        domain = "d" * 180 + ".example.test"
+        shared = "a" * 50 + "@" + domain
+        no_room = "b@" + "e" * 240 + ".test"
+        tables = source()
+        tables["g5_member"] += [
+            member("first", mb_email=shared),
+            member("second-member-with-a-long-id", mb_email=shared),
+            member("third-member-with-a-long-id", mb_email=shared),
+            member("roomy", mb_email=no_room),
+            member("cramped", mb_email=no_room),
+        ]
+
+        run_import(tables, MEMBERS)
+
+        emails = dict(get_user_model().objects.values_list("username", "email"))
+        for username in ("second-member-with-a-long-id", "third-member-with-a-long-id"):
+            self.assertLessEqual(len(emails[username]), 254)
+            self.assertRegex(emails[username], r"^a+\+%s(-\d+)?@%s$" % (username, re.escape(domain)))
+        self.assertEqual(emails["cramped"], "cramped@legacy.local")
+        self.assertEqual(len({email.lower() for email in emails.values()}), len(emails))
 
 
 class Gnuboard5SourceConflictReportTests(TestCase):

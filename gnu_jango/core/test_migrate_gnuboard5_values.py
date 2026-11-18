@@ -12,7 +12,7 @@ from gnu_jango.core.management.commands import migrate_gnuboard5
 from gnu_jango.core.management.commands.migrate_gnuboard5 import Command
 from gnu_jango.core.models import Poll
 from gnu_jango.shop.inventory import cancel_order_with_stock_restore
-from gnu_jango.shop.models import ShopCoupon, ShopCouponZone, ShopOrder, ShopOrderItem, ShopProduct
+from gnu_jango.shop.models import ShopCoupon, ShopCouponZone, ShopOrder, ShopOrderItem, ShopProduct, ShopReview
 from gnu_jango.shop.stock_forecast import stock_level
 from gnu_jango.users.models import User_Memo
 
@@ -22,6 +22,7 @@ CONFIG = {
         "memo_table": "g5_memo",
         "poll_table": "g5_poll",
         "g5_shop_item_table": "g5_shop_item",
+        "g5_shop_item_use_table": "g5_shop_item_use",
         "g5_shop_item_option_table": "g5_shop_item_option",
         "g5_shop_order_table": "g5_shop_order",
         "g5_shop_cart_table": "g5_shop_cart",
@@ -108,6 +109,27 @@ class Gnuboard5ImportValueTests(TestCase):
         coupon = ShopCoupon.objects.get(pk="CP-0")
         self.assertEqual((zone.cp_method, zone.cp_trunc, coupon.cp_method, coupon.cp_trunc), (0, 0, 0, 0))
         self.assertEqual(Poll.objects.get(pk=1).po_use, 0)
+
+    def test_a_tinyint_flag_imports_as_the_zero_or_one_the_shop_reads(self):
+        # PHP reads these columns as truthy (if ($it['it_soldout'])), so any value but 0 is on; a "10"
+        # would also overflow the varchar(1) on PostgreSQL and roll the whole apply back
+        flags = {"it_soldout": 10, "it_type1": -1, "it_type2": 1, "it_use": 0, "it_tel_inq": None, "it_stock_sms": ""}
+        tables = {
+            **source(),
+            "g5_shop_item": [item("FLAGS", **flags)],
+            "g5_shop_item_use": [
+                {"is_id": 1, "it_id": "FLAGS", "is_subject": "좋아요", "is_content": "좋아요", "is_confirm": -1},
+                {"is_id": 2, "it_id": "FLAGS", "is_subject": "숨김", "is_content": "숨김", "is_confirm": 0},
+            ],
+        }
+        self.run_import(tables, SHOP | {"shop_review"})
+
+        product = ShopProduct.objects.get(pk="FLAGS")
+        self.assertEqual(
+            {name: getattr(product, name) for name in flags},
+            {"it_soldout": "1", "it_type1": "1", "it_type2": "1", "it_use": "0", "it_tel_inq": "0", "it_stock_sms": "0"},
+        )
+        self.assertEqual(dict(ShopReview.objects.values_list("pk", "is_confirm")), {1: "1", 2: "0"})
 
     def test_a_missing_or_blank_source_value_takes_the_default(self):
         self.run_import({**source(), "g5_shop_item": [{"it_id": "BARE", "it_name": "BARE", "it_stock_qty": None, "it_sc_price": ""}]})

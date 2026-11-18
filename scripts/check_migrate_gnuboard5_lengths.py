@@ -4,11 +4,12 @@ PostgreSQL refuses a value longer than a varchar(n) and the whole --apply rolls 
 stores it, so an overflow shows up only on the production database. This reads the importer's code
 for each `"field": scalar(row, "column")`, `field=...` and `obj.field = ...`, finds the Django field
 it lands in, and compares that field's max_length with the column's type in the source's
-information_schema. A read cut by `text(..., max_length=n)` or `[:n]` counts as cut to n.
+information_schema. A read cut by `text(..., max_length=n)` or `[:n]` counts as cut to n, and a
+`flag(...)` read, which is "0" or "1", as cut to 1.
 
     python scripts/check_migrate_gnuboard5_lengths.py --source-root "<Gnuboard5 root>"
 
-MySQL is only read. Exit status 1 when a column can overflow its field.
+MySQL is only read. Exit status 1 when a column can overflow its field, a number's digits included.
 """
 
 import argparse
@@ -31,7 +32,9 @@ from django.db import models  # noqa: E402
 
 from gnu_jango.core.management.commands import migrate_gnuboard5 as command  # noqa: E402
 
-STRING_READERS = {"scalar", "text"}
+UNBOUNDED = float("inf")
+# readers of a source column, and the longest text each returns
+STRING_READERS = {"scalar": UNBOUNDED, "text": UNBOUNDED, "flag": 1}
 NOT_TEXT = {"bool", "len", "int", "integer", "bool_char", "max", "min", "exists", "filter", "get", "first"}
 SAME_LENGTH = {"str", "strip", "lower", "upper", "casefold"}
 # importer helpers that cut what they return, and to how many characters
@@ -57,7 +60,6 @@ EXTRA_TABLES = {
     "import_shop_product_tax_flags": "g5_shop_item_table",
     "import_shop_product_categories": "g5_shop_item_table",
 }
-UNBOUNDED = float("inf")
 
 
 def command_models():
@@ -93,7 +95,7 @@ def column_reads(expr, local_values, bound=UNBOUNDED, via=(), seen=()):
             return
         if name in STRING_READERS and isinstance(func, ast.Name):
             if len(expr.args) >= 2 and isinstance(expr.args[1], ast.Constant) and isinstance(expr.args[1].value, str):
-                cut = bound
+                cut = min(bound, STRING_READERS[name])
                 for keyword in expr.keywords:
                     if keyword.arg == "max_length" and isinstance(keyword.value, ast.Constant):
                         cut = min(cut, keyword.value.value)
@@ -277,7 +279,7 @@ def main():
         print(f"{kind} {line}")
     for line in sorted(set(unresolved)):
         print(line)
-    return 1 if any(kind.startswith(("OVERFLOWS", "CAN")) for kind, _ in findings) else 0
+    return 1 if any(kind.startswith(("OVERFLOWS", "CAN", "NUMBER")) for kind, _ in findings) else 0
 
 
 if __name__ == "__main__":
