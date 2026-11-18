@@ -1,26 +1,35 @@
 import hashlib
+import html
 import ipaddress
+import json
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime, time
 from pathlib import Path
 
+from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import make_password
 from django.core.files.base import File
 from django.core.files.images import get_image_dimensions
 from django.core.files.storage import default_storage
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
+from django.db import connection, transaction
+from django.db.models import Q
+from django.db.models.fields import AutoFieldMixin
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
+from django.utils.html import strip_tags
 
 from gnu_jango import defaults
+from gnu_jango.api.community_common import _general_qa_product
+from gnu_jango.api.community_qas import QA_ACTIVE_EXTENSION_RE, _qa_empty_meta, _qa_load_meta, _qa_save_meta
+from gnu_jango.api.v1_auth import SOCIAL_PROVIDER_SPECS, _social_identity_config_name
 from gnu_jango.notifications.context import suppress_notification_events
-from gnu_jango.bbs.models import Board, Comment, Group, Post, Post_file
+from gnu_jango.bbs.models import Board, Comment, Group, Post, Post_file, Post_good, Post_scrap
 from gnu_jango.config import signals
 from gnu_jango.config.models import Config
-from gnu_jango.core.models import ContentPage, FAQItem, FAQMaster, Poll, PollChoice, PollComment
+from gnu_jango.core.models import ContentPage, FAQItem, FAQMaster, New_win, Poll, PollChoice, PollComment, Site_menu
 from gnu_jango.shop.models import (
     ShopAddress,
     ShopBanner,
@@ -41,6 +50,7 @@ from gnu_jango.shop.models import (
     ShopStockNotification,
     ShopShippingCost,
     ShopShippingPolicy,
+    ShopWishlist,
     ORDER_ITEM_STATUS_COMPLETED,
     generate_order_uid,
 )
@@ -84,6 +94,15 @@ TABLE_KEYS = {
     "g5_shop_item_use_table": "shop_review",
     "g5_shop_item_qa_table": "shop_qna",
     "g5_shop_item_stocksms_table": "shop_item_stocksms",
+    # after the members, posts, products and product questions they point at
+    "social_profile_table": "member_social",
+    "qa_content_table": "qa_content",
+    "g5_shop_wish_table": "shop_wish",
+    "scrap_table": "scrap",
+    "board_good_table": "board_good",
+    "new_win_table": "new_win",
+    "menu_table": "menu",
+    "auth_table": "auth",
 }
 DEFAULT_TABLE_SUFFIXES = {
     "member_table": "member",
@@ -118,8 +137,19 @@ DEFAULT_TABLE_SUFFIXES = {
     "g5_shop_item_use_table": "item_use",
     "g5_shop_item_qa_table": "item_qa",
     "g5_shop_item_stocksms_table": "item_stocksms",
+    "social_profile_table": "member_social_profiles",
+    "qa_content_table": "qa_content",
+    "g5_shop_wish_table": "wish",
+    "scrap_table": "scrap",
+    "board_good_table": "board_good",
+    "new_win_table": "new_win",
+    "menu_table": "menu",
+    "auth_table": "auth",
 }
 LEGACY_MEMBER_IMAGE_EXTENSIONS = {".gif", ".jpg", ".jpeg", ".png"}
+EMAIL_MAX_LENGTH = 254  # Django's EmailField
+# the algorithm of every hash convert_gnuboard_password_hash writes (gnu_jango.users.hashers)
+GNUBOARD_HASH_PREFIX = "gnu_"
 
 
 def parse_php_config(path):
@@ -229,6 +259,20 @@ def post_reply_marker(row):
     if len(value) > 10:
         raise ValueError("Gnuboard wr_reply values cannot exceed 10 characters.")
     return value
+
+
+QA_HTML_LINE_END_RE = re.compile(r"<br\s*/?>|</(?:p|div|li|tr|h[1-6])\s*>", re.IGNORECASE)
+
+
+def qa_plain_text(row):
+    """A g5_qa_content body as the plain text a Django 1:1 inquiry holds and the page prints as is.
+    qa_html 1 and 2 are editor HTML (qaview.php conv_content); qa_html 0 is text already."""
+    content = text(row, "qa_content")
+    if integer(row, "qa_html", 0) <= 0:
+        return content
+    content = html.unescape(strip_tags(QA_HTML_LINE_END_RE.sub("\n", content)))
+    lines = content.replace("\xa0", " ").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(line.rstrip() for line in lines)).strip()
 
 
 def bool_char(row, key, default=True):
@@ -341,7 +385,16 @@ def stock_key(it_id, io_id="", io_type=0):
 
 
 class Command(BaseCommand):
-    help = "Inspect or migrate selected Gnuboard5 MySQL tables into Django models."
+    help = (
+        "Inspect or migrate selected Gnuboard5 MySQL tables into Django models. Run --apply against a fresh "
+        "target. --apply stops on a target that holds an earlier import; --allow-rerun applies the same dump "
+        "again, before go-live only. A newer dump always goes to a fresh target."
+    )
+    # g5_config.cf_admin: the only member Gnuboard treats as super admin (lib/common.lib.php is_admin)
+    super_admin_id = ""
+
+    def warn(self, message):
+        self.stdout.write(self.style.WARNING(message))
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -357,13 +410,28 @@ class Command(BaseCommand):
         parser.add_argument(
             "--apply",
             action="store_true",
-            help="Write imported rows. Without this option the command only inspects/counts.",
+            help=(
+                "Write imported rows. Without this option the command only inspects/counts. Use a fresh "
+                "target: --apply stops on a target that holds an earlier import."
+            ),
+        )
+        parser.add_argument(
+            "--allow-rerun",
+            action="store_true",
+            help=(
+                "With --apply, apply the same dump again to a target that holds an earlier import, before "
+                "go-live only. Members get their Gnuboard password, block state and admin flags back, and rows "
+                "removed or edited in Django take the source rows again. A newer dump goes to a fresh target."
+            ),
         )
         parser.add_argument(
             "--limit",
             type=int,
             default=0,
-            help="Limit rows per source table during import for smoke testing.",
+            help=(
+                "Limit rows per source table during import for smoke testing. Rows come in MySQL's own "
+                "order (no ORDER BY), so a limited run may skip rows that point at rows it left out."
+            ),
         )
         parser.add_argument(
             "--only",
@@ -415,6 +483,20 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.WARNING("Dry run only. Re-run with --apply to import rows."))
                     return
 
+                if self.holds_an_earlier_import():
+                    message = (
+                        "This target already holds rows from an earlier migrate_gnuboard5 run. A rerun applies the "
+                        "source rows again: members get their Gnuboard password, block state and admin flags back, "
+                        "social links, scraps, wishlist items and votes removed in Django come back, and rows edited "
+                        "or added in Django take the source rows. Import into a fresh target; a newer dump always "
+                        "goes to a fresh target."
+                    )
+                    if not options["allow_rerun"]:
+                        raise CommandError(
+                            message + " Nothing was written. To apply the same dump again before go-live, add "
+                            "--allow-rerun."
+                        )
+                    self.warn(message)
                 with transaction.atomic():
                     imported = self.import_selected(cursor, config, selected, options["limit"] or None)
 
@@ -510,6 +592,8 @@ class Command(BaseCommand):
                 "is only right when the product stock they come from is imported with them."
             )
         imported = {}
+        if "member" in selected:
+            self.super_admin_id = self.source_super_admin(cursor, config)
         pending_stock = (
             self.source_pending_stock(cursor, config, limit) if selected & {"shop_item", "shop_item_option"} else Counter()
         )
@@ -546,6 +630,14 @@ class Command(BaseCommand):
             "shop_review": self.import_shop_reviews,
             "shop_qna": self.import_shop_qna,
             "shop_item_stocksms": self.import_shop_stock_notifications,
+            "member_social": self.import_member_social,
+            "qa_content": self.import_qa_content,
+            "shop_wish": self.import_shop_wishes,
+            "scrap": self.import_scraps,
+            "board_good": self.import_board_goods,
+            "new_win": self.import_new_wins,
+            "menu": self.import_menus,
+            "auth": self.report_admin_auth,
         }
         for key, label in TABLE_KEYS.items():
             if label not in selected:
@@ -559,6 +651,9 @@ class Command(BaseCommand):
                 continue
             rows = fetch_rows(cursor, table, limit=limit)
             imported[label] = importers[label](rows)
+            if imported[label]:
+                # before a later importer creates rows of a model this one wrote under source ids
+                self.advance_id_sequences()
         if "member_avatars" in selected:
             table = config["tables"]["member_table"]
             if table_exists(cursor, table):
@@ -589,7 +684,54 @@ class Command(BaseCommand):
                 imported["shop_product_categories"] = self.import_shop_product_categories(rows)
             else:
                 imported["shop_product_categories"] = 0
+        if any(imported.values()):
+            self.advance_id_sequences()
         return imported
+
+    def holds_an_earlier_import(self):
+        """Rows only an import writes: the source post, question and restock request numbers, and
+        members still on the Gnuboard password hash (Django rehashes one at the member's next login)."""
+        return (
+            Post.objects.filter(legacy_wr_id__isnull=False).exists()
+            or ShopQA.objects.filter(Q(legacy_iq_id__isnull=False) | Q(legacy_qa_id__isnull=False)).exists()
+            or ShopStockNotification.objects.filter(legacy_ss_id__isnull=False).exists()
+            or get_user_model().objects.filter(password__startswith=GNUBOARD_HASH_PREFIX).exists()
+        )
+
+    def advance_id_sequences(self):
+        """Rows imported under their source id leave PostgreSQL id sequences behind, so the next row
+        Django creates (a menu added in the admin) would take an id already in use. Each sequence
+        moves up to the largest id and never back: on a live database it may be ahead of every row,
+        and an id handed out before must not be reused. A no-op elsewhere; SQLite and MySQL pick the
+        id after the largest."""
+        if connection.vendor != "postgresql":
+            return
+        quote = connection.ops.quote_name
+        with connection.cursor() as db_cursor:
+            for label in ("users", "bbs", "core", "shop"):
+                for model in apps.get_app_config(label).get_models():
+                    pk = model._meta.pk
+                    if model._meta.proxy or not model._meta.managed or not isinstance(pk, AutoFieldMixin):
+                        continue
+                    db_cursor.execute("SELECT pg_get_serial_sequence(%s, %s)", [model._meta.db_table, pk.column])
+                    sequence = db_cursor.fetchone()[0]
+                    if not sequence:
+                        continue
+                    db_cursor.execute(
+                        f"SELECT (SELECT MAX({quote(pk.column)}) FROM {quote(model._meta.db_table)}), last_value, "
+                        f"is_called FROM {sequence}"
+                    )
+                    largest, last_value, is_called = db_cursor.fetchone()
+                    next_id = last_value + 1 if is_called else last_value
+                    if largest is not None and largest >= next_id:
+                        db_cursor.execute("SELECT setval(%s, %s)", [sequence, largest])
+
+    def source_super_admin(self, cursor, config):
+        config_table, _ = self.public_config_tables(config)
+        if not table_exists(cursor, config_table):
+            return ""
+        rows = fetch_rows(cursor, config_table, limit=1)
+        return text(rows[0], "cf_admin").strip() if rows else ""
 
     def source_pending_stock(self, cursor, config, limit=None):
         """Per stock_key, the quantity of the pending youngcart lines the cart import brings in.
@@ -613,8 +755,8 @@ class Command(BaseCommand):
     @staticmethod
     def public_config_tables(config):
         return (
-            config["tables"].get("config_table") or f"{config['table_prefix']}config",
-            config["tables"].get("g5_shop_default_table") or f"{config['shop_prefix']}default",
+            config["tables"].get("config_table") or f"{config.get('table_prefix', 'g5_')}config",
+            config["tables"].get("g5_shop_default_table") or f"{config.get('shop_prefix', 'g5_shop_')}default",
         )
 
     def import_public_config(self, cursor, config):
@@ -729,9 +871,7 @@ class Command(BaseCommand):
     def unique_email(self, username, email):
         User = get_user_model()
         username = str(username or "member").strip() or "member"
-        email = str(email or "").strip()
-        if not email or "@" not in email:
-            email = "%s@legacy.local" % username
+        email = self.safe_email(email) or "%s@legacy.local" % username
         if not User.objects.filter(email__iexact=email).exclude(username=username).exists():
             return email
 
@@ -757,8 +897,10 @@ class Command(BaseCommand):
                     "password": self.legacy_password(row),
                     "first_name": scalar(row, "mb_name")[:150],
                     "email": self.unique_email(username, scalar(row, "mb_email")),
-                    "is_staff": integer(row, "mb_level", 0) >= 10,
-                    "is_superuser": integer(row, "mb_level", 0) >= 10,
+                    # mb_level 10 alone opens no Gnuboard admin page: only cf_admin is super admin, and
+                    # a sub-admin's g5_auth menu grants have no Django equivalent (report_admin_auth)
+                    "is_staff": bool(self.super_admin_id) and username == self.super_admin_id,
+                    "is_superuser": bool(self.super_admin_id) and username == self.super_admin_id,
                     "is_active": not bool(scalar(row, "mb_leave_date") or scalar(row, "mb_intercept_date")),
                     "date_joined": datetime_value(scalar(row, "mb_datetime")),
                     "last_login": optional_datetime_value(scalar(row, "mb_today_login")),
@@ -791,6 +933,17 @@ class Command(BaseCommand):
             self.copy_legacy_member_avatar(profile, username)
             profile.save()
             count += 1
+        super_admin = User.objects.filter(username=self.super_admin_id, is_superuser=True).first()
+        if rows and not super_admin:
+            self.warn(
+                f"member: the source super admin (cf_admin {self.super_admin_id!r}) was not imported, so no "
+                "member has Django admin access. Run createsuperuser."
+            )
+        elif rows and not super_admin.is_active:
+            self.warn(
+                f"member: the source super admin (cf_admin {self.super_admin_id!r}) is left or blocked in the "
+                "source, so it came in inactive and cannot log in to the Django admin. Run createsuperuser."
+            )
         return count
 
     def import_member_avatars(self, rows):
@@ -1230,8 +1383,8 @@ class Command(BaseCommand):
                     "co_content": scalar(row, "co_content"),
                     "co_mobile_content": scalar(row, "co_mobile_content"),
                     "co_html": integer(row, "co_html", 1),
-                    "co_skin": scalar(row, "co_skin", "basic") or "basic",
-                    "co_mobile_skin": scalar(row, "co_mobile_skin", "basic") or "basic",
+                    "co_skin": text(row, "co_skin", "basic", max_length=64) or "basic",
+                    "co_mobile_skin": text(row, "co_mobile_skin", "basic", max_length=64) or "basic",
                     "co_seo_title": scalar(row, "co_seo_title"),
                     "co_include_head": scalar(row, "co_include_head"),
                     "co_include_tail": scalar(row, "co_include_tail"),
@@ -1354,7 +1507,7 @@ class Command(BaseCommand):
                     "ca_name": scalar(row, "ca_name"),
                     "ca_parent": ca_id[:-2] if len(ca_id) > 2 else "",
                     "ca_order": integer(row, "ca_order", 0),
-                    "ca_skin": scalar(row, "ca_skin"),
+                    "ca_skin": text(row, "ca_skin", max_length=100),
                     "ca_use": bool_char(row, "ca_use", True),
                     # categoryform.php 출력설정 and 쿠폰적용안함
                     "ca_list_mod": max(0, integer(row, "ca_list_mod", 0)),
@@ -1405,11 +1558,18 @@ class Command(BaseCommand):
     def import_shop_products(self, rows, pending_stock=None):
         pending_stock = pending_stock or Counter()
         count = 0
+        missing_images = []
         for row in rows:
             it_id = str(scalar(row, "it_id")).strip()
             if not it_id:
                 continue
             category = self.product_category(row)
+            missing = []
+            images = self.product_image_paths(row, missing)
+            if missing:
+                missing_images.append(it_id)
+            # it_time is when the product was registered: the new-arrival order (ShopProduct -created_at)
+            registered = optional_datetime_value(scalar(row, "it_time"))
             ShopProduct.objects.update_or_create(
                 it_id=it_id,
                 defaults={
@@ -1457,11 +1617,17 @@ class Command(BaseCommand):
                     **self.product_info_fields(row),
                     "it_option_subject": scalar(row, "it_option_subject"),
                     "it_supply_subject": scalar(row, "it_supply_subject"),
-                    "image_url": self.product_image_url(row),
-                    "images": self.product_images(row),
+                    "image_url": images[0] if images else "",
+                    "images": [{"url": image, "alt": scalar(row, "it_name")} for image in images],
+                    **({"created_at": registered} if registered else {}),
                 },
             )
             count += 1
+        if missing_images:
+            self.warn(
+                f"shop_item: {len(missing_images)} product(s) list image files missing from the source: "
+                + ", ".join(missing_images)
+            )
         return count
 
     def product_info_fields(self, row):
@@ -1642,7 +1808,8 @@ class Command(BaseCommand):
                 return category
         return None
 
-    def product_image_paths(self, row):
+    def product_image_paths(self, row, missing=None):
+        """The product's image URLs; the it_imgN values whose file is not under data/item go to missing."""
         image_root = self.source_root / "data" / "item"
         image_root_exists = image_root.is_dir()
         images = []
@@ -1665,6 +1832,8 @@ class Command(BaseCommand):
                 except ValueError:
                     continue
                 if not image_path.is_file():
+                    if missing is not None:
+                        missing.append(relative.as_posix())
                     continue
             images.append(f"/data/item/{relative.as_posix()}")
 
@@ -1689,14 +1858,6 @@ class Command(BaseCommand):
         if not images and (product_dir / "w700.png").is_file():
             images.append(f"/data/item/{it_id}/w700.png")
         return images
-
-    def product_image_url(self, row):
-        images = self.product_image_paths(row)
-        return images[0] if images else ""
-
-    def product_images(self, row):
-        alt = scalar(row, "it_name")
-        return [{"url": image, "alt": alt} for image in self.product_image_paths(row)]
 
     def import_shop_item_options(self, rows, pending_stock=None):
         pending_stock = pending_stock or Counter()
@@ -2060,8 +2221,9 @@ class Command(BaseCommand):
         return merged or text(row, prefix)
 
     def safe_email(self, value):
+        """The address, or "" when it is none or longer than an email field holds (a cut one is someone else's)."""
         value = str(value or "").strip()
-        return value if "@" in value else ""
+        return value if "@" in value and len(value) <= EMAIL_MAX_LENGTH else ""
 
     def safe_ip(self, value):
         value = str(value or "").strip()
@@ -2076,6 +2238,284 @@ class Command(BaseCommand):
         image = scalar(row, "cz_file")
         return f"/data/coupon/{image}" if image else ""
 
+    def legacy_post(self, bo_table, wr_id):
+        board = Board.objects.filter(bo_table=str(bo_table or "").strip()).first()
+        post = Post.objects.filter(board=board, legacy_wr_id=wr_id).order_by("pk").first() if board and wr_id else None
+        return board, post
+
+    def report_skipped(self, label, skipped):
+        if skipped:
+            reasons = ", ".join(f"{reason} {count}" for reason, count in sorted(skipped.items()))
+            self.warn(f"{label}: skipped {sum(skipped.values())} row(s): {reasons}")
+
+    def import_member_social(self, rows):
+        """g5_member_social_profiles as the identity links the Django social login looks up
+        (v1_auth._social_identity_owner): HybridAuth's provider name and identifier are the provider
+        and user id Django reads back from the same provider."""
+        count = 0
+        skipped = Counter()
+        links = defaultdict(list)
+        for row in rows:
+            provider = text(row, "provider").strip().lower()
+            identifier = text(row, "identifier").strip()[:255]
+            if provider not in SOCIAL_PROVIDER_SPECS:
+                skipped["unknown provider"] += 1
+            elif not identifier:
+                skipped["no identifier"] += 1
+            else:
+                links[(provider, identifier)].append(row)
+        conflicts = []
+        for (provider, identifier), link_rows in links.items():
+            # social_get_data(): "where provider and identifier ... order by mb_id desc" logs in the first row
+            row = max(link_rows, key=lambda link: text(link, "mb_id").strip().casefold())
+            mb_id = text(row, "mb_id").strip()
+            others = sorted({text(link, "mb_id").strip() for link in link_rows} - {mb_id})
+            if others:
+                conflicts.append(f"  {provider} {identifier}: {mb_id} (not {', '.join(others)})")
+            user = self.legacy_user(mb_id)
+            if not user:
+                skipped["member not imported"] += 1
+                continue
+            linked_at = optional_datetime_value(scalar(row, "mp_register_day"))
+            payload = {
+                "provider": provider,
+                "provider_label": SOCIAL_PROVIDER_SPECS[provider].get("label", provider.title()),
+                "provider_user_id": identifier,
+                "user_id": user.pk,
+                "username": user.get_username(),
+                "email": user.email,
+                "linked_at": (linked_at or timezone.now()).isoformat(),
+            }
+            Config.objects.update_or_create(
+                name=_social_identity_config_name(provider, identifier),
+                defaults={"value": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))},
+            )
+            count += 1
+        if conflicts:
+            self.warn(
+                f"member_social: {len(conflicts)} identity(ies) are linked to more than one member in the source; "
+                "each logs in to the member Gnuboard picks (ORDER BY mb_id DESC):"
+            )
+            for line in sorted(conflicts):
+                self.warn(line)
+        self.report_skipped("member_social", skipped)
+        return count
+
+    def import_qa_content(self, rows):
+        """g5_qa_content as 1:1 inquiries. Gnuboard keeps the answer as its own row (qa_type 1,
+        qa_parent the question); Django keeps it on the question (iq_answer) and its subject in the
+        qa_meta config row, and an inquiry is answered when iq_answer is set."""
+        questions = [row for row in rows if integer(row, "qa_type", 0) == 0 and integer(row, "qa_id", 0) > 0]
+        answers = {integer(row, "qa_parent", 0): row for row in rows if integer(row, "qa_type", 0) == 1}
+        product = _general_qa_product() if questions else None
+        items = {}
+        for row in questions:
+            legacy_id = integer(row, "qa_id", 0)
+            username = text(row, "mb_id").strip()
+            defaults = {
+                "product": product,
+                "user": self.legacy_user(username),
+                "mb_id": username,
+                "mb_nick": text(row, "qa_name", max_length=150),
+                "iq_name": text(row, "qa_name", max_length=150),
+                # a subject is text in Gnuboard too (get_text); qa_html covers the body only
+                "iq_subject": text(row, "qa_subject", max_length=255),
+                "iq_question": qa_plain_text(row),
+                "iq_email": self.safe_email(scalar(row, "qa_email")),
+                "iq_hp": text(row, "qa_hp", max_length=50),
+                "iq_time": datetime_value(scalar(row, "qa_datetime")),
+            }
+            if legacy_id in answers:
+                # with no source answer, an answer written in Django since the last run stays
+                defaults["iq_answer"] = qa_plain_text(answers[legacy_id])
+            items[legacy_id], _ = ShopQA.objects.update_or_create(legacy_qa_id=legacy_id, defaults=defaults)
+
+        unanswered = []
+        missing_files = []
+        for row in questions:
+            legacy_id = integer(row, "qa_id", 0)
+            item = items[legacy_id]
+            if integer(row, "qa_status", 0) == 1 and not item.iq_answer:
+                unanswered.append(legacy_id)
+            meta = _qa_empty_meta()
+            meta["answer_subject"] = (
+                text(answers[legacy_id], "qa_subject") if legacy_id in answers else _qa_load_meta(item.pk)["answer_subject"]
+            )
+            related = items.get(integer(row, "qa_related", 0))
+            if related and related.pk != item.pk:
+                # a 추가 질문: Django marks a follow-up with its own id and the question it follows
+                meta["parent"] = item.pk
+                meta["related"] = related.pk
+            for slot in (1, 2):
+                copied = self.copy_legacy_qa_file(item, text(row, f"qa_file{slot}"), text(row, f"qa_source{slot}"))
+                if copied is None:
+                    missing_files.append(legacy_id)
+                elif copied:
+                    meta["files"][slot - 1] = copied
+            if meta != _qa_empty_meta():
+                _qa_save_meta(item.pk, meta)
+        if unanswered:
+            self.warn(
+                f"qa_content: {len(unanswered)} inquiry(ies) marked answered in the source have no answer row: qa_id "
+                + ", ".join(map(str, unanswered))
+            )
+        if missing_files:
+            self.warn(
+                f"qa_content: {len(missing_files)} attachment(s) missing from the source (or of a refused type) "
+                "were not imported: qa_id " + ", ".join(map(str, dict.fromkeys(missing_files)))
+            )
+        return len(items)
+
+    def copy_legacy_qa_file(self, item, filename, source_name):
+        """The qa_meta file slot for a data/qa attachment: {} when there is none, None when it cannot
+        be imported (missing, outside data/qa, or a type qawrite_update.php would refuse)."""
+        filename = self.legacy_filename(filename)
+        if not filename:
+            return {}
+        name = source_name or filename
+        base = (self.source_root / "data" / "qa").resolve()
+        path = (base / filename).resolve()
+        if not path.is_relative_to(base) or not path.is_file():
+            return None
+        if QA_ACTIVE_EXTENSION_RE.search(filename) or QA_ACTIVE_EXTENSION_RE.search(name):
+            return None
+        target = f"shop/qas/{item.pk}/{filename}"
+        if not default_storage.exists(target):
+            with path.open("rb") as source_file:
+                target = default_storage.save(target, File(source_file))
+        return {"path": target, "name": name, "url": default_storage.url(target)}
+
+    def import_shop_wishes(self, rows):
+        count = 0
+        skipped = Counter()
+        for row in rows:
+            user = self.legacy_user(text(row, "mb_id").strip())
+            it_id = text(row, "it_id", max_length=40).strip()
+            if not user or not it_id:
+                skipped["member not imported" if it_id else "no product id"] += 1
+                continue
+            # the same key the wishlist API adds a product under (shop_cart.wishlist_view)
+            ShopWishlist.objects.update_or_create(
+                user=user,
+                it_id=it_id,
+                defaults={
+                    "product": ShopProduct.objects.filter(pk=it_id).first(),
+                    "wi_time": datetime_value(scalar(row, "wi_time")),
+                },
+            )
+            count += 1
+        self.report_skipped("shop_wish", skipped)
+        return count
+
+    def import_scraps(self, rows):
+        """g5_scrap as Post_scrap, the scraps the member API lists (User_Scrap is an admin-only leftover)."""
+        count = 0
+        skipped = Counter()
+        for row in rows:
+            user = self.legacy_user(text(row, "mb_id").strip())
+            board, post = self.legacy_post(scalar(row, "bo_table"), integer(row, "wr_id", 0))
+            if not user or not post:
+                skipped["member not imported" if post else "post not imported"] += 1
+                continue
+            Post_scrap.objects.update_or_create(
+                user=user, board=board, post=post, defaults={"ms_datetime": datetime_value(scalar(row, "ms_datetime"))}
+            )
+            count += 1
+        self.report_skipped("scrap", skipped)
+        return count
+
+    def import_board_goods(self, rows):
+        """g5_board_good: the vote each member already cast, so good.php's once-per-member rule holds.
+        The post's wr_good / wr_nogood totals come with the post itself."""
+        count = 0
+        skipped = Counter()
+        for row in rows:
+            flag = text(row, "bg_flag").strip()
+            user = self.legacy_user(text(row, "mb_id").strip())
+            board, post = self.legacy_post(scalar(row, "bo_table"), integer(row, "wr_id", 0))
+            if flag not in ("good", "nogood"):
+                skipped["unknown bg_flag"] += 1
+                continue
+            if not user or not post:
+                skipped["member not imported" if post else "post not imported"] += 1
+                continue
+            Post_good.objects.update_or_create(
+                post=post,
+                user=user,
+                defaults={"board": board, "bg_flag": flag, "bg_datetime": datetime_value(scalar(row, "bg_datetime"))},
+            )
+            count += 1
+        self.report_skipped("board_good", skipped)
+        return count
+
+    def import_new_wins(self, rows):
+        count = 0
+        for row in rows:
+            nw_id = integer(row, "nw_id", 0)
+            if nw_id <= 0:
+                continue
+            New_win.objects.update_or_create(
+                pk=nw_id,
+                defaults={
+                    # youngcart adds "shop"; the community popup page shows "both" and "comm"
+                    "nw_division": text(row, "nw_division", "comm", max_length=10),
+                    "nw_device": text(row, "nw_device", "both", max_length=10),
+                    "nw_begin_time": optional_datetime_value(scalar(row, "nw_begin_time")),
+                    "nw_end_time": optional_datetime_value(scalar(row, "nw_end_time")),
+                    "nw_disable_hours": integer(row, "nw_disable_hours", 0),
+                    "nw_left": integer(row, "nw_left", 0),
+                    "nw_top": integer(row, "nw_top", 0),
+                    "nw_height": integer(row, "nw_height", 0),
+                    "nw_width": integer(row, "nw_width", 0),
+                    "nw_subject": text(row, "nw_subject"),
+                    "nw_content": text(row, "nw_content"),
+                    "nw_content_html": integer(row, "nw_content_html", 0),
+                },
+            )
+            count += 1
+        return count
+
+    def import_menus(self, rows):
+        count = 0
+        for row in rows:
+            me_id = integer(row, "me_id", 0)
+            if me_id <= 0:
+                continue
+            Site_menu.objects.update_or_create(
+                pk=me_id,
+                defaults={
+                    "me_code": text(row, "me_code", max_length=255),
+                    "me_name": text(row, "me_name", max_length=255),
+                    "me_link": text(row, "me_link", max_length=255),
+                    "me_target": text(row, "me_target", max_length=255),
+                    "me_order": integer(row, "me_order", 0),
+                    "me_use": integer(row, "me_use", 0),
+                    "me_mobile_use": integer(row, "me_mobile_use", 0),
+                },
+            )
+            count += 1
+        return count
+
+    def report_admin_auth(self, rows):
+        """g5_auth is not imported. Gnuboard grants a sub-admin r/w/d per admin menu code; Django
+        admin access is per-model permissions (groups such as setup_admin_role_presets), and a menu
+        code does not map onto a set of models without granting more than the source did. The run
+        lists each grant so the operator can assign a Django role by hand."""
+        grants = defaultdict(list)
+        for row in rows:
+            mb_id = text(row, "mb_id").strip()
+            if mb_id:
+                grants[mb_id].append(f"{text(row, 'au_menu').strip()}({text(row, 'au_auth').strip()})")
+        if grants:
+            self.warn(
+                f"auth: {sum(map(len, grants.values()))} admin menu grant(s) for {len(grants)} member(s) were not "
+                "imported. Django admin uses per-model permissions, so these members have no admin access; "
+                "assign each a Django group (see setup_admin_role_presets) by hand:"
+            )
+            for mb_id, menus in sorted(grants.items()):
+                self.warn(f"  {mb_id}: {' '.join(sorted(menus))}")
+        return 0
+
     def import_shop_reviews(self, rows):
         count = 0
         User = get_user_model()
@@ -2084,7 +2524,7 @@ class Command(BaseCommand):
             product = ShopProduct.objects.filter(pk=scalar(row, "it_id")).first()
             if not review_id or not product:
                 continue
-            username = scalar(row, "mb_id")
+            username = text(row, "mb_id", max_length=150)
             user = User.objects.filter(username=username).first() if username else None
             ShopReview.objects.update_or_create(
                 pk=review_id,
@@ -2092,8 +2532,8 @@ class Command(BaseCommand):
                     "product": product,
                     "user": user,
                     "mb_id": username,
-                    "mb_nick": scalar(row, "is_name"),
-                    "is_name": scalar(row, "is_name"),
+                    "mb_nick": text(row, "is_name", max_length=150),
+                    "is_name": text(row, "is_name", max_length=150),
                     "is_score": integer(row, "is_score", 5),
                     "is_subject": scalar(row, "is_subject") or scalar(row, "is_content")[:80],
                     "is_content": scalar(row, "is_content"),
@@ -2108,26 +2548,27 @@ class Command(BaseCommand):
         count = 0
         User = get_user_model()
         for row in rows:
-            qa_id = integer(row, "iq_id", 0)
+            iq_id = integer(row, "iq_id", 0)
             product = ShopProduct.objects.filter(pk=scalar(row, "it_id")).first()
-            if not qa_id or not product:
+            if not iq_id or not product:
                 continue
-            username = scalar(row, "mb_id")
+            username = text(row, "mb_id", max_length=150)
             user = User.objects.filter(username=username).first() if username else None
+            # keyed by its own source id, not the pk: the 1:1 inquiries share ShopQA's ids
             ShopQA.objects.update_or_create(
-                pk=qa_id,
+                legacy_iq_id=iq_id,
                 defaults={
                     "product": product,
                     "user": user,
                     "mb_id": username,
-                    "mb_nick": scalar(row, "iq_name"),
-                    "iq_name": scalar(row, "iq_name"),
+                    "mb_nick": text(row, "iq_name", max_length=150),
+                    "iq_name": text(row, "iq_name", max_length=150),
                     "iq_subject": scalar(row, "iq_subject") or scalar(row, "iq_question")[:80],
                     "iq_question": scalar(row, "iq_question"),
                     "iq_answer": scalar(row, "iq_answer"),
                     "iq_secret": integer(row, "iq_secret", 0),
-                    "iq_email": scalar(row, "iq_email"),
-                    "iq_hp": scalar(row, "iq_hp"),
+                    "iq_email": self.safe_email(scalar(row, "iq_email")),
+                    "iq_hp": text(row, "iq_hp", max_length=50),
                     "iq_time": datetime_value(scalar(row, "iq_time")),
                 },
             )

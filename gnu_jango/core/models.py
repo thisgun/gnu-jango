@@ -170,7 +170,8 @@ class FAQMaster(models.Model):
 class FAQItem(models.Model):
     fa_id = models.BigAutoField(primary_key=True)
     master = models.ForeignKey(FAQMaster, on_delete=models.CASCADE, related_name="items")
-    fa_subject = models.CharField(max_length=255, default="", blank=True)
+    # editor HTML, as Gnuboard's g5_faq.fa_subject TEXT holds it
+    fa_subject = models.TextField(default="", blank=True)
     fa_content = models.TextField(default="", blank=True)
     fa_order = models.IntegerField(default=0)
     fa_use = models.PositiveSmallIntegerField(default=1)

@@ -1424,6 +1424,10 @@ class ShopQA(models.Model):
     iq_email = models.EmailField(blank=True, default="")
     iq_hp = models.CharField(max_length=50, blank=True, default="")
     iq_time = models.DateTimeField(default=timezone.now)
+    # the source row of an imported product question (g5_shop_item_qa.iq_id) or 1:1 inquiry
+    # (g5_qa_content.qa_id): two id spaces, so neither is the pk
+    legacy_iq_id = models.PositiveIntegerField(null=True, blank=True, unique=True, editable=False)
+    legacy_qa_id = models.PositiveIntegerField(null=True, blank=True, unique=True, editable=False)
 
     class Meta:
         ordering = ["-iq_time", "-pk"]
