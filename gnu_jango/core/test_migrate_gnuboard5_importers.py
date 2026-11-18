@@ -3,14 +3,20 @@ shows (social logins, 1:1 inquiries, wishlists, scraps, votes, popups, menus) ke
 nothing grants more admin access than the source did."""
 
 import tempfile
+from contextlib import nullcontext
 from io import StringIO
 from pathlib import Path
-from unittest.mock import patch
+from unittest import skipUnless
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.db import connection
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
+from gnu_jango.api.community_common import _general_qa_product
+from gnu_jango.api.v1_auth import _social_identity_owner
 from gnu_jango.bbs.models import Post, Post_good, Post_scrap
 from gnu_jango.config.models import Config
 from gnu_jango.core.management.commands import migrate_gnuboard5
@@ -126,6 +132,21 @@ def run_import(tables, selected, source_root="missing-source"):
     ):
         imported = command.import_selected(None, CONFIG, set(selected), None)
     return imported, out.getvalue()
+
+
+def apply_command(tables, selected):
+    """manage.py migrate_gnuboard5 --apply, as the operator runs it, against the fake source."""
+    out = StringIO()
+    config = {**CONFIG, "host": "mysql.invalid", "database": "g5", "user": "g5", "password": ""}
+    with (
+        patch.object(migrate_gnuboard5, "parse_php_config", lambda path: config),
+        patch.object(migrate_gnuboard5, "mysql_connection", lambda config: nullcontext(MagicMock())),
+        patch.object(migrate_gnuboard5, "count_table", lambda cursor, table: len(tables[table])),
+        patch.object(migrate_gnuboard5, "fetch_rows", lambda cursor, table, limit=None: [dict(row) for row in tables[table]][:limit]),
+        patch.object(migrate_gnuboard5, "table_exists", lambda cursor, table: table in tables),
+    ):
+        call_command("migrate_gnuboard5", "--apply", "--source-root", "missing-source", "--only", *sorted(selected), stdout=out)
+    return out.getvalue()
 
 
 def counts():
@@ -250,3 +271,106 @@ class Gnuboard5ProductImageReportTests(TestCase):
 
         self.assertEqual(ShopProduct.objects.get(pk="NOIMG").images, [])
         self.assertIn("shop_item: 1 product(s) list image files missing from the source: NOIMG", output)
+
+
+class Gnuboard5InquiryTextImportTests(TestCase):
+    def test_an_inquiry_written_in_the_html_editor_reads_as_plain_text(self):
+        tables = source()
+        tables["g5_qa_content"] = [
+            qa(21, qa_html=1, qa_status=1,
+               qa_content="<p>첫 줄</p><p>둘째&nbsp;줄<br>셋째 &amp; 넷째 &lt;b&gt;</p>\r\n\r\n\r\n<div>끝</div>"),
+            qa(22, qa_type=1, qa_parent=21, qa_related=21, mb_id="admin", qa_html=2,
+               qa_subject="<script>alert('hi')</script>", qa_content="<p>답변<br/>드립니다</p>"),
+            qa(23, qa_content="<b>그대로</b> 1 < 2\n둘째 줄"),
+        ]
+        run_import(tables, MEMBERS | NEW_TABLES)
+        client = APIClient()
+        client.force_authenticate(user=get_user_model().objects.get(username="asker"))
+
+        rows = {row["qa_subject"]: row for row in client.get("/api/v1/qas").json()["data"]}
+
+        html_inquiry = rows["문의 21"]
+        self.assertEqual(html_inquiry["qa_content"], "첫 줄\n둘째 줄\n셋째 & 넷째 <b>\n\n끝")
+        self.assertEqual(html_inquiry["answer"]["qa_content"], "답변\n드립니다")
+        # Gnuboard prints a subject as text (get_text), never as HTML, so it stays as typed
+        self.assertEqual(html_inquiry["answer"]["qa_subject"], "<script>alert('hi')</script>")
+        self.assertEqual((html_inquiry["qa_html"], html_inquiry["answer"]["qa_html"]), (0, 0))
+        self.assertEqual(rows["문의 23"]["qa_content"], "<b>그대로</b> 1 < 2\n둘째 줄")
+
+
+class Gnuboard5RerunTests(TestCase):
+    def test_an_answer_written_in_django_survives_a_rerun(self):
+        selected = MEMBERS | NEW_TABLES
+        run_import(source(), selected)
+        unanswered = GeneralInquiry.objects.get(legacy_qa_id=13)
+        unanswered.iq_answer = "장고에서 답변함"
+        unanswered.save()
+
+        run_import(source(), selected)
+
+        self.assertEqual(GeneralInquiry.objects.get(legacy_qa_id=13).iq_answer, "장고에서 답변함")
+        self.assertEqual(GeneralInquiry.objects.get(legacy_qa_id=11).iq_answer, "탈퇴는 이렇게")
+
+    def test_apply_warns_when_the_target_already_holds_an_earlier_import(self):
+        first = apply_command(source(), MEMBERS | NEW_TABLES)
+        second = apply_command(source(), MEMBERS | NEW_TABLES)
+
+        self.assertIn("Imported 3 qa_content row(s).", first)
+        self.assertNotIn("earlier migrate_gnuboard5 run", first)
+        self.assertIn("This target already holds rows from an earlier migrate_gnuboard5 run", second)
+
+
+class Gnuboard5SourceConflictReportTests(TestCase):
+    def test_an_identity_linked_to_two_members_goes_to_the_one_gnuboard_logs_in(self):
+        tables = source()
+        tables["g5_member_social_profiles"] = [
+            {"mp_no": 1, "mb_id": "writer", "provider": "kakao", "identifier": "777"},
+            {"mp_no": 2, "mb_id": "asker", "provider": "kakao", "identifier": "777"},
+            {"mp_no": 3, "mb_id": "voter", "provider": "naver", "identifier": "n-1"},
+        ]
+
+        _, output = run_import(tables, MEMBERS | {"member_social"})
+
+        # social_get_data(): ... where provider and identifier ... order by mb_id desc
+        self.assertEqual(_social_identity_owner("kakao", "777").username, "writer")
+        self.assertEqual(_social_identity_owner("naver", "n-1").username, "voter")
+        self.assertIn("member_social: 1 identity(ies) are linked to more than one member", output)
+        self.assertIn("kakao 777: writer (not asker)", output)
+
+    def test_an_inactive_source_super_admin_is_reported(self):
+        tables = source()
+        tables["g5_member"][0]["mb_intercept_date"] = "20240101"
+
+        _, output = run_import(tables, {"member"})
+
+        self.assertIn("member: the source super admin (cf_admin 'admin') is left or blocked", output)
+
+
+@skipUnless(connection.vendor == "postgresql", "PostgreSQL id sequences; SQLite takes the id after the largest")
+class Gnuboard5IdSequenceTests(TestCase):
+    """Product questions come in under their source ids; the 1:1 inquiries imported later in the
+    same run, and every row Django adds afterwards, draw on the same ShopQA id sequence."""
+
+    def set_shop_qa_sequence(self, value, is_called):
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
+                [ShopQA._meta.db_table, ShopQA._meta.pk.column, value, is_called],
+            )
+
+    def test_inquiries_imported_after_the_product_questions_get_free_ids(self):
+        self.set_shop_qa_sequence(1, False)
+
+        run_import(source(), MEMBERS | {"shop_item", "shop_qna"} | NEW_TABLES)
+
+        self.assertEqual(ShopQA.objects.get(product_id="OLD").pk, 1)
+        self.assertEqual(GeneralInquiry.objects.filter(legacy_qa_id__isnull=False).count(), 3)
+
+    def test_an_id_handed_out_before_the_import_is_never_handed_out_again(self):
+        # ids up to 500 were used on this database and the newest rows deleted since
+        self.set_shop_qa_sequence(500, True)
+
+        run_import(source(), MEMBERS | {"shop_item", "shop_qna"})
+        created = ShopQA.objects.create(product=_general_qa_product(), iq_subject="새 문의")
+
+        self.assertGreater(created.pk, 500)
