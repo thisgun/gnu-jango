@@ -10,7 +10,7 @@ from unittest import skipUnless
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.db import connection
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
@@ -21,9 +21,17 @@ from gnu_jango.bbs.models import Post, Post_good, Post_scrap
 from gnu_jango.config.models import Config
 from gnu_jango.core.management.commands import migrate_gnuboard5
 from gnu_jango.core.management.commands.migrate_gnuboard5 import Command
-from gnu_jango.core.models import New_win, Site_menu
+from gnu_jango.core.models import ContentPage, New_win, Site_menu
 from gnu_jango.core.test_auth_api_more import EXCHANGE_URL, SOCIAL_SETTINGS, USERINFO, SocialFlowBase, query_of
-from gnu_jango.shop.models import GeneralInquiry, ShopProduct, ShopQA, ShopWishlist
+from gnu_jango.shop.models import (
+    GeneralInquiry,
+    ShopCategory,
+    ShopPersonalPay,
+    ShopProduct,
+    ShopQA,
+    ShopReview,
+    ShopWishlist,
+)
 
 CONFIG = {
     "table_prefix": "g5_",
@@ -36,6 +44,12 @@ CONFIG = {
         "write_prefix": "g5_write_",
         "g5_shop_item_table": "g5_shop_item",
         "g5_shop_item_qa_table": "g5_shop_item_qa",
+        "g5_shop_item_use_table": "g5_shop_item_use",
+        "g5_shop_category_table": "g5_shop_category",
+        "g5_shop_personalpay_table": "g5_shop_personalpay",
+        "content_table": "g5_content",
+        "faq_master_table": "g5_faq_master",
+        "faq_table": "g5_faq",
         "social_profile_table": "g5_member_social_profiles",
         "qa_content_table": "g5_qa_content",
         "g5_shop_wish_table": "g5_shop_wish",
@@ -134,7 +148,7 @@ def run_import(tables, selected, source_root="missing-source"):
     return imported, out.getvalue()
 
 
-def apply_command(tables, selected):
+def apply_command(tables, selected, *options):
     """manage.py migrate_gnuboard5 --apply, as the operator runs it, against the fake source."""
     out = StringIO()
     config = {**CONFIG, "host": "mysql.invalid", "database": "g5", "user": "g5", "password": ""}
@@ -145,7 +159,9 @@ def apply_command(tables, selected):
         patch.object(migrate_gnuboard5, "fetch_rows", lambda cursor, table, limit=None: [dict(row) for row in tables[table]][:limit]),
         patch.object(migrate_gnuboard5, "table_exists", lambda cursor, table: table in tables),
     ):
-        call_command("migrate_gnuboard5", "--apply", "--source-root", "missing-source", "--only", *sorted(selected), stdout=out)
+        call_command(
+            "migrate_gnuboard5", "--apply", *options, "--source-root", "missing-source", "--only", *sorted(selected), stdout=out
+        )
     return out.getvalue()
 
 
@@ -298,6 +314,16 @@ class Gnuboard5InquiryTextImportTests(TestCase):
         self.assertEqual(rows["문의 23"]["qa_content"], "<b>그대로</b> 1 < 2\n둘째 줄")
 
 
+    def test_lists_headings_and_table_rows_keep_their_line_breaks(self):
+        tables = source()
+        tables["g5_qa_content"] = [
+            qa(31, qa_html=1, qa_content="<h2>배송</h2><ul><li>하나</li><li>둘</li></ul><table><tr><td>칸</td></tr><tr><td>칸2</td></tr></table>"),
+        ]
+        run_import(tables, MEMBERS | NEW_TABLES)
+
+        self.assertEqual(GeneralInquiry.objects.get(legacy_qa_id=31).iq_question, "배송\n하나\n둘\n칸\n칸2")
+
+
 class Gnuboard5RerunTests(TestCase):
     def test_an_answer_written_in_django_survives_a_rerun(self):
         selected = MEMBERS | NEW_TABLES
@@ -311,13 +337,100 @@ class Gnuboard5RerunTests(TestCase):
         self.assertEqual(GeneralInquiry.objects.get(legacy_qa_id=13).iq_answer, "장고에서 답변함")
         self.assertEqual(GeneralInquiry.objects.get(legacy_qa_id=11).iq_answer, "탈퇴는 이렇게")
 
-    def test_apply_warns_when_the_target_already_holds_an_earlier_import(self):
-        first = apply_command(source(), MEMBERS | NEW_TABLES)
-        second = apply_command(source(), MEMBERS | NEW_TABLES)
+    def test_a_newer_source_keeps_its_new_product_question_apart_from_the_inquiries(self):
+        selected = MEMBERS | {"shop_item", "shop_qna"} | NEW_TABLES
+        run_import(source(), selected)
+        newer = source()
+        # the newer dump's next product question has the id Django gave an imported 1:1 inquiry
+        newer["g5_shop_item_qa"].append(
+            {"iq_id": GeneralInquiry.objects.get(legacy_qa_id=13).pk, "it_id": "NEW", "mb_id": "writer",
+             "iq_subject": "새 상품 문의", "iq_question": "재입고 되나요", "iq_answer": "다음 주", "iq_secret": 0}
+        )
 
+        run_import(newer, selected)
+
+        inquiry = GeneralInquiry.objects.get(legacy_qa_id=13)
+        self.assertEqual((inquiry.iq_subject, inquiry.iq_answer), ("문의 13", ""))
+        self.assertEqual(
+            list(ShopQA.objects.filter(product_id="NEW").values_list("iq_subject", "iq_answer")), [("새 상품 문의", "다음 주")]
+        )
+        self.assertEqual(ShopQA.objects.filter(product_id="OLD").count(), 1)
+
+    def test_apply_refuses_a_target_that_holds_an_earlier_import(self):
+        first = apply_command(source(), MEMBERS | NEW_TABLES)
+
+        with self.assertRaisesMessage(CommandError, "already holds rows from an earlier migrate_gnuboard5 run"):
+            apply_command(source(), MEMBERS | NEW_TABLES)
         self.assertIn("Imported 3 qa_content row(s).", first)
-        self.assertNotIn("earlier migrate_gnuboard5 run", first)
-        self.assertIn("This target already holds rows from an earlier migrate_gnuboard5 run", second)
+
+    def test_a_member_only_rerun_cannot_unblock_a_member_blocked_in_django(self):
+        tables = source()
+        tables["g5_member"][3]["mb_password"] = "*" + "A" * 40
+        apply_command(tables, {"member"})
+        User = get_user_model()
+        User.objects.filter(username="writer").update(is_active=False)
+
+        with self.assertRaisesMessage(CommandError, "--allow-rerun"):
+            apply_command(tables, {"member"})
+        self.assertFalse(User.objects.get(username="writer").is_active)
+
+    def test_allow_rerun_applies_the_same_dump_again(self):
+        apply_command(source(), MEMBERS | NEW_TABLES)
+
+        second = apply_command(source(), MEMBERS | NEW_TABLES, "--allow-rerun")
+
+        self.assertIn("already holds rows from an earlier migrate_gnuboard5 run", second)
+        self.assertIn("Imported 3 qa_content row(s).", second)
+        self.assertEqual(counts()["inquiries"], 3)
+
+
+class Gnuboard5OverLongValueTests(TestCase):
+    """PostgreSQL refuses a value longer than its varchar(n) and the whole apply rolls back. SQLite
+    stores it, so these check what is stored."""
+
+    def test_a_faq_subject_written_in_the_editor_comes_in_whole(self):
+        subject = '<p><span style="color: rgb(224, 62, 45);">' + "주문한 상품은 언제 받을 수 있나요? " * 12 + "</span></p>"
+        tables = {
+            "g5_faq_master": [{"fm_id": 1, "fm_subject": "배송"}],
+            "g5_faq": [{"fa_id": 3, "fm_id": 1, "fa_subject": subject, "fa_content": "<p>이틀</p>"}],
+        }
+        run_import(tables, {"faq_master", "faq"})
+
+        items = APIClient().get("/api/v1/faqs").json()["data"]["items"]
+
+        self.assertGreater(len(subject), 255)
+        self.assertEqual([item["fa_subject"] for item in items], [subject])
+
+    def test_source_text_longer_than_its_django_field_is_cut_to_fit(self):
+        long_text = "가" * 300
+        long_email = "a" * 250 + "@example.test"
+        tables = source()
+        tables["g5_member"].append(member("longmail", mb_email=long_email))
+        tables["g5_shop_category"] = [{"ca_id": "10", "ca_name": "분류", "ca_skin": long_text}]
+        tables["g5_content"] = [{"co_id": "company", "co_subject": "회사", "co_skin": long_text, "co_mobile_skin": long_text}]
+        tables["g5_shop_item_use"] = [
+            {"is_id": 4, "it_id": "OLD", "mb_id": "m" * 200, "is_name": long_text, "is_subject": "후기", "is_content": "좋아요"}
+        ]
+        tables["g5_shop_item_qa"] = [
+            {"iq_id": 1, "it_id": "OLD", "mb_id": "m" * 200, "iq_name": long_text, "iq_subject": "문의", "iq_question": "언제",
+             "iq_email": long_email, "iq_hp": "0" * 255}
+        ]
+        tables["g5_shop_personalpay"] = [{"pp_id": 1, "pp_name": "개인결제", "pp_email": long_email}]
+
+        run_import(tables, MEMBERS | {"shop_category", "content", "shop_item", "shop_review", "shop_qna", "shop_personalpay"})
+
+        for model in (get_user_model(), ShopCategory, ContentPage, ShopReview, ShopQA, ShopPersonalPay):
+            for row in model.objects.values():
+                for field in model._meta.concrete_fields:
+                    value = row[field.attname]
+                    if field.max_length and isinstance(value, str):
+                        self.assertLessEqual(len(value), field.max_length, f"{model.__name__}.{field.name}")
+        self.assertEqual(ShopCategory.objects.get().ca_skin, long_text[:100])
+        self.assertEqual(ShopReview.objects.get().is_name, long_text[:150])
+        # a cut address is someone else's, so an address too long for the field is dropped
+        self.assertEqual(ShopQA.objects.get(product_id="OLD").iq_email, "")
+        self.assertEqual(ShopPersonalPay.objects.get().pp_email, "")
+        self.assertEqual(get_user_model().objects.get(username="longmail").email, "longmail@legacy.local")
 
 
 class Gnuboard5SourceConflictReportTests(TestCase):
@@ -348,29 +461,30 @@ class Gnuboard5SourceConflictReportTests(TestCase):
 
 @skipUnless(connection.vendor == "postgresql", "PostgreSQL id sequences; SQLite takes the id after the largest")
 class Gnuboard5IdSequenceTests(TestCase):
-    """Product questions come in under their source ids; the 1:1 inquiries imported later in the
-    same run, and every row Django adds afterwards, draw on the same ShopQA id sequence."""
+    """Menus come in under their source ids (me_id); the next one added in the Django admin draws on
+    the same id sequence."""
 
-    def set_shop_qa_sequence(self, value, is_called):
+    def set_menu_sequence(self, value, is_called):
         with connection.cursor() as cursor:
             cursor.execute(
                 "SELECT setval(pg_get_serial_sequence(%s, %s), %s, %s)",
-                [ShopQA._meta.db_table, ShopQA._meta.pk.column, value, is_called],
+                [Site_menu._meta.db_table, Site_menu._meta.pk.column, value, is_called],
             )
 
-    def test_inquiries_imported_after_the_product_questions_get_free_ids(self):
-        self.set_shop_qa_sequence(1, False)
+    def add_menu(self):
+        return Site_menu.objects.create(me_code="60", me_name="새 메뉴", me_link="/new")
 
-        run_import(source(), MEMBERS | {"shop_item", "shop_qna"} | NEW_TABLES)
+    def test_a_menu_added_after_the_import_gets_a_free_id(self):
+        self.set_menu_sequence(1, False)
 
-        self.assertEqual(ShopQA.objects.get(product_id="OLD").pk, 1)
-        self.assertEqual(GeneralInquiry.objects.filter(legacy_qa_id__isnull=False).count(), 3)
+        run_import(source(), {"menu"})
+
+        self.assertGreater(self.add_menu().pk, 346)
 
     def test_an_id_handed_out_before_the_import_is_never_handed_out_again(self):
         # ids up to 500 were used on this database and the newest rows deleted since
-        self.set_shop_qa_sequence(500, True)
+        self.set_menu_sequence(500, True)
 
-        run_import(source(), MEMBERS | {"shop_item", "shop_qna"})
-        created = ShopQA.objects.create(product=_general_qa_product(), iq_subject="새 문의")
+        run_import(source(), {"menu"})
 
-        self.assertGreater(created.pk, 500)
+        self.assertGreater(self.add_menu().pk, 500)
