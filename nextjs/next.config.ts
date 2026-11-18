@@ -1,6 +1,5 @@
 import type { NextConfig } from 'next';
 import bundleAnalyzer from '@next/bundle-analyzer';
-import { withSentryConfig } from '@sentry/nextjs';
 import { assertThemeSource, resolveThemeSourceName, themeSourceDir } from './scripts/theme-pair.mjs';
 
 const withBundleAnalyzer = bundleAnalyzer({
@@ -459,20 +458,4 @@ const nextConfig: NextConfig = {
   ...serverRuntimeConfig,
 };
 
-const SENTRY_ENABLED = !!(process.env.SENTRY_AUTH_TOKEN && process.env.NEXT_PUBLIC_SENTRY_DSN);
-
-const baseConfig = withBundleAnalyzer(nextConfig);
-
-export default SENTRY_ENABLED
-  ? withSentryConfig(baseConfig, {
-      silent: !process.env.CI,
-      org: process.env.SENTRY_ORG,
-      project: process.env.SENTRY_PROJECT,
-      widenClientFileUpload: true,
-      sourcemaps: { disable: false },
-      disableLogger: true,
-      ...(process.env.NEXT_PUBLIC_SENTRY_TUNNEL_ROUTE
-        ? { tunnelRoute: process.env.NEXT_PUBLIC_SENTRY_TUNNEL_ROUTE }
-        : {}),
-    })
-  : baseConfig;
+export default withBundleAnalyzer(nextConfig);

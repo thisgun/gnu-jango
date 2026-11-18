@@ -126,7 +126,6 @@
     "@radix-ui/react-slot": "^1.1.0",
     "@radix-ui/react-tabs": "^1.1.0",
     "@radix-ui/react-toast": "^1.2.24",
-    "@sentry/nextjs": "^10.76.2",
     "@tailwindcss/typography": "^0.5.19",
     "@tiptap/extension-code-block-lowlight": "^3.33.1",
     "@tiptap/extension-color": "^3.33.1",
@@ -164,9 +163,6 @@
     "postcss": "$postcss",
     "@tailwindcss/typography": {
       "postcss-selector-parser": "6.1.5"
-    },
-    "@sentry/bundler-plugins": {
-      "glob": "^14.0.2"
     }
   },
   "devDependencies": {
