@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.management.base import CommandError
 from django.test import TestCase
 
 from gnu_jango.core.management.commands import migrate_gnuboard5
@@ -137,8 +138,16 @@ class Gnuboard5ImportValueTests(TestCase):
 
         self.run_import(source())
         self.assertEqual(self.stock_snapshot(), first)
-        self.run_import(source(), {"shop_cart"})
+        self.run_import(source(), {"shop_item", "shop_item_option", "shop_cart"})
         self.assertEqual(self.stock_snapshot(), first)
+
+    def test_order_lines_cannot_be_imported_without_their_products(self):
+        # Lines youngcart holds stock for are marked stock_adjusted only because the product import
+        # subtracts them; importing the lines alone onto older stock would let a cancel add stock back.
+        self.run_import(source())
+
+        with self.assertRaisesMessage(CommandError, "shop_item"):
+            self.run_import(source(), {"shop_cart"})
 
     def test_cancelling_an_imported_order_puts_back_what_youngcart_held(self):
         self.run_import(source())

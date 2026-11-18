@@ -499,6 +499,16 @@ class Command(BaseCommand):
             self.stdout.write(f"  {label}: {count_text}")
 
     def import_selected(self, cursor, config, selected, limit):
+        # A pending line is stock_adjusted only because the product import takes it off the stock, so
+        # the lines never come in without the stock they are taken from (an older import would oversell).
+        missing_stock_tables = {"shop_item", "shop_item_option"} - selected
+        if "shop_cart" in selected and missing_stock_tables:
+            raise CommandError(
+                "--only shop_cart also needs "
+                + ", ".join(sorted(missing_stock_tables))
+                + " in the same run: order lines YoungCart holds stock for are marked stock_adjusted, which "
+                "is only right when the product stock they come from is imported with them."
+            )
         imported = {}
         pending_stock = (
             self.source_pending_stock(cursor, config, limit) if selected & {"shop_item", "shop_item_option"} else Counter()
