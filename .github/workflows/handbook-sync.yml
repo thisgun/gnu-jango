@@ -7,8 +7,9 @@ name: Handbook sync
 on:
   workflow_dispatch:
 
+# Same group as CD on main, so a sync never overlaps the handbook migrations of a deploy.
 concurrency:
-  group: handbook-sync
+  group: cd-refs/heads/main
   cancel-in-progress: false
 
 permissions:
@@ -16,7 +17,8 @@ permissions:
 
 jobs:
   sync:
-    if: ${{ !github.event.repository.private }}
+    # Only main's code may write to the handbook database.
+    if: ${{ !github.event.repository.private && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     environment: production
     env:
@@ -44,5 +46,6 @@ jobs:
         run: python manage.py migrate --check
       - name: Update the unedited sample chapters
         run: python manage.py ensure_handbook_samples --update-unedited
+      # Vercel serves the built-in 2-gram tokenizer (no Kiwi, docs/04-deploy/handbook-demo.md), and so does this run.
       - name: Rebuild the search index
         run: python manage.py rebuild_search_index
