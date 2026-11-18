@@ -111,6 +111,8 @@ python manage.py migrate_gnuboard5 --source-root "<그누보드5 설치 경로>"
 
 `<그누보드5 설치 경로>`는 `data/dbconfig.php`가 들어 있는 그누보드 폴더입니다(예: Windows XAMPP는 `C:\xampp\htdocs\gnuboard5`, Linux는 `/var/www/gnuboard5`). 실제 DB에 적용하기 전에 대상 DB를 백업하고, 점검 모드 출력으로 가져올 테이블과 행 수를 확인하세요.
 
+`--apply`는 새로 만든(`migrate`만 한) 대상 DB에 실행하고, 다시 실행은 사이트를 열기 전에만 하세요. 다시 실행하면 원본 행을 한 번 더 적용하므로, 회원이 Django에서 지운 소셜 로그인 연결·스크랩·찜·추천이 되살아나고 Django에서 고친 행은 원본 값으로 돌아갑니다. 대상 DB에 이전 실행에서 가져온 행이 있으면 명령이 시작할 때 이 경고를 출력합니다.
+
 ## Next.js 프런트엔드 실행
 
 Django 서버와 별도 터미널에서 실행합니다.

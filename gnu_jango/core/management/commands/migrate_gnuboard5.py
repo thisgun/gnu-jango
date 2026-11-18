@@ -1,4 +1,5 @@
 import hashlib
+import html
 import ipaddress
 import json
 import re
@@ -13,14 +14,15 @@ from django.core.files.base import File
 from django.core.files.images import get_image_dimensions
 from django.core.files.storage import default_storage
 from django.core.management.base import BaseCommand, CommandError
-from django.core.management.color import no_style
 from django.db import connection, transaction
+from django.db.models.fields import AutoFieldMixin
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
+from django.utils.html import strip_tags
 
 from gnu_jango import defaults
 from gnu_jango.api.community_common import _general_qa_product
-from gnu_jango.api.community_qas import QA_ACTIVE_EXTENSION_RE, _qa_empty_meta, _qa_save_meta
+from gnu_jango.api.community_qas import QA_ACTIVE_EXTENSION_RE, _qa_empty_meta, _qa_load_meta, _qa_save_meta
 from gnu_jango.api.v1_auth import SOCIAL_PROVIDER_SPECS, _social_identity_config_name
 from gnu_jango.notifications.context import suppress_notification_events
 from gnu_jango.bbs.models import Board, Comment, Group, Post, Post_file, Post_good, Post_scrap
@@ -255,6 +257,20 @@ def post_reply_marker(row):
     return value
 
 
+QA_HTML_LINE_END_RE = re.compile(r"<br\s*/?>|</p\s*>|</div\s*>", re.IGNORECASE)
+
+
+def qa_plain_text(row):
+    """A g5_qa_content body as the plain text a Django 1:1 inquiry holds and the page prints as is.
+    qa_html 1 and 2 are editor HTML (qaview.php conv_content); qa_html 0 is text already."""
+    content = text(row, "qa_content")
+    if integer(row, "qa_html", 0) <= 0:
+        return content
+    content = html.unescape(strip_tags(QA_HTML_LINE_END_RE.sub("\n", content)))
+    lines = content.replace("\xa0", " ").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(line.rstrip() for line in lines)).strip()
+
+
 def bool_char(row, key, default=True):
     value = str(scalar(row, key, "")).strip()
     if value == "":
@@ -365,7 +381,11 @@ def stock_key(it_id, io_id="", io_type=0):
 
 
 class Command(BaseCommand):
-    help = "Inspect or migrate selected Gnuboard5 MySQL tables into Django models."
+    help = (
+        "Inspect or migrate selected Gnuboard5 MySQL tables into Django models. Run --apply against a fresh "
+        "target, and re-run it only before go-live: a rerun applies the source rows again, so links, scraps, "
+        "wishlist items and votes removed in Django come back and edited rows take the source values."
+    )
     # g5_config.cf_admin: the only member Gnuboard treats as super admin (lib/common.lib.php is_admin)
     super_admin_id = ""
 
@@ -386,13 +406,19 @@ class Command(BaseCommand):
         parser.add_argument(
             "--apply",
             action="store_true",
-            help="Write imported rows. Without this option the command only inspects/counts.",
+            help=(
+                "Write imported rows. Without this option the command only inspects/counts. Use a fresh "
+                "target and re-run only before go-live."
+            ),
         )
         parser.add_argument(
             "--limit",
             type=int,
             default=0,
-            help="Limit rows per source table during import for smoke testing.",
+            help=(
+                "Limit rows per source table during import for smoke testing. Rows come in MySQL's own "
+                "order (no ORDER BY), so a limited run may skip rows that point at rows it left out."
+            ),
         )
         parser.add_argument(
             "--only",
@@ -444,6 +470,13 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.WARNING("Dry run only. Re-run with --apply to import rows."))
                     return
 
+                if self.holds_an_earlier_import():
+                    self.warn(
+                        "This target already holds rows from an earlier migrate_gnuboard5 run. A rerun applies the "
+                        "source rows again: social links, scraps, wishlist items and votes members removed in Django "
+                        "come back, and rows edited in Django take the source values. Run against a fresh target, "
+                        "and re-run only before go-live."
+                    )
                 with transaction.atomic():
                     imported = self.import_selected(cursor, config, selected, options["limit"] or None)
 
@@ -598,6 +631,10 @@ class Command(BaseCommand):
                 continue
             rows = fetch_rows(cursor, table, limit=limit)
             imported[label] = importers[label](rows)
+            if imported[label]:
+                # before a later importer creates rows of a model this one wrote under source ids
+                # (the 1:1 inquiries after the product questions)
+                self.advance_id_sequences()
         if "member_avatars" in selected:
             table = config["tables"]["member_table"]
             if table_exists(cursor, table):
@@ -629,17 +666,44 @@ class Command(BaseCommand):
             else:
                 imported["shop_product_categories"] = 0
         if any(imported.values()):
-            self.reset_id_sequences()
+            self.advance_id_sequences()
         return imported
 
-    def reset_id_sequences(self):
+    def holds_an_earlier_import(self):
+        """Rows only an import writes: the source post, 1:1 inquiry and restock request numbers."""
+        return (
+            Post.objects.filter(legacy_wr_id__isnull=False).exists()
+            or ShopQA.objects.filter(legacy_qa_id__isnull=False).exists()
+            or ShopStockNotification.objects.filter(legacy_ss_id__isnull=False).exists()
+        )
+
+    def advance_id_sequences(self):
         """Rows imported under their source id leave PostgreSQL id sequences behind, so the next row
         Django creates (a 1:1 inquiry after the product questions, a menu added in the admin) would
-        take an id already in use. A no-op on SQLite, which picks the id after the largest."""
-        models = [model for label in ("users", "bbs", "core", "shop") for model in apps.get_app_config(label).get_models()]
+        take an id already in use. Each sequence moves up to the largest id and never back: on a live
+        database it may be ahead of every row, and an id handed out before must not be reused. A
+        no-op elsewhere; SQLite and MySQL pick the id after the largest."""
+        if connection.vendor != "postgresql":
+            return
+        quote = connection.ops.quote_name
         with connection.cursor() as db_cursor:
-            for statement in connection.ops.sequence_reset_sql(no_style(), models):
-                db_cursor.execute(statement)
+            for label in ("users", "bbs", "core", "shop"):
+                for model in apps.get_app_config(label).get_models():
+                    pk = model._meta.pk
+                    if model._meta.proxy or not model._meta.managed or not isinstance(pk, AutoFieldMixin):
+                        continue
+                    db_cursor.execute("SELECT pg_get_serial_sequence(%s, %s)", [model._meta.db_table, pk.column])
+                    sequence = db_cursor.fetchone()[0]
+                    if not sequence:
+                        continue
+                    db_cursor.execute(
+                        f"SELECT (SELECT MAX({quote(pk.column)}) FROM {quote(model._meta.db_table)}), last_value, "
+                        f"is_called FROM {sequence}"
+                    )
+                    largest, last_value, is_called = db_cursor.fetchone()
+                    next_id = last_value + 1 if is_called else last_value
+                    if largest is not None and largest >= next_id:
+                        db_cursor.execute("SELECT setval(%s, %s)", [sequence, largest])
 
     def source_super_admin(self, cursor, config):
         config_table, _ = self.public_config_tables(config)
@@ -850,10 +914,16 @@ class Command(BaseCommand):
             self.copy_legacy_member_avatar(profile, username)
             profile.save()
             count += 1
-        if rows and not User.objects.filter(username=self.super_admin_id, is_superuser=True).exists():
+        super_admin = User.objects.filter(username=self.super_admin_id, is_superuser=True).first()
+        if rows and not super_admin:
             self.warn(
                 f"member: the source super admin (cf_admin {self.super_admin_id!r}) was not imported, so no "
                 "member has Django admin access. Run createsuperuser."
+            )
+        elif rows and not super_admin.is_active:
+            self.warn(
+                f"member: the source super admin (cf_admin {self.super_admin_id!r}) is left or blocked in the "
+                "source, so it came in inactive and cannot log in to the Django admin. Run createsuperuser."
             )
         return count
 
@@ -2164,16 +2234,25 @@ class Command(BaseCommand):
         and user id Django reads back from the same provider."""
         count = 0
         skipped = Counter()
+        links = defaultdict(list)
         for row in rows:
             provider = text(row, "provider").strip().lower()
             identifier = text(row, "identifier").strip()[:255]
-            user = self.legacy_user(text(row, "mb_id").strip())
             if provider not in SOCIAL_PROVIDER_SPECS:
                 skipped["unknown provider"] += 1
-                continue
-            if not identifier:
+            elif not identifier:
                 skipped["no identifier"] += 1
-                continue
+            else:
+                links[(provider, identifier)].append(row)
+        conflicts = []
+        for (provider, identifier), link_rows in links.items():
+            # social_get_data(): "where provider and identifier ... order by mb_id desc" logs in the first row
+            row = max(link_rows, key=lambda link: text(link, "mb_id").strip().casefold())
+            mb_id = text(row, "mb_id").strip()
+            others = sorted({text(link, "mb_id").strip() for link in link_rows} - {mb_id})
+            if others:
+                conflicts.append(f"  {provider} {identifier}: {mb_id} (not {', '.join(others)})")
+            user = self.legacy_user(mb_id)
             if not user:
                 skipped["member not imported"] += 1
                 continue
@@ -2192,6 +2271,13 @@ class Command(BaseCommand):
                 defaults={"value": json.dumps(payload, ensure_ascii=False, separators=(",", ":"))},
             )
             count += 1
+        if conflicts:
+            self.warn(
+                f"member_social: {len(conflicts)} identity(ies) are linked to more than one member in the source; "
+                "each logs in to the member Gnuboard picks (ORDER BY mb_id DESC):"
+            )
+            for line in sorted(conflicts):
+                self.warn(line)
         self.report_skipped("member_social", skipped)
         return count
 
@@ -2206,23 +2292,23 @@ class Command(BaseCommand):
         for row in questions:
             legacy_id = integer(row, "qa_id", 0)
             username = text(row, "mb_id").strip()
-            answer = answers.get(legacy_id, {})
-            items[legacy_id], _ = ShopQA.objects.update_or_create(
-                legacy_qa_id=legacy_id,
-                defaults={
-                    "product": product,
-                    "user": self.legacy_user(username),
-                    "mb_id": username,
-                    "mb_nick": text(row, "qa_name", max_length=150),
-                    "iq_name": text(row, "qa_name", max_length=150),
-                    "iq_subject": text(row, "qa_subject", max_length=255),
-                    "iq_question": text(row, "qa_content"),
-                    "iq_answer": text(answer, "qa_content"),
-                    "iq_email": self.safe_email(scalar(row, "qa_email"))[:254],
-                    "iq_hp": text(row, "qa_hp", max_length=50),
-                    "iq_time": datetime_value(scalar(row, "qa_datetime")),
-                },
-            )
+            defaults = {
+                "product": product,
+                "user": self.legacy_user(username),
+                "mb_id": username,
+                "mb_nick": text(row, "qa_name", max_length=150),
+                "iq_name": text(row, "qa_name", max_length=150),
+                # a subject is text in Gnuboard too (get_text); qa_html covers the body only
+                "iq_subject": text(row, "qa_subject", max_length=255),
+                "iq_question": qa_plain_text(row),
+                "iq_email": self.safe_email(scalar(row, "qa_email"))[:254],
+                "iq_hp": text(row, "qa_hp", max_length=50),
+                "iq_time": datetime_value(scalar(row, "qa_datetime")),
+            }
+            if legacy_id in answers:
+                # with no source answer, an answer written in Django since the last run stays
+                defaults["iq_answer"] = qa_plain_text(answers[legacy_id])
+            items[legacy_id], _ = ShopQA.objects.update_or_create(legacy_qa_id=legacy_id, defaults=defaults)
 
         unanswered = []
         missing_files = []
@@ -2232,7 +2318,9 @@ class Command(BaseCommand):
             if integer(row, "qa_status", 0) == 1 and not item.iq_answer:
                 unanswered.append(legacy_id)
             meta = _qa_empty_meta()
-            meta["answer_subject"] = text(answers.get(legacy_id, {}), "qa_subject")
+            meta["answer_subject"] = (
+                text(answers[legacy_id], "qa_subject") if legacy_id in answers else _qa_load_meta(item.pk)["answer_subject"]
+            )
             related = items.get(integer(row, "qa_related", 0))
             if related and related.pk != item.pk:
                 # a 추가 질문: Django marks a follow-up with its own id and the question it follows
