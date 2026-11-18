@@ -1,6 +1,7 @@
 import hashlib
 import html
 import ipaddress
+import itertools
 import json
 import re
 from collections import Counter, defaultdict
@@ -249,6 +250,15 @@ def integer(row, key, default=0):
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def flag(row, key, default="0"):
+    """A tinyint flag as the "0" or "1" its CharField(1) holds. Gnuboard tests it for truth in PHP, so
+    0, NULL and blank are "0" and any other value is "1"; ``default`` only when the column is missing."""
+    if key not in row:
+        return default
+    value = row[key]
+    return "0" if value is None or str(value).strip() in ("", "0") else "1"
 
 
 def post_reply_marker(row):
@@ -877,12 +887,15 @@ class Command(BaseCommand):
 
         local, domain = email.rsplit("@", 1)
         safe_username = re.sub(r"[^A-Za-z0-9_.-]+", "-", username)
-        candidate = "%s+%s@%s" % (local[:120], safe_username[:60], domain)
-        suffix = 1
-        while User.objects.filter(email__iexact=candidate).exclude(username=username).exists():
-            suffix += 1
-            candidate = "%s+%s-%s@%s" % (local[:110], safe_username[:50], suffix, domain)
-        return candidate[:254]
+        for suffix in itertools.count(1):
+            tag = safe_username[:60] if suffix == 1 else "%s-%s" % (safe_username[:50], suffix)
+            # a cut domain is someone else's, so only the local part gives way
+            room = EMAIL_MAX_LENGTH - len("+%s@%s" % (tag, domain))
+            if room < 1:
+                return self.unique_email(username, None)
+            candidate = "%s+%s@%s" % (local[:room], tag, domain)
+            if not User.objects.filter(email__iexact=candidate).exclude(username=username).exists():
+                return candidate
 
     def import_members(self, rows):
         count = 0
@@ -1592,10 +1605,10 @@ class Command(BaseCommand):
                     "it_stock_qty": integer(row, "it_stock_qty", 9999) - pending_stock[stock_key(it_id)],
                     "it_buy_min_qty": integer(row, "it_buy_min_qty", 1),
                     "it_buy_max_qty": integer(row, "it_buy_max_qty", 0),
-                    "it_tel_inq": scalar(row, "it_tel_inq"),
-                    "it_soldout": scalar(row, "it_soldout"),
-                    "it_use": scalar(row, "it_use", "1"),
-                    "it_stock_sms": scalar(row, "it_stock_sms"),
+                    "it_tel_inq": flag(row, "it_tel_inq"),
+                    "it_soldout": flag(row, "it_soldout"),
+                    "it_use": flag(row, "it_use", "1"),
+                    "it_stock_sms": flag(row, "it_stock_sms"),
                     "it_sc_type": integer(row, "it_sc_type", 0),
                     "it_sc_method": integer(row, "it_sc_method", 0),
                     "it_sc_price": integer(row, "it_sc_price", 3000),
@@ -1603,11 +1616,11 @@ class Command(BaseCommand):
                     "it_sc_qty": integer(row, "it_sc_qty", 0),
                     "it_notax": integer(row, "it_notax", 0),
                     "it_nocoupon": bool(integer(row, "it_nocoupon", 0)),
-                    "it_type1": scalar(row, "it_type1"),
-                    "it_type2": scalar(row, "it_type2"),
-                    "it_type3": scalar(row, "it_type3"),
-                    "it_type4": scalar(row, "it_type4"),
-                    "it_type5": scalar(row, "it_type5"),
+                    "it_type1": flag(row, "it_type1"),
+                    "it_type2": flag(row, "it_type2"),
+                    "it_type3": flag(row, "it_type3"),
+                    "it_type4": flag(row, "it_type4"),
+                    "it_type5": flag(row, "it_type5"),
                     "it_basic": scalar(row, "it_basic"),
                     "it_content": scalar(row, "it_content"),
                     "it_explan": scalar(row, "it_explan"),
@@ -2537,7 +2550,7 @@ class Command(BaseCommand):
                     "is_score": integer(row, "is_score", 5),
                     "is_subject": scalar(row, "is_subject") or scalar(row, "is_content")[:80],
                     "is_content": scalar(row, "is_content"),
-                    "is_confirm": scalar(row, "is_confirm", "1"),
+                    "is_confirm": flag(row, "is_confirm", "1"),
                     "is_time": datetime_value(scalar(row, "is_time")),
                 },
             )
