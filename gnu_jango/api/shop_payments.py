@@ -624,7 +624,9 @@ def redact_payment_data(data):
     if isinstance(data, dict):
         redacted = {}
         for key, value in data.items():
-            normalized = re.sub(r"(?<!^)(?=[A-Z])", "_", str(key)).lower().replace("-", "_")
+            # BuyerTel, BUYER_TEL and TEL become buyer_tel and tel: a run of capitals is one word
+            normalized = re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", "_", str(key))
+            normalized = normalized.lower().replace("-", "_")
             sensitive_fragments = (
                 "secret",
                 "signature",
