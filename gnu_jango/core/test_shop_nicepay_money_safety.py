@@ -1330,3 +1330,36 @@ def test_nicepay_expiry_is_scheduled():
     from gnu_jango.core.job_registry import CORE_JOBS
 
     assert "expire_vbank_orders" in {job.name for job in CORE_JOBS}
+
+
+# the goods name sent to the payment window -----------------------------------------------------
+
+
+def euc_kr_bytes(text):
+    return len(text.encode("cp949"))
+
+
+def test_a_long_goods_name_fits_nicepays_40_bytes_without_breaking_a_character(nicepay, buyer, shop):
+    ShopProduct.objects.filter(pk=shop["shirt"].pk).update(it_name="가나다라마바사아자차카타파하" * 3)
+
+    checkout = Checkout(buyer, shop)
+
+    # developers.nicepay.co.kr: GoodsName 40 bytes, the form is sent in EUC-KR
+    assert euc_kr_bytes(checkout.order_name) <= 40
+    assert checkout.order_name.endswith(" 외 1건")
+    assert ("가나다라마바사아자차카타파하" * 3).startswith(checkout.order_name.removesuffix(" 외 1건"))
+
+
+@pytest.mark.parametrize("pg, limit", [("toss", 100), ("nicepay", 40)])
+def test_the_goods_name_fits_each_pg(nicepay, buyer, shop, pg, limit):
+    from gnu_jango.api.v1_shop import fit_goods_name
+
+    long_name = "😀" + "상품" * 120
+    fitted = fit_goods_name(long_name, pg, suffix=" 외 2건")
+
+    # an EUC-KR form sends a character it cannot encode as a numeric reference (&#128512;)
+    size = len(fitted) if pg == "toss" else len(fitted.encode("cp949", "xmlcharrefreplace"))
+    assert size <= limit
+    assert fitted.endswith(" 외 2건")
+    assert long_name.startswith(fitted.removesuffix(" 외 2건"))
+    assert fit_goods_name("셔츠", pg) == "셔츠"
