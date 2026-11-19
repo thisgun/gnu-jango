@@ -654,15 +654,12 @@ def redact_payment_data(data):
                 "buyer_name",
                 "company",
             )
-            if any(fragment in normalized for fragment in sensitive_fragments) or normalized in {
-                "od_name",
-                "od_hp",
-                "od_tel",
-                "name",
-                "od_b_name",
-                "od_b_hp",
-                "od_b_tel",
-            }:
+            if (
+                any(fragment in normalized for fragment in sensitive_fragments)
+                # "tel" as a word of the key (BuyerTel, od_tel), never inside another word
+                or "tel" in normalized.split("_")
+                or normalized in {"od_name", "od_hp", "name", "od_b_name", "od_b_hp"}
+            ):
                 redacted[key] = "***redacted***"
             else:
                 redacted[key] = redact_payment_data(value)

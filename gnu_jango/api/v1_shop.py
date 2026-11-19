@@ -1981,7 +1981,7 @@ def payment_prepare_view(request):
         data={
             "order_id": order.od_id,
             "uid": order.uid,
-            "order_name": str(data.get("order_name") or "Shop order"),
+            "order_name": str(data.get("order_name") or order_goods_name(order)),
             "amount": amount,
             # 복합과세 결제 (de_tax_flag_use): the checkout sends comm_free_mny as taxFreeAmount
             "tax_flag": tax_flag,
@@ -2013,6 +2013,16 @@ def payment_prepare_view(request):
             "pg_extra": pg_extra,
         }
     )
+
+
+def order_goods_name(order):
+    """youngcart orderform.sub.php: the first product's name, with " 외 N건" for the other products,
+    without the characters youngcart strips for the PG form."""
+    names = {}
+    for it_id, it_name in order.items.order_by("pk").values_list("it_id", "it_name"):
+        names.setdefault(it_id, re.sub(r"['\"|,&;]", "", it_name))
+    first = next(iter(names.values()), "")
+    return f"{first} 외 {len(names) - 1}건" if len(names) > 1 else first
 
 
 @api_view(["POST"])
