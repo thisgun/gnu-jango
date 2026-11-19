@@ -392,7 +392,7 @@ class ScheduledJobsRunnerTests(TestCase):
             [
                 "expire_pending_payment_orders",
                 "expire_pending_email_members",
-                "expire_toss_vbank_orders",
+                "expire_vbank_orders",
                 "recover_nicepay_attempts",
                 "cleanup_admin_privacy",
                 "cleanup_search_clicks",
@@ -481,7 +481,7 @@ class RunScheduledJobsCommandTests(TestCase):
                     call_command("run_scheduled_jobs", stdout=stdout)
 
         self.assertIn("cleanup_admin_privacy: failed", stdout.getvalue())
-        self.assertIn("expire_toss_vbank_orders: ok", stdout.getvalue())
+        self.assertIn("expire_vbank_orders: ok", stdout.getvalue())
 
     def test_dry_run_and_json(self):
         stdout = StringIO()
@@ -549,7 +549,7 @@ class CronEndpointTests(TestCase):
 
     @override_settings(CRON_SECRET="s" * 32)
     def test_partial_failure_reports_each_job(self):
-        with mock.patch.object(scheduled_jobs, "default_runner", fake_runner(failing={"expire_toss_vbank_orders"})):
+        with mock.patch.object(scheduled_jobs, "default_runner", fake_runner(failing={"expire_vbank_orders"})):
             with self.assertLogs("gnu_jango.core.scheduled_jobs", "ERROR"):
                 response = self.client.get(CRON_URL, HTTP_AUTHORIZATION="Bearer " + "s" * 32)
 
@@ -558,9 +558,9 @@ class CronEndpointTests(TestCase):
         self.assertFalse(body["ok"])
         self.assertEqual(body["data"]["failed"], 1)
         statuses = {job["name"]: job["status"] for job in body["data"]["jobs"]}
-        self.assertEqual(statuses["expire_toss_vbank_orders"], "failed")
+        self.assertEqual(statuses["expire_vbank_orders"], "failed")
         self.assertEqual(statuses["cleanup_admin_privacy"], "ok")
-        self.assertIn("expire_toss_vbank_orders", body["errors"])
+        self.assertIn("expire_vbank_orders", body["errors"])
         self.assertIn("no-store", response["Cache-Control"])
 
 
