@@ -1437,9 +1437,12 @@ def recheck_expired_nicepay_vbank(attempt):
     """Ask NICEPAY about an account this shop expired while NICEPAY kept it open. A deposit found
     there is kept for a refund (_keep_late_deposit); an account NICEPAY has closed since needs no
     more watching. Returns "late_deposit", "closed" or "open"; PaymentCancelError when NICEPAY could
-    not be asked or its answer cannot be matched to this account."""
-    lookup = _lookup_transaction(attempt.tid, attempt.mode)
-    _touch_attempt_checked(attempt)
+    not be asked or its answer cannot be matched to this account. The attempt counts as asked even
+    when the lookup fails, so a failure is retried the next day and not on every run."""
+    try:
+        lookup = _lookup_transaction(attempt.tid, attempt.mode)
+    finally:
+        _touch_attempt_checked(attempt)
     status = str(lookup.get("Status") or "").strip()
     if status == "9":
         return "open"

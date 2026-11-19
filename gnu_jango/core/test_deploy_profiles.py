@@ -394,7 +394,6 @@ class ScheduledJobsRunnerTests(TestCase):
                 "expire_pending_email_members",
                 "expire_vbank_orders",
                 "recover_nicepay_attempts",
-                "recheck_expired_nicepay_vbanks",
                 "cleanup_admin_privacy",
                 "cleanup_search_clicks",
                 "process_notifications",
@@ -402,6 +401,7 @@ class ScheduledJobsRunnerTests(TestCase):
                 "check_search_health",
                 "save_order_points",
                 "send_shop_alerts",
+                "recheck_expired_nicepay_vbanks",
                 # The bundled plugins' jobs: the suite runs with gnu_plugins.* installed.
                 "attendance_monthly_bonus",
                 "order_notify_retry",

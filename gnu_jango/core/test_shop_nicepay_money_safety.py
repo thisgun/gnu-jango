@@ -1719,6 +1719,45 @@ def test_a_recheck_nicepay_cannot_answer_fails_the_run_and_changes_nothing(expir
     assert expired_here.attempt.state == "expired"
 
 
+def test_a_failed_lookup_is_not_asked_again_before_the_day_is_up(expired_here):
+    checkout = expired_here
+
+    summary, post = recheck([shop_nicepay.NicepayTransportError("down", kind="network")], fails=True)
+
+    assert (summary["failed"], post.call_count) == (1, 1)
+    checkout.attempt.refresh_from_db()
+    assert checkout.attempt.state == "expired"
+    assert checkout.attempt.last_checked_at > timezone.now() - timedelta(minutes=5)
+    again, post = recheck([])  # the job may run again today: no second lookup, and no failure to repeat
+    post.assert_not_called()
+    assert (again["inspected"], again["failed"]) == (0, 0)
+
+    ShopPaymentAttempt.objects.filter(pk=checkout.attempt.pk).update(last_checked_at=timezone.now() - timedelta(days=1))
+    next_day, post = recheck([shop_nicepay.NicepayTransportError("down", kind="network")], fails=True)
+    assert (next_day["failed"], post.call_count) == (1, 1)  # a failure that persists fails each day's run
+
+
+def test_a_recheck_out_of_time_stops_reports_the_rest_and_does_not_fail(expired_here):
+    command = "gnu_jango.core.management.commands.recheck_expired_nicepay_vbanks.time.monotonic"
+    with patch(command, side_effect=[0, 1000]):
+        summary, post = recheck([])
+
+    post.assert_not_called()
+    assert (summary["timed_out"], summary["remaining"], summary["failed"]) == (True, 1, 0)
+    assert summary["time_budget_seconds"] >= 5
+    expired_here.attempt.refresh_from_db()
+    assert expired_here.attempt.last_checked_at < timezone.now() - timedelta(hours=20)  # still due next run
+    done, post = recheck([(NOT_DEPOSITED_LOOKUP, 200)])
+    assert (done["open"], done["remaining"], done["timed_out"]) == (1, 0, False)
+
+
+def test_the_recheck_runs_after_the_other_daily_jobs():
+    from gnu_jango.core.job_registry import CORE_JOBS
+
+    names = [job.name for job in CORE_JOBS]
+    assert names.index("recheck_expired_nicepay_vbanks") > names.index("cleanup_search_clicks")
+
+
 def test_the_recheck_of_expired_accounts_is_scheduled_daily():
     from gnu_jango.core.job_registry import CORE_JOBS
 

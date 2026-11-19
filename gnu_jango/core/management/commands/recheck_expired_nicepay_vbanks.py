@@ -2,8 +2,10 @@
 
 import json
 import logging
+import time
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import F, Q
 from django.utils import timezone
@@ -21,6 +23,11 @@ WATCH_FOR = timedelta(days=30)
 # every job each time) still asks about each account at most once a day.
 ASK_EVERY = timedelta(hours=20)
 DEFAULT_LIMIT = 50
+# Each lookup can take 30 s and the cron request is cut off at 60 s, so stop early and leave the
+# rest for the next run, the way recover_nicepay_attempts does.
+DEFAULT_TIME_BUDGET = 20
+MIN_TIME_BUDGET = 5
+MAX_TIME_BUDGET = 55
 LISTED = 20
 
 
@@ -39,6 +46,10 @@ class Command(BaseCommand):
         limit = int(options["limit"] or 0)
         if limit < 1:
             raise CommandError("--limit must be positive.")
+        budget = max(
+            MIN_TIME_BUDGET,
+            min(int(getattr(settings, "SHOP_NICEPAY_RECHECK_TIME_BUDGET", DEFAULT_TIME_BUDGET) or DEFAULT_TIME_BUDGET), MAX_TIME_BUDGET),
+        )
         now = timezone.now()
         # An expired attempt is saved again only when it leaves that state, so updated_at is when it expired.
         attempts = list(
@@ -54,10 +65,18 @@ class Command(BaseCommand):
             "closed": 0,
             "late_deposit": 0,
             "failed": 0,
+            "remaining": 0,
+            "timed_out": False,
+            "time_budget_seconds": budget,
             "samples": [],
         }
         failures = []
-        for attempt in attempts:
+        started = time.monotonic()
+        for done, attempt in enumerate(attempts):
+            if options["apply"] and time.monotonic() - started >= budget:
+                summary["timed_out"] = True
+                summary["remaining"] = len(attempts) - done
+                break
             if not options["apply"]:
                 self.add_sample(summary, attempt, "planned")
                 continue
@@ -79,7 +98,7 @@ class Command(BaseCommand):
             self.stdout.write(
                 "Expired NICEPAY account recheck: "
                 f"inspected={summary['inspected']} open={summary['open']} closed={summary['closed']} "
-                f"late_deposit={summary['late_deposit']} failed={summary['failed']} "
+                f"late_deposit={summary['late_deposit']} failed={summary['failed']} remaining={summary['remaining']} "
                 f"mode={'apply' if options['apply'] else 'dry-run'}"
             )
             for failure in failures[:LISTED]:
