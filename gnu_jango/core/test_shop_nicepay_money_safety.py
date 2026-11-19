@@ -87,6 +87,7 @@ class Checkout:
         )
         assert response.status_code == 200, response.content[:400]
         data = response.json()["data"]
+        self.order_name = data["order_name"]
         self.order = ShopOrder.objects.get(pk=data["order_id"])
         self.extra = data["pg_extra"]["nicepay"]
         self.attempt = ShopPaymentAttempt.objects.get(order=self.order)
@@ -707,7 +708,6 @@ def test_an_issued_virtual_account_waits_for_the_deposit_and_pays_nothing(vbank_
         "주문", TID, "12345678901234", "WAITING_FOR_DEPOSIT"
     )
     assert order.od_misu == order.od_receipt_price
-    assert order.od_vbank_due_date == "20261031235959"
     assert checkout.attempt.state == "pending_deposit"
     # replaying the return page does not issue a second account
     again, post = checkout.confirm([], PayMethod="VBANK")
@@ -747,6 +747,58 @@ def test_cancelling_an_unpaid_virtual_account_order_closes_the_account_first(vba
         assert (order.od_status, order.od_tno, order.od_vbank_status) == ("주문", TID, "WAITING_FOR_DEPOSIT")
         for product in shop.values():
             assert_stock_conserved(product, STOCK)
+
+
+def customer_cancel(checkout, endpoint):
+    order_id = checkout.order.od_id
+    if endpoint == "order page":
+        return checkout.client.patch(f"/api/v1/shop/orders/{order_id}", {"reason": "단순 변심"}, format="json")
+    return checkout.client.post("/api/v1/shop/payment/cancel", {"order_id": order_id, "reason": "단순 변심"}, format="json")
+
+
+@pytest.mark.parametrize("endpoint", ["order page", "checkout cancel"])
+@pytest.mark.parametrize("cancelled", [True, False], ids=["NICEPAY closes it", "NICEPAY refuses"])
+def test_a_customer_cancel_closes_the_nicepay_virtual_account_first(vbank_checkout, shop, endpoint, cancelled):
+    checkout = vbank_checkout
+    checkout.confirm([(vbank_approval(checkout.order), 200)], PayMethod="VBANK")
+    order = checkout.order
+    answer = cancel_response(order, order.od_receipt_price) if cancelled else {"ResultCode": "2015", "ResultMsg": "불가"}
+
+    with patch(POST, return_value=(answer, 200)) as post:
+        response = customer_cancel(checkout, endpoint)
+
+    assert post.call_count == 1, response.content[:300]
+    assert (post.call_args.args[1]["TID"], post.call_args.args[1]["PartialCancelCode"]) == (TID, "0")
+    if cancelled:
+        assert response.status_code == 200, response.content[:300]
+        assert_fully_cancelled(order, paid=0)
+        assert order.od_vbank_status == "CANCELED"
+        for product in shop.values():
+            assert ShopProduct.objects.get(pk=product.pk).it_stock_qty == STOCK
+    else:
+        assert (response.status_code, response.json()["code"]) == (502, "nicepay_vbank_cancel_failed")
+        order.refresh_from_db()
+        assert (order.od_status, order.od_vbank_status) == ("주문", "WAITING_FOR_DEPOSIT")
+        for product in shop.values():
+            assert_stock_conserved(product, STOCK)
+
+
+def test_the_order_page_shows_the_issued_virtual_account_like_a_toss_one(vbank_checkout):
+    checkout = vbank_checkout
+    checkout.confirm([(vbank_approval(checkout.order), 200)], PayMethod="VBANK")
+
+    data = checkout.client.get(f"/api/v1/shop/orders/{checkout.order.od_id}").json()["data"]
+
+    # NICEPAY names the bank and never the account holder (youngcart leaves 예금주 empty); the due
+    # date is the ISO time Toss gives, in Korean time
+    assert (
+        data["od_vbank_bank_code"], data["od_vbank_account"], data["od_vbank_customer_name"], data["od_vbank_due_date"]
+    ) == ("국민은행", "12345678901234", "", "2026-10-31T23:59:59+09:00")
+
+
+def test_the_payment_window_names_the_goods_like_youngcart(nicepay, buyer, shop):
+    checkout = Checkout(buyer, shop)
+    assert checkout.order_name == f"{shop['shirt'].it_name} 외 1건"
 
 
 # recovery against the transaction lookup ---------------------------------------------------
