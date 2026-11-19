@@ -139,7 +139,7 @@ function loadNicepayScript(src: string) {
       resolve();
     };
     script.onerror = () =>
-      reject(new Error(`Nicepay script load failed: ${targetUrl}`));
+      reject(new Error("NICEPAY 결제창을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."));
     if (!script.parentElement) document.head.appendChild(script);
   });
 }
@@ -325,7 +325,7 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
   return new Promise((resolve, reject) => {
     const nicepay = req.order.pg_extra?.nicepay;
     if (!nicepay) {
-      reject(new Error("Nicepay prepare response is missing."));
+      reject(new Error("NICEPAY 결제 준비 정보가 없습니다. 다시 시도해 주세요."));
       return;
     }
     if (nicepay.registration_error) {
@@ -333,11 +333,11 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
       return;
     }
     if (!nicepay.mid || !nicepay.edi_date || !nicepay.sign_data) {
-      reject(new Error("Nicepay MID/signature is missing."));
+      reject(new Error("NICEPAY 결제 정보(MID·서명)가 없습니다. 관리자에게 문의해 주세요."));
       return;
     }
     if (!nicepay.return_url) {
-      reject(new Error("Nicepay return URL is missing."));
+      reject(new Error("NICEPAY 결제 결과를 받을 주소가 없습니다. 관리자에게 문의해 주세요."));
       return;
     }
 
@@ -475,7 +475,7 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
       .then(() => {
         if (typeof hostWindow.goPay !== "function") {
           cleanup();
-          reject(new Error("Nicepay goPay is not defined."));
+          reject(new Error("NICEPAY 결제창을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."));
           return;
         }
         try {
