@@ -49,6 +49,7 @@ from gnu_jango.shop.models import (
     ShopOrder,
     ShopOrderData,
     ShopOrderItem,
+    ShopPaymentAttempt,
     ShopProduct,
     ShopStockNotification,
 )
@@ -1722,6 +1723,10 @@ def cancel_shop_order_locally(order_id, reason):
         if settle_case_is_vbank(order.od_settle_case):
             order.od_vbank_status = "CANCELED"
             order.save(update_fields=["od_vbank_status"])
+        if str(order.od_pg or "").strip().lower() == "nicepay":
+            ShopPaymentAttempt.objects.filter(
+                order=order, provider="nicepay", state__in={"prepared", "authenticated", "pending_deposit"}
+            ).update(state="canceled")
         return order, restored_count, None
 
 
@@ -2055,12 +2060,6 @@ def payment_cancel_view(request):
     order, _, cancel_error = cancel_shop_order_locally(order.pk, cancel_reason)
     if cancel_error:
         return cancel_error
-    if str(order.od_pg or "").strip().lower() == "nicepay":
-        from gnu_jango.shop.models import ShopPaymentAttempt
-
-        ShopPaymentAttempt.objects.filter(
-            order=order, provider="nicepay", state__in={"prepared", "authenticated"}
-        ).update(state="canceled")
     restored_rows = restore_order_cart_snapshot(request, order)
     return api_response(data={"order_id": order.od_id, "uid": order.uid, "status": order.od_status, "restored_rows": restored_rows})
 
