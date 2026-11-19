@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { addressFromMember } from "../src/app/shop/order/orderDataHelpers";
 import { isClosedOrderStatus, normalizeOrderStatus, orderStatusLabel } from "../src/lib/order-status";
 import { shopSearchHref } from "../src/lib/product-url";
-import { formatDateTime } from "../src/lib/utils";
+import { formatDateTime, formatVbankDueDate } from "../src/lib/utils";
 
 test.describe("shop front fixes", () => {
   test("the shop header search goes to the product search", () => {
@@ -19,6 +19,11 @@ test.describe("shop front fixes", () => {
     expect(formatDateTime("")).toBe("");
     expect(formatDateTime(undefined)).toBe("");
     expect(formatDateTime("not a date")).toBe("");
+    // 가상계좌 입금 기한: Toss's ISO dueDate, and the YYYYMMDDhhmmss older NICEPAY orders kept
+    expect(formatVbankDueDate("2026-11-21T23:59:59+09:00")).toBe("2026-11-21 23:59");
+    expect(formatVbankDueDate("20261121235959")).toBe("2026-11-21 23:59");
+    expect(formatVbankDueDate("2026-11-21")).toBe("2026-11-21 23:59");
+    expect(formatVbankDueDate("곧 안내")).toBe("곧 안내");
   });
 
   test("one status label table for list and detail", () => {
