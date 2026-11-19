@@ -45,15 +45,15 @@ export function formatDateTime(value?: string | null): string {
 }
 
 /**
- * 가상계좌 입금 기한 "2026-11-21 23:59". The API sends the stored text: Toss's ISO dueDate in Korean
- * time, or YYYYMMDDhhmmss on older NICEPAY orders. A date alone is open until the end of that day;
- * anything else is shown as it is.
+ * 가상계좌 입금 기한 "2026-11-21 23:59", as vbank_due_date_display() prints it on the server. The API
+ * sends the stored text: Toss's ISO dueDate in Korean time, or YYYYMMDD[hhmmss] on older NICEPAY
+ * orders. A date alone is open until the end of that day; anything else is shown as it is.
  */
 export function formatVbankDueDate(value?: string | null): string {
   const text = String(value || "").trim();
-  const compact = text.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})\d{2}$/);
+  const compact = text.match(/^(\d{4})(\d{2})(\d{2})(?:(\d{2})(\d{2})\d{2})?$/);
   if (compact) {
-    const [, year, month, day, hour, minute] = compact;
+    const [, year, month, day, hour = "23", minute = "59"] = compact;
     return `${year}-${month}-${day} ${hour}:${minute}`;
   }
   if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return `${text} 23:59`;
