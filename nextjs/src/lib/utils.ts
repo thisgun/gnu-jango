@@ -45,6 +45,22 @@ export function formatDateTime(value?: string | null): string {
 }
 
 /**
+ * 가상계좌 입금 기한 "2026-11-21 23:59". The API sends the stored text: Toss's ISO dueDate in Korean
+ * time, or YYYYMMDDhhmmss on older NICEPAY orders. A date alone is open until the end of that day;
+ * anything else is shown as it is.
+ */
+export function formatVbankDueDate(value?: string | null): string {
+  const text = String(value || "").trim();
+  const compact = text.match(/^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})\d{2}$/);
+  if (compact) {
+    const [, year, month, day, hour, minute] = compact;
+    return `${year}-${month}-${day} ${hour}:${minute}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return `${text} 23:59`;
+  return formatDateTime(text) || text;
+}
+
+/**
  * 통화 표시 — 기본 ko-KR/KRW. NEXT_PUBLIC_SHOP_LOCALE / NEXT_PUBLIC_SHOP_CURRENCY
  * 환경변수로 운영자가 다른 로케일/통화 전환 가능.
  *   예: en-US / USD → '$1,234'

@@ -23,6 +23,7 @@ from django.utils import timezone
 from gnu_jango.config.models import Config
 from gnu_jango.defaults import CONFIGS
 from gnu_jango.shop.models import ShopOrder
+from gnu_jango.shop.vbank_due import vbank_due_date_display
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +155,7 @@ def order_context(order):
         "settle_case": "무통장입금" if settle_case_is_bank(order.od_settle_case) else order.od_settle_case,
         "order_url": order_link(order),
         "ordered_at": timezone.localtime(order.od_datetime).strftime("%Y-%m-%d %H:%M") if order.od_datetime else "",
+        "vbank_due_at": vbank_due_date_display(order.od_vbank_due_date),
     }
 
 
