@@ -16,10 +16,6 @@ STATUS_RETURNED = "반품"
 STATUS_SOLD_OUT = "품절"
 
 ACTIVE_LINE_STATUSES = (STATUS_ORDERED, STATUS_PAID, STATUS_READY, STATUS_SHIPPING, STATUS_COMPLETED)
-# A line in one of these counts for nothing (no price, no sale, no further status move) and an
-# order in one of them is closed. Older rows spell 취소 in English.
-INACTIVE_LINE_STATUSES = frozenset({STATUS_CANCELLED, STATUS_RETURNED, STATUS_SOLD_OUT, "cancel", "cancelled"})
-
 # Older rows (and the API's own aliases) spell the statuses in English.
 STATUS_ALIASES = {
     "order": STATUS_ORDERED,
@@ -40,9 +36,14 @@ STATUS_ALIASES = {
     "returned": STATUS_RETURNED,
 }
 
-UNSOLD_LINE_STATUSES = INACTIVE_LINE_STATUSES | frozenset(
-    alias for alias, status in STATUS_ALIASES.items() if status in INACTIVE_LINE_STATUSES
+_CLOSED_STATUSES = (STATUS_CANCELLED, STATUS_RETURNED, STATUS_SOLD_OUT)
+# A line in one of these counts for nothing (no price, no sale, no further status move) and an
+# order in one of them is closed. Every English spelling of them counts too, so order totals and
+# the sales reports always agree on which lines are out.
+INACTIVE_LINE_STATUSES = frozenset(_CLOSED_STATUSES) | frozenset(
+    alias for alias, status in STATUS_ALIASES.items() if status in _CLOSED_STATUSES
 )
+UNSOLD_LINE_STATUSES = INACTIVE_LINE_STATUSES
 
 
 def sold_line_q():
