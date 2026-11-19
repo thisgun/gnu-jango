@@ -394,6 +394,7 @@ class ScheduledJobsRunnerTests(TestCase):
                 "expire_pending_email_members",
                 "expire_vbank_orders",
                 "recover_nicepay_attempts",
+                "recheck_expired_nicepay_vbanks",
                 "cleanup_admin_privacy",
                 "cleanup_search_clicks",
                 "process_notifications",
