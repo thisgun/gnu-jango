@@ -798,6 +798,42 @@ def test_the_order_page_shows_the_issued_virtual_account_like_a_toss_one(vbank_c
     ) == ("국민은행", "12345678901234", "", "2026-10-31T23:59:59+09:00")
 
 
+def customer_order_views(checkout):
+    order_id = checkout.order.od_id
+    listed = checkout.client.get("/api/v1/shop/orders").json()["data"]
+    detail = checkout.client.get(f"/api/v1/shop/orders/{order_id}").json()["data"]
+    return [next(row for row in listed if row["od_id"] == order_id), detail]
+
+
+@pytest.mark.parametrize("settle_case", ["vbank", "card"], ids=["issued virtual account", "abandoned card payment"])
+def test_the_customer_sees_an_unpaid_online_order_as_owed_not_paid(nicepay, buyer, shop, settle_case):
+    from gnu_jango.testing.shop_flows import set_config
+
+    set_config("de_vbank_use", "1")
+    checkout = Checkout(buyer, shop, settle_case=settle_case)
+    if settle_case == "vbank":
+        checkout.confirm([(vbank_approval(checkout.order), 200)], PayMethod="VBANK")
+    order = checkout.order
+    owed = order.od_receipt_price
+
+    for data in customer_order_views(checkout):
+        # youngcart orderinquiryview.php: od_receipt_price 0 prints "아직 입금되지 않았거나…"
+        assert (data["od_receipt_price"], data["od_receipt_total"]) == (0, order.od_receipt_point)
+        assert (data["od_misu"], data["od_misu_price"], data["od_is_fully_paid"]) == (owed, owed, False)
+
+
+def test_the_customer_sees_a_deposited_virtual_account_as_paid(waiting_vbank, buyer):
+    order, _ = waiting_vbank
+    with patch(POST, return_value=(APPROVED_LOOKUP, 200)):
+        assert shop_nicepay.process_nicepay_vbank_notification(deposit(order)) is None
+
+    data = client_for(buyer).get(f"/api/v1/shop/orders/{order.od_id}").json()["data"]
+
+    assert (data["od_status"], data["od_receipt_price"], data["od_misu"], data["od_is_fully_paid"]) == (
+        "입금", 5000, 0, True
+    )
+
+
 def test_the_payment_window_names_the_goods_like_youngcart(nicepay, buyer, shop):
     checkout = Checkout(buyer, shop)
     assert checkout.order_name == f"{shop['shirt'].it_name} 외 1건"
