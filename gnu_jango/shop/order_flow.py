@@ -6,8 +6,8 @@ import logging
 from dataclasses import dataclass
 
 from django.db import transaction
-from django.db.models import Case, F, IntegerField, Q, Value, When
-from django.db.models.functions import Lower, Trim
+from django.db.models import Case, CharField, F, Func, IntegerField, Q, Value, When
+from django.db.models.functions import Lower
 from django.db.models.lookups import In
 from django.utils import timezone
 
@@ -85,6 +85,22 @@ def paid_amount(order):
 
 
 ORDERED_SPELLINGS = frozenset({STATUS_ORDERED, *(alias for alias, s in STATUS_ALIASES.items() if s == STATUS_ORDERED)})
+# What str.strip() removes (str.isspace(); U+3000 is the last such code point). SQL TRIM alone
+# removes only spaces, so a tab or a no-break space would read differently in a query.
+WHITESPACE = "".join(filter(str.isspace, map(chr, range(0x3001))))
+
+
+class StripWhitespace(Func):
+    """A text column with WHITESPACE trimmed from both ends, as str.strip() trims a value."""
+
+    function = "TRIM"  # SQLite: trim(X, Y) removes every character of Y
+    output_field = CharField()
+
+    def __init__(self, expression):
+        super().__init__(expression, Value(WHITESPACE))
+
+    def as_postgresql(self, compiler, connection, **extra_context):
+        return self.as_sql(compiler, connection, function="BTRIM", **extra_context)
 
 
 def awaiting_online_payment():
@@ -92,8 +108,10 @@ def awaiting_online_payment():
     status and the settle case the way canonical_status() and settle_case_is_bank() do."""
     from gnu_jango.api.shop_payments import BANK_SETTLE_CASES
 
-    status = Lower(Trim("od_status"))
-    return Q(In(status, sorted(ORDERED_SPELLINGS))) & ~Q(In(Trim("od_settle_case"), sorted(BANK_SETTLE_CASES)))
+    status = Lower(StripWhitespace("od_status"))
+    return Q(In(status, sorted(ORDERED_SPELLINGS))) & ~Q(
+        In(StripWhitespace("od_settle_case"), sorted(BANK_SETTLE_CASES))
+    )
 
 
 def received_price():
