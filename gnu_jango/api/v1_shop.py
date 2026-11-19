@@ -1723,14 +1723,20 @@ def cancel_shop_order_locally(order_id, reason):
         if vbank_error:
             return None, 0, vbank_error
         order, restored_count = cancel_order_and_refund_benefits(order, reason)
-        if settle_case_is_vbank(order.od_settle_case):
-            order.od_vbank_status = "CANCELED"
-            order.save(update_fields=["od_vbank_status"])
-        if str(order.od_pg or "").strip().lower() == "nicepay":
-            ShopPaymentAttempt.objects.filter(
-                order=order, provider="nicepay", state__in={"prepared", "authenticated", "pending_deposit"}
-            ).update(state="canceled")
+        close_cancelled_order_payment(order)
         return order, restored_count, None
+
+
+def close_cancelled_order_payment(order):
+    """After an unpaid order is cancelled: its virtual account is closed and no NICEPAY attempt
+    waits for it any more (the recovery job would keep looking it up)."""
+    if settle_case_is_vbank(order.od_settle_case):
+        order.od_vbank_status = "CANCELED"
+        order.save(update_fields=["od_vbank_status"])
+    if str(order.od_pg or "").strip().lower() == "nicepay":
+        ShopPaymentAttempt.objects.filter(
+            order=order, provider="nicepay", state__in={"prepared", "authenticated", "pending_deposit"}
+        ).update(state="canceled")
 
 
 def restore_order_cart_snapshot(request, order):

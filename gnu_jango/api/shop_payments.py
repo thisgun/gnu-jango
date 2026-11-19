@@ -868,6 +868,18 @@ def cancel_pending_vbank(order, reason):
     )
 
 
+def refresh_pending_vbank(order):
+    """Bring the order up to date with the PG before its waiting virtual account is closed, so a
+    deposit made just before the deadline is applied rather than cancelled. NICEPAY is asked here;
+    the Toss cancel reads the payment's latest status itself and refuses one that left
+    WAITING_FOR_DEPOSIT. None, or the error that leaves the order as it is."""
+    if str(order.od_pg or "").strip().lower() == "nicepay":
+        from .shop_nicepay import refresh_nicepay_vbank
+
+        return refresh_nicepay_vbank(order)
+    return None
+
+
 @sensitive_variables("authorization")
 def cancel_pending_toss_vbank(order, reason):
     if not settle_case_is_vbank(order.od_settle_case) or not order.od_tno:

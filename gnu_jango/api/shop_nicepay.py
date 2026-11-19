@@ -1290,6 +1290,26 @@ def cancel_pending_nicepay_vbank(order, reason):
     return None
 
 
+def refresh_nicepay_vbank(order):
+    """Ask NICEPAY for the latest state of the order's waiting virtual account and apply it: a
+    deposit pays the order, a closed account cancels it, and an account still waiting leaves the
+    order as it is. None once NICEPAY answered; the error when it could not be asked or answered
+    something that needs an admin."""
+    attempt = (
+        order.payment_attempts.filter(provider="nicepay", tid=order.od_tno, state="pending_deposit")
+        .order_by("-pk")
+        .first()
+    )
+    if attempt is None:
+        return api_error(
+            "NICEPAY 가상계좌의 결제 시도를 찾지 못해 입금 여부를 확인할 수 없습니다. 관리자 확인이 필요합니다.",
+            status=drf_status.HTTP_409_CONFLICT,
+            code="nicepay_vbank_attempt_missing",
+        )
+    _, error = recover_nicepay_attempt(attempt)
+    return error
+
+
 def order_paid_through_nicepay(order):
     """A card / transfer / phone NICEPAY payment that can be refunded with the cancel API."""
     return (

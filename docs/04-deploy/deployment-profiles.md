@@ -244,7 +244,7 @@ DB 파일을 영구 디스크에 두고 백업하세요(`DATABASE_URL=sqlite:///
 |------|------|
 | `expire_pending_payment_orders` | 결제가 끝나지 않은 오래된 주문 자동 취소 |
 | `expire_pending_email_members` | 메일 인증 기한이 지난 가입 대기 회원 처리 |
-| `expire_toss_vbank_orders` | 입금 기한이 지난 Toss 가상계좌 주문 취소 |
+| `expire_vbank_orders` | 입금 기한이 지난 Toss·NICEPAY 가상계좌를 닫고 주문 취소 (예전 이름 `expire_toss_vbank_orders`도 실행됨) |
 | `cleanup_admin_privacy` | 보존 기간이 지난 방문 로그·검색어 삭제 |
 
 ```bash
