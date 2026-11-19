@@ -34,7 +34,7 @@
 <section class="g5-admin-report-metrics" aria-label="현재 주문 금액">
   <article class="card g5-admin-report-metric"><span>상품금액</span><strong>{{ order.od_cart_price|intcomma }}</strong><em>취소 {{ order.od_cancel_price|intcomma }}</em></article>
   <article class="card g5-admin-report-metric"><span>배송비</span><strong>{{ order.od_send_cost|intcomma }}</strong><em>추가 {{ order.od_send_cost2|intcomma }}</em></article>
-  <article class="card g5-admin-report-metric"><span>결제금액</span><strong>{{ order.od_receipt_price|intcomma }}</strong><em>포인트 {{ order.od_receipt_point|intcomma }} · 환불 {{ order.od_refund_price|intcomma }}</em></article>
+  <article class="card g5-admin-report-metric"><span>결제금액</span><strong>{{ received|intcomma }}</strong><em>포인트 {{ order.od_receipt_point|intcomma }} · 환불 {{ order.od_refund_price|intcomma }}</em></article>
   <article class="card g5-admin-report-metric"><span>미수금</span><strong>{{ order.od_misu|intcomma }}</strong><em>쿠폰 {{ order.od_coupon|intcomma }} · 배송쿠폰 {{ order.od_send_coupon|intcomma }}</em></article>
 </section>
 

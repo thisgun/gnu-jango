@@ -984,6 +984,10 @@ class ShopPaymentAttempt(models.Model):
         ("superseded", "다른 결제 시도로 대체됨"),
         ("failed", "실패"),
         ("canceled", "취소됨"),
+        # NICEPAY would not close the account after its deadline; the shop cancelled the order itself
+        ("expired", "기한 만료로 쇼핑몰에서 취소"),
+        # a deposit NICEPAY confirmed for an order already cancelled: refund it by hand
+        ("late_deposit", "취소 후 입금됨 · 환불 필요"),
     )
 
     order = models.ForeignKey(
@@ -1010,6 +1014,9 @@ class ShopPaymentAttempt(models.Model):
     last_error = models.TextField(blank=True, default="")
     recovery_attempts = models.PositiveSmallIntegerField(default=0)
     last_checked_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    # NICEPAY refused to close this virtual account past its deadline: the expiry job stops asking
+    # until a day after the deadline, when the shop may expire the order itself
+    close_refused_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 

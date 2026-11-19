@@ -28,7 +28,7 @@ class ScheduledJob:
 CORE_JOBS: tuple[ScheduledJob, ...] = (
     ScheduledJob("expire_pending_payment_orders", ("--apply", "--json"), ("--json",), 60),
     ScheduledJob("expire_pending_email_members", ("--apply", "--json"), ("--json",), 3600),
-    ScheduledJob("expire_toss_vbank_orders", ("--apply", "--json"), ("--json",), 60),
+    ScheduledJob("expire_vbank_orders", ("--apply", "--json"), ("--json",), 60),
     ScheduledJob("recover_nicepay_attempts", ("--apply", "--json"), ("--json",), 300),
     # This one applies by default and takes --dry-run instead of --apply.
     ScheduledJob("cleanup_admin_privacy", (), ("--dry-run",), 86400),
@@ -39,6 +39,10 @@ CORE_JOBS: tuple[ScheduledJob, ...] = (
     ScheduledJob("save_order_points", ("--apply", "--json"), ("--json",)),
     # Each kind of alert checks its own shop setting, so the job does nothing until one is on.
     ScheduledJob("send_shop_alerts", ("--apply", "--json"), ("--json",), 600),
+    # Last of the core jobs: one request runs them in order within a 60 s limit, and this one is the
+    # slow one (a NICEPAY lookup takes up to 30 s). It stops after its own time budget.
+    # Accounts the shop expired while NICEPAY kept them open: a deposit there must still be refunded.
+    ScheduledJob("recheck_expired_nicepay_vbanks", ("--apply", "--json"), ("--json",), 86400),
 )
 
 

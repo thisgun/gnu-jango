@@ -3,6 +3,7 @@ orderformcartupdate.php, orderlistdelete.php): status transitions, payment and r
 PG cancellation, permission checks on the order reports, and order lines that cannot be edited
 by hand."""
 
+import csv
 import io
 import json
 from unittest.mock import patch
@@ -22,6 +23,7 @@ from rest_framework.test import APIClient
 from gnu_jango.config.models import Config
 from gnu_jango.core.test_shop_payments_api import FAKE_TOSS, fake_http_response, http_error
 from gnu_jango.shop.admin.orders import set_order_status
+from gnu_jango.shop.import_export_resources import ShopOrderResource
 from gnu_jango.shop.order_flow import order_misu
 from gnu_jango.shop.sales_report import PERIOD_DAY, sales_table
 from gnu_jango.shop.models import (
@@ -553,6 +555,32 @@ class NetReceiptTests(OrderAdminBase):
         self.assertIn(no_invoice, [str(risk["hint"]) for risk in kept["risks"]])
         waiting = self.client.get(reverse("admin:shop_shoporder_changelist"), {"shipping_state": "waiting_invoice"})
         self.assertEqual({row.pk for row in waiting.context["cl"].result_list}, {self.kept.pk})
+
+    def report_csv(self, export):
+        response = self.client.get(reverse("admin:shop_shoporder_reports"), {"export": export})
+        rows = list(csv.DictReader(io.StringIO(response.content.decode("utf-8-sig"))))
+        return {row.get("od_id") or row.get("id"): row for row in rows}
+
+    def test_the_exports_show_an_unpaid_online_order_as_nothing_received(self):
+        self.unpaid_online_order()
+
+        orders = self.report_csv("orders")
+        # the order export keeps the stored column and names what was received next to it
+        self.assertEqual((orders["YC-N3"]["od_receipt_price"], orders["YC-N3"]["received_price"]), ("13000", "0"))
+        self.assertEqual((orders["YC-N1"]["od_receipt_price"], orders["YC-N1"]["received_price"]), ("13000", "13000"))
+        receipts = self.report_csv("receipts")
+        self.assertEqual((receipts["YC-N3"]["receipt_price"], receipts["YC-N1"]["receipt_price"]), ("0", "13000"))
+        exported = {
+            row["od_id"]: row
+            for row in csv.DictReader(io.StringIO(ShopOrderResource().export(ShopOrder.objects.all()).csv))
+        }
+        self.assertEqual((exported["YC-N3"]["od_receipt_price"], exported["YC-N3"]["received_price"]), ("13000", "0"))
+        self.assertEqual(exported["YC-N1"]["received_price"], "13000")
+
+    def test_the_order_lines_page_shows_what_an_unpaid_online_order_received(self):
+        order = self.unpaid_online_order()
+        response = self.client.get(reverse("admin:shop_shoporder_lines", args=[order.pk]))
+        self.assertContains(response, "<span>결제금액</span><strong>0</strong>", html=False)
 
     @override_settings(SHOP_PAYMENT_ADAPTER_BASE_URL="https://adapter.invalid/verify", SHOP_PAYMENT_ADAPTER_SECRET="s")
     def test_the_adapter_reconciliation_skips_cancelled_and_refunded_orders(self):

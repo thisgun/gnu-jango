@@ -14,6 +14,7 @@ import {
   type PaymentHostResultPayload,
 } from "@/lib/payment-return";
 import { runtimeRouterPush } from "@/lib/runtime-router";
+import { formatVbankDueDate } from "@/lib/utils";
 import { Loader2, CheckCircle2, XCircle, Clock } from "lucide-react";
 
 function PaymentSuccessContent() {
@@ -263,7 +264,7 @@ function PaymentSuccessContent() {
                   <p>예금주: {virtualAccount.customer_name}</p>
                 )}
                 {virtualAccount?.due_date && (
-                  <p>입금 기한: {virtualAccount.due_date}</p>
+                  <p>입금 기한: {formatVbankDueDate(virtualAccount.due_date)}</p>
                 )}
               </div>
             </div>

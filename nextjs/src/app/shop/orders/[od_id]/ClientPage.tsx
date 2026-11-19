@@ -16,7 +16,7 @@ import {
   normalizeOrderStatus,
   orderStatusLabel,
 } from "@/lib/order-status";
-import { formatPrice, formatDateTime, cn } from "@/lib/utils";
+import { formatPrice, formatDateTime, formatVbankDueDate, cn } from "@/lib/utils";
 import { formatHopeDate } from "@/lib/hope-date";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Check, X } from "lucide-react";
@@ -431,7 +431,7 @@ export default function OrderDetailPage() {
                   <p>예금주: {order.od_vbank_customer_name}</p>
                 )}
                 {order.od_vbank_due_date && (
-                  <p>입금 기한: {order.od_vbank_due_date}</p>
+                  <p>입금 기한: {formatVbankDueDate(order.od_vbank_due_date)}</p>
                 )}
               </div>
             </div>

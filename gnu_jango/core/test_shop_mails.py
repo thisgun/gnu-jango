@@ -17,6 +17,7 @@ from gnu_jango.api.shop_payments import confirm_order_payment, save_toss_vbank_a
 from gnu_jango.config.models import Config
 from gnu_jango.core.test_shop_orders_more import API, ShopOrderBase
 from gnu_jango.shop.models import ShopOrder
+from gnu_jango.shop.notifications import send_order_placed_mails
 from gnu_jango.shop.order_flow import move_order_status
 from gnu_jango.users.models import Profile
 
@@ -232,6 +233,20 @@ class OrderPlacedMailTests(ShopMailBase):
         customer = [message for message in mail.outbox if message.to == ["vbank@example.test"]]
         self.assertEqual(len(mail.outbox), 2)
         self.assertIn("가상계좌: 20 12345678901234", customer[0].body)
+
+    def test_the_virtual_account_deadline_is_mailed_as_a_date_and_time(self):
+        for od_id, stored in (("VB-DUE-ISO", "2026-11-21T23:59:59+09:00"), ("VB-DUE-OLD", "20261121235959")):
+            with self.subTest(stored=stored):
+                mail.outbox.clear()
+                order = ShopOrder.objects.create(
+                    od_id=od_id, od_name="Vbank buyer", od_email="vbank@example.test", od_status="주문",
+                    od_settle_case="가상계좌", od_pg="nicepay", od_vbank_bank_code="국민은행",
+                    od_vbank_account="12345678901234", od_vbank_due_date=stored,
+                )
+                send_order_placed_mails(order.od_id)
+                customer = next(message for message in mail.outbox if message.to == ["vbank@example.test"])
+                self.assertIn("입금 기한: 2026-11-21 23:59\n", customer.body)
+                self.assertIn("<strong>입금 기한</strong> 2026-11-21 23:59</p>", self.html_of(customer))
 
     def test_a_virtual_account_deposit_sends_the_deposit_mail(self):
         order = ShopOrder.objects.create(

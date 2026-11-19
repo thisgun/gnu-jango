@@ -56,6 +56,7 @@ from gnu_jango.shop.models import (
 from gnu_jango.shop.cash_receipts import customer_payload as cash_receipt_payload, schedule_close_settlement
 from gnu_jango.shop.coupon_dates import coupon_end_date
 from gnu_jango.shop.inventory import StockAdjustmentError, cancel_order_with_stock_restore, reserve_product_stock
+from gnu_jango.shop.order_flow import paid_amount
 from gnu_jango.shop.order_hooks import order_placed, order_status_changed
 from gnu_jango.shop.delivery import delivery_inquiry
 from gnu_jango.shop.delivery_tracking import tracking_payload
@@ -592,7 +593,9 @@ def order_payload(order, *, detail=False, bank_accounts=None):
         - send_coupon
         - order.od_cancel_price,
     )
-    receipt_total = order.od_receipt_price + order.od_receipt_point
+    # an online payment the PG has not completed keeps the amount to pay in od_receipt_price
+    receipt_price = paid_amount(order)
+    receipt_total = receipt_price + order.od_receipt_point
     receipt_url = ""
     if order.od_tno and str(order.od_pg or "").lower() == "toss":
         receipt_url = f"https://dashboard.tosspayments.com/receipt/redirection?transactionId={order.od_tno}"
@@ -633,7 +636,7 @@ def order_payload(order, *, detail=False, bank_accounts=None):
         "od_cart_price": order.od_cart_price,
         "od_send_cost": order.od_send_cost,
         "od_send_cost2": order.od_send_cost2,
-        "od_receipt_price": order.od_receipt_price,
+        "od_receipt_price": receipt_price,
         "od_cancel_price": order.od_cancel_price,
         "od_refund_price": order.od_refund_price,
         "od_receipt_point": order.od_receipt_point,
@@ -1720,14 +1723,20 @@ def cancel_shop_order_locally(order_id, reason):
         if vbank_error:
             return None, 0, vbank_error
         order, restored_count = cancel_order_and_refund_benefits(order, reason)
-        if settle_case_is_vbank(order.od_settle_case):
-            order.od_vbank_status = "CANCELED"
-            order.save(update_fields=["od_vbank_status"])
-        if str(order.od_pg or "").strip().lower() == "nicepay":
-            ShopPaymentAttempt.objects.filter(
-                order=order, provider="nicepay", state__in={"prepared", "authenticated", "pending_deposit"}
-            ).update(state="canceled")
+        close_cancelled_order_payment(order)
         return order, restored_count, None
+
+
+def close_cancelled_order_payment(order):
+    """After an unpaid order is cancelled: its virtual account is closed and no NICEPAY attempt
+    waits for it any more (the recovery job would keep looking it up)."""
+    if settle_case_is_vbank(order.od_settle_case):
+        order.od_vbank_status = "CANCELED"
+        order.save(update_fields=["od_vbank_status"])
+    if str(order.od_pg or "").strip().lower() == "nicepay":
+        ShopPaymentAttempt.objects.filter(
+            order=order, provider="nicepay", state__in={"prepared", "authenticated", "pending_deposit"}
+        ).update(state="canceled")
 
 
 def restore_order_cart_snapshot(request, order):
@@ -1986,7 +1995,11 @@ def payment_prepare_view(request):
         data={
             "order_id": order.od_id,
             "uid": order.uid,
-            "order_name": str(data.get("order_name") or order_goods_name(order)),
+            "order_name": (
+                fit_goods_name(data["order_name"], pg_service)
+                if data.get("order_name")
+                else order_goods_name(order, pg_service)
+            ),
             "amount": amount,
             # 복합과세 결제 (de_tax_flag_use): the checkout sends comm_free_mny as taxFreeAmount
             "tax_flag": tax_flag,
@@ -2020,14 +2033,37 @@ def payment_prepare_view(request):
     )
 
 
-def order_goods_name(order):
+def order_goods_name(order, pg_service):
     """youngcart orderform.sub.php: the first product's name, with " 외 N건" for the other products,
     without the characters youngcart strips for the PG form."""
     names = {}
     for it_id, it_name in order.items.order_by("pk").values_list("it_id", "it_name"):
         names.setdefault(it_id, re.sub(r"['\"|,&;]", "", it_name))
     first = next(iter(names.values()), "")
-    return f"{first} 외 {len(names) - 1}건" if len(names) > 1 else first
+    return fit_goods_name(first, pg_service, suffix=f" 외 {len(names) - 1}건" if len(names) > 1 else "")
+
+
+def _euc_kr_size(char):
+    # NICEPAY's form is sent in EUC-KR; the browser sends a character outside it as &#NNNN;
+    return len(char.encode("cp949", "xmlcharrefreplace"))
+
+
+# NICEPAY GoodsName: 40 bytes (developers.nicepay.co.kr, 요청 파라미터); Toss orderName: 100 characters
+GOODS_NAME_LIMITS = {"nicepay": (40, _euc_kr_size)}
+DEFAULT_GOODS_NAME_LIMIT = (100, len)
+
+
+def fit_goods_name(name, pg_service, *, suffix=""):
+    """``name`` + ``suffix`` cut to what the PG accepts, whole characters only; the suffix stays."""
+    limit, size = GOODS_NAME_LIMITS.get(pg_service, DEFAULT_GOODS_NAME_LIMIT)
+    room = limit - sum(size(char) for char in suffix)
+    kept = []
+    for char in str(name or ""):
+        room -= size(char)
+        if room < 0:
+            break
+        kept.append(char)
+    return "".join(kept).rstrip() + suffix
 
 
 @api_view(["POST"])

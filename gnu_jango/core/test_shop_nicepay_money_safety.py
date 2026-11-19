@@ -4,10 +4,16 @@ NICEPAY did. No test calls NICEPAY: ``_nicepay_post`` (or the HTTPS connection b
 patched, the keys are fake (gnu_jango/core/test_shop_nicepay.py has the happy paths)."""
 
 import json
+import logging
 import socket
+from datetime import timedelta
+from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import pytest
+from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.utils import timezone
 
 from gnu_jango.api import shop_nicepay
 from gnu_jango.api.shop_payments import PaymentCancelError
@@ -288,10 +294,18 @@ def test_a_declined_approval_fails_without_a_net_cancel(nicepay, buyer, shop):
     assert_still_unpaid(checkout, shop)
 
 
-def test_a_declined_approval_with_a_server_error_status_is_treated_as_unknown(nicepay, buyer, shop):
+@pytest.mark.parametrize(
+    "answer, status",
+    [
+        (lambda order: approval_response(order, ResultCode="9999"), 503),
+        (lambda order: approval_response(order, ResultCode="9999"), 400),
+        (lambda order: {"<html><body>502 Bad Gateway</body></html>": ""}, 200),
+    ],
+    ids=["a decline on a server error", "a decline on a client error", "a proxy's page"],
+)
+def test_an_approval_answer_nicepay_did_not_give_is_never_taken_as_a_decline(nicepay, buyer, shop, answer, status):
     checkout = Checkout(buyer, shop)
-    declined = approval_response(checkout.order, ResultCode="9999")
-    response, post = checkout.confirm([(declined, 503), (net_cancel_answer(checkout.order), 200)])
+    response, post = checkout.confirm([(answer(checkout.order), status), (net_cancel_answer(checkout.order), 200)])
 
     assert response.json()["code"] == "nicepay_approval_unverified"
     assert post.call_count == 2
@@ -551,14 +565,13 @@ def test_a_whole_nicepay_order_cancel_is_one_full_refund_and_closes_the_attempt(
 @pytest.mark.parametrize(
     "answer",
     [
-        lambda order, amount: {},
         lambda order, amount: {"ResultCode": "2013", "ResultMsg": "이미 취소된 거래"},
         lambda order, amount: cancel_response(order, amount, TID="NICTESTOTHERTID000000001"),
         lambda order, amount: cancel_response(order, amount, MID="OTHERMID01"),
         lambda order, amount: cancel_response(order, amount - 1),
         lambda order, amount: cancel_response(order, amount, Signature="0" * 64),
     ],
-    ids=["empty", "refused", "another TID", "another MID", "another amount", "forged signature"],
+    ids=["refused", "another TID", "another MID", "another amount", "forged signature"],
 )
 def test_an_unconfirmed_nicepay_refund_changes_nothing_in_the_shop(nicepay, buyer, shop, answer):
     checkout = Checkout(buyer, shop)
@@ -588,6 +601,15 @@ def paid_nicepay_order(user, **fields):
     return ShopOrderFactory(**values)
 
 
+LOST_CANCEL_ANSWERS = {
+    "no answer": shop_nicepay.NicepayTransportError("timeout", kind="timeout"),
+    "a proxy's error page": ({"<html><body>504 Gateway Time-out</body></html>": ""}, 504),
+    "a refusal code on a server error": ({"ResultCode": "2015", "ResultMsg": "취소 불가"}, 500),
+    "an empty answer": ({}, 200),
+}
+
+
+@pytest.mark.parametrize("lost", LOST_CANCEL_ANSWERS.values(), ids=list(LOST_CANCEL_ANSWERS))
 @pytest.mark.parametrize(
     "lookup, partial, outcome",
     [
@@ -599,9 +621,10 @@ def paid_nicepay_order(user, **fields):
     ],
     ids=["full cancel found cancelled", "partial cancel found cancelled", "still approved", "lookup refused", "lookup of another TID"],
 )
-def test_a_lost_cancel_answer_is_settled_by_the_lookup_never_by_a_second_cancel(nicepay, buyer, lookup, partial, outcome):
+def test_a_lost_cancel_answer_is_settled_by_the_lookup_never_by_a_second_cancel(
+    nicepay, buyer, lost, lookup, partial, outcome
+):
     order = paid_nicepay_order(buyer)
-    lost = shop_nicepay.NicepayTransportError("timeout", kind="timeout")
     with patch(POST, side_effect=[lost, (lookup, 200)]) as post:
         if outcome == "already_canceled":
             answer = shop_nicepay.nicepay_cancel_payment(order, "고객 요청", amount=None, partial=partial)
@@ -611,6 +634,7 @@ def test_a_lost_cancel_answer_is_settled_by_the_lookup_never_by_a_second_cancel(
             with pytest.raises(PaymentCancelError) as raised:
                 shop_nicepay.nicepay_cancel_payment(order, "고객 요청", amount=4000 if partial else None, partial=partial)
             assert outcome in str(raised.value)
+            assert not isinstance(raised.value, shop_nicepay.NicepayCancelRefused)
     assert post.call_count == 2
     assert post.call_args_list[1].args[0] == shop_nicepay.NICEPAY_LOOKUP_URL
     assert ShopOrderData.objects.filter(od_id=order.od_id, log_id__startswith="nicepay-cancel-unknown").exists()
@@ -798,6 +822,42 @@ def test_the_order_page_shows_the_issued_virtual_account_like_a_toss_one(vbank_c
     ) == ("국민은행", "12345678901234", "", "2026-10-31T23:59:59+09:00")
 
 
+def customer_order_views(checkout):
+    order_id = checkout.order.od_id
+    listed = checkout.client.get("/api/v1/shop/orders").json()["data"]
+    detail = checkout.client.get(f"/api/v1/shop/orders/{order_id}").json()["data"]
+    return [next(row for row in listed if row["od_id"] == order_id), detail]
+
+
+@pytest.mark.parametrize("settle_case", ["vbank", "card"], ids=["issued virtual account", "abandoned card payment"])
+def test_the_customer_sees_an_unpaid_online_order_as_owed_not_paid(nicepay, buyer, shop, settle_case):
+    from gnu_jango.testing.shop_flows import set_config
+
+    set_config("de_vbank_use", "1")
+    checkout = Checkout(buyer, shop, settle_case=settle_case)
+    if settle_case == "vbank":
+        checkout.confirm([(vbank_approval(checkout.order), 200)], PayMethod="VBANK")
+    order = checkout.order
+    owed = order.od_receipt_price
+
+    for data in customer_order_views(checkout):
+        # youngcart orderinquiryview.php: od_receipt_price 0 prints "아직 입금되지 않았거나…"
+        assert (data["od_receipt_price"], data["od_receipt_total"]) == (0, order.od_receipt_point)
+        assert (data["od_misu"], data["od_misu_price"], data["od_is_fully_paid"]) == (owed, owed, False)
+
+
+def test_the_customer_sees_a_deposited_virtual_account_as_paid(waiting_vbank, buyer):
+    order, _ = waiting_vbank
+    with patch(POST, return_value=(APPROVED_LOOKUP, 200)):
+        assert shop_nicepay.process_nicepay_vbank_notification(deposit(order)) is None
+
+    data = client_for(buyer).get(f"/api/v1/shop/orders/{order.od_id}").json()["data"]
+
+    assert (data["od_status"], data["od_receipt_price"], data["od_misu"], data["od_is_fully_paid"]) == (
+        "입금", 5000, 0, True
+    )
+
+
 def test_the_payment_window_names_the_goods_like_youngcart(nicepay, buyer, shop):
     checkout = Checkout(buyer, shop)
     assert checkout.order_name == f"{shop['shirt'].it_name} 외 1건"
@@ -959,14 +1019,24 @@ def test_a_cancel_notification_confirmed_by_the_lookup_cancels_the_waiting_order
     assert attempt.state == "canceled"
 
 
-def test_a_deposit_for_an_order_cancelled_meanwhile_is_recorded_not_applied(waiting_vbank):
-    order, _ = waiting_vbank
-    ShopOrder.objects.filter(pk=order.pk).update(od_status="취소")
+@pytest.mark.parametrize("while_asking", [False, True], ids=["cancelled before the notice", "cancelled while NICEPAY is asked"])
+def test_a_deposit_for_an_order_cancelled_meanwhile_is_kept_for_a_refund_not_applied(waiting_vbank, while_asking):
+    order, attempt = waiting_vbank
     lookup = {"ResultCode": "0000", "TID": TID, "Status": "0"}
-    with patch(POST, return_value=(lookup, 200)):
+
+    def cancel_meanwhile():
+        ShopOrder.objects.filter(pk=order.pk).update(od_status="취소")
+        return lookup, 200
+
+    if not while_asking:
+        cancel_meanwhile()
+    with patch(POST, side_effect=replies([cancel_meanwhile])):
         assert shop_nicepay.process_nicepay_vbank_notification(deposit(order)) is None
     order.refresh_from_db()
+    attempt.refresh_from_db()
     assert (order.od_status, order.od_receipt_time) == ("취소", "")
+    assert attempt.state == "late_deposit"
+    assert "5,000원" in order.od_shop_memo
     assert ShopOrderData.objects.filter(od_id=order.od_id, log_id__startswith="nicepay-vbank-late-paid").exists()
 
 
@@ -1010,7 +1080,7 @@ CANCELLED_LOOKUP = {"ResultCode": "0000", "TID": TID, "Status": "1"}
     "order_change, lookup, state, code, order_status",
     [
         ({}, APPROVED_LOOKUP, "approved", None, "입금"),
-        ({"od_status": "취소"}, APPROVED_LOOKUP, "canceled", "order_cancelled", "취소"),
+        ({"od_status": "취소"}, APPROVED_LOOKUP, "late_deposit", None, "취소"),
         ({"od_status": "입금"}, APPROVED_LOOKUP, "approved", None, "입금"),
         ({"od_status": "입금", "od_tno": "NICTESTOTHERTID000000001"}, APPROVED_LOOKUP, "uncertain",
          "nicepay_vbank_duplicate_deposit", "입금"),
@@ -1166,3 +1236,616 @@ def test_a_repeated_deposit_notification_after_the_order_moved_on_never_refunds_
     assert repeated is None  # a duplicate deposit notification is a no-op
     checkout.attempt.refresh_from_db()
     assert checkout.attempt.state == "approved"
+
+
+# expiry of a virtual account past its deposit deadline -----------------------------------------
+
+NOT_DEPOSITED_LOOKUP = {"ResultCode": "0000", "TID": TID, "Status": "9"}
+
+
+@pytest.fixture
+def expired_vbank(nicepay, buyer, shop):
+    """An issued NICEPAY account whose deadline (31 October 2026) has passed, with 3,000 points spent."""
+    from gnu_jango.testing.shop_flows import set_config
+
+    set_config("de_vbank_use", "1")
+    checkout = Checkout(buyer, shop, settle_case="vbank", od_receipt_point=3000)
+    checkout.confirm([(vbank_approval(checkout.order), 200)], PayMethod="VBANK")
+    assert (checkout.order.od_receipt_point, balance(buyer)) == (3000, 7000)
+    return checkout
+
+
+def expire(answers, *args, fails=False):
+    """Run the expiry job with ``answers`` as NICEPAY's replies; returns (summary, post mock). With
+    ``fails`` the job must end with an error, as cron sees it."""
+    from io import StringIO
+
+    from django.core.management import call_command
+    from django.core.management.base import CommandError
+
+    output = StringIO()
+    with patch(POST, side_effect=replies(answers)) as post:
+        if fails:
+            with pytest.raises(CommandError):
+                call_command("expire_vbank_orders", "--apply", "--json", *args, stdout=output, stderr=StringIO())
+        else:
+            call_command("expire_vbank_orders", "--apply", "--json", *args, stdout=output, stderr=StringIO())
+    return json.loads(output.getvalue()), post
+
+
+def test_an_expired_virtual_account_is_closed_at_nicepay_then_releases_what_it_held(expired_vbank, shop):
+    checkout = expired_vbank
+    order = checkout.order
+
+    summary, post = expire([(NOT_DEPOSITED_LOOKUP, 200), (cancel_response(order, order.od_receipt_price), 200)])
+
+    assert [call.args[0] for call in post.call_args_list] == [
+        shop_nicepay.NICEPAY_LOOKUP_URL, shop_nicepay.NICEPAY_CANCEL_URL
+    ]
+    assert (summary["expired"], summary["cancelled"], summary["failed"]) == (1, 1, 0)
+    assert_fully_cancelled(order, paid=0)
+    assert order.od_vbank_status == "CANCELED"
+    checkout.attempt.refresh_from_db()
+    assert checkout.attempt.state == "canceled"
+    for product in shop.values():
+        assert ShopProduct.objects.get(pk=product.pk).it_stock_qty == STOCK
+    assert balance(checkout.buyer) == 10000
+    assert_point_ledger_matches(checkout.buyer)
+    # a second run finds nothing left to expire
+    again, post = expire([])
+    assert again["inspected"] == 0
+    post.assert_not_called()
+
+
+def test_a_deposit_made_at_the_deadline_wins_over_the_expiry(expired_vbank, shop):
+    checkout = expired_vbank
+
+    summary, post = expire([(APPROVED_LOOKUP, 200)])
+
+    assert post.call_count == 1  # the lookup; no cancel request
+    assert (summary["cancelled"], summary["settled"], summary["failed"]) == (0, 1, 0)
+    order = checkout.order
+    order.refresh_from_db()
+    assert (order.od_status, order.od_vbank_status, order.od_misu) == ("입금", "DONE", 0)
+
+
+REFUSED = {"ResultCode": "2015", "ResultMsg": "취소 불가 거래"}
+
+
+def hours_ago(hours):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    return (timezone.localtime() - timedelta(hours=hours)).isoformat()
+
+
+@pytest.mark.parametrize(
+    "answers, due_date",
+    [
+        ([shop_nicepay.NicepayTransportError("down", kind="network")], None),
+        (
+            [(NOT_DEPOSITED_LOOKUP, 200), shop_nicepay.NicepayTransportError("down", kind="network"),
+             (NOT_DEPOSITED_LOOKUP, 200)],
+            None,
+        ),
+    ],
+    ids=["NICEPAY cannot be asked", "the cancel answer is lost"],
+)
+def test_an_expiry_nicepay_does_not_confirm_leaves_the_order_waiting(expired_vbank, shop, answers, due_date):
+    checkout = expired_vbank
+    if due_date:
+        ShopOrder.objects.filter(pk=checkout.order.pk).update(od_vbank_due_date=due_date)
+
+    expire(answers, fails=True)
+
+    order = checkout.order
+    order.refresh_from_db()
+    assert (order.od_status, order.od_vbank_status, order.od_receipt_point) == ("주문", "WAITING_FOR_DEPOSIT", 3000)
+    for product in shop.values():
+        assert_stock_conserved(product, STOCK)
+
+
+@pytest.mark.parametrize(
+    "due_date, expired",
+    [
+        ("20261031235959", True),
+        ("2026-10-31T23:59:59+09:00", True),
+        ("2999-01-01T00:00:00+09:00", False),
+        ("29990101000000", False),
+    ],
+    ids=["stored before the ISO change", "ISO", "ISO, still open", "old format, still open"],
+)
+def test_the_deadline_is_read_in_both_stored_formats(waiting_vbank, due_date, expired):
+    order, _ = waiting_vbank
+    ShopOrder.objects.filter(pk=order.pk).update(od_vbank_due_date=due_date)
+
+    summary, _ = expire([(NOT_DEPOSITED_LOOKUP, 200), (cancel_response(order, 5000), 200)])
+
+    assert (summary["expired"], summary["invalid_due_date"]) == (int(expired), 0)
+    order.refresh_from_db()
+    assert order.od_status == ("취소" if expired else "주문")
+
+
+def test_a_deadline_that_just_passed_waits_for_a_late_deposit_notice(waiting_vbank):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    order, _ = waiting_vbank
+    just_passed = timezone.localtime() - timedelta(minutes=5)
+    ShopOrder.objects.filter(pk=order.pk).update(od_vbank_due_date=just_passed.isoformat())
+
+    summary, post = expire([])
+
+    post.assert_not_called()
+    assert (summary["expired"], summary["skipped"]) == (0, 1)
+
+
+def test_nicepay_expiry_is_scheduled():
+    from gnu_jango.core.job_registry import CORE_JOBS
+
+    assert "expire_vbank_orders" in {job.name for job in CORE_JOBS}
+
+
+def test_an_account_nicepay_will_not_close_a_day_after_its_deadline_is_expired_here(expired_vbank, shop):
+    checkout = expired_vbank
+    order = checkout.order
+
+    summary, post = expire([(NOT_DEPOSITED_LOOKUP, 200), (REFUSED, 200), (NOT_DEPOSITED_LOOKUP, 200)])
+
+    assert [call.args[0] for call in post.call_args_list] == [
+        shop_nicepay.NICEPAY_LOOKUP_URL, shop_nicepay.NICEPAY_CANCEL_URL, shop_nicepay.NICEPAY_LOOKUP_URL
+    ]
+    assert (summary["expired_locally"], summary["cancelled"], summary["failed"]) == (1, 0, 0)
+    assert_fully_cancelled(order, paid=0)
+    assert order.od_vbank_status == "EXPIRED"
+    checkout.attempt.refresh_from_db()
+    assert checkout.attempt.state == "expired"
+    assert json.loads(checkout.attempt.provider_data)["ResultCode"] == "2015"  # what NICEPAY answered
+    assert ShopOrderData.objects.filter(od_id=order.od_id, log_id__startswith="nicepay-vbank-expired").exists()
+    for product in shop.values():
+        assert ShopProduct.objects.get(pk=product.pk).it_stock_qty == STOCK
+    assert balance(checkout.buyer) == 10000
+    assert_point_ledger_matches(checkout.buyer)
+
+
+def test_an_account_nicepay_will_not_close_but_now_reports_paid_is_not_expired(expired_vbank, shop):
+    checkout = expired_vbank
+
+    expire([(NOT_DEPOSITED_LOOKUP, 200), (REFUSED, 200), (APPROVED_LOOKUP, 200)], fails=True)
+
+    order = checkout.order
+    order.refresh_from_db()
+    checkout.attempt.refresh_from_db()
+    assert (order.od_status, order.od_vbank_status, order.od_receipt_point) == ("주문", "WAITING_FOR_DEPOSIT", 3000)
+    assert checkout.attempt.state == "pending_deposit"
+    for product in shop.values():
+        assert_stock_conserved(product, STOCK)
+
+
+def test_a_deposit_after_the_account_was_expired_here_is_kept_for_a_refund(expired_vbank, caplog):
+    import logging
+
+    checkout = expired_vbank
+    order = checkout.order
+    expire([(NOT_DEPOSITED_LOOKUP, 200), (REFUSED, 200), (NOT_DEPOSITED_LOOKUP, 200)])
+    notice = deposit(order, Amt=f"{checkout.attempt.amount:012d}")
+
+    with patch(POST, return_value=(APPROVED_LOOKUP, 200)), caplog.at_level(logging.ERROR):
+        first = shop_nicepay.process_nicepay_vbank_notification(notice)
+        again = shop_nicepay.process_nicepay_vbank_notification(notice)
+
+    assert (first, again) == (None, None)  # acknowledged, so NICEPAY stops resending it
+    order.refresh_from_db()
+    checkout.attempt.refresh_from_db()
+    assert (order.od_status, order.od_receipt_time, order.od_vbank_status) == ("취소", "", "EXPIRED")
+    assert checkout.attempt.state == "late_deposit"
+    assert f"{checkout.attempt.amount:,}원" in checkout.attempt.last_error
+    assert order.od_shop_memo.count("환불") == 1
+    assert ShopOrderData.objects.filter(od_id=order.od_id, log_id__startswith="nicepay-vbank-late-paid").exists()
+    alerts = [r for r in caplog.records if r.levelno >= logging.ERROR and order.od_id in r.getMessage()]
+    assert len(alerts) == 1
+
+
+def test_a_deposit_that_lands_while_the_account_is_being_closed_fails_the_run(expired_vbank, shop):
+    checkout = expired_vbank
+    order = checkout.order
+
+    def deposit_meanwhile():
+        ShopOrder.objects.filter(pk=order.pk).update(od_status="입금", od_vbank_status="DONE", od_misu=0)
+        return cancel_response(order, order.od_receipt_price), 200
+
+    summary, _ = expire([(NOT_DEPOSITED_LOOKUP, 200), deposit_meanwhile], fails=True)
+
+    assert (summary["cancelled"], summary["failed"], summary["needs_review"]) == (0, 1, 1)
+    order.refresh_from_db()
+    assert (order.od_status, order.od_vbank_status, order.od_receipt_point) == ("입금", "DONE", 3000)
+    assert ShopOrderData.objects.filter(od_id=order.od_id, log_id__startswith="vbank-expiry-review").exists()
+
+
+def waiting_nicepay_order(buyer, tid, due_date, **fields):
+    order = ShopOrderFactory(
+        user=buyer, od_status="주문", od_receipt_price=5000, od_misu=5000, od_settle_case="가상계좌", od_pg="nicepay",
+        od_tno=tid, od_vbank_status="WAITING_FOR_DEPOSIT", od_vbank_due_date=due_date, od_test="1", **fields,
+    )
+    ShopPaymentAttempt.objects.create(
+        order=order, od_id=order.od_id, provider="nicepay", mode="test", mid=MID, amount=5000, pay_method="VBANK",
+        tid=tid, state="pending_deposit",
+    )
+    return order
+
+
+def test_orders_stuck_for_review_never_hold_back_a_new_expiry(waiting_vbank, buyer):
+    from datetime import timedelta
+
+    from django.utils import timezone
+
+    order, _ = waiting_vbank
+    ShopOrder.objects.filter(pk=order.pk).update(od_vbank_due_date="20261031235959")
+    long_ago = timezone.now() - timedelta(days=60)
+    unreadable = waiting_nicepay_order(buyer, "NICTESTTID0000000000000002", "곧 안내", od_datetime=long_ago)
+    paid_but_marked_waiting = waiting_nicepay_order(
+        buyer, "NICTESTTID0000000000000003", "20261001235959", od_datetime=long_ago
+    )
+    ShopOrder.objects.filter(pk=paid_but_marked_waiting.pk).update(od_status="입금", od_misu=0)
+
+    summary, _ = expire([(NOT_DEPOSITED_LOOKUP, 200), (cancel_response(order, 5000), 200)], "--limit", "1")
+
+    assert summary["cancelled"] == 1
+    assert (summary["stuck"], summary["invalid_due_date"], summary["manual_review"]) == (2, 1, 1)
+    order.refresh_from_db()
+    assert order.od_status == "취소"
+    for stuck in (unreadable, paid_but_marked_waiting):
+        stuck.refresh_from_db()
+        assert stuck.od_vbank_status == "WAITING_FOR_DEPOSIT"
+
+
+def test_one_order_that_breaks_does_not_stop_the_others(waiting_vbank, buyer):
+    order, _ = waiting_vbank
+    ShopOrder.objects.filter(pk=order.pk).update(od_vbank_due_date="20261031235959")
+    broken = waiting_nicepay_order(buyer, "NICTESTTID0000000000000002", "20261030235959")
+
+    summary, _ = expire(
+        [RuntimeError("unexpected"), (NOT_DEPOSITED_LOOKUP, 200), (cancel_response(order, 5000), 200)], fails=True
+    )
+
+    assert (summary["cancelled"], summary["failed"]) == (1, 1)
+    order.refresh_from_db()
+    broken.refresh_from_db()
+    assert (order.od_status, broken.od_status, broken.od_vbank_status) == ("취소", "주문", "WAITING_FOR_DEPOSIT")
+
+
+# NICEPAY answers around and after the expiry ---------------------------------------------------
+
+
+GATEWAY_PAGE = {"<html><head><title>504 Gateway Time-out</title></head><body>nginx</body></html>": ""}
+
+
+def assert_waiting(checkout, shop):
+    order = checkout.order
+    order.refresh_from_db()
+    checkout.attempt.refresh_from_db()
+    assert (order.od_status, order.od_vbank_status, order.od_receipt_point) == ("주문", "WAITING_FOR_DEPOSIT", 3000)
+    assert checkout.attempt.state == "pending_deposit"
+    for product in shop.values():
+        assert_stock_conserved(product, STOCK)
+
+
+# an answer NICEPAY did not give is not a refusal ------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "cancel_answer",
+    [(GATEWAY_PAGE, 504), (GATEWAY_PAGE, 200), (REFUSED, 500), ({}, 200)],
+    ids=["a proxy's 504 page", "a proxy's page sent as 200", "a refusal code on a server error", "an empty answer"],
+)
+def test_a_cancel_answer_nicepay_did_not_give_is_never_taken_as_its_refusal(expired_vbank, shop, cancel_answer):
+    checkout = expired_vbank
+
+    summary, post = expire([(NOT_DEPOSITED_LOOKUP, 200), cancel_answer, (NOT_DEPOSITED_LOOKUP, 200)], fails=True)
+
+    assert (summary["expired_locally"], summary["deferred"], summary["failed"]) == (0, 0, 1)
+    # the lost answer is settled by a lookup, never by a second cancel
+    assert [call.args[0] for call in post.call_args_list] == [
+        shop_nicepay.NICEPAY_LOOKUP_URL, shop_nicepay.NICEPAY_CANCEL_URL, shop_nicepay.NICEPAY_LOOKUP_URL
+    ]
+    assert_waiting(checkout, shop)
+    assert checkout.attempt.close_refused_at is None
+    assert ShopOrderData.objects.filter(od_id=checkout.order.od_id, log_id__startswith="nicepay-cancel-unknown").exists()
+
+
+@pytest.mark.parametrize(
+    "lookup", [(NOT_DEPOSITED_LOOKUP, 503), (GATEWAY_PAGE, 504)], ids=["a lookup on a server error", "a proxy's page"]
+)
+def test_an_expiry_never_rests_on_a_lookup_nicepay_did_not_give(expired_vbank, shop, lookup):
+    checkout = expired_vbank
+
+    expire([(NOT_DEPOSITED_LOOKUP, 200), (REFUSED, 200), lookup], fails=True)
+
+    assert_waiting(checkout, shop)
+
+
+def test_a_deposit_reported_on_a_server_error_does_not_pay_the_order(waiting_vbank):
+    order, attempt = waiting_vbank
+
+    with patch(POST, return_value=(APPROVED_LOOKUP, 502)):
+        attempt, error = shop_nicepay.recover_nicepay_attempt(attempt)
+
+    assert error.data["code"] == "nicepay_lookup_failed"
+    order.refresh_from_db()
+    assert (order.od_status, order.od_misu, attempt.state) == ("주문", 5000, "pending_deposit")
+
+
+def test_a_deposit_the_recovery_finds_on_a_cancelled_order_is_kept_like_a_notified_one(waiting_vbank, caplog):
+    order, attempt = waiting_vbank
+    ShopOrder.objects.filter(pk=order.pk).update(od_status="취소")
+
+    with patch(POST, return_value=(APPROVED_LOOKUP, 200)), caplog.at_level(logging.ERROR):
+        attempt, error = shop_nicepay.recover_nicepay_attempt(attempt)
+
+    assert error is None
+    assert attempt.state == "late_deposit"
+    order.refresh_from_db()
+    assert (order.od_status, order.od_receipt_time) == ("취소", "")
+    assert "5,000원" in order.od_shop_memo
+    assert [r for r in caplog.records if r.levelno >= logging.ERROR and order.od_id in r.getMessage()]
+
+
+# a refusal within a day of the deadline ---------------------------------------------------------
+
+
+def test_a_refusal_within_a_day_of_the_deadline_waits_without_asking_nicepay_again(expired_vbank, shop):
+    checkout = expired_vbank
+    ShopOrder.objects.filter(pk=checkout.order.pk).update(od_vbank_due_date=hours_ago(2))
+
+    first, post = expire([(NOT_DEPOSITED_LOOKUP, 200), (REFUSED, 200)])
+
+    assert (first["deferred"], first["failed"], first["expired_locally"]) == (1, 0, 0)
+    assert post.call_count == 2
+    assert_waiting(checkout, shop)
+    assert checkout.attempt.close_refused_at is not None
+    assert "2015" in checkout.attempt.last_error
+
+    again, post = expire([])  # the job runs every minute: no lookup and no doomed cancel until the day is up
+
+    post.assert_not_called()
+    assert (again["deferred"], again["failed"]) == (1, 0)
+    assert_waiting(checkout, shop)
+
+    ShopOrder.objects.filter(pk=checkout.order.pk).update(od_vbank_due_date=hours_ago(25))
+    later, post = expire([(NOT_DEPOSITED_LOOKUP, 200), (REFUSED, 200), (NOT_DEPOSITED_LOOKUP, 200)])
+
+    assert (later["expired_locally"], later["deferred"], later["failed"]) == (1, 0, 0)
+    checkout.attempt.refresh_from_db()
+    assert checkout.attempt.state == "expired"
+
+
+def test_a_deposit_while_the_expiry_waits_out_a_refusal_still_pays_the_order(expired_vbank):
+    checkout = expired_vbank
+    ShopOrder.objects.filter(pk=checkout.order.pk).update(od_vbank_due_date=hours_ago(2))
+    expire([(NOT_DEPOSITED_LOOKUP, 200), (REFUSED, 200)])
+
+    notice = deposit(checkout.order, Amt=f"{checkout.attempt.amount:012d}")
+    with patch(POST, return_value=(APPROVED_LOOKUP, 200)):
+        assert shop_nicepay.process_nicepay_vbank_notification(notice) is None
+
+    order = checkout.order
+    order.refresh_from_db()
+    assert (order.od_status, order.od_vbank_status, order.od_misu) == ("입금", "DONE", 0)
+    summary, post = expire([])
+    post.assert_not_called()
+    assert summary["expired"] == 0
+
+
+# an account expired here is looked up again -----------------------------------------------------
+
+
+def recheck(answers, *args, fails=False):
+    output = StringIO()
+    with patch(POST, side_effect=replies(answers)) as post:
+        if fails:
+            with pytest.raises(CommandError):
+                call_command("recheck_expired_nicepay_vbanks", "--apply", "--json", *args, stdout=output)
+        else:
+            call_command("recheck_expired_nicepay_vbanks", "--apply", "--json", *args, stdout=output)
+    return json.loads(output.getvalue()), post
+
+
+@pytest.fixture
+def expired_here(expired_vbank):
+    expire([(NOT_DEPOSITED_LOOKUP, 200), (REFUSED, 200), (NOT_DEPOSITED_LOOKUP, 200)])
+    expired_vbank.attempt.refresh_from_db()
+    assert expired_vbank.attempt.state == "expired"
+    assert recheck([])[0]["inspected"] == 0  # the expiry has just looked it up
+    # a day later
+    ShopPaymentAttempt.objects.filter(pk=expired_vbank.attempt.pk).update(
+        last_checked_at=timezone.now() - timedelta(days=1)
+    )
+    return expired_vbank
+
+
+def test_a_deposit_found_on_an_account_expired_here_is_kept_for_a_refund(expired_here, caplog):
+    checkout = expired_here
+
+    with caplog.at_level(logging.ERROR):
+        summary, post = recheck([(APPROVED_LOOKUP, 200)])
+
+    assert [call.args[0] for call in post.call_args_list] == [shop_nicepay.NICEPAY_LOOKUP_URL]
+    assert (summary["late_deposit"], summary["failed"]) == (1, 0)
+    order = checkout.order
+    order.refresh_from_db()
+    checkout.attempt.refresh_from_db()
+    assert (order.od_status, order.od_receipt_time, order.od_vbank_status) == ("취소", "", "EXPIRED")
+    assert checkout.attempt.state == "late_deposit"
+    assert order.od_shop_memo.count("환불") == 1
+    alerts = [r for r in caplog.records if r.levelno >= logging.ERROR and order.od_id in r.getMessage()]
+    assert len(alerts) == 1
+    again, post = recheck([])
+    post.assert_not_called()
+    assert again["inspected"] == 0
+
+
+def test_an_account_expired_here_is_looked_up_at_most_once_a_day(expired_here):
+    checkout = expired_here
+
+    first, post = recheck([(NOT_DEPOSITED_LOOKUP, 200)])
+    assert (first["inspected"], first["open"], post.call_count) == (1, 1, 1)
+    again, post = recheck([])
+    post.assert_not_called()
+    assert again["inspected"] == 0
+
+    ShopPaymentAttempt.objects.filter(pk=checkout.attempt.pk).update(last_checked_at=timezone.now() - timedelta(days=1))
+    closed, post = recheck([(CANCELLED_LOOKUP, 200)])
+    assert (closed["closed"], post.call_count) == (1, 1)
+    checkout.attempt.refresh_from_db()
+    assert checkout.attempt.state == "canceled"  # NICEPAY closed it at last: nothing more to watch
+
+
+def test_an_account_expired_long_ago_is_no_longer_looked_up(expired_here):
+    ShopPaymentAttempt.objects.filter(pk=expired_here.attempt.pk).update(updated_at=timezone.now() - timedelta(days=31))
+
+    summary, post = recheck([])
+
+    post.assert_not_called()
+    assert summary["inspected"] == 0
+
+
+def test_a_recheck_nicepay_cannot_answer_fails_the_run_and_changes_nothing(expired_here):
+    summary, _ = recheck([shop_nicepay.NicepayTransportError("down", kind="network")], fails=True)
+
+    assert summary["failed"] == 1
+    expired_here.attempt.refresh_from_db()
+    assert expired_here.attempt.state == "expired"
+
+
+def test_a_failed_lookup_is_not_asked_again_before_the_day_is_up(expired_here):
+    checkout = expired_here
+
+    summary, post = recheck([shop_nicepay.NicepayTransportError("down", kind="network")], fails=True)
+
+    assert (summary["failed"], post.call_count) == (1, 1)
+    checkout.attempt.refresh_from_db()
+    assert checkout.attempt.state == "expired"
+    assert checkout.attempt.last_checked_at > timezone.now() - timedelta(minutes=5)
+    again, post = recheck([])  # the job may run again today: no second lookup, and no failure to repeat
+    post.assert_not_called()
+    assert (again["inspected"], again["failed"]) == (0, 0)
+
+    ShopPaymentAttempt.objects.filter(pk=checkout.attempt.pk).update(last_checked_at=timezone.now() - timedelta(days=1))
+    next_day, post = recheck([shop_nicepay.NicepayTransportError("down", kind="network")], fails=True)
+    assert (next_day["failed"], post.call_count) == (1, 1)  # a failure that persists fails each day's run
+
+
+def test_a_recheck_out_of_time_stops_reports_the_rest_and_does_not_fail(expired_here):
+    command = "gnu_jango.core.management.commands.recheck_expired_nicepay_vbanks.time.monotonic"
+    with patch(command, side_effect=[0, 1000]):
+        summary, post = recheck([])
+
+    post.assert_not_called()
+    assert (summary["timed_out"], summary["remaining"], summary["failed"]) == (True, 1, 0)
+    assert summary["time_budget_seconds"] >= 5
+    expired_here.attempt.refresh_from_db()
+    assert expired_here.attempt.last_checked_at < timezone.now() - timedelta(hours=20)  # still due next run
+    done, post = recheck([(NOT_DEPOSITED_LOOKUP, 200)])
+    assert (done["open"], done["remaining"], done["timed_out"]) == (1, 0, False)
+
+
+def test_the_recheck_runs_after_the_other_daily_jobs():
+    from gnu_jango.core.job_registry import CORE_JOBS
+
+    names = [job.name for job in CORE_JOBS]
+    assert names.index("recheck_expired_nicepay_vbanks") > names.index("cleanup_search_clicks")
+
+
+def test_the_recheck_of_expired_accounts_is_scheduled_daily():
+    from gnu_jango.core.job_registry import CORE_JOBS
+
+    jobs = {job.name: job for job in CORE_JOBS}
+    assert jobs["recheck_expired_nicepay_vbanks"].interval_seconds == 86400
+    assert "--apply" in jobs["recheck_expired_nicepay_vbanks"].apply_args
+
+
+# rows the expiry cannot handle ------------------------------------------------------------------
+
+
+def test_a_stuck_order_is_reported_once_a_day_without_failing_the_run(nicepay, buyer, caplog):
+    stuck = waiting_nicepay_order(buyer, TID, "곧 안내")
+
+    with caplog.at_level(logging.ERROR):
+        first, _ = expire([])
+        again, _ = expire([])
+
+    assert (first["stuck"], again["stuck"], first["failed"]) == (1, 1, 0)
+    alerts = [r for r in caplog.records if r.levelno >= logging.ERROR and stuck.od_id in r.getMessage()]
+    assert len(alerts) == 1
+    assert ShopOrderData.objects.filter(od_id=stuck.od_id, log_id__startswith="vbank-stuck").exists()
+
+    ShopOrderData.objects.filter(od_id=stuck.od_id, log_id__startswith="vbank-stuck").update(
+        dt_time=timezone.now() - timedelta(days=1, minutes=1)
+    )
+    caplog.clear()
+    with caplog.at_level(logging.ERROR):
+        expire([])
+    assert [r for r in caplog.records if r.levelno >= logging.ERROR and stuck.od_id in r.getMessage()]
+
+
+def test_a_dry_run_reports_stuck_orders_but_writes_nothing(nicepay, buyer, caplog):
+    stuck = waiting_nicepay_order(buyer, TID, "곧 안내")
+
+    with patch(POST) as post:
+        call_command("expire_vbank_orders", "--json", stdout=StringIO())
+
+    post.assert_not_called()
+    assert not ShopOrderData.objects.filter(od_id=stuck.od_id, log_id__startswith="vbank-stuck").exists()
+
+
+# the PG's answer outlives a local rollback ------------------------------------------------------
+
+
+def test_nicepays_cancel_answer_is_kept_when_the_local_cancel_breaks(expired_vbank, shop):
+    checkout = expired_vbank
+    order = checkout.order
+
+    with patch(
+        "gnu_jango.core.management.commands.expire_vbank_orders.cancel_order_and_refund_benefits",
+        side_effect=RuntimeError("db down"),
+    ):
+        expire([(NOT_DEPOSITED_LOOKUP, 200), (cancel_response(order, order.od_receipt_price), 200)], fails=True)
+
+    assert_waiting(checkout, shop)
+    kept = ShopOrderData.objects.get(od_id=order.od_id, log_id__startswith="nicepay-cancel-pay")
+    assert json.loads(kept.dt_data)["nicepay_cancel"]["ResultCode"] == "2001"
+
+
+# the goods name sent to the payment window -----------------------------------------------------
+
+
+def euc_kr_bytes(text):
+    return len(text.encode("cp949"))
+
+
+def test_a_long_goods_name_fits_nicepays_40_bytes_without_breaking_a_character(nicepay, buyer, shop):
+    ShopProduct.objects.filter(pk=shop["shirt"].pk).update(it_name="가나다라마바사아자차카타파하" * 3)
+
+    checkout = Checkout(buyer, shop)
+
+    # developers.nicepay.co.kr: GoodsName 40 bytes, the form is sent in EUC-KR
+    assert euc_kr_bytes(checkout.order_name) <= 40
+    assert checkout.order_name.endswith(" 외 1건")
+    assert ("가나다라마바사아자차카타파하" * 3).startswith(checkout.order_name.removesuffix(" 외 1건"))
+
+
+@pytest.mark.parametrize("pg, limit", [("toss", 100), ("nicepay", 40)])
+def test_the_goods_name_fits_each_pg(nicepay, buyer, shop, pg, limit):
+    from gnu_jango.api.v1_shop import fit_goods_name
+
+    long_name = "😀" + "상품" * 120
+    fitted = fit_goods_name(long_name, pg, suffix=" 외 2건")
+
+    # an EUC-KR form sends a character it cannot encode as a numeric reference (&#128512;)
+    size = len(fitted) if pg == "toss" else len(fitted.encode("cp949", "xmlcharrefreplace"))
+    assert size <= limit
+    assert fitted.endswith(" 외 2건")
+    assert long_name.startswith(fitted.removesuffix(" 외 2건"))
+    assert fit_goods_name("셔츠", pg) == "셔츠"

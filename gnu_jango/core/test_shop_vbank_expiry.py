@@ -27,12 +27,12 @@ class TossVirtualAccountExpiryCommandTests(TestCase):
             od_vbank_due_date=(due_date or timezone.now() - timedelta(hours=1)).isoformat(),
         )
 
-    @patch("gnu_jango.core.management.commands.expire_toss_vbank_orders.cancel_pending_toss_vbank")
+    @patch("gnu_jango.api.shop_payments.cancel_pending_toss_vbank")
     def test_dry_run_lists_expired_order_without_provider_or_database_changes(self, cancel_provider):
         order = self.create_order()
         output = StringIO()
 
-        call_command("expire_toss_vbank_orders", stdout=output)
+        call_command("expire_vbank_orders", stdout=output)
 
         cancel_provider.assert_not_called()
         order.refresh_from_db()
@@ -40,12 +40,12 @@ class TossVirtualAccountExpiryCommandTests(TestCase):
         self.assertIn("expired=1", output.getvalue())
         self.assertIn("mode=dry-run", output.getvalue())
 
-    @patch("gnu_jango.core.management.commands.expire_toss_vbank_orders.cancel_pending_toss_vbank", return_value=None)
+    @patch("gnu_jango.api.shop_payments.cancel_pending_toss_vbank", return_value=None)
     def test_apply_cancels_expired_order_after_provider_confirmation(self, cancel_provider):
         order = self.create_order()
         output = StringIO()
 
-        call_command("expire_toss_vbank_orders", "--apply", stdout=output)
+        call_command("expire_vbank_orders", "--apply", stdout=output)
 
         cancel_provider.assert_called_once()
         order.refresh_from_db()
@@ -55,14 +55,14 @@ class TossVirtualAccountExpiryCommandTests(TestCase):
         self.assertIn("cancelled=1", output.getvalue())
 
     @patch(
-        "gnu_jango.core.management.commands.expire_toss_vbank_orders.cancel_pending_toss_vbank",
+        "gnu_jango.api.shop_payments.cancel_pending_toss_vbank",
         return_value=Response({"message": "Toss unavailable"}, status=502),
     )
     def test_provider_failure_keeps_order_and_reservation_unchanged(self, cancel_provider):
         order = self.create_order()
 
         with self.assertRaises(CommandError):
-            call_command("expire_toss_vbank_orders", "--apply", stdout=StringIO(), stderr=StringIO())
+            call_command("expire_vbank_orders", "--apply", stdout=StringIO(), stderr=StringIO())
 
         cancel_provider.assert_called_once()
         order.refresh_from_db()
@@ -70,19 +70,19 @@ class TossVirtualAccountExpiryCommandTests(TestCase):
         self.assertEqual(order.od_receipt_price, 1000)
         self.assertEqual(order.od_vbank_status, "WAITING_FOR_DEPOSIT")
 
-    @patch("gnu_jango.core.management.commands.expire_toss_vbank_orders.cancel_pending_toss_vbank")
+    @patch("gnu_jango.api.shop_payments.cancel_pending_toss_vbank")
     def test_future_due_date_is_left_pending(self, cancel_provider):
         order = self.create_order(due_date=timezone.now() + timedelta(days=1))
 
         output = StringIO()
-        call_command("expire_toss_vbank_orders", "--apply", stdout=output)
+        call_command("expire_vbank_orders", "--apply", stdout=output)
 
         cancel_provider.assert_not_called()
         order.refresh_from_db()
         self.assertEqual(order.od_status, "order")
         self.assertIn("skipped=1", output.getvalue())
 
-    @patch("gnu_jango.core.management.commands.expire_toss_vbank_orders.cancel_pending_toss_vbank", return_value=None)
+    @patch("gnu_jango.api.shop_payments.cancel_pending_toss_vbank", return_value=None)
     def test_a_paid_order_past_its_deadline_is_left_for_review_at_every_step(self, cancel_provider):
         # 준비 and 완료 are paid like 입금/배송: a stale WAITING_FOR_DEPOSIT mark never cancels the order
         for status in ("입금", "준비", "배송", "완료"):
@@ -91,7 +91,7 @@ class TossVirtualAccountExpiryCommandTests(TestCase):
                 ShopOrder.objects.filter(pk=order.pk).update(od_status=status, od_misu=0)
                 output = StringIO()
 
-                call_command("expire_toss_vbank_orders", "--apply", "--json", stdout=output)
+                call_command("expire_vbank_orders", "--apply", "--json", stdout=output)
 
                 order.refresh_from_db()
                 self.assertEqual((order.od_status, order.od_receipt_price, order.od_misu), (status, 1000, 0))
@@ -100,3 +100,14 @@ class TossVirtualAccountExpiryCommandTests(TestCase):
                 self.assertEqual((summary["cancelled"], summary["skipped"]), (0, 1))
                 self.assertEqual(summary["samples"][0]["action"], "manual_review")
                 order.delete()
+
+
+    def test_the_old_toss_command_name_still_runs_the_expiry(self):
+        order = self.create_order()
+        output = StringIO()
+
+        with patch("gnu_jango.api.shop_payments.cancel_pending_toss_vbank", return_value=None):
+            call_command("expire_toss_vbank_orders", "--apply", stdout=output)
+
+        order.refresh_from_db()
+        self.assertEqual((order.od_status, order.od_vbank_status), ("취소", "CANCELED"))

@@ -8,6 +8,8 @@ import json
 import logging
 import re
 import socket
+from contextlib import contextmanager
+from contextvars import ContextVar
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from urllib.parse import quote
@@ -624,7 +626,9 @@ def redact_payment_data(data):
     if isinstance(data, dict):
         redacted = {}
         for key, value in data.items():
-            normalized = re.sub(r"(?<!^)(?=[A-Z])", "_", str(key)).lower().replace("-", "_")
+            # BuyerTel, BUYER_TEL and TEL become buyer_tel and tel: a run of capitals is one word
+            normalized = re.sub(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])", "_", str(key))
+            normalized = normalized.lower().replace("-", "_")
             sensitive_fragments = (
                 "secret",
                 "signature",
@@ -699,23 +703,50 @@ def toss_cash_receipt_from_payment(payment):
     return None
 
 
+_kept_raw_logs = ContextVar("kept_raw_logs", default=None)
+
+
+@contextmanager
+def keep_payment_logs():
+    """Raw payment logs written inside this block are written again when the block ends in an
+    exception. Wrap a transaction that calls a PG with it, outside the atomic block: the rollback
+    then undoes the shop's changes but never what the PG answered."""
+    kept = []
+    token = _kept_raw_logs.set(kept)
+    try:
+        yield
+    except Exception:
+        _kept_raw_logs.reset(token)
+        token = None
+        for log_id, fields in kept:
+            try:
+                ShopOrderData.objects.update_or_create(log_id=log_id, defaults=fields)
+            except Exception:  # noqa: BLE001 - the original error is the one to raise
+                logger.exception("could not keep payment log %s after a rollback", log_id)
+        raise
+    finally:
+        if token is not None:
+            _kept_raw_logs.reset(token)
+
+
 def record_payment_raw_log(order, order_id, pg_service, transaction_id, data, *, prefix="pay"):
     log_id = payment_log_id(order_id or "unknown", transaction_id)
     if prefix and prefix != "pay":
         log_id = ("%s-%s" % (prefix, log_id))[:40]
-    ShopOrderData.objects.update_or_create(
-        log_id=log_id,
-        defaults={
-            "order": order,
-            "od_id": order.od_id if order else str(order_id or ""),
-            "cart_id": "",
-            "user": order.user if order and order.user_id else None,
-            "mb_id": order.user.get_username() if order and order.user_id else "",
-            "dt_pg": str(pg_service or "")[:50],
-            "dt_data": json.dumps(redact_payment_data(data), ensure_ascii=False, default=str),
-            "dt_time": timezone.now(),
-        },
-    )
+    fields = {
+        "order": order,
+        "od_id": order.od_id if order else str(order_id or ""),
+        "cart_id": "",
+        "user": order.user if order and order.user_id else None,
+        "mb_id": order.user.get_username() if order and order.user_id else "",
+        "dt_pg": str(pg_service or "")[:50],
+        "dt_data": json.dumps(redact_payment_data(data), ensure_ascii=False, default=str),
+        "dt_time": timezone.now(),
+    }
+    ShopOrderData.objects.update_or_create(log_id=log_id, defaults=fields)
+    kept = _kept_raw_logs.get()
+    if kept is not None:
+        kept.append((log_id, fields))
 
 
 @sensitive_variables("authorization")
@@ -826,15 +857,58 @@ def toss_api_get_payment_by_order(order_id, *, order=None):
         )
 
 
+# od_pg as youngcart and the payment adapters write it
+PG_LABELS = {
+    "toss": "토스페이먼츠",
+    "nicepay": "NICEPAY",
+    "kcp": "NHN KCP",
+    "kcp_v2": "NHN KCP",
+    "inicis": "KG이니시스",
+    "lg": "LG유플러스",
+    "kakaopay": "카카오페이",
+    "naverpay": "네이버페이",
+    "samsungpay": "삼성페이",
+}
+VBANK_CANCEL_UNSUPPORTED = "vbank_cancel_unsupported"
+
+
+def pg_label(od_pg):
+    pg = str(od_pg or "").strip()
+    return PG_LABELS.get(pg.lower(), pg or "결제대행사")
+
+
 def cancel_pending_vbank(order, reason):
     """Close the order's issued, still unpaid virtual account at the PG that issued it. None when
     it is closed or there is none; otherwise the error response, and the order must be left as it
     is so the customer can never deposit into the account of a cancelled order."""
-    if str(order.od_pg or "").strip().lower() == "nicepay":
+    pg = str(order.od_pg or "").strip().lower()
+    if pg == "nicepay":
         from .shop_nicepay import cancel_pending_nicepay_vbank
 
         return cancel_pending_nicepay_vbank(order, reason)
-    return cancel_pending_toss_vbank(order, reason)
+    if pg == "toss":
+        return cancel_pending_toss_vbank(order, reason)
+    if not settle_case_is_vbank(order.od_settle_case) or not order.od_tno:
+        return None
+    label = pg_label(order.od_pg)
+    return api_error(
+        f"{label}에서 발급한 가상계좌는 이 쇼핑몰에서 취소할 수 없어 주문을 그대로 두었습니다. "
+        f"{label} 상점관리자에서 가상계좌를 먼저 취소해야 합니다.",
+        status=drf_status.HTTP_409_CONFLICT,
+        code=VBANK_CANCEL_UNSUPPORTED,
+    )
+
+
+def refresh_pending_vbank(order):
+    """Bring the order up to date with the PG before its waiting virtual account is closed, so a
+    deposit made just before the deadline is applied rather than cancelled. NICEPAY is asked here;
+    the Toss cancel reads the payment's latest status itself and refuses one that left
+    WAITING_FOR_DEPOSIT. None, or the error that leaves the order as it is."""
+    if str(order.od_pg or "").strip().lower() == "nicepay":
+        from .shop_nicepay import refresh_nicepay_vbank
+
+        return refresh_nicepay_vbank(order)
+    return None
 
 
 @sensitive_variables("authorization")

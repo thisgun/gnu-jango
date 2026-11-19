@@ -23,4 +23,4 @@ Only the latest commit on the default branch receives fixes.
 - Configure SMTP: password reset and e-mail certification are mail-only.
 - Serve `data/` and `media/` through the app or a web server rule that refuses
   active content (`.php`, `.html`, `.svg`, ...), as Gnuboard5's `data/.htaccess` does.
-- Schedule `expire_pending_payment_orders --apply` and `expire_toss_vbank_orders --apply`.
+- Schedule `expire_pending_payment_orders --apply` and `expire_vbank_orders --apply`.
