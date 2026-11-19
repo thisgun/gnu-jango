@@ -56,6 +56,7 @@ from gnu_jango.shop.models import (
 from gnu_jango.shop.cash_receipts import customer_payload as cash_receipt_payload, schedule_close_settlement
 from gnu_jango.shop.coupon_dates import coupon_end_date
 from gnu_jango.shop.inventory import StockAdjustmentError, cancel_order_with_stock_restore, reserve_product_stock
+from gnu_jango.shop.order_flow import paid_amount
 from gnu_jango.shop.order_hooks import order_placed, order_status_changed
 from gnu_jango.shop.delivery import delivery_inquiry
 from gnu_jango.shop.delivery_tracking import tracking_payload
@@ -592,7 +593,9 @@ def order_payload(order, *, detail=False, bank_accounts=None):
         - send_coupon
         - order.od_cancel_price,
     )
-    receipt_total = order.od_receipt_price + order.od_receipt_point
+    # an online payment the PG has not completed keeps the amount to pay in od_receipt_price
+    receipt_price = paid_amount(order)
+    receipt_total = receipt_price + order.od_receipt_point
     receipt_url = ""
     if order.od_tno and str(order.od_pg or "").lower() == "toss":
         receipt_url = f"https://dashboard.tosspayments.com/receipt/redirection?transactionId={order.od_tno}"
@@ -633,7 +636,7 @@ def order_payload(order, *, detail=False, bank_accounts=None):
         "od_cart_price": order.od_cart_price,
         "od_send_cost": order.od_send_cost,
         "od_send_cost2": order.od_send_cost2,
-        "od_receipt_price": order.od_receipt_price,
+        "od_receipt_price": receipt_price,
         "od_cancel_price": order.od_cancel_price,
         "od_refund_price": order.od_refund_price,
         "od_receipt_point": order.od_receipt_point,
