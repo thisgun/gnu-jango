@@ -1816,6 +1816,21 @@ class PaymentHelperTests(TestCase):
             },
         )
 
+    def test_redaction_reads_an_all_caps_key_as_one_word(self):
+        redacted = shop_payments.redact_payment_data(
+            {"TEL": "01012345678", "BUYER_TEL": "01012345678", "BuyerEMAIL": "a@example.com", "TID": "t", "MID": "m"}
+        )
+        self.assertEqual(
+            redacted,
+            {
+                "TEL": "***redacted***",
+                "BUYER_TEL": "***redacted***",
+                "BuyerEMAIL": "***redacted***",
+                "TID": "t",
+                "MID": "m",
+            },
+        )
+
     def test_redaction_leaves_scalars_alone(self):
         self.assertEqual(shop_payments.redact_payment_data(5), 5)
         self.assertIsNone(shop_payments.redact_payment_data(None))
