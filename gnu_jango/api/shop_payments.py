@@ -8,6 +8,8 @@ import json
 import logging
 import re
 import socket
+from contextlib import contextmanager
+from contextvars import ContextVar
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from urllib.parse import quote
@@ -701,23 +703,50 @@ def toss_cash_receipt_from_payment(payment):
     return None
 
 
+_kept_raw_logs = ContextVar("kept_raw_logs", default=None)
+
+
+@contextmanager
+def keep_payment_logs():
+    """Raw payment logs written inside this block are written again when the block ends in an
+    exception. Wrap a transaction that calls a PG with it, outside the atomic block: the rollback
+    then undoes the shop's changes but never what the PG answered."""
+    kept = []
+    token = _kept_raw_logs.set(kept)
+    try:
+        yield
+    except Exception:
+        _kept_raw_logs.reset(token)
+        token = None
+        for log_id, fields in kept:
+            try:
+                ShopOrderData.objects.update_or_create(log_id=log_id, defaults=fields)
+            except Exception:  # noqa: BLE001 - the original error is the one to raise
+                logger.exception("could not keep payment log %s after a rollback", log_id)
+        raise
+    finally:
+        if token is not None:
+            _kept_raw_logs.reset(token)
+
+
 def record_payment_raw_log(order, order_id, pg_service, transaction_id, data, *, prefix="pay"):
     log_id = payment_log_id(order_id or "unknown", transaction_id)
     if prefix and prefix != "pay":
         log_id = ("%s-%s" % (prefix, log_id))[:40]
-    ShopOrderData.objects.update_or_create(
-        log_id=log_id,
-        defaults={
-            "order": order,
-            "od_id": order.od_id if order else str(order_id or ""),
-            "cart_id": "",
-            "user": order.user if order and order.user_id else None,
-            "mb_id": order.user.get_username() if order and order.user_id else "",
-            "dt_pg": str(pg_service or "")[:50],
-            "dt_data": json.dumps(redact_payment_data(data), ensure_ascii=False, default=str),
-            "dt_time": timezone.now(),
-        },
-    )
+    fields = {
+        "order": order,
+        "od_id": order.od_id if order else str(order_id or ""),
+        "cart_id": "",
+        "user": order.user if order and order.user_id else None,
+        "mb_id": order.user.get_username() if order and order.user_id else "",
+        "dt_pg": str(pg_service or "")[:50],
+        "dt_data": json.dumps(redact_payment_data(data), ensure_ascii=False, default=str),
+        "dt_time": timezone.now(),
+    }
+    ShopOrderData.objects.update_or_create(log_id=log_id, defaults=fields)
+    kept = _kept_raw_logs.get()
+    if kept is not None:
+        kept.append((log_id, fields))
 
 
 @sensitive_variables("authorization")

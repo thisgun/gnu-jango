@@ -7,15 +7,21 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from gnu_jango.api.shop_nicepay import NICEPAY_REFUSAL, expire_refused_nicepay_vbank
+from gnu_jango.api.shop_nicepay import (
+    NICEPAY_REFUSAL,
+    expire_refused_nicepay_vbank,
+    nicepay_close_refused,
+    note_nicepay_close_refused,
+)
 from gnu_jango.api.shop_payments import (
     cancel_pending_vbank,
+    keep_payment_logs,
     pg_label,
     record_payment_raw_log,
     refresh_pending_vbank,
 )
 from gnu_jango.api.v1_shop import cancel_order_and_refund_benefits, close_cancelled_order_payment
-from gnu_jango.shop.models import ShopOrder
+from gnu_jango.shop.models import ShopOrder, ShopOrderData
 from gnu_jango.shop.order_flow import canonical_status
 from gnu_jango.shop.order_statuses import STATUS_ORDERED
 from gnu_jango.shop.vbank_due import parse_vbank_due_date
@@ -33,7 +39,14 @@ DEFAULT_GRACE_MINUTES = 30
 # here anyway; a deposit that arrives regardless is kept for a refund (shop_nicepay).
 LOCAL_EXPIRY_AFTER = timedelta(hours=24)
 REASON = "가상계좌 입금 기한이 지나 자동 취소되었습니다."
-COUNTED_ACTIONS = {"cancelled", "expired_locally", "settled"}
+# "deferred": NICEPAY refused to close the account within a day of its deadline. Not a failure: the
+# job waits for LOCAL_EXPIRY_AFTER without asking again, while deposit notifications still pay it.
+COUNTED_ACTIONS = {"cancelled", "expired_locally", "settled", "deferred"}
+# An order the job can never expire (an unreadable deadline, or an account that waits while the order
+# does not) logs one ERROR a day and a raw log on the order, so it reaches a person without turning
+# every run red and burying a real failure.
+STUCK_LOG = "vbank-stuck"
+STUCK_ALERT_EVERY = timedelta(days=1)
 LISTED = 20
 
 
@@ -83,6 +96,7 @@ class Command(BaseCommand):
             "cancelled": 0,
             "expired_locally": 0,
             "settled": 0,
+            "deferred": 0,
             "skipped": 0,
             "stuck": 0,
             "invalid_due_date": 0,
@@ -93,7 +107,10 @@ class Command(BaseCommand):
         }
         failures = []
 
-        overdue = self.overdue_orders(options, timezone.now() - timedelta(minutes=grace), summary)
+        overdue, stuck = self.overdue_orders(options, timezone.now() - timedelta(minutes=grace), summary)
+        if options["apply"]:
+            for order, problem in stuck:
+                self.report_stuck(order, problem)
         for due_date, order in overdue[:limit]:
             summary["expired"] += 1
             if not options["apply"]:
@@ -120,7 +137,8 @@ class Command(BaseCommand):
                 "Virtual account expiry: "
                 f"inspected={summary['inspected']} expired={summary['expired']} "
                 f"cancelled={summary['cancelled']} expired_locally={summary['expired_locally']} "
-                f"settled={summary['settled']} skipped={summary['skipped']} stuck={summary['stuck']} "
+                f"settled={summary['settled']} deferred={summary['deferred']} skipped={summary['skipped']} "
+                f"stuck={summary['stuck']} "
                 f"invalid_due_date={summary['invalid_due_date']} manual_review={summary['manual_review']} "
                 f"failed={summary['failed']} needs_review={summary['needs_review']} "
                 f"mode={'apply' if options['apply'] else 'dry-run'}"
@@ -133,9 +151,9 @@ class Command(BaseCommand):
 
     def overdue_orders(self, options, cutoff, summary):
         """(deadline, order) for the orders still waiting for a deposit past ``cutoff``, longest
-        overdue first. A row that cannot be expired (an unreadable deadline, or an order no longer
-        waiting although its account says so) is counted as stuck and never takes a place under
-        --limit."""
+        overdue first, and (order, problem) for the stuck rows. A row that cannot be expired (an
+        unreadable deadline, or an order no longer waiting although its account says so) is counted
+        as stuck and never takes a place under --limit."""
         pgs = Q()
         for pg in EXPIRING_PGS:
             pgs |= Q(od_pg__iexact=pg)
@@ -144,7 +162,7 @@ class Command(BaseCommand):
         if order_ids:
             queryset = queryset.filter(pk__in=order_ids)
 
-        overdue = []
+        overdue, stuck = [], []
         for order in queryset.order_by("od_id").iterator():
             summary["inspected"] += 1
             due_date = parse_vbank_due_date(order.od_vbank_due_date)
@@ -152,6 +170,7 @@ class Command(BaseCommand):
                 summary["invalid_due_date"] += 1
                 summary["stuck"] += 1
                 self.add_sample(summary, order, "invalid_due_date")
+                stuck.append((order, f"its virtual account deadline {order.od_vbank_due_date!r} cannot be read"))
             elif due_date > cutoff:
                 summary["skipped"] += 1
             elif not waiting_for_deposit(order):
@@ -159,18 +178,39 @@ class Command(BaseCommand):
                 summary["stuck"] += 1
                 summary["skipped"] += 1
                 self.add_sample(summary, order, "manual_review")
+                stuck.append((order, f"the order is {order.od_status} while its virtual account still waits"))
             else:
                 overdue.append((due_date, order))
-        return sorted(overdue, key=lambda item: (item[0], item[1].od_id))
+        return sorted(overdue, key=lambda item: (item[0], item[1].od_id)), stuck
+
+    def report_stuck(self, order, problem):
+        """At most once a day per order: an ERROR log and the vbank-stuck raw log on the order."""
+        since = timezone.now() - STUCK_ALERT_EVERY
+        if ShopOrderData.objects.filter(od_id=order.od_id, log_id__startswith=STUCK_LOG, dt_time__gte=since).exists():
+            return
+        reason = f"the virtual account expiry cannot handle this order: {problem}. Settle it by hand."
+        logger.error("order %s: %s", order.od_id, reason)
+        record_payment_raw_log(
+            order,
+            order.od_id,
+            str(order.od_pg or ""),
+            "stuck",
+            {"vbank_expiry": reason, "od_status": order.od_status, "od_vbank_due_date": order.od_vbank_due_date},
+            prefix=STUCK_LOG,
+        )
 
     def expire(self, order, due_date):
         """Close one overdue account at its PG, then cancel the order: all under the order's lock,
-        as the admin cancel does, so a deposit notification waits for the outcome. Returns the
-        action and, for a failure, why."""
-        with transaction.atomic():
+        as the admin cancel does, so a deposit notification waits for the outcome. What the PG
+        answered is kept even when the local cancel breaks and rolls back. Returns the action and,
+        for a failure, why."""
+        with keep_payment_logs(), transaction.atomic():
             locked = ShopOrder.objects.select_for_update(of=("self",)).filter(pk=order.pk).first()
             if locked is None or not waiting_for_deposit(locked):
                 return "settled", ""
+            local_expiry = due_date + LOCAL_EXPIRY_AFTER
+            if timezone.now() < local_expiry and nicepay_close_refused(locked):
+                return "deferred", ""
             error = refresh_pending_vbank(locked)
             if error:
                 return "failed", error_reason(error)
@@ -182,7 +222,10 @@ class Command(BaseCommand):
             action = "cancelled"
             error = cancel_pending_vbank(locked, REASON)
             refusal = nicepay_refusal(error)
-            if refusal and timezone.now() >= due_date + LOCAL_EXPIRY_AFTER:
+            if refusal and timezone.now() < local_expiry:
+                note_nicepay_close_refused(locked, refusal)
+                return "deferred", ""
+            if refusal:
                 action = "expired_locally"
                 error = expire_refused_nicepay_vbank(locked, refusal)
             if error:

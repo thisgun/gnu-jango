@@ -30,6 +30,8 @@ CORE_JOBS: tuple[ScheduledJob, ...] = (
     ScheduledJob("expire_pending_email_members", ("--apply", "--json"), ("--json",), 3600),
     ScheduledJob("expire_vbank_orders", ("--apply", "--json"), ("--json",), 60),
     ScheduledJob("recover_nicepay_attempts", ("--apply", "--json"), ("--json",), 300),
+    # Accounts the shop expired while NICEPAY kept them open: a deposit there must still be refunded.
+    ScheduledJob("recheck_expired_nicepay_vbanks", ("--apply", "--json"), ("--json",), 86400),
     # This one applies by default and takes --dry-run instead of --apply.
     ScheduledJob("cleanup_admin_privacy", (), ("--dry-run",), 86400),
     ScheduledJob("cleanup_search_clicks", ("--json",), ("--dry-run", "--json"), 86400),

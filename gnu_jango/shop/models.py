@@ -1014,6 +1014,9 @@ class ShopPaymentAttempt(models.Model):
     last_error = models.TextField(blank=True, default="")
     recovery_attempts = models.PositiveSmallIntegerField(default=0)
     last_checked_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    # NICEPAY refused to close this virtual account past its deadline: the expiry job stops asking
+    # until a day after the deadline, when the shop may expire the order itself
+    close_refused_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(default=timezone.now)
     updated_at = models.DateTimeField(auto_now=True)
 
