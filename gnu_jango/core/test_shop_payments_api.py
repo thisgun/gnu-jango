@@ -1801,6 +1801,21 @@ class PaymentHelperTests(TestCase):
         self.assertEqual(redacted["nested"]["list"][1][0], "h")
         self.assertEqual(data["Secret"], "a")
 
+    def test_redaction_hides_the_nicepay_buyer_contact(self):
+        redacted = shop_payments.redact_payment_data(
+            {"BuyerName": "홍길동", "BuyerEmail": "a@example.com", "BuyerTel": "01012345678", "TID": "t", "Hotel": "h"}
+        )
+        self.assertEqual(
+            redacted,
+            {
+                "BuyerName": "***redacted***",
+                "BuyerEmail": "***redacted***",
+                "BuyerTel": "***redacted***",
+                "TID": "t",
+                "Hotel": "h",
+            },
+        )
+
     def test_redaction_leaves_scalars_alone(self):
         self.assertEqual(shop_payments.redact_payment_data(5), 5)
         self.assertIsNone(shop_payments.redact_payment_data(None))

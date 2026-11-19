@@ -18,11 +18,12 @@ import logging
 import secrets
 import socket
 import ssl
-from datetime import timedelta
+from datetime import datetime, timedelta
 from http.client import HTTPSConnection
 from urllib import error as urllib_error
 from urllib import parse as urllib_parse
 from urllib.parse import urlencode, urlsplit
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db import transaction
@@ -52,6 +53,7 @@ from .shop_payments import (
 
 logger = logging.getLogger(__name__)
 
+KOREA_TIME = ZoneInfo("Asia/Seoul")
 NICEPAY_SCRIPT_URL = "https://pg-web.nicepay.co.kr/v3/common/js/nicepay-pgweb.js"
 NICEPAY_APPROVAL_URLS = {
     "dc1-api.nicepay.co.kr": "/webapi/pay_process.jsp",
@@ -725,6 +727,16 @@ def _validate_cancel_response(order, response, keys, amount):
     return "", ""
 
 
+def _vbank_due_date(response):
+    """VbankExpDate + VbankExpTime (Korean time) as the ISO time Toss gives for its dueDate."""
+    raw = f"{response.get('VbankExpDate') or ''}{response.get('VbankExpTime') or ''}"
+    try:
+        due = datetime.strptime(raw, "%Y%m%d%H%M%S")
+    except ValueError:
+        return raw[:40]
+    return due.replace(tzinfo=KOREA_TIME).isoformat()
+
+
 @sensitive_variables("attempt", "response", "keys")
 def _save_vbank_authorization(attempt, response):
     """Persist the issued virtual account without marking the order paid."""
@@ -756,12 +768,13 @@ def _save_vbank_authorization(attempt, response):
         newly_issued = str(locked.od_tno or "") != attempt.tid
         locked.od_pg = "nicepay"
         locked.od_tno = attempt.tid[:255]
-        locked.od_vbank_bank_code = bank_code
+        # The order page, the order mail and the result page print this before the account
+        # number. youngcart keeps NICEPAY's bank name (od_bank_account); the code stays in the
+        # attempt's provider data. NICEPAY never returns the account holder.
+        locked.od_vbank_bank_code = str(response.get("VbankBankName") or "").strip()[:10] or bank_code
         locked.od_vbank_account = account_number
-        locked.od_vbank_customer_name = str(response.get("VbankBankName") or "")[:100]
-        locked.od_vbank_due_date = (
-            f"{response.get('VbankExpDate', '')}{response.get('VbankExpTime', '')}"[:40]
-        )
+        locked.od_vbank_customer_name = ""
+        locked.od_vbank_due_date = _vbank_due_date(response)
         locked.od_vbank_secret_hash = ""
         locked.od_vbank_status = "WAITING_FOR_DEPOSIT"
         locked.od_misu = attempt.amount

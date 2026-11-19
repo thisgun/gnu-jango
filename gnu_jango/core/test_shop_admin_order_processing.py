@@ -16,12 +16,14 @@ from django.forms.models import model_to_dict
 from django.test import RequestFactory, TestCase, TransactionTestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.translation import gettext
 from rest_framework.test import APIClient
 
 from gnu_jango.config.models import Config
 from gnu_jango.core.test_shop_payments_api import FAKE_TOSS, fake_http_response, http_error
 from gnu_jango.shop.admin.orders import set_order_status
 from gnu_jango.shop.order_flow import order_misu
+from gnu_jango.shop.sales_report import PERIOD_DAY, sales_table
 from gnu_jango.shop.models import (
     ShopCoupon,
     ShopCouponLog,
@@ -525,6 +527,32 @@ class NetReceiptTests(OrderAdminBase):
         self.assertEqual(context["metrics"][2]["value"], "13,000")
         context = self.client.get(reverse("admin:shop_shoporder_print") + "?receipt_state=proof_needed").context
         self.assertEqual([row["id"] for row in context["print_rows"]], ["YC-N1"])
+
+    def unpaid_online_order(self):
+        """What payment prepare leaves before the PG answers: the amount to pay sits in
+        od_receipt_price, the order is still 주문 and all of it is owed."""
+        return self.make_order(od_id="YC-N3", settle_case="신용카드", od_pg="nicepay", od_receipt_price=13000)
+
+    def test_an_unpaid_online_order_adds_nothing_to_the_receipts(self):
+        self.unpaid_online_order()
+        context = self.client.get(reverse("admin:shop_shoporder_reports")).context
+        self.assertEqual(context["metrics"][1]["value"], "13,000")
+        today = timezone.localdate()
+        table = sales_table(PERIOD_DAY, today, today)
+        self.assertEqual((table["total"]["receipt"], table["total"]["methods"]["card"]), (13000, 0))
+        self.assertEqual(table["total"]["misu"], 13000)
+
+    def test_the_order_page_shows_an_unpaid_online_order_as_owed_not_paid(self):
+        order = self.unpaid_online_order()
+        context = self.client.get(reverse("admin:shop_shoporder_change", args=[order.pk])).context
+        ops = context["order_detail_ops"]
+        self.assertEqual((ops["receipt"], ops["outstanding"]), ("0", "13,000"))
+        no_invoice = gettext("Paid order has no invoice number.")
+        self.assertNotIn(no_invoice, [str(risk["hint"]) for risk in ops["risks"]])
+        kept = self.client.get(reverse("admin:shop_shoporder_change", args=[self.kept.pk])).context["order_detail_ops"]
+        self.assertIn(no_invoice, [str(risk["hint"]) for risk in kept["risks"]])
+        waiting = self.client.get(reverse("admin:shop_shoporder_changelist"), {"shipping_state": "waiting_invoice"})
+        self.assertEqual({row.pk for row in waiting.context["cl"].result_list}, {self.kept.pk})
 
     @override_settings(SHOP_PAYMENT_ADAPTER_BASE_URL="https://adapter.invalid/verify", SHOP_PAYMENT_ADAPTER_SECRET="s")
     def test_the_adapter_reconciliation_skips_cancelled_and_refunded_orders(self):

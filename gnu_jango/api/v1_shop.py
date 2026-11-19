@@ -49,6 +49,7 @@ from gnu_jango.shop.models import (
     ShopOrder,
     ShopOrderData,
     ShopOrderItem,
+    ShopPaymentAttempt,
     ShopProduct,
     ShopStockNotification,
 )
@@ -187,13 +188,12 @@ from .shop_reviews import (
 from .shop_nicepay import (
     NICEPAY_SCRIPT_URL,
     NicepayConfigError,
-    cancel_pending_nicepay_vbank,
     confirm_nicepay_payment,
     create_nicepay_attempt,
     recover_stale_nicepay_attempts,
 )
 from .shop_payments import (
-    cancel_pending_toss_vbank,
+    cancel_pending_vbank,
     checkout_payment_methods,
     configured_payment_provider,
     confirm_adapter_payment,
@@ -1618,9 +1618,6 @@ def order_detail_view(request, od_id):
         if not can_cancel:
             return api_error(reason or "Order cannot be cancelled.", status=drf_status.HTTP_400_BAD_REQUEST, code="order_cancel_blocked")
         data = request_data(request)
-        toss_cancel_error = cancel_pending_toss_vbank(order, str(data.get("reason") or "cancelled"))
-        if toss_cancel_error:
-            return toss_cancel_error
         order, _, cancel_error = cancel_shop_order_locally(order.pk, str(data.get("reason") or "cancelled"))
         if cancel_error:
             return cancel_error
@@ -1719,10 +1716,17 @@ def cancel_shop_order_locally(order_id, reason):
                 status=drf_status.HTTP_400_BAD_REQUEST,
                 code="order_cancel_blocked",
             )
+        vbank_error = cancel_pending_vbank(order, reason)
+        if vbank_error:
+            return None, 0, vbank_error
         order, restored_count = cancel_order_and_refund_benefits(order, reason)
         if settle_case_is_vbank(order.od_settle_case):
             order.od_vbank_status = "CANCELED"
             order.save(update_fields=["od_vbank_status"])
+        if str(order.od_pg or "").strip().lower() == "nicepay":
+            ShopPaymentAttempt.objects.filter(
+                order=order, provider="nicepay", state__in={"prepared", "authenticated", "pending_deposit"}
+            ).update(state="canceled")
         return order, restored_count, None
 
 
@@ -1982,7 +1986,7 @@ def payment_prepare_view(request):
         data={
             "order_id": order.od_id,
             "uid": order.uid,
-            "order_name": str(data.get("order_name") or "Shop order"),
+            "order_name": str(data.get("order_name") or order_goods_name(order)),
             "amount": amount,
             # 복합과세 결제 (de_tax_flag_use): the checkout sends comm_free_mny as taxFreeAmount
             "tax_flag": tax_flag,
@@ -2016,6 +2020,16 @@ def payment_prepare_view(request):
     )
 
 
+def order_goods_name(order):
+    """youngcart orderform.sub.php: the first product's name, with " 외 N건" for the other products,
+    without the characters youngcart strips for the PG form."""
+    names = {}
+    for it_id, it_name in order.items.order_by("pk").values_list("it_id", "it_name"):
+        names.setdefault(it_id, re.sub(r"['\"|,&;]", "", it_name))
+    first = next(iter(names.values()), "")
+    return f"{first} 외 {len(names) - 1}건" if len(names) > 1 else first
+
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 @authentication_classes([JWTAuthentication, BasicAuthentication])
@@ -2043,21 +2057,9 @@ def payment_cancel_view(request):
     if not can_cancel:
         return api_error(reason or "Order cannot be cancelled.", status=drf_status.HTTP_400_BAD_REQUEST, code="order_cancel_blocked")
     cancel_reason = str(data.get("reason") or "payment cancelled")
-    toss_cancel_error = cancel_pending_toss_vbank(order, cancel_reason)
-    if toss_cancel_error:
-        return toss_cancel_error
-    nicepay_cancel_error = cancel_pending_nicepay_vbank(order, cancel_reason)
-    if nicepay_cancel_error:
-        return nicepay_cancel_error
     order, _, cancel_error = cancel_shop_order_locally(order.pk, cancel_reason)
     if cancel_error:
         return cancel_error
-    if str(order.od_pg or "").strip().lower() == "nicepay":
-        from gnu_jango.shop.models import ShopPaymentAttempt
-
-        ShopPaymentAttempt.objects.filter(
-            order=order, provider="nicepay", state__in={"prepared", "authenticated"}
-        ).update(state="canceled")
     restored_rows = restore_order_cart_snapshot(request, order)
     return api_response(data={"order_id": order.od_id, "uid": order.uid, "status": order.od_status, "restored_rows": restored_rows})
 

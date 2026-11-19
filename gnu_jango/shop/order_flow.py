@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 
 from django.db import transaction
+from django.db.models import Case, F, IntegerField, Q, Value, When
 from django.utils import timezone
 
 from gnu_jango.shop.models import ShopOrder
@@ -79,6 +80,23 @@ def paid_amount(order):
     if canonical_status(order.od_status) == STATUS_ORDERED and not settle_case_is_bank(order.od_settle_case):
         return 0
     return max(0, int(order.od_receipt_price or 0))
+
+
+ORDERED_SPELLINGS = frozenset({STATUS_ORDERED, *(alias for alias, s in STATUS_ALIASES.items() if s == STATUS_ORDERED)})
+
+
+def awaiting_online_payment():
+    """The orders paid_amount() counts as unpaid, as a query (reports and admin lists)."""
+    from gnu_jango.api.shop_payments import BANK_SETTLE_CASES
+
+    return Q(od_status__in=ORDERED_SPELLINGS) & ~Q(od_settle_case__in=BANK_SETTLE_CASES)
+
+
+def received_price():
+    """paid_amount() as a database expression."""
+    return Case(
+        When(awaiting_online_payment(), then=Value(0)), default=F("od_receipt_price"), output_field=IntegerField()
+    )
 
 
 def transition_error(order, target, *, invoice=None, delivery_company=None):
@@ -260,14 +278,10 @@ def admin_cancel_order(order, reason="", *, actor=""):
 
 def _cancel_locked_order(current, reason, actor):
     from gnu_jango.api.shop_common import CANCELLED_STATUSES
-    from gnu_jango.api.shop_nicepay import (
-        cancel_pending_nicepay_vbank,
-        nicepay_api_cancel_payment,
-        order_paid_through_nicepay,
-    )
+    from gnu_jango.api.shop_nicepay import nicepay_api_cancel_payment, order_paid_through_nicepay
     from gnu_jango.api.shop_payments import (
         PaymentCancelError,
-        cancel_pending_toss_vbank,
+        cancel_pending_vbank,
         order_paid_through_toss,
         record_payment_raw_log,
         settle_case_is_bank,
@@ -300,15 +314,10 @@ def _cancel_locked_order(current, reason, actor):
     if paid <= 0:
         if settle_case_is_vbank(current.od_settle_case) and current.od_tno:
             # the customer could still deposit into the issued account: close it first
-            if str(current.od_pg or "").lower() == "nicepay":
-                if cancel_pending_nicepay_vbank(current, reason or "쇼핑몰 운영자 취소") is not None:
-                    return StatusChange(
-                        False,
-                        "NICEPAY 가상계좌를 취소하지 못해 주문을 그대로 두었습니다. 잠시 후 다시 시도하세요.",
-                    )
-            elif cancel_pending_toss_vbank(current, reason or "쇼핑몰 운영자 취소") is not None:
+            if cancel_pending_vbank(current, reason or "쇼핑몰 운영자 취소") is not None:
+                provider = "NICEPAY" if str(current.od_pg or "").strip().lower() == "nicepay" else "토스페이먼츠"
                 return StatusChange(
-                    False, "토스페이먼츠 가상계좌를 취소하지 못해 주문을 그대로 두었습니다. 잠시 후 다시 시도하세요."
+                    False, f"{provider} 가상계좌를 취소하지 못해 주문을 그대로 두었습니다. 잠시 후 다시 시도하세요."
                 )
             vbank_waiting = True
     elif order_paid_through_toss(current) or order_paid_through_nicepay(current):

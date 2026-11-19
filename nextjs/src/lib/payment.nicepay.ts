@@ -17,6 +17,7 @@ import type { NicepayExtra, PaymentMethod, PaymentRequest } from "./payment.type
  * the payment window is not treated as a paid order.
  */
 
+const PAYMENT_CANCELLED_MESSAGE = "결제가 취소되었습니다.";
 const NICEPAY_PC_SCRIPT_URL =
   "https://pg-web.nicepay.co.kr/v3/common/js/nicepay-pgweb.js";
 const NICEPAY_FORM_ID = "nicepayForm";
@@ -358,6 +359,13 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
       fn();
     };
 
+    // The checkout shows a rejected payment itself. The window message reaches it only once this
+    // promise has already resolved (the mobile window), so the customer sees a single notice.
+    const fail = (status: "cancelled" | "error", message: string) => {
+      if (settled) postPaymentResult({ status, message });
+      else settle(() => reject(new Error(message)));
+    };
+
     function cleanup() {
       if (resultTimer) window.clearTimeout(resultTimer);
       window.removeEventListener("message", onNicepayMessage);
@@ -380,16 +388,10 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
             req,
             err instanceof Error ? err.message : "Nicepay payment failed"
           );
-          postPaymentResult({
-            status: "error",
-            message:
-              err instanceof Error
-                ? err.message
-                : "Nicepay payment confirmation failed.",
-          });
-          settle(() => {
-            reject(err instanceof Error ? err : new Error("Nicepay payment failed"));
-          });
+          fail(
+            "error",
+            err instanceof Error ? err.message : "NICEPAY 결제 승인을 확인하지 못했습니다."
+          );
         });
     }
 
@@ -415,19 +417,15 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
         const message =
           data.message ||
           (isCancelled
-            ? "Payment was cancelled."
-            : "Nicepay payment was not completed.");
+            ? PAYMENT_CANCELLED_MESSAGE
+            : "NICEPAY 결제가 완료되지 않았습니다.");
         await cancelPreparedPayment(
           req,
           isCancelled
             ? "Nicepay payment cancelled"
             : data.message || "Nicepay payment failed"
         );
-        postPaymentResult({
-          status: isCancelled ? "cancelled" : "error",
-          message,
-        });
-        settle(() => reject(new Error(message)));
+        fail(isCancelled ? "cancelled" : "error", message);
       });
     }
 
@@ -445,9 +443,8 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
           const message =
             responseFields.AuthResultMsg ||
             responseFields.ResultMsg ||
-            `Nicepay authentication failed: ${code}`;
-          postPaymentResult({ status: "error", message });
-          settle(() => reject(new Error(message)));
+            `NICEPAY 인증에 실패했습니다. (${code})`;
+          fail("error", message);
           return;
         }
         await confirmNicepayPaymentPayload(responseFields, req);
@@ -461,11 +458,7 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
       finish(async () => {
         cleanup();
         await cancelPreparedPayment(req, resultMsg || "Nicepay payment cancelled");
-        postPaymentResult({
-          status: "cancelled",
-          message: resultMsg || "Payment was cancelled.",
-        });
-        settle(() => reject(new Error(resultMsg || "Payment was cancelled.")));
+        fail("cancelled", resultMsg || PAYMENT_CANCELLED_MESSAGE);
       });
     };
 
@@ -474,10 +467,7 @@ export function requestNicepayPayment(req: PaymentRequest): Promise<void> {
       finish(async () => {
         cleanup();
         await cancelPreparedPayment(req, "Nicepay payment response timeout");
-        const message =
-          "Nicepay payment response timed out. Close the payment window and try again.";
-        postPaymentResult({ status: "error", message });
-        settle(() => reject(new Error(message)));
+        fail("error", "NICEPAY 결제 응답이 없습니다. 결제창을 닫고 다시 시도해 주세요.");
       });
     }, 300000);
 

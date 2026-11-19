@@ -176,9 +176,11 @@ class TossVirtualAccountTests(TestCase):
         profile.user_point = 2000
         profile.save(update_fields=["user_point"])
 
-        first, _, first_error = cancel_shop_order_locally(order.od_id, "customer requested cancellation")
-        second, _, second_error = cancel_shop_order_locally(order.od_id, "customer requested cancellation")
+        with patch("gnu_jango.api.shop_payments.cancel_pending_toss_vbank", return_value=None) as close_account:
+            first, _, first_error = cancel_shop_order_locally(order.od_id, "customer requested cancellation")
+            second, _, second_error = cancel_shop_order_locally(order.od_id, "customer requested cancellation")
 
+        close_account.assert_called_once()
         self.assertIsNone(first_error)
         self.assertIsNone(second_error)
         self.assertEqual(first.od_status, second.od_status)

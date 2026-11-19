@@ -423,8 +423,11 @@ def payment_adapter_request(action, provider, data):
         )
 
 
+BANK_SETTLE_CASES = frozenset({"", "bank", "무통장", "무통장입금"})
+
+
 def settle_case_is_bank(value):
-    return str(value or "").strip() in {"", "bank", "무통장", "무통장입금"}
+    return str(value or "").strip() in BANK_SETTLE_CASES
 
 
 def settle_case_supports_cash_receipt(value):
@@ -651,15 +654,12 @@ def redact_payment_data(data):
                 "buyer_name",
                 "company",
             )
-            if any(fragment in normalized for fragment in sensitive_fragments) or normalized in {
-                "od_name",
-                "od_hp",
-                "od_tel",
-                "name",
-                "od_b_name",
-                "od_b_hp",
-                "od_b_tel",
-            }:
+            if (
+                any(fragment in normalized for fragment in sensitive_fragments)
+                # "tel" as a word of the key (BuyerTel, od_tel), never inside another word
+                or "tel" in normalized.split("_")
+                or normalized in {"od_name", "od_hp", "name", "od_b_name", "od_b_hp"}
+            ):
                 redacted[key] = "***redacted***"
             else:
                 redacted[key] = redact_payment_data(value)
@@ -824,6 +824,17 @@ def toss_api_get_payment_by_order(order_id, *, order=None):
             status=drf_status.HTTP_502_BAD_GATEWAY,
             code="toss_payment_invalid_response",
         )
+
+
+def cancel_pending_vbank(order, reason):
+    """Close the order's issued, still unpaid virtual account at the PG that issued it. None when
+    it is closed or there is none; otherwise the error response, and the order must be left as it
+    is so the customer can never deposit into the account of a cancelled order."""
+    if str(order.od_pg or "").strip().lower() == "nicepay":
+        from .shop_nicepay import cancel_pending_nicepay_vbank
+
+        return cancel_pending_nicepay_vbank(order, reason)
+    return cancel_pending_toss_vbank(order, reason)
 
 
 @sensitive_variables("authorization")

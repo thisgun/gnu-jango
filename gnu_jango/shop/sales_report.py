@@ -6,7 +6,9 @@ youngcart adds od_receipt_price to the column of the order's od_settle_case (무
 계좌이체, 신용카드, 간편결제 family, 휴대폰) and od_receipt_point to 포인트입금. Here a refund is
 taken off what the method received (od_receipt_price - od_refund_price, as the settlement report
 counts it) and refunds are shown on their own; a payment method youngcart does not list lands in
-기타 so no money disappears from the totals.
+기타 so no money disappears from the totals. youngcart writes no receipt before the PG approves;
+here an online-payment order still 주문 carries the amount to pay in od_receipt_price, so it
+counts as nothing received (order_flow.received_price).
 """
 
 from datetime import date, timedelta
@@ -17,6 +19,7 @@ from django.db.models.functions import TruncDate, TruncMonth, TruncYear
 from gnu_jango.utils.date_ranges import local_days
 
 from .models import ShopOrder
+from .order_flow import received_price
 
 PERIOD_TODAY = "today"
 PERIOD_DAY = "day"
@@ -126,7 +129,7 @@ def _amount_expressions():
     return {
         "order_price": Sum(F("od_cart_price") + F("od_send_cost") + F("od_send_cost2"), output_field=IntegerField()),
         "coupon": Sum(F("od_coupon") + F("od_send_coupon"), output_field=IntegerField()),
-        "net": Sum(F("od_receipt_price") - F("od_refund_price"), output_field=IntegerField()),
+        "net": Sum(received_price() - F("od_refund_price"), output_field=IntegerField()),
         "point": Sum("od_receipt_point"),
         "cancel": Sum("od_cancel_price"),
         "refund": Sum("od_refund_price"),
@@ -148,15 +151,16 @@ def sales_table(period, start, end, orders=None):
     total = _empty_row("합계")
     if period == PERIOD_TODAY:
         rows = []
-        for order in orders.order_by("-od_datetime", "-od_id")[:MAX_TODAY_ROWS].values(
+        today_orders = orders.annotate(received=received_price()).order_by("-od_datetime", "-od_id")
+        for order in today_orders[:MAX_TODAY_ROWS].values(
             "od_id", "od_name", "od_settle_case", "od_status", "od_cart_price", "od_send_cost", "od_send_cost2",
-            "od_coupon", "od_send_coupon", "od_receipt_price", "od_refund_price", "od_receipt_point",
+            "od_coupon", "od_send_coupon", "received", "od_refund_price", "od_receipt_point",
             "od_cancel_price", "od_misu",
         ):
             values = {
                 "order_price": order["od_cart_price"] + order["od_send_cost"] + order["od_send_cost2"],
                 "coupon": order["od_coupon"] + order["od_send_coupon"],
-                "net": order["od_receipt_price"] - order["od_refund_price"],
+                "net": order["received"] - order["od_refund_price"],
                 "point": order["od_receipt_point"],
                 "cancel": order["od_cancel_price"],
                 "refund": order["od_refund_price"],

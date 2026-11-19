@@ -38,6 +38,8 @@ def staff_with(*codenames):
 class SalesTableTests(TestCase):
     def setUp(self):
         def order(od_id, when, settle_case, receipt, **values):
+            # paid orders (입금): an online payment still 주문 has received nothing yet
+            values.setdefault("od_status", "입금")
             return ShopOrder.objects.create(
                 od_id=od_id, od_datetime=when, od_settle_case=settle_case, od_receipt_price=receipt, **values
             )
