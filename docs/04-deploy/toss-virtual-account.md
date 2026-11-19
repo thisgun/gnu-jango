@@ -47,7 +47,7 @@ python manage.py expire_vbank_orders --json
 python manage.py expire_vbank_orders --apply --json
 ```
 
-운영 서버의 작업 스케줄러에서 하루 한 번 이상 실행하고, 실패 건은 명령 종료 코드와 출력 로그로 확인하세요. 실제 배포에서는 주문량에 따라 `--limit`을 조정합니다. 같은 명령이 NICEPAY 가상계좌도 만료합니다. NICEPAY 거래조회로 입금 여부를 먼저 확인하고, 입금되지 않은 계좌만 NICEPAY에서 닫은 뒤 주문을 취소합니다. 기한 직후 늦게 오는 입금 통보를 기다리도록 기한이 지나고 30분(`--grace-minutes`) 뒤에 만료합니다. 예전 이름 `expire_toss_vbank_orders`도 같은 명령으로 실행됩니다.
+운영 서버의 작업 스케줄러에서 하루 한 번 이상 실행하고, 실패 건은 명령 종료 코드와 출력 로그로 확인하세요. 실제 배포에서는 주문량에 따라 `--limit`을 조정합니다. 같은 명령이 NICEPAY 가상계좌도 만료합니다. NICEPAY 거래조회로 입금 여부를 먼저 확인하고, 입금되지 않은 계좌만 NICEPAY에서 닫은 뒤 주문을 취소합니다. 기한 직후 늦게 오는 입금 통보를 기다리도록 기한이 지나고 30분(`--grace-minutes`) 뒤에 만료합니다. NICEPAY가 계좌 취소를 거절할 때의 대체 경로와 만료 뒤 늦은 입금 처리는 [NICEPAY 문서](nicepay-auth-payment.md#가상계좌-입금-기한-만료)에 있습니다. 출력의 `stuck`은 기한을 읽을 수 없거나 확인이 필요한 행 수, `needs_review`는 PG와 쇼핑몰이 어긋나 확인이 필요한 주문 수입니다. 예전 이름 `expire_toss_vbank_orders`도 같은 명령으로 실행됩니다.
 
 ## 배포 전 점검
 
