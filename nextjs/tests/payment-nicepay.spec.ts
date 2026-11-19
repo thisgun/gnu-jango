@@ -593,4 +593,32 @@ test.describe("Nicepay payment helpers", () => {
       });
     });
   });
+
+  test("tells the checkout once, in Korean, when the PC payment window is closed", async () => {
+    await withNicepayDom(async ({ postedMessages, win }) => {
+      win.goPay = () => win.nicepayClose?.();
+
+      const outcome = await withMockedApiPost(
+        async () => ({}),
+        () =>
+          requestNicepayPayment(
+            paymentRequest("card", {
+              pg_extra: {
+                nicepay: nicepay({
+                  module_type: "pc",
+                  return_url: "https://shop.example.com/api/v1/shop/payment/nicepay-return",
+                }),
+              },
+            })
+          ).then(
+            () => "resolved",
+            (err: Error) => err.message
+          )
+      );
+      await flushPromises();
+
+      expect(outcome).toBe("결제가 취소되었습니다.");
+      expect(postedMessages).toEqual([]);
+    });
+  });
 });
