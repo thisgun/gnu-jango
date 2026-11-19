@@ -11,8 +11,14 @@ from gnu_jango.shop.order_flow import awaiting_online_payment, paid_amount, rece
 
 pytestmark = pytest.mark.django_db
 
-STATUSES = ("주문", " 주문 ", "order", "ORDER", "Pending", " ordered", "입금", "paid", "준비", "취소", "cancel")
-SETTLE_CASES = ("", "bank", "무통장", " 무통장 ", "무통장입금", "BANK", "신용카드", "가상계좌", " card", "vbank")
+STATUSES = (
+    "주문", " 주문 ", "order", "ORDER", "Pending", " ordered", "입금", "paid", "준비", "취소", "cancel",
+    "\t주문", "주문\u00a0", "\u3000order\n",
+)
+SETTLE_CASES = (
+    "", "bank", "무통장", " 무통장 ", "무통장입금", "BANK", "신용카드", "가상계좌", " card", "vbank",
+    "\t무통장", "무통장\u00a0", "\t", "\u00a0",
+)
 
 
 def test_the_query_and_the_order_agree_on_what_was_received():

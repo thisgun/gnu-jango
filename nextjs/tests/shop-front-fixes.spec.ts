@@ -23,6 +23,7 @@ test.describe("shop front fixes", () => {
     expect(formatVbankDueDate("2026-11-21T23:59:59+09:00")).toBe("2026-11-21 23:59");
     expect(formatVbankDueDate("20261121235959")).toBe("2026-11-21 23:59");
     expect(formatVbankDueDate("2026-11-21")).toBe("2026-11-21 23:59");
+    expect(formatVbankDueDate("20261121")).toBe("2026-11-21 23:59");
     expect(formatVbankDueDate("곧 안내")).toBe("곧 안내");
   });
 
