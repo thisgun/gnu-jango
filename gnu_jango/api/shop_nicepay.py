@@ -108,6 +108,15 @@ class NicepayKeyRotationError(PaymentCancelError):
     """The attempt was made with a credential pair that is no longer configured."""
 
 
+class NicepayCancelRefused(PaymentCancelError):
+    """NICEPAY answered the cancel request with a failure code; ``answer`` is its ResultCode and
+    ResultMsg."""
+
+    def __init__(self, message, *, answer):
+        super().__init__(message)
+        self.answer = answer
+
+
 def _now_edidate():
     return timezone.localtime().strftime("%Y%m%d%H%M%S")
 
@@ -1238,6 +1247,9 @@ def nicepay_cancel_payment(
     error_message, error_code = _validate_cancel_response(order, response, keys, cancel_amount)
     if error_message:
         _record_attempt_log_for_order(order, {"nicepay_cancel": response}, prefix="nicepay-cancel-reject")
+        if error_code == "nicepay_cancel_rejected":
+            answer = {key: str(response.get(key) or "") for key in ("ResultCode", "ResultMsg")}
+            raise NicepayCancelRefused(error_message, answer=answer) from None
         raise PaymentCancelError(error_message) from None
     _record_attempt_log_for_order(
         order,
@@ -1273,8 +1285,13 @@ def nicepay_api_partial_cancel_payment(order, amount, reason, *, idempotency_key
     )
 
 
+NICEPAY_REFUSAL = "nicepay_refusal"
+
+
 def cancel_pending_nicepay_vbank(order, reason):
-    """Close an issued virtual account that has not received a deposit. None on success/not needed."""
+    """Close an issued virtual account that has not received a deposit. None on success/not needed.
+    When NICEPAY refused, rather than failed to answer, the error's ``errors[NICEPAY_REFUSAL]``
+    holds its answer."""
     if str(order.od_pg or "").strip().lower() != "nicepay" or not settle_case_is_vbank(order.od_settle_case):
         return None
     if not order.od_tno or str(order.od_vbank_status or "").upper() == "DONE":
@@ -1282,12 +1299,30 @@ def cancel_pending_nicepay_vbank(order, reason):
     try:
         nicepay_cancel_payment(order, reason, amount=None, partial=False)
     except PaymentCancelError as exc:
+        message = f"NICEPAY 가상계좌를 취소하지 못했습니다. {exc}"
+        details = {"nicepay_vbank_cancel_failed": message}
+        if isinstance(exc, NicepayCancelRefused):
+            details[NICEPAY_REFUSAL] = exc.answer
         return api_error(
-            f"NICEPAY 가상계좌를 취소하지 못했습니다. {exc}",
-            status=drf_status.HTTP_502_BAD_GATEWAY,
-            code="nicepay_vbank_cancel_failed",
+            message, status=drf_status.HTTP_502_BAD_GATEWAY, code="nicepay_vbank_cancel_failed", details=details
         )
     return None
+
+
+def _waiting_vbank_attempt(order):
+    return (
+        order.payment_attempts.filter(provider="nicepay", tid=order.od_tno, state="pending_deposit")
+        .order_by("-pk")
+        .first()
+    )
+
+
+def _vbank_attempt_missing():
+    return api_error(
+        "NICEPAY 가상계좌의 결제 시도를 찾지 못해 입금 여부를 확인할 수 없습니다. 관리자 확인이 필요합니다.",
+        status=drf_status.HTTP_409_CONFLICT,
+        code="nicepay_vbank_attempt_missing",
+    )
 
 
 def refresh_nicepay_vbank(order):
@@ -1295,19 +1330,74 @@ def refresh_nicepay_vbank(order):
     deposit pays the order, a closed account cancels it, and an account still waiting leaves the
     order as it is. None once NICEPAY answered; the error when it could not be asked or answered
     something that needs an admin."""
-    attempt = (
-        order.payment_attempts.filter(provider="nicepay", tid=order.od_tno, state="pending_deposit")
-        .order_by("-pk")
-        .first()
-    )
+    attempt = _waiting_vbank_attempt(order)
     if attempt is None:
-        return api_error(
-            "NICEPAY 가상계좌의 결제 시도를 찾지 못해 입금 여부를 확인할 수 없습니다. 관리자 확인이 필요합니다.",
-            status=drf_status.HTTP_409_CONFLICT,
-            code="nicepay_vbank_attempt_missing",
-        )
+        return _vbank_attempt_missing()
     _, error = recover_nicepay_attempt(attempt)
     return error
+
+
+def expire_refused_nicepay_vbank(order, answer):
+    """NICEPAY refused (``answer``) to close the waiting account of ``order``, which the caller holds
+    locked a day past its deadline. If a fresh lookup still finds no deposit (Status 9), the attempt
+    becomes ``expired`` with NICEPAY's answer, and the caller cancels the order here; a deposit that
+    arrives anyway is kept for a refund (_keep_late_deposit). None, or the error that leaves the order
+    as it is."""
+    attempt = _waiting_vbank_attempt(order)
+    if attempt is None:
+        return _vbank_attempt_missing()
+    try:
+        lookup = _lookup_transaction(attempt.tid, attempt.mode)
+    except PaymentCancelError as exc:
+        return api_error(str(exc), status=drf_status.HTTP_502_BAD_GATEWAY, code="nicepay_lookup_failed")
+    evidence = {"nicepay_cancel": answer, "nicepay_lookup": lookup}
+    if str(lookup.get("Status") or "").strip() != "9":
+        _record_attempt_log(attempt, evidence, prefix="nicepay-vbank-expiry-blocked")
+        return api_error(
+            "NICEPAY가 가상계좌 취소를 거절했고 거래조회가 미입금이 아니어서 주문을 그대로 두었습니다. "
+            "다음 실행에서 거래조회 결과를 반영합니다.",
+            status=drf_status.HTTP_409_CONFLICT,
+            code="nicepay_vbank_expiry_not_unpaid",
+        )
+    _mark_attempt(
+        attempt,
+        "expired",
+        provider_data=answer,
+        error=(
+            f"NICEPAY refused to close the account ({answer.get('ResultCode')} {answer.get('ResultMsg')}) and its "
+            "lookup still found no deposit a day past the deadline, so the order was cancelled in this shop."
+        ),
+    )
+    _record_attempt_log(attempt, evidence, prefix="nicepay-vbank-expired")
+    return None
+
+
+def _keep_late_deposit(order_id, attempt, amount):
+    """NICEPAY confirmed a deposit into the account of an order already cancelled here (expired here,
+    or cancelled while the deposit was on its way). The order stays cancelled and the money is not
+    lost: the attempt becomes ``late_deposit``, the order's admin memo asks for a refund, and an
+    error log alerts the operators (Sentry). Once per attempt, so a resent notification changes
+    nothing."""
+    with transaction.atomic():
+        order = ShopOrder.objects.select_for_update(of=("self",)).filter(pk=order_id).first()
+        attempt.refresh_from_db()
+        if attempt.state == "late_deposit":
+            return
+        note = (
+            f"[{timezone.localtime():%Y-%m-%d %H:%M}] 취소된 주문의 NICEPAY 가상계좌(TID {attempt.tid})에 "
+            f"{amount:,}원이 입금되었습니다. 고객에게 환불해 주세요."
+        )
+        _mark_attempt(attempt, "late_deposit", error=note)
+        if order is not None:
+            order.od_shop_memo = "\n".join(filter(None, [order.od_shop_memo, note]))
+            order._change_reason = "NICEPAY deposit into a cancelled order"
+            order.save(update_fields=["od_shop_memo"])
+    logger.error(
+        "order %s: NICEPAY confirmed a deposit of %s won into the virtual account of the cancelled order; "
+        "refund it by hand",
+        order_id,
+        amount,
+    )
 
 
 def order_paid_through_nicepay(order):
@@ -1860,6 +1950,7 @@ def process_nicepay_vbank_notification(data):
                          code="nicepay_vbank_not_deposited")
     if str(order.od_status or "") in CANCELLED_STATUSES:
         record_payment_raw_log(order, order_id, "nicepay-vbank", tid, raw, prefix="nicepay-vbank-late-paid")
+        _keep_late_deposit(order_id, attempt, authoritative_amount)
         return None
     paid_order, error = confirm_order_payment(
         order.pk,
@@ -1869,6 +1960,11 @@ def process_nicepay_vbank_notification(data):
         {"nicepay_vbank_notification": data, "nicepay_lookup": lookup},
         log_prefix="nicepay-vbank",
     )
+    if error and error.data.get("code") == "order_cancelled":
+        # cancelled after it was read above (the expiry job held it locked while the deposit came in)
+        record_payment_raw_log(order, order_id, "nicepay-vbank", tid, raw, prefix="nicepay-vbank-late-paid")
+        _keep_late_deposit(order_id, attempt, authoritative_amount)
+        return None
     if error:
         return error
     # confirm_order_payment already queues the paid mail/SMS exactly once when it changes the
