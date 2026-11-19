@@ -260,14 +260,10 @@ def admin_cancel_order(order, reason="", *, actor=""):
 
 def _cancel_locked_order(current, reason, actor):
     from gnu_jango.api.shop_common import CANCELLED_STATUSES
-    from gnu_jango.api.shop_nicepay import (
-        cancel_pending_nicepay_vbank,
-        nicepay_api_cancel_payment,
-        order_paid_through_nicepay,
-    )
+    from gnu_jango.api.shop_nicepay import nicepay_api_cancel_payment, order_paid_through_nicepay
     from gnu_jango.api.shop_payments import (
         PaymentCancelError,
-        cancel_pending_toss_vbank,
+        cancel_pending_vbank,
         order_paid_through_toss,
         record_payment_raw_log,
         settle_case_is_bank,
@@ -300,15 +296,10 @@ def _cancel_locked_order(current, reason, actor):
     if paid <= 0:
         if settle_case_is_vbank(current.od_settle_case) and current.od_tno:
             # the customer could still deposit into the issued account: close it first
-            if str(current.od_pg or "").lower() == "nicepay":
-                if cancel_pending_nicepay_vbank(current, reason or "쇼핑몰 운영자 취소") is not None:
-                    return StatusChange(
-                        False,
-                        "NICEPAY 가상계좌를 취소하지 못해 주문을 그대로 두었습니다. 잠시 후 다시 시도하세요.",
-                    )
-            elif cancel_pending_toss_vbank(current, reason or "쇼핑몰 운영자 취소") is not None:
+            if cancel_pending_vbank(current, reason or "쇼핑몰 운영자 취소") is not None:
+                provider = "NICEPAY" if str(current.od_pg or "").strip().lower() == "nicepay" else "토스페이먼츠"
                 return StatusChange(
-                    False, "토스페이먼츠 가상계좌를 취소하지 못해 주문을 그대로 두었습니다. 잠시 후 다시 시도하세요."
+                    False, f"{provider} 가상계좌를 취소하지 못해 주문을 그대로 두었습니다. 잠시 후 다시 시도하세요."
                 )
             vbank_waiting = True
     elif order_paid_through_toss(current) or order_paid_through_nicepay(current):

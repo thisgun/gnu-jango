@@ -187,13 +187,12 @@ from .shop_reviews import (
 from .shop_nicepay import (
     NICEPAY_SCRIPT_URL,
     NicepayConfigError,
-    cancel_pending_nicepay_vbank,
     confirm_nicepay_payment,
     create_nicepay_attempt,
     recover_stale_nicepay_attempts,
 )
 from .shop_payments import (
-    cancel_pending_toss_vbank,
+    cancel_pending_vbank,
     checkout_payment_methods,
     configured_payment_provider,
     confirm_adapter_payment,
@@ -1618,9 +1617,6 @@ def order_detail_view(request, od_id):
         if not can_cancel:
             return api_error(reason or "Order cannot be cancelled.", status=drf_status.HTTP_400_BAD_REQUEST, code="order_cancel_blocked")
         data = request_data(request)
-        toss_cancel_error = cancel_pending_toss_vbank(order, str(data.get("reason") or "cancelled"))
-        if toss_cancel_error:
-            return toss_cancel_error
         order, _, cancel_error = cancel_shop_order_locally(order.pk, str(data.get("reason") or "cancelled"))
         if cancel_error:
             return cancel_error
@@ -1719,6 +1715,9 @@ def cancel_shop_order_locally(order_id, reason):
                 status=drf_status.HTTP_400_BAD_REQUEST,
                 code="order_cancel_blocked",
             )
+        vbank_error = cancel_pending_vbank(order, reason)
+        if vbank_error:
+            return None, 0, vbank_error
         order, restored_count = cancel_order_and_refund_benefits(order, reason)
         if settle_case_is_vbank(order.od_settle_case):
             order.od_vbank_status = "CANCELED"
@@ -2043,12 +2042,6 @@ def payment_cancel_view(request):
     if not can_cancel:
         return api_error(reason or "Order cannot be cancelled.", status=drf_status.HTTP_400_BAD_REQUEST, code="order_cancel_blocked")
     cancel_reason = str(data.get("reason") or "payment cancelled")
-    toss_cancel_error = cancel_pending_toss_vbank(order, cancel_reason)
-    if toss_cancel_error:
-        return toss_cancel_error
-    nicepay_cancel_error = cancel_pending_nicepay_vbank(order, cancel_reason)
-    if nicepay_cancel_error:
-        return nicepay_cancel_error
     order, _, cancel_error = cancel_shop_order_locally(order.pk, cancel_reason)
     if cancel_error:
         return cancel_error

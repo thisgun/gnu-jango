@@ -826,6 +826,17 @@ def toss_api_get_payment_by_order(order_id, *, order=None):
         )
 
 
+def cancel_pending_vbank(order, reason):
+    """Close the order's issued, still unpaid virtual account at the PG that issued it. None when
+    it is closed or there is none; otherwise the error response, and the order must be left as it
+    is so the customer can never deposit into the account of a cancelled order."""
+    if str(order.od_pg or "").strip().lower() == "nicepay":
+        from .shop_nicepay import cancel_pending_nicepay_vbank
+
+        return cancel_pending_nicepay_vbank(order, reason)
+    return cancel_pending_toss_vbank(order, reason)
+
+
 @sensitive_variables("authorization")
 def cancel_pending_toss_vbank(order, reason):
     if not settle_case_is_vbank(order.od_settle_case) or not order.od_tno:
