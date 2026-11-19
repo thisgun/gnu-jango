@@ -594,6 +594,30 @@ test.describe("Nicepay payment helpers", () => {
     });
   });
 
+  test("explains in Korean why the payment window cannot open", async () => {
+    const outcome = (req: PaymentRequest) =>
+      requestNicepayPayment(req).then(
+        () => "resolved",
+        (err: Error) => err.message
+      );
+    const withNicepay = (extra?: NicepayExtra) => paymentRequest("card", { pg_extra: extra ? { nicepay: extra } : {} });
+
+    expect(await outcome(withNicepay())).toBe("NICEPAY 결제 준비 정보가 없습니다. 다시 시도해 주세요.");
+    expect(await outcome(withNicepay(nicepay({ sign_data: "" })))).toBe(
+      "NICEPAY 결제 정보(MID·서명)가 없습니다. 관리자에게 문의해 주세요."
+    );
+    expect(await outcome(withNicepay(nicepay()))).toBe(
+      "NICEPAY 결제 결과를 받을 주소가 없습니다. 관리자에게 문의해 주세요."
+    );
+    await withNicepayDom(async () => {
+      expect(
+        await outcome(
+          withNicepay(nicepay({ module_type: "pc", return_url: "https://shop.example.com/api/v1/shop/payment/nicepay-return" }))
+        )
+      ).toBe("NICEPAY 결제창을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    });
+  });
+
   test("tells the checkout once, in Korean, when the PC payment window is closed", async () => {
     await withNicepayDom(async ({ postedMessages, win }) => {
       win.goPay = () => win.nicepayClose?.();
