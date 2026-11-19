@@ -20,6 +20,7 @@ from gnu_jango.core.import_export import SafeExportResource, UpdateOnlyResource
 
 from .inventory import reserve_product_stock
 from .models import ShopOrder, ShopOrderItem, ShopProduct
+from .order_flow import paid_amount
 from .order_statuses import STATUS_ORDERED
 from .shipping import current_shipping_policy, shipping_quote
 from .taxes import calculate_order_tax_amounts
@@ -204,6 +205,8 @@ class ShopOrderResource(UpdateOnlyResource):
     od_send_cost = fields.Field(attribute="od_send_cost", readonly=True)
     od_send_cost2 = fields.Field(attribute="od_send_cost2", readonly=True)
     od_receipt_price = fields.Field(attribute="od_receipt_price", readonly=True)
+    # od_receipt_price holds the amount to pay while an online payment is not completed
+    received_price = fields.Field(column_name="received_price", readonly=True)
     od_cancel_price = fields.Field(attribute="od_cancel_price", readonly=True)
     od_refund_price = fields.Field(attribute="od_refund_price", readonly=True)
     od_misu = fields.Field(attribute="od_misu", readonly=True)
@@ -254,6 +257,7 @@ class ShopOrderResource(UpdateOnlyResource):
             "od_send_cost",
             "od_send_cost2",
             "od_receipt_price",
+            "received_price",
             "od_cancel_price",
             "od_refund_price",
             "od_misu",
@@ -276,6 +280,9 @@ class ShopOrderResource(UpdateOnlyResource):
         import_id_fields = ("od_id",)
         skip_unchanged = True
         report_skipped = True
+
+    def dehydrate_received_price(self, order):
+        return paid_amount(order)
 
     def before_import_row(self, row, **kwargs):
         od_id = _text(row.get("od_id"))
