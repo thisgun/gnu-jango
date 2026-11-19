@@ -1995,7 +1995,11 @@ def payment_prepare_view(request):
         data={
             "order_id": order.od_id,
             "uid": order.uid,
-            "order_name": str(data.get("order_name") or order_goods_name(order)),
+            "order_name": (
+                fit_goods_name(data["order_name"], pg_service)
+                if data.get("order_name")
+                else order_goods_name(order, pg_service)
+            ),
             "amount": amount,
             # 복합과세 결제 (de_tax_flag_use): the checkout sends comm_free_mny as taxFreeAmount
             "tax_flag": tax_flag,
@@ -2029,14 +2033,37 @@ def payment_prepare_view(request):
     )
 
 
-def order_goods_name(order):
+def order_goods_name(order, pg_service):
     """youngcart orderform.sub.php: the first product's name, with " 외 N건" for the other products,
     without the characters youngcart strips for the PG form."""
     names = {}
     for it_id, it_name in order.items.order_by("pk").values_list("it_id", "it_name"):
         names.setdefault(it_id, re.sub(r"['\"|,&;]", "", it_name))
     first = next(iter(names.values()), "")
-    return f"{first} 외 {len(names) - 1}건" if len(names) > 1 else first
+    return fit_goods_name(first, pg_service, suffix=f" 외 {len(names) - 1}건" if len(names) > 1 else "")
+
+
+def _euc_kr_size(char):
+    # NICEPAY's form is sent in EUC-KR; the browser sends a character outside it as &#NNNN;
+    return len(char.encode("cp949", "xmlcharrefreplace"))
+
+
+# NICEPAY GoodsName: 40 bytes (developers.nicepay.co.kr, 요청 파라미터); Toss orderName: 100 characters
+GOODS_NAME_LIMITS = {"nicepay": (40, _euc_kr_size)}
+DEFAULT_GOODS_NAME_LIMIT = (100, len)
+
+
+def fit_goods_name(name, pg_service, *, suffix=""):
+    """``name`` + ``suffix`` cut to what the PG accepts, whole characters only; the suffix stays."""
+    limit, size = GOODS_NAME_LIMITS.get(pg_service, DEFAULT_GOODS_NAME_LIMIT)
+    room = limit - sum(size(char) for char in suffix)
+    kept = []
+    for char in str(name or ""):
+        room -= size(char)
+        if room < 0:
+            break
+        kept.append(char)
+    return "".join(kept).rstrip() + suffix
 
 
 @api_view(["POST"])
