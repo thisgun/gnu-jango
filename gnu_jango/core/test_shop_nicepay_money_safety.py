@@ -773,6 +773,8 @@ def test_a_customer_cancel_closes_the_nicepay_virtual_account_first(vbank_checko
         assert response.status_code == 200, response.content[:300]
         assert_fully_cancelled(order, paid=0)
         assert order.od_vbank_status == "CANCELED"
+        checkout.attempt.refresh_from_db()
+        assert checkout.attempt.state == "canceled"  # no longer waits for a deposit or a recovery
         for product in shop.values():
             assert ShopProduct.objects.get(pk=product.pk).it_stock_qty == STOCK
     else:
