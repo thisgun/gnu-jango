@@ -7,6 +7,8 @@ from dataclasses import dataclass
 
 from django.db import transaction
 from django.db.models import Case, F, IntegerField, Q, Value, When
+from django.db.models.functions import Lower, Trim
+from django.db.models.lookups import In
 from django.utils import timezone
 
 from gnu_jango.shop.models import ShopOrder
@@ -86,10 +88,12 @@ ORDERED_SPELLINGS = frozenset({STATUS_ORDERED, *(alias for alias, s in STATUS_AL
 
 
 def awaiting_online_payment():
-    """The orders paid_amount() counts as unpaid, as a query (reports and admin lists)."""
+    """The orders paid_amount() counts as unpaid, as a query (reports and admin lists). It reads the
+    status and the settle case the way canonical_status() and settle_case_is_bank() do."""
     from gnu_jango.api.shop_payments import BANK_SETTLE_CASES
 
-    return Q(od_status__in=ORDERED_SPELLINGS) & ~Q(od_settle_case__in=BANK_SETTLE_CASES)
+    status = Lower(Trim("od_status"))
+    return Q(In(status, sorted(ORDERED_SPELLINGS))) & ~Q(In(Trim("od_settle_case"), sorted(BANK_SETTLE_CASES)))
 
 
 def received_price():
