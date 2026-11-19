@@ -6,11 +6,11 @@ from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
+from gnu_jango.api.shop_payments import cancel_pending_toss_vbank
 from gnu_jango.api.v1_shop import (
     CANCELLED_STATUSES,
     ORDERED_STATUSES,
     PAID_STATUSES,
-    cancel_pending_toss_vbank,
     restore_order_coupons_and_points,
 )
 from gnu_jango.shop.inventory import cancel_order_with_stock_restore
