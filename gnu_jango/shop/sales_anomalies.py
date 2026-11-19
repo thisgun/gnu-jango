@@ -4,7 +4,7 @@ Every finding comes from the order table and the rules below; nothing here calls
 optional AI briefing (gnu_jango.ai.sales_insights) only puts these findings into words.
 
 Counting follows the 매출현황 report (sales_report): an order belongs to the local day of
-od_datetime, the received amount is od_receipt_price - od_refund_price, and the payment method
+od_datetime, the received amount is order_flow.received_price() - od_refund_price, and the payment method
 comes from od_settle_case. An order in a cancelled/returned/sold-out status counts as a cancel,
 not as an order.
 """
@@ -18,6 +18,7 @@ from django.db.models.functions import TruncDate
 from gnu_jango.utils.date_ranges import local_days
 
 from .models import ShopOrder
+from .order_flow import received_price
 from .order_statuses import INACTIVE_LINE_STATUSES
 from .sales_report import METHOD_COLUMNS, settle_method
 
@@ -75,7 +76,7 @@ def daily_sales(start, end):
         .annotate(
             orders=Count("pk", filter=~cancelled),
             cancels=Count("pk", filter=cancelled),
-            receipt=Sum(F("od_receipt_price") - F("od_refund_price"), output_field=IntegerField()),
+            receipt=Sum(received_price() - F("od_refund_price"), output_field=IntegerField()),
             refund=Sum("od_refund_price"),
         )
     )

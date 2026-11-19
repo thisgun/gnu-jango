@@ -34,10 +34,12 @@ from gnu_jango.shop.order_flow import (
     ADMIN_ORDER_STATUSES,
     admin_cancel_order,
     allowed_targets,
+    awaiting_online_payment,
     delete_order,
     move_order_status,
     order_delete_block_reason,
     order_misu,
+    paid_amount,
     transition_error,
 )
 from gnu_jango.shop.order_lines import (
@@ -855,9 +857,10 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
         raw_log_count = order.raw_logs.count()
         coupon_count = order.coupon_logs.count()
         personal_pay_count = order.personal_pays.count()
-        paid = order.od_receipt_price and order.od_misu <= 0
+        received = paid_amount(order)
+        paid = received and order.od_misu <= 0
         cancelled = order.od_cancel_price and order.od_cancel_price > 0
-        waiting_invoice = bool(order.od_receipt_price and not order.od_invoice and not cancelled)
+        waiting_invoice = bool(received and not order.od_invoice and not cancelled)
         cash_receipt = bool(order.od_cash_no)
 
         risks = []
@@ -919,7 +922,7 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
             "status_tone": "danger" if cancelled else "success" if paid else "warning" if order.od_misu > 0 else "neutral",
             "settle_case": order.od_settle_case or "-",
             "pg": order.od_pg or "-",
-            "receipt": format_number(order.od_receipt_price),
+            "receipt": format_number(received),
             "outstanding": format_number(order.od_misu),
             "cancel": format_number(order.od_cancel_price),
             "delivery_company": order.od_delivery_company or "-",
@@ -1029,7 +1032,7 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
 
     @admin.display(description=_("Receipt"), ordering="od_receipt_price")
     def receipt_price_display(self, obj):
-        return money_html(obj.od_receipt_price)
+        return money_html(paid_amount(obj))
 
     @admin.display(description=_("Outstanding"), ordering="od_misu")
     def outstanding_price_display(self, obj):
@@ -1044,7 +1047,7 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
             state, tone, next_action = _("Cancelled"), "danger", _("Check cancellation and refund trail.")
         elif obj.od_misu and obj.od_misu > 0:
             state, tone, next_action = _("Payment due"), "warning", _("Contact customer or confirm bank transfer.")
-        elif obj.od_receipt_price and not obj.od_invoice:
+        elif paid_amount(obj) and not obj.od_invoice:
             state, tone, next_action = _("Waiting invoice"), "warning", _("Register carrier and invoice number.")
         elif obj.od_memo:
             state, tone, next_action = _("Memo review"), "info", _("Review customer memo before shipping.")
@@ -1086,13 +1089,13 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
             tone,
             _("Receipt %(receipt)s / outstanding %(outstanding)s / cancel %(cancel)s")
             % {
-                "receipt": format_number(obj.od_receipt_price),
+                "receipt": format_number(paid_amount(obj)),
                 "outstanding": format_number(obj.od_misu),
                 "cancel": format_number(obj.od_cancel_price),
             },
             (
                 (_("Order amount"), format_number(order_total), _("Items %(items)s / shipping %(shipping)s") % {"items": format_number(obj.od_cart_price), "shipping": format_number(obj.od_send_cost + obj.od_send_cost2)}),
-                (_("Receipt amount"), format_number(obj.od_receipt_price), compact_text(obj.od_settle_case, obj.od_pg)),
+                (_("Receipt amount"), format_number(paid_amount(obj)), compact_text(obj.od_settle_case, obj.od_pg)),
                 (_("Outstanding"), format_number(obj.od_misu), compact_text(obj.od_deposit_name, obj.od_receipt_time)),
                 (_("Bank account"), obj.od_bank_account or "-", ""),
                 ("환불금액", format_number(obj.od_refund_price), "PG 승인취소 또는 직접 환불한 금액"),
@@ -1112,7 +1115,7 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
             state, tone = _("Cash receipt request received"), "warning"
         elif obj.od_tno or obj.od_app_no:
             state, tone = _("Gateway evidence"), "success"
-        elif obj.od_receipt_price:
+        elif paid_amount(obj):
             state, tone = _("Receipt proof needed"), "warning"
         else:
             state, tone = _("No receipt proof"), "neutral"
@@ -1152,7 +1155,7 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
         cancelled = obj.od_cancel_price and obj.od_cancel_price > 0
         if obj.od_invoice:
             state, tone = _("Invoiced"), "success"
-        elif obj.od_receipt_price and not cancelled:
+        elif paid_amount(obj) and not cancelled:
             state, tone = _("Waiting invoice"), "warning"
         elif obj.od_delivery_company:
             state, tone = _("Carrier only"), "info"
@@ -1462,7 +1465,9 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
             orders = orders.filter(has_net_receipt(), od_cash_no="", od_tno="", od_app_no="")
 
         if shipping_state == "waiting_invoice":
-            orders = orders.filter(od_receipt_price__gt=0, od_cancel_price__lte=0, od_invoice="")
+            orders = orders.filter(od_receipt_price__gt=0, od_cancel_price__lte=0, od_invoice="").exclude(
+                awaiting_online_payment()
+            )
         elif shipping_state == "shipped":
             orders = orders.exclude(od_invoice="")
         return orders
@@ -1485,7 +1490,7 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
                     "status": order.od_status or "-",
                     "settle_case": order.od_settle_case or "-",
                     "pg": order.od_pg or "-",
-                    "receipt": format_number(order.od_receipt_price),
+                    "receipt": format_number(paid_amount(order)),
                     "outstanding": format_number(order.od_misu),
                     "cash_no": order.od_cash_no or "-",
                     "transaction_no": order.od_tno or "-",
@@ -1562,7 +1567,7 @@ class ShopOrderAdmin(AdminExportAuditMixin, ImportExportMixin, UnfoldHistoryAdmi
                 "settle_case": order.od_settle_case or "-",
                 "bank_account": order.od_bank_account or "-",
                 "deposit_name": order.od_deposit_name or "-",
-                "receipt": format_number(order.od_receipt_price),
+                "receipt": format_number(paid_amount(order)),
                 "outstanding": format_number(order.od_misu),
                 "time": datetime_value(order.od_datetime),
             }

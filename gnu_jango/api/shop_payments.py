@@ -423,8 +423,11 @@ def payment_adapter_request(action, provider, data):
         )
 
 
+BANK_SETTLE_CASES = frozenset({"", "bank", "무통장", "무통장입금"})
+
+
 def settle_case_is_bank(value):
-    return str(value or "").strip() in {"", "bank", "무통장", "무통장입금"}
+    return str(value or "").strip() in BANK_SETTLE_CASES
 
 
 def settle_case_supports_cash_receipt(value):

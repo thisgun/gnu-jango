@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 
 from django.db import transaction
+from django.db.models import Case, F, IntegerField, Q, Value, When
 from django.utils import timezone
 
 from gnu_jango.shop.models import ShopOrder
@@ -79,6 +80,23 @@ def paid_amount(order):
     if canonical_status(order.od_status) == STATUS_ORDERED and not settle_case_is_bank(order.od_settle_case):
         return 0
     return max(0, int(order.od_receipt_price or 0))
+
+
+ORDERED_SPELLINGS = frozenset({STATUS_ORDERED, *(alias for alias, s in STATUS_ALIASES.items() if s == STATUS_ORDERED)})
+
+
+def awaiting_online_payment():
+    """The orders paid_amount() counts as unpaid, as a query (reports and admin lists)."""
+    from gnu_jango.api.shop_payments import BANK_SETTLE_CASES
+
+    return Q(od_status__in=ORDERED_SPELLINGS) & ~Q(od_settle_case__in=BANK_SETTLE_CASES)
+
+
+def received_price():
+    """paid_amount() as a database expression."""
+    return Case(
+        When(awaiting_online_payment(), then=Value(0)), default=F("od_receipt_price"), output_field=IntegerField()
+    )
 
 
 def transition_error(order, target, *, invoice=None, delivery_company=None):

@@ -13,6 +13,7 @@ from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, Ou
 from gnu_jango.core.models import MailCampaign, MailSendLog, SearchKeyword, VisitLog
 from gnu_jango.api.community_common import GENERAL_QA_PRODUCT_ID
 from gnu_jango.shop.models import ShopOrder, ShopOrderData, ShopPersonalPay, ShopProduct, ShopQA
+from gnu_jango.shop.order_flow import awaiting_online_payment, paid_amount, received_price
 from gnu_jango.users.models import Profile, User_Memo, User_Point
 from gnu_jango.utils.admin_display import format_number, money_sum
 from gnu_jango.utils.date_ranges import local_days
@@ -35,7 +36,7 @@ def order_tone(order):
         return "warning"
     if order.od_cancel_price and order.od_cancel_price > 0:
         return "danger"
-    if order.od_receipt_price and order.od_receipt_price > 0:
+    if paid_amount(order) > 0:
         return "success"
     return "neutral"
 
@@ -47,7 +48,7 @@ def order_row(order):
         "status": order.od_status or "-",
         "settle_case": order.od_settle_case or "-",
         "pg": order.od_pg or "-",
-        "receipt": format_number(order.od_receipt_price),
+        "receipt": format_number(paid_amount(order)),
         "outstanding": format_number(order.od_misu),
         "time": local_datetime(order.od_datetime),
         "tone": order_tone(order),
@@ -164,12 +165,15 @@ def _build_admin_ops_summary():
     now = timezone.now()
     orders = ShopOrder.objects.all()
     today_orders = orders.filter(local_days("od_datetime", today, today))
-    today_sales = money_sum(today_orders, "od_receipt_price") - money_sum(today_orders, "od_refund_price")
+    today_received = money_sum(today_orders, received_price())
+    today_sales = today_received - money_sum(today_orders, "od_refund_price")
     products = ShopProduct.objects.all()
     low_stock = products.filter(it_use="1", it_stock_qty__lte=5)
     sold_out = products.filter(it_use="1", it_stock_qty__lte=0)
     outstanding_orders = orders.filter(od_misu__gt=0)
-    pending_shipping = orders.filter(od_receipt_price__gt=0, od_cancel_price__lte=0).filter(od_invoice="")
+    pending_shipping = (
+        orders.filter(od_receipt_price__gt=0, od_cancel_price__lte=0, od_invoice="").exclude(awaiting_online_payment())
+    )
     cash_receipt_orders = orders.exclude(od_cash_no="")
     raw_logs = ShopOrderData.objects.all()
     personal_pays = ShopPersonalPay.objects.all()
@@ -226,7 +230,7 @@ def _build_admin_ops_summary():
             {
                 "label": _("Today orders"),
                 "value": format_number(today_orders.count()),
-                "hint": _("%(amount)s received") % {"amount": format_number(money_sum(today_orders, "od_receipt_price"))},
+                "hint": _("%(amount)s received") % {"amount": format_number(today_received)},
                 "url": "/admin/shop/shoporder/?od_datetime__day=%s" % today.day,
                 "tone": "info",
             },

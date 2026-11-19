@@ -36,6 +36,7 @@ from gnu_jango.shop.models import (
     ShopShippingPolicy,
     ShopWishlist,
 )
+from gnu_jango.shop.order_flow import awaiting_online_payment, paid_amount, received_price
 from gnu_jango.shop.order_statuses import (
     ACTIVE_LINE_STATUSES,
     INACTIVE_LINE_STATUSES,
@@ -56,14 +57,15 @@ from gnu_jango.utils.date_ranges import local_days, period_days
 
 
 def net_receipt_expression():
-    """What the shop kept of an order's payment: od_receipt_price - od_refund_price (a cancelled
-    paid order keeps its receipt as the record of the payment, next to the refund)."""
-    return ExpressionWrapper(F("od_receipt_price") - F("od_refund_price"), output_field=IntegerField())
+    """What the shop kept of an order's payment: what it received - od_refund_price (a cancelled
+    paid order keeps its receipt as the record of the payment, next to the refund; an online
+    payment still 주문 received nothing yet, see order_flow.received_price)."""
+    return ExpressionWrapper(received_price() - F("od_refund_price"), output_field=IntegerField())
 
 
 def has_net_receipt():
     """Orders that kept some of their payment (not fully refunded)."""
-    return Q(od_receipt_price__gt=F("od_refund_price"))
+    return Q(od_receipt_price__gt=F("od_refund_price")) & ~awaiting_online_payment()
 
 
 def report_date_range(request):
@@ -222,7 +224,7 @@ def brief_order_rows(queryset):
             "status": order.od_status or "-",
             "settle_case": order.od_settle_case or "-",
             "pg": order.od_pg or "-",
-            "receipt": format_number(order.od_receipt_price),
+            "receipt": format_number(paid_amount(order)),
             "misu": format_number(order.od_misu),
             "time": datetime_value(order.od_datetime),
         }
@@ -421,7 +423,9 @@ class ShippingStateFilter(DropdownFilter):
     def queryset(self, request, queryset):
         value = self.value()
         if value == "waiting_invoice":
-            return queryset.filter(od_receipt_price__gt=0, od_cancel_price__lte=0, od_invoice="")
+            return queryset.filter(od_receipt_price__gt=0, od_cancel_price__lte=0, od_invoice="").exclude(
+                awaiting_online_payment()
+            )
         if value == "carrier_only":
             return queryset.exclude(od_delivery_company="").filter(od_invoice="")
         if value == "invoiced":
