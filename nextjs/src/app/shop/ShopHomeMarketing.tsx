@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUpRight, ShoppingBag } from "lucide-react";
 import { ShopBannerCarousel } from "@/components/shop/ShopBannerCarousel";
+import { G5Link as Link } from "@/components/ui/g5-link";
 import type { ShopBanner } from "@/lib/api";
-import { selectShopBanners } from "@/lib/shop-banner";
+import { demoShopHeroBanner, selectShopBanners } from "@/lib/shop-banner";
 import { getShopHomeData } from "@/services/shop-home";
 
 function useMediaQuery(query: string): boolean {
@@ -19,33 +20,58 @@ function useMediaQuery(query: string): boolean {
   return matches;
 }
 
-/** 배너를 받는 동안의 자리 — 진짜 배너와 같은 높이(.solune-banner-stage)라 응답 뒤에 아래가 밀리지 않는다. */
-function ShopBannerSkeleton() {
+function ShopCatalogHero({
+  banner, loading = false, onImageError,
+}: {
+  banner?: ShopBanner;
+  loading?: boolean;
+  onImageError?: () => void;
+}) {
   return (
-    <div className="solune-shop-banner" aria-hidden="true">
-      <div className="solune-banner">
-        <div className="solune-banner-stage">
-          <div className="skeleton absolute inset-0 rounded-none" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/** 등록된 배너가 없을 때의 첫 화면 — 배너와 같은 높이에 상품 보기 안내. */
-function ShopBannerEmpty() {
-  return (
-    <section className="solune-shop-banner" aria-label="등록된 쇼핑몰 배너 없음">
-      <div className="solune-banner">
-        <div className="solune-banner-stage flex items-center bg-base-200">
-          <div className="mx-auto w-[min(100%_-_2rem,1216px)] space-y-4">
-            <p className="text-xs font-bold uppercase tracking-[0.24em] text-primary">Youngcart shop</p>
-            <h1 className="text-3xl font-bold tracking-tight text-base-content md:text-5xl">오늘 필요한 상품을 만나보세요</h1>
-            <p className="hidden text-base text-base-content/70 md:block">카테고리별 상품과 새롭게 등록된 상품을 둘러보세요.</p>
-            <a href="/shop/products" className="btn btn-neutral btn-sm md:btn-md">
-              전체 상품 보기 <ChevronRight className="size-4" />
-            </a>
+    <section className="mx-auto w-full max-w-[1216px] pt-4 sm:pt-7" aria-labelledby="shop-hero-title">
+      <div className="grid overflow-hidden rounded-[1.5rem] border border-base-300 bg-base-200 md:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+        <div className="hero min-w-0 px-6 py-7 sm:px-9 sm:py-9 lg:px-12">
+          <div className="hero-content w-full max-w-none flex-col items-start gap-0 p-0">
+            <p className="text-xs font-semibold tracking-[0.12em] text-base-content/65">
+              {banner ? "문구 · 데스크 · 커피" : "쇼핑몰"}
+            </p>
+            <h1 id="shop-hero-title" className="mt-3 text-balance text-[clamp(1.875rem,4vw,3.5rem)]! leading-[1.14]! font-semibold! tracking-[-0.055em] text-base-content md:max-w-[16ch]">
+              {banner ? "작은 도구로 일상을 정돈하다" : "오늘 필요한 상품을 만나보세요"}
+            </h1>
+            <p className="mt-3 max-w-[30ch] text-pretty text-sm leading-6 text-base-content/75 lg:text-base">
+              {banner
+                ? "기록을 시작하는 노트부터 책상을 정돈하는 소품, 커피 한 잔을 준비하는 도구까지."
+                : "카테고리별 상품과 새롭게 등록된 상품을 둘러보세요."}
+            </p>
+            <div className="mt-5 flex flex-wrap items-center gap-2 sm:mt-6">
+              <Link href="/shop/products" className="btn btn-primary">
+                전체 상품 보기 <ArrowUpRight size={16} aria-hidden />
+              </Link>
+              <a href="#shop-categories" className="btn btn-ghost">
+                카테고리 <ArrowDown size={15} aria-hidden />
+              </a>
+            </div>
           </div>
+        </div>
+        <div className="relative grid aspect-[2/1] place-items-center overflow-hidden bg-base-300 md:aspect-[8/5] md:min-h-80 lg:min-h-[23rem]">
+          {banner ? (
+            /* This bundled image is already optimized and has the same URL in Django's static export. */
+            <img
+              alt="햇빛이 드는 책상 위에 펼친 노트와 커피잔"
+              className="absolute inset-0 size-full object-cover object-[58%_50%]"
+              src={banner.image_url}
+              width={800}
+              height={400}
+              fetchPriority="high"
+              onError={onImageError}
+            />
+          ) : loading ? (
+            <div className="skeleton absolute inset-0 rounded-none" aria-hidden />
+          ) : (
+            <div className="grid size-31 place-items-center rounded-full border border-base-content/15 sm:size-42" aria-hidden>
+              <ShoppingBag className="size-12 text-base-content/45 sm:size-16" strokeWidth={1.15} />
+            </div>
+          )}
         </div>
       </div>
     </section>
@@ -89,15 +115,28 @@ export function ShopHomeBanners({ banners }: { banners: ShopBanner[] }) {
     setFailedBannerIds((ids) => (ids.includes(bannerId) ? ids : [...ids, bannerId]));
   }, []);
 
-  if (runtimeBanners === null && banners.length === 0) return <ShopBannerSkeleton />;
-  if (visibleBanners.length === 0) return <ShopBannerEmpty />;
+  const demo = demoShopHeroBanner(runtimeBanners ?? banners);
+  if (demo) {
+    return (
+      <ShopCatalogHero
+        banner={failedBannerIds.includes(demo.bn_id) ? undefined : demo}
+        onImageError={() => handleImageError(demo.bn_id)}
+      />
+    );
+  }
+  if (visibleBanners.length === 0) {
+    return <ShopCatalogHero loading={runtimeBanners === null && banners.length === 0} />;
+  }
 
   return (
-    <ShopBannerCarousel
-      key={visibleBanners.map((banner) => banner.bn_id).join(",")}
-      banners={visibleBanners}
-      reducedMotion={reducedMotion}
-      onImageError={handleImageError}
-    />
+    <>
+      <h1 className="sr-only">쇼핑몰</h1>
+      <ShopBannerCarousel
+        key={visibleBanners.map((banner) => banner.bn_id).join(",")}
+        banners={visibleBanners}
+        reducedMotion={reducedMotion}
+        onImageError={handleImageError}
+      />
+    </>
   );
 }
