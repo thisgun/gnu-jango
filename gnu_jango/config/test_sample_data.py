@@ -1,6 +1,12 @@
 """Admin sample data: what it creates, what it removes and what it leaves alone."""
 
+import json
+from importlib import import_module
+from types import SimpleNamespace
+
+from django.apps import apps
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -22,6 +28,47 @@ def public_board(group, table, subject):
 
 
 class SampleDataTests(TestCase):
+    def test_shop_sample_categories_are_grouped_for_browsing(self):
+        sample_data.ensure_shop_sample_data()
+        response = self.client.get("/api/v1/shop/categories").json()["data"]
+        demo = next(category for category in response if category["ca_name"] == "데모 스토어")
+        self.assertEqual(demo["item_count"], 6)
+        self.assertEqual(
+            [(category["ca_name"], category["item_count"]) for category in demo["children"]],
+            [("문구·기록", 1), ("데스크 정리", 3), ("커피·티", 2)],
+        )
+        self.assertEqual(sample_data.ensure_shop_sample_data()["categories_created"], 0)
+
+    def test_legacy_shop_upgrade_only_assigns_tracked_products_without_a_category(self):
+        demo = ShopCategory.objects.create(ca_id="z0", ca_name="데모 스토어", ca_use=True)
+        real = ShopCategory.objects.create(ca_id="10", ca_name="운영 분류", ca_use=True)
+        notebook = ShopProduct.objects.create(
+            it_id="SAMPLE1234567801", category=demo, it_name="운영자가 수정한 이름",
+            image_url="/sample-data/product-01.webp", it_price=12345,
+        )
+        moved = ShopProduct.objects.create(
+            it_id="SAMPLE1234567802", category=demo, category2=real, image_url="/sample-data/product-02.webp",
+        )
+        untracked = ShopProduct.objects.create(
+            it_id="SAMPLEabcdef1205", category=demo, image_url="/sample-data/product-05.webp",
+        )
+        Config.objects.create(name=sample_data.MANIFEST_NAME, value=json.dumps({
+            **sample_data.empty_manifest(), "categories": [demo.pk], "products": [notebook.pk, moved.pk],
+        }))
+        migration = import_module("gnu_jango.config.migrations.0005_group_legacy_demo_shop_products")
+        editor = SimpleNamespace(connection=connection)
+        migration.group_demo_products(apps, editor)
+        migration.group_demo_products(apps, editor)
+
+        notebook.refresh_from_db()
+        moved.refresh_from_db()
+        untracked.refresh_from_db()
+        self.assertEqual(notebook.category2.ca_name, "문구·기록")
+        self.assertEqual((notebook.it_name, notebook.it_price), ("운영자가 수정한 이름", 12345))
+        self.assertEqual(moved.category2_id, real.pk)
+        self.assertIsNone(untracked.category2_id)
+        self.assertEqual(ShopCategory.objects.filter(ca_parent=demo.pk).count(), 1)
+
     def test_create_then_remove_leaves_nothing_behind(self):
         boards_before = set(Board.objects.values_list("bo_table", flat=True))
         groups_before = set(Group.objects.values_list("gr_id", flat=True))
