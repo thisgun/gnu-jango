@@ -5,21 +5,6 @@ export const BANNER_INTERVAL_MS = 6500;
 export const BANNER_SPEED_MS = 900;
 
 const DEMO_SAMPLE_BANNER_ALT = "차분한 일상을 위한 데모 스토어";
-const DEMO_SAMPLE_SLIDES = new Set([
-  "/sample-data/product-02.webp|DESK OBJECTS|책상 위를 더 가볍게",
-  "/sample-data/product-04.webp|SLOW KITCHEN|매일 쓰는 도구의 온기",
-  "/sample-data/product-05.webp|COFFEE & TEA|커피와 차를 준비하는 시간",
-]);
-
-/** Let the bundled storefront use a composed hero without replacing a shop's own campaigns. */
-export function demoShopHeroBanner(banners: ShopBanner[]): ShopBanner | undefined {
-  const demo = banners.find((banner) => banner.image_url === "/sample-data/banner.webp" && (
-    banner.bn_alt === DEMO_SAMPLE_BANNER_ALT || banner.bn_alt === "DESK NOTES|기록이 시작되는 책상"
-  ));
-  return demo && banners.every((banner) => banner === demo || DEMO_SAMPLE_SLIDES.has(`${banner.image_url}|${banner.bn_alt}`))
-    ? demo
-    : undefined;
-}
 
 const DEMO_SAMPLE_BANNER_FALLBACKS: ShopBanner[] = [
   {
