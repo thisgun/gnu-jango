@@ -6,18 +6,15 @@ from datetime import timedelta
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
-from django.db.models.functions import Length
 from django.utils import timezone
 
 from gnu_jango.api.page_bootstrap import batch_bootstrap_changes
 from gnu_jango.bbs.models import Board, Comment, Group, Post, Post_file
 from gnu_jango.bbs.utils import get_next_num, get_pretty_url
 from gnu_jango.config import config as site_config
-from gnu_jango.config.demo_shop_catalog_v2 import DEMO_CATEGORY_GROUPS
 from gnu_jango.config.models import Config
 from gnu_jango.core.models import ContentPage, FAQItem, FAQMaster, Poll, PollChoice, Site_menu
 from gnu_jango.shop.models import ShopBanner, ShopCategory, ShopProduct
-from gnu_jango.shop.category_tree import next_child_category_id
 from gnu_jango.notifications.context import suppress_notification_events
 
 
@@ -430,23 +427,13 @@ def _ensure_shop_samples(manifest):
     )
     category_by_id = {category.pk: category for category in tracked_categories}
     root_category_ids = {category.pk for category in tracked_categories if not category.ca_parent}
-    # Installations with the previous set of standalone sample categories keep their links.
-    legacy_layout = len(root_category_ids) > 1
-    category_names = SHOP_SAMPLE_CATEGORY_NAMES if legacy_layout else tuple(group[1] for group in DEMO_CATEGORY_GROUPS)
-    curated_product_slots = {
-        number: slot
-        for slot, (_, _, numbers) in enumerate(DEMO_CATEGORY_GROUPS, 2)
-        for number in numbers
-    }
-    product_slots = SHOP_SAMPLE_PRODUCT_CATEGORY_SLOTS if legacy_layout else tuple(
-        curated_product_slots[number] for number in range(1, len(PRODUCTS) + 1)
-    )
     raw_category_slots = manifest.get("shop_category_slots")
     if isinstance(raw_category_slots, dict) and raw_category_slots:
         category_slots = {
             str(slot): category_id
             for slot, category_id in raw_category_slots.items()
-            if category_id in category_by_id
+            if str(slot) in {str(index) for index in range(1, len(SHOP_SAMPLE_CATEGORY_NAMES) + 2)}
+            and category_id in root_category_ids
         }
     else:
         category_slots = {
@@ -458,15 +445,11 @@ def _ensure_shop_samples(manifest):
         }
 
     manifest["categories"] = list(category_by_id)
-    for slot, name in enumerate(("데모 스토어", *category_names), start=1):
-        parent = "" if slot == 1 or legacy_layout else category_slots["1"]
+    for slot, name in enumerate(("데모 스토어", *SHOP_SAMPLE_CATEGORY_NAMES), start=1):
         category = category_by_id.get(category_slots.get(str(slot)))
-        if category is None or category.ca_parent != parent:
-            category_id = next_child_category_id(parent) if parent else _free_root_category_id()
-            if not category_id:
-                raise SampleDataError("샘플 하위 카테고리를 추가할 수 있는 분류 코드가 없습니다.")
+        if category is None:
             category = ShopCategory.objects.create(
-                ca_id=category_id, ca_parent=parent, ca_name=name, ca_order=slot, ca_use=True,
+                ca_id=_free_root_category_id(), ca_name=name, ca_order=slot, ca_use=True,
             )
             category_by_id[category.pk] = category
             manifest["categories"].append(category.pk)
@@ -487,7 +470,7 @@ def _ensure_shop_samples(manifest):
     manifest["products"] = [pk for pk in tracked if pk in products]
     for number, (name, price, description) in enumerate(PRODUCTS, start=1):
         product = products.get(slots.get(str(number)))
-        secondary_category = category_by_id[category_slots[str(product_slots[number - 1])]]
+        secondary_category = category_by_id[category_slots[str(SHOP_SAMPLE_PRODUCT_CATEGORY_SLOTS[number - 1])]]
         if product is None:
             image_url = f"/sample-data/{SAMPLE_IMAGES[number - 1]}"
             product = ShopProduct.objects.create(
@@ -538,12 +521,7 @@ def _ensure_shop_samples(manifest):
         }
 
     manifest["banners"] = list(banner_by_id)
-    banner_specs = SHOP_SAMPLE_BANNER_SPECS if legacy_layout else (
-        (SAMPLE_BANNER, "DESK NOTES|기록이 시작되는 책상", 1),
-        ("product-02.webp", "DESK OBJECTS|책상 위를 더 가볍게", 3),
-        ("product-05.webp", "COFFEE & TEA|커피와 차를 준비하는 시간", 4),
-    )
-    for slot, (image_name, alt, category_slot) in enumerate(banner_specs, start=1):
+    for slot, (image_name, alt, category_slot) in enumerate(SHOP_SAMPLE_BANNER_SPECS, start=1):
         banner = banner_by_id.get(banner_slots.get(str(slot)))
         if banner is None:
             banner_category = category_by_id[category_slots[str(category_slot)]]
@@ -1019,9 +997,8 @@ def remove_sample_data():
                 poll.delete()
 
         retained_categories = []
-        sample_categories = ShopCategory.objects.select_for_update().filter(pk__in=tracked_categories)
-        for category in sample_categories.order_by(Length("ca_id").desc(), "pk"):
-            if _has_related_rows(category) or ShopCategory.objects.filter(ca_parent=category.pk).exists():
+        for category in ShopCategory.objects.select_for_update().filter(pk__in=tracked_categories).order_by("pk"):
+            if _has_related_rows(category):
                 retained_categories.append(category.pk)
             else:
                 category.delete()
