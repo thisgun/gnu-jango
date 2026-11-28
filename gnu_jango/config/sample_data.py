@@ -31,6 +31,9 @@ SAMPLE_ASSET_SIZES = {
     "product-05.webp": 10332,
     "product-06.webp": 8790,
     "banner.webp": 11552,
+    "hero-notebook-202611.webp": 116852,
+    "hero-desk-shelf-202611.webp": 61744,
+    "hero-wood-mat-202611.webp": 175094,
 }
 
 MANIFEST_LIST_FIELDS = (
